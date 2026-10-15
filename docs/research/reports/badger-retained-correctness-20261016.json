@@ -1,0 +1,482 @@
+{
+  "kind": "retained-family-correctness-compatibility-certificate",
+  "status": "pass-retained-scoped-correctness-and-current-compatibility",
+  "independentReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/root-independent120.json",
+    "sha256": "fc65706215710a030dde269842587be782006e99b41306a2bc844da7f3e11fc7"
+  },
+  "familyId": "protocol:badger-sett-withdraw",
+  "variant": "TheVault synchronous unlocked withdraw",
+  "source": {
+    "number": 26138511,
+    "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771"
+  },
+  "originalTx": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+  "counts": {
+    "retainedPositiveExecutions": 4,
+    "newEvmExecutions": 0,
+    "currentScriptReemits": 4,
+    "rawBalanceSlots": 8,
+    "newNegativeExecutions": 0
+  },
+  "samples": [
+    {
+      "label": "production-P",
+      "amountIn": "186879770730708662978",
+      "quoteOut": "200848688640274565677",
+      "executions": [
+        {
+          "encoding": "quoted-fragment",
+          "scriptHash": "0x009105158cefb786f193de6eb0193b88fc6191e7c7a513d24fbbb023a602bcd0",
+          "protocolCallPath": [
+            12
+          ],
+          "actualWithdrawInput": "186879770730708662978",
+          "returnBytes": 0,
+          "transferPath": [
+            12,
+            0,
+            3
+          ],
+          "actualTransferOutput": "200848688640274565677",
+          "rawBalanceSlots": [
+            {
+              "token": "0xba485b556399123261a5f9c95d413b4f93107407",
+              "slotIndex": 51,
+              "slot": "0xcd18c7cdd513609ab5cc6d1f92e3bd368555415d2393d70fa0a770a62e004e2e",
+              "before": "186879770730708663079",
+              "after": "101",
+              "delta": "-186879770730708662978"
+            },
+            {
+              "token": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+              "slotIndex": 0,
+              "slot": "0xfb750de6f7d0583f749efc558ce6626b24fed04efd7219dc3f4294c408699e8c",
+              "before": "200848688640274565780",
+              "after": "401697377280549131457",
+              "delta": "200848688640274565677"
+            }
+          ],
+          "feeInputs": {
+            "balance": "26530206517415158308347",
+            "supply": "24685044970807531810340",
+            "feeBps": "0",
+            "gross": "200848688640274565677",
+            "feeAmount": "0"
+          }
+        },
+        {
+          "encoding": "runtime-program",
+          "scriptHash": "0x3949c1db13b6626d3f9e8188eadbc35b3b38b60e828114c568748ff8f61804b0",
+          "protocolCallPath": [
+            12
+          ],
+          "actualWithdrawInput": "186879770730708662978",
+          "returnBytes": 0,
+          "transferPath": [
+            12,
+            0,
+            3
+          ],
+          "actualTransferOutput": "200848688640274565677",
+          "rawBalanceSlots": [
+            {
+              "token": "0xba485b556399123261a5f9c95d413b4f93107407",
+              "slotIndex": 51,
+              "slot": "0xcd18c7cdd513609ab5cc6d1f92e3bd368555415d2393d70fa0a770a62e004e2e",
+              "before": "186879770730708663079",
+              "after": "101",
+              "delta": "-186879770730708662978"
+            },
+            {
+              "token": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+              "slotIndex": 0,
+              "slot": "0xfb750de6f7d0583f749efc558ce6626b24fed04efd7219dc3f4294c408699e8c",
+              "before": "200848688640274565780",
+              "after": "401697377280549131457",
+              "delta": "200848688640274565677"
+            }
+          ],
+          "feeInputs": {
+            "balance": "26530206517415158308347",
+            "supply": "24685044970807531810340",
+            "feeBps": "0",
+            "gross": "200848688640274565677",
+            "feeAmount": "0"
+          }
+        }
+      ]
+    },
+    {
+      "label": "historical-amount-at-N",
+      "amountIn": "131502308044455713821",
+      "quoteOut": "141331862836870691964",
+      "executions": [
+        {
+          "encoding": "quoted-fragment",
+          "scriptHash": "0xa7b74050205861e9f2577f17dc8b3d03eafb6f8476d4e3fa93c3d2d97c19cbf1",
+          "protocolCallPath": [
+            12
+          ],
+          "actualWithdrawInput": "131502308044455713821",
+          "returnBytes": 0,
+          "transferPath": [
+            12,
+            0,
+            3
+          ],
+          "actualTransferOutput": "141331862836870691964",
+          "rawBalanceSlots": [
+            {
+              "token": "0xba485b556399123261a5f9c95d413b4f93107407",
+              "slotIndex": 51,
+              "slot": "0xcd18c7cdd513609ab5cc6d1f92e3bd368555415d2393d70fa0a770a62e004e2e",
+              "before": "131502308044455713922",
+              "after": "101",
+              "delta": "-131502308044455713821"
+            },
+            {
+              "token": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+              "slotIndex": 0,
+              "slot": "0xfb750de6f7d0583f749efc558ce6626b24fed04efd7219dc3f4294c408699e8c",
+              "before": "141331862836870692067",
+              "after": "282663725673741384031",
+              "delta": "141331862836870691964"
+            }
+          ],
+          "feeInputs": {
+            "balance": "26530206517415158308347",
+            "supply": "24685044970807531810340",
+            "feeBps": "0",
+            "gross": "141331862836870691964",
+            "feeAmount": "0"
+          }
+        },
+        {
+          "encoding": "runtime-program",
+          "scriptHash": "0x5c5167cb255c292fe4bf6f5c4c5aa8456eb7523eba04995f9479b51e37455dab",
+          "protocolCallPath": [
+            12
+          ],
+          "actualWithdrawInput": "131502308044455713821",
+          "returnBytes": 0,
+          "transferPath": [
+            12,
+            0,
+            3
+          ],
+          "actualTransferOutput": "141331862836870691964",
+          "rawBalanceSlots": [
+            {
+              "token": "0xba485b556399123261a5f9c95d413b4f93107407",
+              "slotIndex": 51,
+              "slot": "0xcd18c7cdd513609ab5cc6d1f92e3bd368555415d2393d70fa0a770a62e004e2e",
+              "before": "131502308044455713922",
+              "after": "101",
+              "delta": "-131502308044455713821"
+            },
+            {
+              "token": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+              "slotIndex": 0,
+              "slot": "0xfb750de6f7d0583f749efc558ce6626b24fed04efd7219dc3f4294c408699e8c",
+              "before": "141331862836870692067",
+              "after": "282663725673741384031",
+              "delta": "141331862836870691964"
+            }
+          ],
+          "feeInputs": {
+            "balance": "26530206517415158308347",
+            "supply": "24685044970807531810340",
+            "feeBps": "0",
+            "gross": "141331862836870691964",
+            "feeAmount": "0"
+          }
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/raw-metadata115.json",
+      "sha256": "0fc3b9a5169100cc86ff06f97e7ec1a6be8e5f6dbd00fd0d0b8b881988f77bfb"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/current-compat116.json",
+      "sha256": "9ee8c5f872924e0a56b05f4573be9852319c1966d024ebffbee3507390387c9a"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/reemit115.json",
+      "sha256": "13f57eda3094d69a7d9d136f1850f8b15c7f636d928cff2125b9518922fe3e86"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/delivery118/badger-current-deployment-interface.json",
+      "sha256": "bc6aa3cd36a2a8119c33ffe1006edb9501f663d16209d32eca8186cecb760150"
+    }
+  ],
+  "allFamilySourceEquality": [
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/action.ts",
+      "oldSha256": "237beef6e0cbcd47d07fff167c2401418d39b8c5143cbd11e86389e3b2cebddb",
+      "currentSha256": "237beef6e0cbcd47d07fff167c2401418d39b8c5143cbd11e86389e3b2cebddb",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/capture.ts",
+      "oldSha256": "c83ffd552f019c7136d8aa84ef152fd84e07ad45c8a7cee1feb4be1ec2ddb166",
+      "currentSha256": "c83ffd552f019c7136d8aa84ef152fd84e07ad45c8a7cee1feb4be1ec2ddb166",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/closure.ts",
+      "oldSha256": "c886e19bbc1304ec547e6a528057187deb40ff10aca95f69066117289c5e07ab",
+      "currentSha256": "c886e19bbc1304ec547e6a528057187deb40ff10aca95f69066117289c5e07ab",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+      "oldSha256": "e0631334ce5f9fee0d35b16dd3d219bf4c3fdcf3eb28cfee7d979469ce75b57d",
+      "currentSha256": "e0631334ce5f9fee0d35b16dd3d219bf4c3fdcf3eb28cfee7d979469ce75b57d",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/discovery.ts",
+      "oldSha256": "a8048b63f4149dc0ab8dd0f32bb98adad3a861478adc68c3a3b451be004a97c2",
+      "currentSha256": "a8048b63f4149dc0ab8dd0f32bb98adad3a861478adc68c3a3b451be004a97c2",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/exact.ts",
+      "oldSha256": "1b214c8687fa51e7f3892bea101e6d84c453dcb66ee1d841d83ed7209dd9a881",
+      "currentSha256": "1b214c8687fa51e7f3892bea101e6d84c453dcb66ee1d841d83ed7209dd9a881",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/execution.ts",
+      "oldSha256": "17f36cd39f154d24bbb97655403bb4a7e28ab761f48f184b6d2975e7abc01077",
+      "currentSha256": "17f36cd39f154d24bbb97655403bb4a7e28ab761f48f184b6d2975e7abc01077",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/identity.ts",
+      "oldSha256": "8a8a7ae675e8e41357b0a2a2c018ddb09f459368a78e19eeed8c7cf6b91d54d2",
+      "currentSha256": "8a8a7ae675e8e41357b0a2a2c018ddb09f459368a78e19eeed8c7cf6b91d54d2",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/instance.ts",
+      "oldSha256": "9e2880fe27654ab886ac56c546bd40c5d20df4e413b9c6c88846bf9449547a5e",
+      "currentSha256": "9e2880fe27654ab886ac56c546bd40c5d20df4e413b9c6c88846bf9449547a5e",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+      "oldSha256": "5eac781512bf856cdaad9299610148343b74396de40303b263abdef921038123",
+      "currentSha256": "5eac781512bf856cdaad9299610148343b74396de40303b263abdef921038123",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/pricing.ts",
+      "oldSha256": "a7aaf0a6d7cf588b5904d8ae39adfc7a1219d9e5fd32e069c8f136e159ca7c28",
+      "currentSha256": "a7aaf0a6d7cf588b5904d8ae39adfc7a1219d9e5fd32e069c8f136e159ca7c28",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/protocol.ts",
+      "oldSha256": "5b046234cc73a7919ab3ea01cef56dfb14254765b814b1d20366cccf0ac0f92e",
+      "currentSha256": "5b046234cc73a7919ab3ea01cef56dfb14254765b814b1d20366cccf0ac0f92e",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/routes.ts",
+      "oldSha256": "707eae5695236f2abccc3d8c0855e118d3cc1c5c7720833a3d7cdb7ce8aa4a6a",
+      "currentSha256": "707eae5695236f2abccc3d8c0855e118d3cc1c5c7720833a3d7cdb7ce8aa4a6a",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/state.ts",
+      "oldSha256": "fa6ecead1f24433d2a89cc3c52622a0531bb757a699abd00414dd44d0e0b5367",
+      "currentSha256": "fa6ecead1f24433d2a89cc3c52622a0531bb757a699abd00414dd44d0e0b5367",
+      "equal": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/types.ts",
+      "oldSha256": "c49748ce0d4b9765be47383a36129654992b95756c08d1ff8b747512f8f7374c",
+      "currentSha256": "c49748ce0d4b9765be47383a36129654992b95756c08d1ff8b747512f8f7374c",
+      "equal": true
+    }
+  ],
+  "currentRelevantSource": [
+    {
+      "path": "listener/src/adapters/protocol-legs.ts",
+      "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/badger-sett-withdraw.production.ts",
+      "sha256": "ca387e77a4e8708861f5c65493349a3f99f1158576d165e812ea0cd9ed38bc37"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/action.ts",
+      "sha256": "237beef6e0cbcd47d07fff167c2401418d39b8c5143cbd11e86389e3b2cebddb"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/closure.ts",
+      "sha256": "c886e19bbc1304ec547e6a528057187deb40ff10aca95f69066117289c5e07ab"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/codec.ts",
+      "sha256": "e0631334ce5f9fee0d35b16dd3d219bf4c3fdcf3eb28cfee7d979469ce75b57d"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/execution.ts",
+      "sha256": "17f36cd39f154d24bbb97655403bb4a7e28ab761f48f184b6d2975e7abc01077"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/identity.ts",
+      "sha256": "8a8a7ae675e8e41357b0a2a2c018ddb09f459368a78e19eeed8c7cf6b91d54d2"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/instance.ts",
+      "sha256": "9e2880fe27654ab886ac56c546bd40c5d20df4e413b9c6c88846bf9449547a5e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/manifest.ts",
+      "sha256": "5eac781512bf856cdaad9299610148343b74396de40303b263abdef921038123"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/routes.ts",
+      "sha256": "707eae5695236f2abccc3d8c0855e118d3cc1c5c7720833a3d7cdb7ce8aa4a6a"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/state.ts",
+      "sha256": "fa6ecead1f24433d2a89cc3c52622a0531bb757a699abd00414dd44d0e0b5367"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+      "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    }
+  ],
+  "oldArtifact": {
+    "old": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/actual/logs/rounding-central-20261009.V3Y8qS/BotVM-before.json",
+      "sha256": "ff8b61348f037390645448c44d923b5cb43fbda34afe0ff5a34dfaf2a3676b0b"
+    },
+    "current": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/actual/out/BotVM.sol/BotVM.json",
+      "sha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+    },
+    "oldVM": {
+      "hash": "0x8811c106a0e02c6e77062c046568a03d8b9f3142b25664ca29f6090114e692a6",
+      "bytes": 15675
+    },
+    "currentVM": {
+      "hash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bytes": 18345
+    },
+    "oldExactArtifactMatches": true,
+    "metadata": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/old/src/BotVM.sol",
+        "sha256": "5cc05fe179c3c39ffae2eadd4ae066c8498948f5fcdb42b705acbe44658b6c66",
+        "metadataKeccak": "0x56b2c959bba3574e408f9c0eb7dfb7f889cda7298142a6a8affef7f106d24126"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/old/src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+        "metadataKeccak": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/old/src/RuntimeAmountVM.sol",
+        "sha256": "6d286940c1ba7d7a308cbc4dfd4e592cecded80ae1c520b858e1ef525323fb0c",
+        "metadataKeccak": "0x29a6dc264210d22fb8f2d4ca3708001ea1d798b99847b068231b8092bce555ca"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/old/src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+        "metadataKeccak": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+      }
+    ]
+  },
+  "priorIntegration": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/actual/docs/research/reports/family-three-historical-integration-20261007.json",
+    "sha256": "c354b6193869266e908fe8551fe544ee17be315ae388157f4a8bd4e228dd19ea"
+  },
+  "priorOriginalLeg": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/actual/docs/research/reports/family-original-exact-parity-20261008.json",
+    "sha256": "a495a8af9f0ec46bcf394aaa4a139ba336dd2d62c60f8d4229404527bf559a14"
+  },
+  "exactInputAmounts": [
+    "186879770730708662978",
+    "131502308044455713821"
+  ],
+  "outputAmounts": [
+    "200848688640274565677",
+    "141331862836870691964"
+  ],
+  "inventory": {
+    "oldInputRemainder": "101",
+    "oldOutput": "quoteOut+103",
+    "actualReceipt": "quoteOut",
+    "feeBps": 0,
+    "newNativeInventoryFaultTests": false
+  },
+  "limitations": [
+    "This is retained4 historical execution certification plus source/current bytecode recomputation, not4 fresh currentVM EVM runs.",
+    "No negative or unsupported settlement new executions; no new native inventory fault matrix.",
+    "Original reverse-verified sameN descriptor is used for recomputation, not a newly issued currentReady or natural valuation claim.",
+    "No full opportunity, deposit, locker realization, latency or performance conclusion.",
+    "Old4 records have no new missing-input/fault matrix; preserving exactly4 successful saved executions, not multiplying partial coverage.",
+    "SameN actual proxy slot/code binding newly read without state mutation, no currentReady rebuild or currentNatural price recalculation.",
+    "The scoped review covers caller-receiver withdrawal; deposit/locker/locked realization stays outside task scope."
+  ],
+  "canonicalReconciliation": "Current tool index has no standalone Badger package script; selected generic offline family dual tool after manual inspection. Its result is a regression, not extra historical execution.",
+  "canonical": {
+    "checks": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/evidence118/checks118.json",
+      "sha256": "8c051799bf9d1a917bdff5211a551bb1f91b12bfdb4901d90b6cde71c7fa0a17"
+    },
+    "selection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/evidence118/selection118.json",
+      "sha256": "6ad837ff3f6db6bebd34621f9f10b016a931f7c6baccb085235dee411a6ed7c4"
+    },
+    "log": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/evidence118/offline-dual118.log",
+      "sha256": "19de87a48a37dcea9c8e640673bdc6b9dc63c35943de3e8667d6b7224f8073ce"
+    },
+    "tests": 307,
+    "passed": 307,
+    "failed": 0,
+    "executionKind": "offline-regression-not-new-historical-execution"
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "kind": "tooling_defect",
+  "status": "fixed; canonical contract and three scoped gates passed; parent codify_commit pending",
+  "codify_commit": null,
+  "title": "Internal protocol hooks do not create a caller settlement mode",
+  "baseHead": "8a277504455baaa07251e1c91e7a244771e5018c",
+  "finding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/gate122/defect-design.json",
+    "sha256": "9864428bffe43985463deb8d40e15a8b0924230bfa69c6a7e195c4756a22e568"
+  },
+  "freshReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/final-review121/gate122-source-review.json",
+    "sha256": "6fa35930f90433dd3cbf17737e428a7998866c3c2dd53a10662885e23b1f401e"
+  },
+  "before": {
+    "report": "docs/research/reports/family-retained-prefixed-gates-20261016.json",
+    "observedExitCodes": {
+      "protocol:curve-lp": 0,
+      "protocol:compound-ctoken": 1,
+      "protocol:badger-sett-withdraw": 1
+    },
+    "failure": "Compound and Badger rejected for execution evidence despite internal-only hooks, caller-only recipient and no caller continuation. LP none/no control passed."
+  },
+  "fix": "Allow internal-only/no/not-required only with explicit independent reviewed callerContinuation=false plus typed ordinary execution evidence. Require matching Family/variant/current Family and common source, positive integer executions, nonnegative integer rejections, actual-input-debit, actual-output-receipt, old-inventory and immutable evidence hashes. Existing none and genuine settlement behavior gates remain unchanged.",
+  "candidate": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/gate122/handoff.json",
+    "sha256": "b607842debb4c6378360dfa5ccc8ef8ba2afdb41f70f119a97ccde9cd77d9351"
+  },
+  "after": {
+    "report": "docs/research/reports/family-retained-current-gates-20261016.json",
+    "checks": [
+      {
+        "tool": "listener:searcher:family-settlement-review-contract",
+        "args": [],
+        "exitCode": 0,
+        "startedAt": "2026-10-15T16:40:40.821270+00:00",
+        "finishedAt": "2026-10-15T16:40:43.652660+00:00",
+        "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+        "manifestSha256": "a494ab486f8de04ac4e2da4e1ea2ef7e274dbe8afc32ffac3bd196e2ac043761",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-contract.log",
+        "logSha256": "2fb0e2a5ee69a17e76939f7078fa5eb6ecab20287417be7743b622b493b77fa0",
+        "query": [
+          "family",
+          "settlement"
+        ]
+      },
+      {
+        "tool": "listener:searcher:family-settlement-review",
+        "args": [
+          "--family",
+          "protocol:curve-lp"
+        ],
+        "exitCode": 0,
+        "startedAt": "2026-10-15T16:40:43.652989+00:00",
+        "finishedAt": "2026-10-15T16:41:34.618828+00:00",
+        "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+        "manifestSha256": "5036faa7bb721d729902002d019ea82f3942739890c2e361ee0d300526480d02",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-curve-lp.log",
+        "logSha256": "8f9c4bbdfe154860f52c74dfc7c8c514596ebb10b9d1ed589667d24188d6f308",
+        "query": [
+          "family",
+          "settlement"
+        ],
+        "result": {
+          "scope": "settlement capability acceptance only",
+          "installed": 48,
+          "results": [
+            {
+              "familyId": "protocol:curve-lp",
+              "passed": true,
+              "failures": []
+            }
+          ]
+        }
+      },
+      {
+        "tool": "listener:searcher:family-settlement-review",
+        "args": [
+          "--family",
+          "protocol:compound-ctoken"
+        ],
+        "exitCode": 0,
+        "startedAt": "2026-10-15T16:41:34.619246+00:00",
+        "finishedAt": "2026-10-15T16:42:24.920648+00:00",
+        "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+        "manifestSha256": "92b3fe07316733a722a254f97848a32296e3151546bdfefbb8175088c7241771",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-compound-ctoken.log",
+        "logSha256": "ad21d143a2d9d46fdbef0bf0e2e18765885d8f2d94f1cb5011d3701c62a83464",
+        "query": [
+          "family",
+          "settlement"
+        ],
+        "result": {
+          "scope": "settlement capability acceptance only",
+          "installed": 48,
+          "results": [
+            {
+              "familyId": "protocol:compound-ctoken",
+              "passed": true,
+              "failures": []
+            }
+          ]
+        }
+      },
+      {
+        "tool": "listener:searcher:family-settlement-review",
+        "args": [
+          "--family",
+          "protocol:badger-sett-withdraw"
+        ],
+        "exitCode": 0,
+        "startedAt": "2026-10-15T16:42:24.921312+00:00",
+        "finishedAt": "2026-10-15T16:43:15.623826+00:00",
+        "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+        "manifestSha256": "5ab82cf21c44d8ecc8d21bdbbf6e485305f3345756c64e5f4df5c61b0b4b2d88",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-badger-sett-withdraw.log",
+        "logSha256": "a33b45aca551ab398d4fb8480a2d5940e5d3d352f0ba80ff59b6cbfe8c19a4ab",
+        "query": [
+          "family",
+          "settlement"
+        ],
+        "result": {
+          "scope": "settlement capability acceptance only",
+          "installed": 48,
+          "results": [
+            {
+              "familyId": "protocol:badger-sett-withdraw",
+              "passed": true,
+              "failures": []
+            }
+          ]
+        }
+      }
+    ],
+    "contractTests": 7,
+    "contractPass": 7,
+    "allExitZero": true
+  },
+  "limits": [
+    "Only acceptance-tool classification changed; no production Family or executor modification.",
+    "Retained ordinary historical executions are reused, not newly run. No independent negative storageDiff is invented.",
+    "No competitor, opportunity, natural valuation, performance or whole-goal completion inference.",
+    "The absence of a caller continuation is independently evidenced, not inferred merely from an internal-only inventory label."
+  ]
+}

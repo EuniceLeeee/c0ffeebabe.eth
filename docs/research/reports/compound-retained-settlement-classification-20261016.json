@@ -1,0 +1,22 @@
+{
+  "result": "pass-with-scoped-inventory-classification",
+  "review": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/v1-independent-final09.json",
+    "sha256": "25e9898c78d76ad1f17a493a765e5e14c30aa6e273be12077d60f512edf5d13c"
+  },
+  "familyId": "protocol:compound-ctoken",
+  "variantIds": [
+    "cUSDC CErc20 redeem",
+    "cDAI CErc20Delegator -> CErc20Delegate redeem"
+  ],
+  "settlementExecution": "not-required",
+  "reason": "Actual installed share redemption receives underlying only at caller. Comptroller redeemAllowed/redeemVerify are internal protocol hooks, not a user callback or deferred payer continuation. There is no applicable new direct/deferred settlement mode in this selected scope.",
+  "ordinaryExecutionEvidence": {
+    "positives": 24,
+    "noInputRootReverts": 12,
+    "independentNegativeStorageDiff": false,
+    "status": "retained correctness with current byte/source/VM compatibility"
+  },
+  "rootAction": "In the new inventory compatibility view set settlement execution=not-required and retain ordinary execution evidence separately. Preserve author proposal and original source/raw hashes; do not rewrite them.",
+  "findingClass": "Evidence-field scope clarification, not an implementation or execution defect."
+}

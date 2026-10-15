@@ -1,0 +1,305 @@
+{
+  "kind": "final-non-author-retained-delivery-review",
+  "result": "pass-scoped-documents-and-tool-correction",
+  "reviewer": "/root/v4_accept26",
+  "documents": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/badger-retained-compatibility-20261016.json",
+      "sha256": "7de8dbacb3dece8351726fc40b99354778938a42ea1b44cd0c014264f33bc40b"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/badger-retained-correctness-20261016.json",
+      "sha256": "3f16ebb40126b37c3f62584e19e13ba7ddb1fb3da1a85f298794ff3818c77800"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/badger-retained-independent-20261016.json",
+      "sha256": "fc65706215710a030dde269842587be782006e99b41306a2bc844da7f3e11fc7"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/badger-retained-interface-20261016.json",
+      "sha256": "bc6aa3cd36a2a8119c33ffe1006edb9501f663d16209d32eca8186cecb760150"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/badger-retained-ordinary-behavior-20261016.json",
+      "sha256": "feb9fc3c87089febf009a8c5eb2bf75a6bba5613fb785eab8b9fafc63b66d9ab"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/compound-retained-compatibility-20261016.json",
+      "sha256": "ee2417d58f5c43ecc26409e3a12fcca1806d6aab01d04a404001b4926cf0f355"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/compound-retained-correctness-20261016.json",
+      "sha256": "c74fcb964a10a06c5e2a67b2d223e1312f82591a4b637977505d2bfb8d3b4b23"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/compound-retained-independent-20261016.json",
+      "sha256": "f98aa036d67b986a50e58827e19e291a6c2bd510665267f7d99f3f9cafac5012"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/compound-retained-independent-final-20261016.json",
+      "sha256": "25e9898c78d76ad1f17a493a765e5e14c30aa6e273be12077d60f512edf5d13c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/compound-retained-ordinary-behavior-20261016.json",
+      "sha256": "6c07d64f49e359ea6e8650207991ac1c59c4b1ec7dcccab38b760091ee11b48f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/compound-retained-raw-authentication-20261016.json",
+      "sha256": "df69fb66171b49f9b19a3f5bc7f63d53010caedacd593dc181482077be2f0dd5"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/compound-retained-settlement-classification-20261016.json",
+      "sha256": "e71c0e3ef3703c8aa07414f61ade691675d585ba1c91b720aabb5dcf75edd4d6"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/compound-retained-vm-program-binding-20261016.json",
+      "sha256": "6db7b06542a0e993070a8f1a87bc165b6497fdb0a37197dbd3598621a4adcd93"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/current-interface-badger-sett-withdraw-retained-20261016.json",
+      "sha256": "4a9b74f40b000172499a9f45da05171cdcefea7cbd8666a02fc58a2302f9189a"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/current-interface-compound-ctoken-retained-20261016.json",
+      "sha256": "b63668c83d160142b574104339e2ff635a31e1cc184cc0477f457fa0ff70f425"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/current-interface-curve-lp-retained-20261016.json",
+      "sha256": "358695ec870f9ad05ebfa9ba424a52ca5a03cc773cc6fbeb7cc9bc846f96ee3b"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/curve-lp-current-retained-compatibility-20261016.json",
+      "sha256": "08d80b856a5200b495a9ca1dcc4792cd05f51544298139631bc41e0cdc3a47bc"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/curve-lp-retained-raw-authentication-20261016.json",
+      "sha256": "b341dd0a303c27cf3d10044b4cea2c754f27cd75747950bab581732e834cbbaf"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/family-impl-scope-audit-20261016.json",
+      "sha256": "210d1e226264122026ad740bbae6c8b489c48b58d3c0cfe20a81ee568d6a767e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/family-retained-correctness-20261016.md",
+      "sha256": "69d07ef1ec9d7c3d4f42ddeae993cedda26608fe8b70653b7e01aab4fad628e0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/delivery121/family-settlement-interface-review-20261014.json",
+      "sha256": "b95207107d5141da634b2f974ce47e543db3d265bd036cb90ffd11d5962c4eed"
+    }
+  ],
+  "documentCount": 21,
+  "inventory": {
+    "changedFamilies": [
+      "protocol:badger-sett-withdraw",
+      "protocol:compound-ctoken",
+      "protocol:curve-lp"
+    ],
+    "allOther45RowsAndCommonSourceUnchanged": true,
+    "allVariantIdsPreserved": true,
+    "internalDocumentHashRefsChecked": 55,
+    "failures": [],
+    "allGlobalFamiliesPassed": false
+  },
+  "ordinaryExecutionScopes": {
+    "curveLP": "48positive/32declaredrevert; fixed-A FRAXBP two coins; no newEVM or ramp/native upgrade",
+    "compound": "24positive/12rootrevert; cUSDC,cDAI,cUNI redeem(shares); no negative storageDiff or redeemUnderlying equivalence",
+    "badger": "4positive/0negative; cash funded fee0 caller-only withdraw; no strategy or nativefault matrix"
+  },
+  "newSettlementMode": "None applicable; internal-only/no-caller-continuation and recipient=no distinguished from ordinary protocol execution. Current typed evidence separately authenticates family/common closure and retained actual debit/receipt/inventory.",
+  "toolSourceReview": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/final-review121/gate122-source-review.json",
+    "sha256": "6fa35930f90433dd3cbf17737e428a7998866c3c2dd53a10662885e23b1f401e"
+  },
+  "toolFiles": [
+    {
+      "path": "listener/src/searcher/test/family-settlement-review.ts",
+      "beforeSha256": "020e8283f0369df564e461580a92ffe650e6a29cb082c3b7f3eb366bc0ab645f",
+      "afterSha256": "b01a7c5ab1576069d065f347b7ca07f6ad0911f0321ab5a5655431277a6a962b",
+      "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/gate122/candidate/listener/src/searcher/test/family-settlement-review.ts"
+    },
+    {
+      "path": "listener/src/searcher/test/family-settlement-review-contract.ts",
+      "beforeSha256": "aa2ce75cdf7d7d9628b86f72ee2d216a80eaebb2c0c8bc1472bff3cf6361f4c1",
+      "afterSha256": "fdda3a8390cf801cfcb1fb8daf8658a585b4fad62f7d6ee250bafc330833f286",
+      "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/gate122/candidate/listener/src/searcher/test/family-settlement-review-contract.ts"
+    }
+  ],
+  "actualBefore": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/apply-retained121.log",
+    "sha256": "064253712f5fdbc58b8d679bf708246f185b31ec9d960fb6e1518f61be8b6da4"
+  },
+  "beforeResult": "CurveLP0,Compound1,Badger1; explicit internal-only classification coverage defect retained, not protocol execution failure",
+  "actualAfter": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/apply-gate122.log",
+    "sha256": "3676a38d13f24a950f0fac509f27c6494f8c9c95cd5b1adc5ba2b22ff760cf7c"
+  },
+  "canonicalChecks": [
+    {
+      "tool": "listener:searcher:family-settlement-review-contract",
+      "args": [],
+      "exitCode": 0,
+      "startedAt": "2026-10-15T16:40:40.821270+00:00",
+      "finishedAt": "2026-10-15T16:40:43.652660+00:00",
+      "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+      "manifestSha256": "a494ab486f8de04ac4e2da4e1ea2ef7e274dbe8afc32ffac3bd196e2ac043761",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-contract.log",
+      "logSha256": "2fb0e2a5ee69a17e76939f7078fa5eb6ecab20287417be7743b622b493b77fa0",
+      "query": [
+        "family",
+        "settlement"
+      ],
+      "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json --tool listener:searcher:family-settlement-review-contract --\n\n\n> mev-listener@0.1.0 searcher:family-settlement-review-contract\n> node --import tsx --test src/searcher/test/family-settlement-review-contract.ts\n\n✔ acceptance requires complete identity, interface, wiring and real execution evidence (1.065498ms)\n✔ unsupported operations need interface evidence, while callbacks and receiver modes cannot skip execution (0.161151ms)\n✔ installed coverage cannot omit disabled entries, duplicate Families or silently add variants (3.379129ms)\n✔ changed or missing production code invalidates saved acceptance without overwriting old evidence (0.242083ms)\n✔ omitted reviewed variants and interface-only files cannot manufacture execution acceptance (4.378267ms)\n✔ reviewers cannot replace relevant source closure with arbitrary unchanged files (0.396144ms)\n✔ internal-only caller hooks require independent classification and ordinary real execution (4.021833ms)\nℹ tests 7\nℹ suites 0\nℹ pass 7\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2383.44755\ntool-run receipt=listener:searcher:family-settlement-review-contract exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json\n"
+    },
+    {
+      "tool": "listener:searcher:family-settlement-review",
+      "args": [
+        "--family",
+        "protocol:curve-lp"
+      ],
+      "exitCode": 0,
+      "startedAt": "2026-10-15T16:40:43.652989+00:00",
+      "finishedAt": "2026-10-15T16:41:34.618828+00:00",
+      "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+      "manifestSha256": "5036faa7bb721d729902002d019ea82f3942739890c2e361ee0d300526480d02",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-curve-lp.log",
+      "logSha256": "8f9c4bbdfe154860f52c74dfc7c8c514596ebb10b9d1ed589667d24188d6f308",
+      "query": [
+        "family",
+        "settlement"
+      ],
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "protocol:curve-lp",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "tool": "listener:searcher:family-settlement-review",
+      "args": [
+        "--family",
+        "protocol:compound-ctoken"
+      ],
+      "exitCode": 0,
+      "startedAt": "2026-10-15T16:41:34.619246+00:00",
+      "finishedAt": "2026-10-15T16:42:24.920648+00:00",
+      "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+      "manifestSha256": "92b3fe07316733a722a254f97848a32296e3151546bdfefbb8175088c7241771",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-compound-ctoken.log",
+      "logSha256": "ad21d143a2d9d46fdbef0bf0e2e18765885d8f2d94f1cb5011d3701c62a83464",
+      "query": [
+        "family",
+        "settlement"
+      ],
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "protocol:compound-ctoken",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "tool": "listener:searcher:family-settlement-review",
+      "args": [
+        "--family",
+        "protocol:badger-sett-withdraw"
+      ],
+      "exitCode": 0,
+      "startedAt": "2026-10-15T16:42:24.921312+00:00",
+      "finishedAt": "2026-10-15T16:43:15.623826+00:00",
+      "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+      "manifestSha256": "5ab82cf21c44d8ecc8d21bdbbf6e485305f3345756c64e5f4df5c61b0b4b2d88",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-badger-sett-withdraw.log",
+      "logSha256": "a33b45aca551ab398d4fb8480a2d5940e5d3d352f0ba80ff59b6cbfe8c19a4ab",
+      "query": [
+        "family",
+        "settlement"
+      ],
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "protocol:badger-sett-withdraw",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    }
+  ],
+  "canonicalResult": "7/7 contract regression plus three scoped inventory gates all exit0; no historical executions rerun",
+  "requiredDocUpdatesVerified": [
+    "Compound final reviewer appended and pinned",
+    "Badger and Compound ordinary view kind family-ordinary-execution-evidence-v1 and57currentcommon pins",
+    "New hashed internal-only interface variants declare callerContinuation false",
+    "Original local reports/raw hashes unchanged; new compatibility views referenced separately"
+  ],
+  "implCandidate": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/final-review121/update-impl-candidate.py",
+    "sha256": "32186feac8c9bcd50c217282a452ee68de9d6eff37c3562731250118dfddfe0b"
+  },
+  "implNewLinkChecks": [
+    {
+      "urlTemplate": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/21b7e08edc511d1c8c5ba8b5f7caa9c7e719fde6/docs/research/reports/balancer-v3-current-correctness-20261015.json",
+      "verified": true,
+      "basis": "exact existing Git commit file verified"
+    },
+    {
+      "urlTemplate": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/775509c7449619e74d188fa42b9ca2edb54c41d8/docs/research/reports/xwin-current-correctness-20261015.json",
+      "verified": true,
+      "basis": "exact existing Git commit file verified"
+    },
+    {
+      "urlTemplate": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/775509c7449619e74d188fa42b9ca2edb54c41d8/docs/research/reports/xwin-negative-root-revert-independent-20261015.json",
+      "verified": true,
+      "basis": "exact existing Git commit file verified"
+    },
+    {
+      "urlTemplate": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/<relay122.codeCommit>/docs/research/reports/badger-retained-correctness-20261016.json",
+      "verified": true,
+      "basis": "reviewed delivery121; final commit read from pushed relay122 receipt"
+    },
+    {
+      "urlTemplate": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/<relay122.codeCommit>/docs/research/reports/badger-retained-independent-20261016.json",
+      "verified": true,
+      "basis": "reviewed delivery121; final commit read from pushed relay122 receipt"
+    },
+    {
+      "urlTemplate": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/<relay122.codeCommit>/docs/research/reports/compound-retained-correctness-20261016.json",
+      "verified": true,
+      "basis": "reviewed delivery121; final commit read from pushed relay122 receipt"
+    },
+    {
+      "urlTemplate": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/<relay122.codeCommit>/docs/research/reports/compound-retained-independent-final-20261016.json",
+      "verified": true,
+      "basis": "reviewed delivery121; final commit read from pushed relay122 receipt"
+    },
+    {
+      "urlTemplate": "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/<relay122.codeCommit>/docs/research/reports/curve-lp-current-retained-compatibility-20261016.json",
+      "verified": true,
+      "basis": "reviewed delivery121; final commit read from pushed relay122 receipt"
+    }
+  ],
+  "implWrites": 0,
+  "blockingFindings": [],
+  "remainingPublication": "Root to codify tooling_defect using actual finalcommit and commit/push exact reviewed files, then apply guarded IMPL candidate from pushed relay122 receipt. This metadata review does not itself claim publication complete.",
+  "notClaimed": [
+    "new historical EVM",
+    "negative storageDiff for Compound or Badger",
+    "new native/receiver/callback/deposit/borrow/locker support",
+    "natural integration, original opportunity, full Adapter Replay or4A/4B",
+    "wholegoalcomplete"
+  ]
+}

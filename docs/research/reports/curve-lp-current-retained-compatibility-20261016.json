@@ -1,0 +1,318 @@
+{
+  "schema": "scoped-old-evidence-current-compatibility/v1",
+  "familyId": "protocol:curve-lp",
+  "result": "verified-reuse-with-bounded-scope",
+  "scope": "Original FRAXBP two-coin mint/redeem for both coins at two fixed non-ramping historical states. Current source compatibility certification, not new EVM execution.",
+  "reviewer": "/root/v1_accept26",
+  "actualReadHead": "feaf1c7983871d586f8a9707d1fb6288278c50a7",
+  "oldSourceRef": "622461e7714a69c8651d2ed5a740ea94d2f93db1",
+  "rawAuthentication": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/raw-artifact-auth114.json",
+    "sha256": "b341dd0a303c27cf3d10044b4cea2c754f27cd75747950bab581732e834cbbaf"
+  },
+  "oldReport": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/current/docs/research/reports/curve-lp-correctness-20261010.json",
+    "sha256": "1ebc6ac3774c9f610b4250cb39d87cfb52b63371bb427ac6de0c3406b93d9afd"
+  },
+  "oldArtifactOrigin": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/artifact-origin.json",
+    "sha256": "4611de453cf455a03bca51b14a949bd25f085f5b75560cd642fa456a79979328"
+  },
+  "unchangedFamilyAndEncoding": [
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/action.ts",
+      "oldAndCurrentSha256": "810bfe033971cc0ed69cba6c605c24094f4680c2b4c6665df3b4fcd86591c1ad"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/capture.ts",
+      "oldAndCurrentSha256": "c83ffd552f019c7136d8aa84ef152fd84e07ad45c8a7cee1feb4be1ec2ddb166"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/codec.ts",
+      "oldAndCurrentSha256": "3eca4e416e5ddf76fd185b31d3c4c867bba466827540954691c0087e9e6bd9df"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/discovery.ts",
+      "oldAndCurrentSha256": "5fde64ca39e3007461756985c3111a56c4254ce5edec76be11279757e30315f9"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/exact.ts",
+      "oldAndCurrentSha256": "cdc699d28cd93805934a75ef7fc1b82618dc30a0a62ae9c59edd8c0d7665d534"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/execution.ts",
+      "oldAndCurrentSha256": "95d926dfb2a84c307b5221475dbcc620b48f4cd67e5894864f968b318ae86cfd"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/identity.ts",
+      "oldAndCurrentSha256": "f034463c5f2cf4d967016b5f060f38649738beca1085bdf3f79c5fa041d7b225"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/instance.ts",
+      "oldAndCurrentSha256": "59d2ed0df3b2f7cb2c503cde721c39b6a8e032b6e2ced54e9f217e621af994ef"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/manifest.ts",
+      "oldAndCurrentSha256": "25431edafb9266095b4e60ba86cb2b41cfc0a323fcf919a04b1643e069437681"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/model.ts",
+      "oldAndCurrentSha256": "7fae2e46d5bd8803ca8d1deeafe062a1860e429bf59e0e1e0d5d3058a5b56346"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/pricing.ts",
+      "oldAndCurrentSha256": "3a06fe5b2268197471fcb74dc9b9a941102e16ec8785f39f54c28e521d908cc2"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/protocol.ts",
+      "oldAndCurrentSha256": "5b046234cc73a7919ab3ea01cef56dfb14254765b814b1d20366cccf0ac0f92e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/routes.ts",
+      "oldAndCurrentSha256": "8fc0d1ba7451711354180a1104b0d6e53f88b501c95ad8a84262fede2820ffee"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/state.ts",
+      "oldAndCurrentSha256": "1914f98fa2b017a2247f3635c1e5c52f1daec92f3ae12ee7f9a825abbfdad95d"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/types.ts",
+      "oldAndCurrentSha256": "5f20c55a50a4cb7615b7994dcaef07c63d20869045e7aecd0779c6fc72c5240e"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "oldAndCurrentSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/curve-lp.production.ts",
+      "oldAndCurrentSha256": "a0a30607d5149fa9a2658409c974a654d3131e48bbb6c156218abde15e849bc9"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "oldAndCurrentSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/adapters/protocol-legs.ts",
+      "oldAndCurrentSha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+    }
+  ],
+  "changedCommon": [
+    {
+      "path": "src/BotVM.sol",
+      "oldSha256": "5cc05fe179c3c39ffae2eadd4ae066c8498948f5fcdb42b705acbe44658b6c66",
+      "currentSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/diffs/src/BotVM.sol",
+        "sha256": "5167eec9913302cb514459631e9a4bae4593aaa57840fab4f1be24bd30ceccd0"
+      }
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "oldSha256": "241d644b7d27f58f07a76e1c48f40fb80c71ef2689c785f516b2345004b3eac6",
+      "currentSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/diffs/src/RuntimeAmountVM.sol",
+        "sha256": "24ec80dafba7d228df38c0143ea16ff76e0ba7f8dc5a24e68b1229f5e36c0d4b"
+      }
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "oldSha256": "5ab89da1040c55ffa7ecd74eafe781b9aa83c24f7b06987ffe0d8fbc91322ce6",
+      "currentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/diffs/listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "a9122984c05ab16f692c46b3e3f2acf86bb938f89d4e05cf60309608f0ecae14"
+      }
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "oldSha256": "e8aa9084cecd3881d7957813b8b9594199c06a76e2e347d5671c2e826e644f8b",
+      "currentSha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/diffs/listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "1b2f919c9ee0e77b63edf4a9b74c695727302d23ace0f529ca15811fb5794ae3"
+      }
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "oldSha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e",
+      "currentSha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/diffs/listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "7e76735d931106e86f9e095f9b56333eeac7c41df155138ef6523fba9bc20b2c"
+      }
+    }
+  ],
+  "currentInventoryClosure": [
+    {
+      "path": "listener/src/adapters/protocol-legs.ts",
+      "oldInventorySha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7",
+      "currentSha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "oldInventorySha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc",
+      "currentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "oldInventorySha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a",
+      "currentSha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "oldInventorySha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5",
+      "currentSha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "oldInventorySha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+      "currentSha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "oldInventorySha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633",
+      "currentSha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "oldInventorySha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961",
+      "currentSha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "oldInventorySha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2",
+      "currentSha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/curve-lp.production.ts",
+      "oldInventorySha256": "a0a30607d5149fa9a2658409c974a654d3131e48bbb6c156218abde15e849bc9",
+      "currentSha256": "a0a30607d5149fa9a2658409c974a654d3131e48bbb6c156218abde15e849bc9"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/action.ts",
+      "oldInventorySha256": "810bfe033971cc0ed69cba6c605c24094f4680c2b4c6665df3b4fcd86591c1ad",
+      "currentSha256": "810bfe033971cc0ed69cba6c605c24094f4680c2b4c6665df3b4fcd86591c1ad"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/codec.ts",
+      "oldInventorySha256": "3eca4e416e5ddf76fd185b31d3c4c867bba466827540954691c0087e9e6bd9df",
+      "currentSha256": "3eca4e416e5ddf76fd185b31d3c4c867bba466827540954691c0087e9e6bd9df"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/execution.ts",
+      "oldInventorySha256": "95d926dfb2a84c307b5221475dbcc620b48f4cd67e5894864f968b318ae86cfd",
+      "currentSha256": "95d926dfb2a84c307b5221475dbcc620b48f4cd67e5894864f968b318ae86cfd"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/identity.ts",
+      "oldInventorySha256": "f034463c5f2cf4d967016b5f060f38649738beca1085bdf3f79c5fa041d7b225",
+      "currentSha256": "f034463c5f2cf4d967016b5f060f38649738beca1085bdf3f79c5fa041d7b225"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/instance.ts",
+      "oldInventorySha256": "59d2ed0df3b2f7cb2c503cde721c39b6a8e032b6e2ced54e9f217e621af994ef",
+      "currentSha256": "59d2ed0df3b2f7cb2c503cde721c39b6a8e032b6e2ced54e9f217e621af994ef"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/manifest.ts",
+      "oldInventorySha256": "25431edafb9266095b4e60ba86cb2b41cfc0a323fcf919a04b1643e069437681",
+      "currentSha256": "25431edafb9266095b4e60ba86cb2b41cfc0a323fcf919a04b1643e069437681"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/model.ts",
+      "oldInventorySha256": "7fae2e46d5bd8803ca8d1deeafe062a1860e429bf59e0e1e0d5d3058a5b56346",
+      "currentSha256": "7fae2e46d5bd8803ca8d1deeafe062a1860e429bf59e0e1e0d5d3058a5b56346"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/routes.ts",
+      "oldInventorySha256": "8fc0d1ba7451711354180a1104b0d6e53f88b501c95ad8a84262fede2820ffee",
+      "currentSha256": "8fc0d1ba7451711354180a1104b0d6e53f88b501c95ad8a84262fede2820ffee"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/curve-lp-family/state.ts",
+      "oldInventorySha256": "1914f98fa2b017a2247f3635c1e5c52f1daec92f3ae12ee7f9a825abbfdad95d",
+      "currentSha256": "1914f98fa2b017a2247f3635c1e5c52f1daec92f3ae12ee7f9a825abbfdad95d"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+      "oldInventorySha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f",
+      "currentSha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "oldInventorySha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+      "currentSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "oldInventorySha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8",
+      "currentSha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    }
+  ],
+  "currentSourceExport": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/production-source97.json",
+    "sha256": "487afab9784fa4b1720c6f95fdc289d4cc899dd1e2f2994bac6e6cfdc3908828"
+  },
+  "compatibilityFindings": [
+    "All 15 production Family TypeScript files and activation, runtime-execution, encoder/protocol-leg encoding are byte-identical to the historical accepted source commit. Exact methods, A-state guard, identity, ABI, amounts and caller-only execution unchanged.",
+    "RuntimeAmountProgram old constants, load/equality/math0..6 and ordinary call0/static1 byte serialization are unchanged. Added math7/8, callmode2, nested op8 and settlement program dispatch are not emitted by this Family.",
+    "Issuer additions map omitted settlement to undefined and compare undefined echo; this Family retains no direct/deferred capability. Original caller/ownership/source fences remain. Quoted tolerance optional field is not read by Curve LP.",
+    "All supported LP routes are ordinary ERC20. executionNativeSides returns null and common asset boundary returns original leg; shared native default1 tolerance and native settlement logic are unreachable.",
+    "Old artifact exact bytes a2fa2279 reauthenticated against both raw reports. Owner100...1 patch yields recorded a7658a48 runtime. Its four Solidity metadata keccak hashes equal source at historical commit, not a guessed sibling artifact.",
+    "Current RuntimeAmountVM introduces context/error diagnostics and additional opcodes/read-only/nesting modes. Original default entry uses readOnly=false/depth0. LP programs use old instructions/call modes and no callbacks; these paths preserve success semantics and revert fail-closed. Diagnostic error envelope changes do not turn any old rejection into success.",
+    "Original whole-loop runtime input/output/safety semantics remain; old LP evidence is 48 single-leg positive and32 declared EVM reverts, not a final loop/profit proof. Reauthentication recomputed48 exact debit/output/supply/native and96Transfer log deltas against raw trusted results."
+  ],
+  "inventoryProposal": {
+    "familyId": "protocol:curve-lp",
+    "variants": [
+      {
+        "id": "FRAXBP two-coin add_liquidity",
+        "interface": "verified",
+        "identity": "verified",
+        "callback": "none",
+        "recipient": "no",
+        "wiring": "verified",
+        "execution": "not-required",
+        "proposal": "Preserve existing interface not-required receiver/callback status; attach current-source compatible ordinary quoted/runtime historical correctness reference, do not mark external/deferred execution supported."
+      },
+      {
+        "id": "FRAXBP remove_liquidity_one_coin",
+        "interface": "verified",
+        "identity": "verified",
+        "callback": "none",
+        "recipient": "no",
+        "wiring": "verified",
+        "execution": "not-required",
+        "proposal": "Preserve existing interface not-required receiver/callback status; attach current-source compatible ordinary quoted/runtime historical correctness reference, do not mark external/deferred execution supported."
+      }
+    ],
+    "ordinaryQuotedRuntimeCorrectness": "verified historical evidence, current compatible reuse",
+    "positive": 48,
+    "negativeDeclaredReverts": 32,
+    "newEvmExecutions": 0,
+    "openMandatoryCorrectnessGap": null
+  },
+  "limitations": [
+    "Only existing two-coin StableSwap FRAXBP profile and fixed-A historical states; no new pool/profile/active-ramp support claim.",
+    "Activation remains explicit opt-in SEARCHER_FAMILY_CURVE_LP_ENABLED, default false.",
+    "Original natural Ready/price and strict successes retain their own old source/hash; no claim of a fresh current natural graph/price run.",
+    "Declared reverts have trusted effects omitted; do not call them independently observed full storage rollback.",
+    "Performance and original opportunity reproduction remain separate, no upgrade.",
+    "No live, signatures, broadcast, deployments, or new EVM in this review."
+  ],
+  "sourceReads": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/fetch113.jsonl",
+      "sha256": "cbebd2c872f1e640ea51f7dd5651c9df343699494882978a099160d4ff8edf2e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/fetch114.jsonl",
+      "sha256": "a87ff38e35d748dfff673d73bbf81f270c42961ce37896fab9e4e14418814e7b"
+    }
+  ],
+  "preservedReadFailure": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/fetch112-error.json",
+    "sha256": "3b6a3c5c8b952fd246c4b610c499704078dc5d718b6bbc970f5ae344dac68cb6"
+  }
+}

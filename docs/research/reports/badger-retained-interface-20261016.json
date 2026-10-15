@@ -1,0 +1,92 @@
+{
+  "kind": "historical-proxy-and-reciprocal-dependency-join",
+  "result": "pass-scoped-independent-reviewed",
+  "source": {
+    "number": 26138511,
+    "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771"
+  },
+  "vault": {
+    "address": "0xba485b556399123261a5f9c95d413b4f93107407",
+    "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+    "implementationWord": "0x00000000000000000000000060c796acb2e0949178086294f03a44c450511784"
+  },
+  "strategy": {
+    "address": "0x3c0989ef27e3e3fab87a2d7c38b35880c90e63b5",
+    "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+    "implementationWord": "0x0000000000000000000000007c2a951d062cc7b7c6f9c7aa7e80a6f20eaa8cab"
+  },
+  "codeBindings": [
+    {
+      "address": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "codeHash": "0x1dd89e38c5a11df51ecacb234a347e6043127ba58d42beb784889bf64ab4abaf",
+      "bytes": 1581,
+      "archiveMatches": true
+    },
+    {
+      "address": "0x60c796acb2e0949178086294f03a44c450511784",
+      "codeHash": "0x55f87e0d3930098a9a23ad78acb3a69df6009334f7194ddc64cfed0c620abe1b",
+      "bytes": 18707,
+      "archiveMatches": true
+    },
+    {
+      "address": "0x3c0989ef27e3e3fab87a2d7c38b35880c90e63b5",
+      "codeHash": "0x1dd89e38c5a11df51ecacb234a347e6043127ba58d42beb784889bf64ab4abaf",
+      "bytes": 1581,
+      "archiveMatches": true
+    },
+    {
+      "address": "0x7c2a951d062cc7b7c6f9c7aa7e80a6f20eaa8cab",
+      "codeHash": "0x7c9ad0b11aaf2698dc34b392b0fefa07bc2b554991677eafcc70ea6b47ad3df4",
+      "bytes": 20378,
+      "archiveMatches": true
+    }
+  ],
+  "reciprocalBindings": [
+    {
+      "to": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "selector": "0xa8c62e76",
+      "result": "0x0000000000000000000000003c0989ef27e3e3fab87a2d7c38b35880c90e63b5"
+    },
+    {
+      "to": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "selector": "0xfc0c546a",
+      "result": "0x000000000000000000000000c0c293ce456ff0ed870add98a0828dd4d2903dbf"
+    },
+    {
+      "to": "0x3c0989ef27e3e3fab87a2d7c38b35880c90e63b5",
+      "selector": "0xfbfa77cf",
+      "result": "0x000000000000000000000000ba485b556399123261a5f9c95d413b4f93107407"
+    },
+    {
+      "to": "0x3c0989ef27e3e3fab87a2d7c38b35880c90e63b5",
+      "selector": "0x1f1fcd51",
+      "result": "0x000000000000000000000000c0c293ce456ff0ed870add98a0828dd4d2903dbf"
+    },
+    {
+      "to": "0x3c0989ef27e3e3fab87a2d7c38b35880c90e63b5",
+      "selector": "0x08ecd9a6",
+      "result": "0x0000000000000000000000003fa73f1e5d8a792c80f426fc8f84fbf7ce9bbcac"
+    }
+  ],
+  "interfaceReview": {
+    "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interfaces-protocols-a-20261014.json",
+    "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+  },
+  "selectedInterface": {
+    "withdraw(uint256)": "0x2e1a7d4d",
+    "returns": "void; measure actual output",
+    "recipient": "msg.sender; no external receiver argument",
+    "callback": "strategy internal interaction only; no caller deferred settlement"
+  },
+  "evidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/identity114.json",
+      "sha256": "6bf68515a569462f819d75c979d38da1389dcca8007d300a88919235597dfb78"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/strategy-identity115.json",
+      "sha256": "4792a82d81e4fbb549b8fa50426f0eaa17748d8de84fdbe9684b49eaff8006e5"
+    }
+  ],
+  "scope": "Only selected sameN synchronous liquid share withdrawal; actual4 samples use vault cash and do not invoke strategy.withdraw. Strategy identity joined, not additional actual branch test."
+}

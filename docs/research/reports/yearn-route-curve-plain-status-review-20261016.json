@@ -1,0 +1,53 @@
+{
+  "result": "both-real-targets-already-in-112-plain-acceptance",
+  "implLine": 38,
+  "source": {
+    "number": 26152335,
+    "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3"
+  },
+  "raw": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence67/historical-int12867.json",
+      "sha256": "72178819c4462f07097fb6961bd7b51a71ae6d2e82abf255fdfeb543c8bdf707"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence67/historical-uintclone67.json",
+      "sha256": "b4063f5f10279bad35061c532a97e3ac93a200d5b70475d1f506d21cf52b0bf0"
+    }
+  ],
+  "independent": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/root-independent70-partial.json",
+    "sha256": "78dae8307b788aa4f52c34b2a77d307f9e352cee0c80e1c91f35f0e35b83bceb"
+  },
+  "committedAggregate": {
+    "commit": "976d707c98521c623184da539f7264ba80f79c6e",
+    "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
+    "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
+  },
+  "countsWithinAggregate": {
+    "positive": 32,
+    "zero": 16,
+    "faultRejection": 48,
+    "rawBalanceSlots": 128,
+    "postSuccessRollback": 24
+  },
+  "modes": [
+    "quoted",
+    "runtime",
+    "direct-self",
+    "direct-external"
+  ],
+  "proposedText": "本路线390f与4149的双方向普通及指定收款历史验收已完成，32正／16零额／48故障拒绝为Curve plain112总账子集，不重复累计；中间Ready重验成果原hash保留，最终源码与独立证明引用976d707。此两ERC20实例不称原生币、新自然估值或原机会通过。",
+  "otherStalePending": [
+    "L22/L31 Balancer机器inventory更新中",
+    "L44 Basic已安装redeem收款继续核对",
+    "L57 xWin独立复核中"
+  ],
+  "truePendingPreserved": [
+    "L33 BTC自然估值缺项",
+    "L36全环／时效性未验",
+    "各行机会／自然集成／正式AdapterReplay／4A／4B原未验"
+  ],
+  "newExecution": 0,
+  "mainTableWrites": 0
+}

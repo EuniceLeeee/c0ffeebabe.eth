@@ -1,0 +1,33 @@
+{
+  "result": "fresh-non-author-source-review-pass",
+  "reviewer": "/root/v4_accept26",
+  "files": [
+    {
+      "path": "listener/src/searcher/test/family-settlement-review.ts",
+      "beforeSha256": "020e8283f0369df564e461580a92ffe650e6a29cb082c3b7f3eb366bc0ab645f",
+      "afterSha256": "b01a7c5ab1576069d065f347b7ca07f6ad0911f0321ab5a5655431277a6a962b",
+      "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/gate122/candidate/listener/src/searcher/test/family-settlement-review.ts"
+    },
+    {
+      "path": "listener/src/searcher/test/family-settlement-review-contract.ts",
+      "beforeSha256": "aa2ce75cdf7d7d9628b86f72ee2d216a80eaebb2c0c8bc1472bff3cf6361f4c1",
+      "afterSha256": "fdda3a8390cf801cfcb1fb8daf8658a585b4fad62f7d6ee250bafc330833f286",
+      "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/gate122/candidate/listener/src/searcher/test/family-settlement-review-contract.ts"
+    }
+  ],
+  "scope": "Tool evidence contract only; no production, quote or execution changes. Source review, not actual canonical execution.",
+  "verified": [
+    "New exemption requires recipient=no, callback=internal-only, not-required and hashed reviewed callerContinuation===false.",
+    "Ordinary report kind/family/variant/current Family and commonSource exact matches; safeInteger positive>0 and rejection>=0; actual debit/receipt/oldinventory assertions and nonempty exact valid evidence pins.",
+    "Real settlement verified branch still requires original typed report, positive rejections, rollback and applicable output-first callback guards.",
+    "Existing none/not-required behavior unchanged.",
+    "Tests cover zero rejection success, malicious classification downgrade, missing/stale ordinary and raw evidence, invalid boolean/string/counts, wrong Family/kind/variant/source/common and omitted observations."
+  ],
+  "blockingFindings": [],
+  "integrationRequirements": [
+    "Use new current-compatible family-ordinary-execution-evidence-v1 view; original immutable reports retain original schema/hash.",
+    "New hashed interface view explicitly callerContinuation:false only for actual internal-only/caller-only variants.",
+    "Root must run indexed canonical contract and actual three scoped inventory gates, preserving first failed gate and codify tooling_defect in same batch."
+  ],
+  "executedTests": false
+}

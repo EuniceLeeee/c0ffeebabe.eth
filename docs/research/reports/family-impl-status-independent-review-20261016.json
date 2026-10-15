@@ -1,0 +1,85 @@
+{
+  "kind": "independent-delivery-metadata-scope-review",
+  "result": "four-scoped-correctness-deliveries-supported-table-has-stale-status",
+  "reviewer": "/root/v4_accept26",
+  "impl": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "sha256": "f278ebf68eb04c44423eebbbcc54cdb0702311078387f63ef7070ef9ece8516a"
+  },
+  "remote": {
+    "method": "read-only git ls-remote",
+    "branch": "codex/family-runtime-actual-20261007",
+    "head": "8a277504455baaa07251e1c91e7a244771e5018c"
+  },
+  "scopeAuditAssessment": "scope119 correctly separates selected actual IMPL correctness from unselected global modes, original opportunity/natural integration and stage4. Its remaining evidence-join entries are an immutable audit-time snapshot, not a new runtime defect. This review does not assert every installed global Family mode passed.",
+  "rows": [
+    {
+      "name": "Set BasicIssuance",
+      "codeCommit": "c479aea51176983873032af121fdae5942cc6fc8",
+      "committedReport": "docs/research/reports/set-basic-recipient-actual-correctness-20261015.json",
+      "committedReportSha256": "87887224f9ada6997fa4182fbfaa1f554fb3a42d8b474b1ba960b523409044a2",
+      "conclusion": "实际四组件Basic redeem及指定收款适配正确性完成并推送。N26130046、四个已安装Graph方向、8金额组：32正／32严格声明拒绝；旧默认与quoted16次、Legacy220程序／调用数据按有效证据认证复用。协议把整篮子交给执行器，仅选中组件本次实收转给外部收款人，其他组件留存。",
+      "tableChange": "L21/L43当前计数与结论正确。L44替换过时句为：Basic实际四组件redeem与新收款正确性已完成，见上一行；未安装issue不列必补缺口。本Legacy单组件四方向结论不扩大为任意多组件issue。",
+      "limits": [
+        "没有新增issue或deferred支持",
+        "32历史负例为严格传输声明回滚；独立全状态故障回滚来自另列合成实际BotVM测试",
+        "保留原分段自然正EV及原配置，不升级新机会、Adapter Replay或4A/4B"
+      ]
+    },
+    {
+      "name": "标准ERC4626",
+      "codeCommit": "2ef3215bac0edb0e18faaa4ca6dbd7f10820116c",
+      "committedReport": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+      "committedReportSha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079",
+      "conclusion": "本次18真实目标／13变体标签／32准入方向适配正确性完成并推送：512正、1264严格声明拒绝、64零输入；另16同N独立fork欠资回滚补证，原strict resource-limited分类保留。身份、部署实现与依赖、实扣实收、512事件及1024供应量观察已独立复核；完整输入、Exact=0与无fallback成立。",
+      "tableChange": "L21/L31标准总账无需改数。保留13标签不等于13目标、18目标不等于全部ERC4626部署的范围。",
+      "limits": [
+        "四个当前仅deposit目标不提升为同步redeem",
+        "Fluid WETH只含ERC20包装入口，不提升原生ETH入口",
+        "标准MAX standing approval保留，不称授权清零",
+        "Frax/InfiniFi分派另有兼容证书，不混计此512",
+        "独立fork16与1264声明拒绝分列；无新自然估值、机会或4A/4B结论"
+      ]
+    },
+    {
+      "name": "Balancer V3",
+      "codeCommit": "21b7e08edc511d1c8c5ba8b5f7caa9c7e719fde6",
+      "committedReport": "docs/research/reports/balancer-v3-current-correctness-20261015.json",
+      "committedReportSha256": "511cbdd63971ff0f56845919807c76ebcc076127028b7de6a463e6f5c8c68869",
+      "conclusion": "已选8池StableSurge v1/v2与无Hook Weighted的36/36实际方向适配正确性证据认证完成并推送：复用280次正执行（含重复方向）及后续12次无输入独立storage回滚；280正／12负当前调用数据逐字节一致，本轮无新增历史EVM。原33/36只是第一份报告覆盖，已按完整证据纠正。",
+      "tableChange": "L22/L31删除机器表仍在更新的旧进度；L31首格改为本次实际范围适配正确性完成，后续集成／时效性未完成。",
+      "limits": [
+        "默认三跳自然估值仍35/36；最后方向获授权手工四跳只借amountIn，不称默认36/36自然通过",
+        "当前Router输出仅给sender，unlock为内部回调；不声明外部recipient／调用方deferred／原生ETH模式已验",
+        "初始268正没有独立post-native或负例观察；后12正12负额外观察不扩到全部280",
+        "Permit2 amount清零不等于expiration等全部字段清零",
+        "正式Adapter Replay、原完整机会、4A/4B未新增通过"
+      ]
+    },
+    {
+      "name": "xWin",
+      "codeCommit": "775509c7449619e74d188fa42b9ca2edb54c41d8",
+      "codifyCommit": "8a277504455baaa07251e1c91e7a244771e5018c",
+      "committedReport": "docs/research/reports/xwin-current-correctness-20261015.json",
+      "committedReportSha256": "827ef638abbf0674aa6d8e8642e1b49c66df40b9fd40fbf76e0308448803782a",
+      "conclusion": "N26075823当前VM两个方向quote／quoted／runtime共16正、8完整root执行拒绝，已独立复算并提交推送。实际proxy实现／身份、完整A、实收与返回值、旧库存及构造Exact=0／无fallback已核验。同源固定N只读quote传输修复仅属测试工具，执行仍隔离同N fork，未改定价、窗口或价格表。",
+      "tableChange": "L18/L22/L57将独立复核中／尚不能写新验收通过改为当前已选两方向适配正确性完成。L3补本次提交及最新已推送HEAD；不能把新16与旧16合称当前32次新执行。",
+      "limits": [
+        "8负例完整root revert支持EVM语义原子回滚，未独立保存negative storageDiff",
+        "旧自然正EV按原quoted fallback及原配置保留，不转称新当前自然估值或原TX复现",
+        "N26144845 paused保持真实状态正确拒绝",
+        "105错误expected-hash、106fork读取超时、110入口参数命名拒绝原件保留",
+        "无外部recipient或deferred新增能力；正式Adapter Replay、4A/4B未升级"
+      ]
+    }
+  ],
+  "otherStaleSummary": [
+    "L18当前三代理工作分配是旧时点，完成后应换成最终已完成与真实后续事项，不继续写xWin独立复核中",
+    "L3已推送HEAD679ce580已经过时；本次只读远端证实8a277504，后续提交需以root最终receipt再更新"
+  ],
+  "newExecution": 0,
+  "newRpc": 0,
+  "productionWrites": 0,
+  "mainTableWrites": 0,
+  "goalBoundary": "仅所列实际范围适配正确性；不标原四阶段全目标完成，不清除其他全局模式未知状态。待root delivery121后另作最终文档范围审。"
+}

@@ -1,0 +1,700 @@
+{
+  "schema": "compound-retained-evidence-readback/v1",
+  "result": "pass-scoped-reuse",
+  "scope": "Recomputed old raw evidence only; no new RPC, quote, EVM, build, test or historical run.",
+  "positive": 24,
+  "negativeDeclaredRevert": 12,
+  "tokenDeltaChecks": 48,
+  "supplyChecks": 24,
+  "transferChecks": 24,
+  "callbackChecks": 24,
+  "nativeObservations": 24,
+  "verifiedSourceBindings": [
+    {
+      "address": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a/blockscout/0x39aa39c021dfbae8fac545936693ac917d5e7563.json",
+      "sha256": "22e3ab7cc372d8c5da28ec71cb339237da8f499acab1397469ce53e5e055d958",
+      "runtimeKeccak256": "0x37ead445e87de4842ff3f791ad73f3c3d1fd963d5b7a1735f8d3490547152074",
+      "matchingCaches": 1,
+      "signature": "redeem(uint256)",
+      "selector": "0xdb006a75"
+    },
+    {
+      "address": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a/blockscout/0x5d3a536e4d6dbd6114cc1ead35777bab948e3643.json",
+      "sha256": "7180fb6dfd16da0803b624e4076862940c132ada096ab7ef1ef815cd7aa36f3d",
+      "runtimeKeccak256": "0x3f1d4a4e2a03855c7ee8f6f2477c1245752a5ca3ef28d59e8fd509efe59ef877",
+      "matchingCaches": 1,
+      "signature": "redeem(uint256)",
+      "selector": "0xdb006a75"
+    },
+    {
+      "address": "0x3363bae2fc44da742df13cd3ee94b6bb868ea376",
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a/blockscout/0x3363bae2fc44da742df13cd3ee94b6bb868ea376.json",
+      "sha256": "e81fa3a695bf82dbf0e65299c4e42da0416ade31dedba18a548409c8c851f3a6",
+      "runtimeKeccak256": "0x7e243019362602067d8c798362cbad827b8780f6882667b1b13efa102d1ccf78",
+      "matchingCaches": 2,
+      "signature": "redeem(uint256)",
+      "selector": "0xdb006a75"
+    }
+  ],
+  "cUNIAdditionalProxy": {
+    "exactRuntimeDiffers": true,
+    "sourceCompilerMetadataTrailerBytes": 50,
+    "codeBodyEqualToVerifiedCDAI": true,
+    "bodyKeccak256": "0xa41a11c29e4d00946a6f1f3c031e7225961025d4f5c70db0232fe0ef8e68fd1c",
+    "actualRuntimeKeccak256": "0xd32dbe57e793a99fe8663f8a3a9b52ed92810bd4c69aecf7635c55805b29405f",
+    "historicalDelegateAddress": "0x3363bae2fc44da742df13cd3ee94b6bb868ea376",
+    "historicalDelegateRuntimeMatchesVerified": true
+  },
+  "cacheProjection": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/cache-projection05.json",
+    "sha256": "543788a8f5cd01b5075526cee932cbc175abcbf9d05645cbfa3bccfe4fef3794"
+  },
+  "reports": [
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/four-family-coverage-20261012.tO076Z/compound-current-executor-20261012/dual-source-block.json",
+        "sha256": "9a5196a018a604d98338a0be0fec5d892b025675476de4026626b298dc1be7a3"
+      },
+      "originalResult": "pass-with-spliced-reference",
+      "source": {
+        "number": 25944463,
+        "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316",
+        "generation": 25944463
+      },
+      "originalRuntime": {
+        "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+        "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+      },
+      "originalSourceTree": "de8c875e842dc6018d5e00daccc1a131334e8f6dcc2d062e256879083ef85707",
+      "rows": [
+        {
+          "market": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "amountIn": "20453524572",
+          "amountOut": "5179510",
+          "encoding": "quoted",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "20453524572",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "5179510"
+            }
+          ],
+          "shareSupplyBefore": "30468863107181974",
+          "shareSupplyAfter": "30468842653657402",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "amountIn": "20453524572",
+          "amountOut": "5179510",
+          "encoding": "runtime",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "20453524572",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "5179510"
+            }
+          ],
+          "shareSupplyBefore": "30468863107181974",
+          "shareSupplyAfter": "30468842653657402",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "amountIn": "20453524572",
+          "amountOut": "5179510",
+          "encoding": "quoted",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "20453524572",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000000000000000005179510"
+            }
+          ],
+          "shareSupplyBefore": "30468863107181974",
+          "shareSupplyAfter": "30468842653657402",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "amountIn": "20453524572",
+          "amountOut": "5179510",
+          "encoding": "runtime",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "20453524572",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000000000000000005179510"
+            }
+          ],
+          "shareSupplyBefore": "30468863107181974",
+          "shareSupplyAfter": "30468842653657402",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "amountIn": "16895162987",
+          "amountOut": "4278414",
+          "encoding": "quoted",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "16895162987",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "4278414"
+            }
+          ],
+          "shareSupplyBefore": "30468863107181974",
+          "shareSupplyAfter": "30468846212018987",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "amountIn": "16895162987",
+          "amountOut": "4278414",
+          "encoding": "runtime",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "16895162987",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "4278414"
+            }
+          ],
+          "shareSupplyBefore": "30468863107181974",
+          "shareSupplyAfter": "30468846212018987",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "amountIn": "16895162987",
+          "amountOut": "4278414",
+          "encoding": "quoted",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "16895162987",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000000000000000004278414"
+            }
+          ],
+          "shareSupplyBefore": "30468863107181974",
+          "shareSupplyAfter": "30468846212018987",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "amountIn": "16895162987",
+          "amountOut": "4278414",
+          "encoding": "runtime",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "16895162987",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000000000000000004278414"
+            }
+          ],
+          "shareSupplyBefore": "30468863107181974",
+          "shareSupplyAfter": "30468846212018987",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "amountIn": "20576236020",
+          "amountOut": "5158309426899040893",
+          "encoding": "quoted",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "20576236020",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "5158309426899040893"
+            }
+          ],
+          "shareSupplyBefore": "30619432068935862",
+          "shareSupplyAfter": "30619411492699842",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "amountIn": "20576236020",
+          "amountOut": "5158309426899040893",
+          "encoding": "runtime",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "20576236020",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "5158309426899040893"
+            }
+          ],
+          "shareSupplyBefore": "30619432068935862",
+          "shareSupplyAfter": "30619411492699842",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "amountIn": "20576236020",
+          "amountOut": "5158309426899040893",
+          "encoding": "quoted",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "20576236020",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000005158309426899040893"
+            }
+          ],
+          "shareSupplyBefore": "30619432068935862",
+          "shareSupplyAfter": "30619411492699842",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "amountIn": "20576236020",
+          "amountOut": "5158309426899040893",
+          "encoding": "runtime",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "20576236020",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000005158309426899040893"
+            }
+          ],
+          "shareSupplyBefore": "30619432068935862",
+          "shareSupplyAfter": "30619411492699842",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "amountIn": "17733672807",
+          "amountOut": "4445699958193387588",
+          "encoding": "quoted",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "17733672807",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "4445699958193387588"
+            }
+          ],
+          "shareSupplyBefore": "30619432068935862",
+          "shareSupplyAfter": "30619414335263055",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "amountIn": "17733672807",
+          "amountOut": "4445699958193387588",
+          "encoding": "runtime",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "17733672807",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "4445699958193387588"
+            }
+          ],
+          "shareSupplyBefore": "30619432068935862",
+          "shareSupplyAfter": "30619414335263055",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "amountIn": "17733672807",
+          "amountOut": "4445699958193387588",
+          "encoding": "quoted",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "17733672807",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000004445699958193387588"
+            }
+          ],
+          "shareSupplyBefore": "30619432068935862",
+          "shareSupplyAfter": "30619414335263055",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "amountIn": "17733672807",
+          "amountOut": "4445699958193387588",
+          "encoding": "runtime",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "17733672807",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000004445699958193387588"
+            }
+          ],
+          "shareSupplyBefore": "30619432068935862",
+          "shareSupplyAfter": "30619414335263055",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/raw02/logs/cuni-manual-tx-20261013.gzo43m9o/manual-tx-dual-attempt02.json",
+        "sha256": "e18d4d023bba691ea54c9b0e1268d6eab190bde5e02183bcbab2f9e87cec8b20"
+      },
+      "originalResult": "incomplete-production-reference",
+      "source": {
+        "number": 26037262,
+        "hash": "0xbb2188010009ec062a4b88eed08ff7d51bf7dc747257a8aa50749304d68b0bc7",
+        "generation": 26037262
+      },
+      "originalRuntime": {
+        "keccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+        "artifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+      },
+      "originalSourceTree": "853eb200841aa1af2a439c958132bc8a2fcd7b888d3ab5770307283568d2c9e8",
+      "rows": [
+        {
+          "market": "0x35a18000230da775cac24873d00ff85bccded550",
+          "amountIn": "3309303296",
+          "amountOut": "679066135847953170",
+          "encoding": "quoted",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "3309303296",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "679066135847953170"
+            }
+          ],
+          "shareSupplyBefore": "967816913235963",
+          "shareSupplyAfter": "967813603932667",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x35a18000230da775cac24873d00ff85bccded550",
+          "amountIn": "3309303296",
+          "amountOut": "679066135847953170",
+          "encoding": "runtime",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "3309303296",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "679066135847953170"
+            }
+          ],
+          "shareSupplyBefore": "967816913235963",
+          "shareSupplyAfter": "967813603932667",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x35a18000230da775cac24873d00ff85bccded550",
+          "amountIn": "3309303296",
+          "amountOut": "679066135847953170",
+          "encoding": "quoted",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "3309303296",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000000679066135847953170"
+            }
+          ],
+          "shareSupplyBefore": "967816913235963",
+          "shareSupplyAfter": "967813603932667",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x35a18000230da775cac24873d00ff85bccded550",
+          "amountIn": "3309303296",
+          "amountOut": "679066135847953170",
+          "encoding": "runtime",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "3309303296",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000000679066135847953170"
+            }
+          ],
+          "shareSupplyBefore": "967816913235963",
+          "shareSupplyAfter": "967813603932667",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x35a18000230da775cac24873d00ff85bccded550",
+          "amountIn": "6618606592",
+          "amountOut": "1358132271695906341",
+          "encoding": "quoted",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "6618606592",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "1358132271695906341"
+            }
+          ],
+          "shareSupplyBefore": "967816913235963",
+          "shareSupplyAfter": "967810294629371",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x35a18000230da775cac24873d00ff85bccded550",
+          "amountIn": "6618606592",
+          "amountOut": "1358132271695906341",
+          "encoding": "runtime",
+          "inventoryControl": false,
+          "balances": [
+            {
+              "before": "6618606592",
+              "after": "0"
+            },
+            {
+              "before": "0",
+              "after": "1358132271695906341"
+            }
+          ],
+          "shareSupplyBefore": "967816913235963",
+          "shareSupplyAfter": "967810294629371",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": false,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x35a18000230da775cac24873d00ff85bccded550",
+          "amountIn": "6618606592",
+          "amountOut": "1358132271695906341",
+          "encoding": "quoted",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "6618606592",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000001358132271695906341"
+            }
+          ],
+          "shareSupplyBefore": "967816913235963",
+          "shareSupplyAfter": "967810294629371",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        },
+        {
+          "market": "0x35a18000230da775cac24873d00ff85bccded550",
+          "amountIn": "6618606592",
+          "amountOut": "1358132271695906341",
+          "encoding": "runtime",
+          "inventoryControl": true,
+          "balances": [
+            {
+              "before": "6618606592",
+              "after": "0"
+            },
+            {
+              "before": "1000000000000000000000000",
+              "after": "1000001358132271695906341"
+            }
+          ],
+          "shareSupplyBefore": "967816913235963",
+          "shareSupplyAfter": "967810294629371",
+          "numericReturn": "0",
+          "nativeBeforeAfter": "17",
+          "internalHookOrder": "redeemAllowed -> underlying transfer -> redeemVerify",
+          "callerContinuation": false,
+          "declaredRevertControl": true,
+          "independentNegativeStorageDiff": false
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "12 no-input traces prove declared EVM rejection, not independently observed storage rollback; negative stateDiff was not saved.",
+    "Positive samples fund exactly A shares; old output inventory is separately tested, positive surplus old input inventory is not newly claimed.",
+    "cUSDC/cDAI default amount uses the original spliced reference; cUNI uses explicitly authorized original TX shares and double. Natural valuation is not proven.",
+    "No user continuation, external output receiver, native alias, mint/borrow/redeemUnderlying support or performance is claimed."
+  ]
+}

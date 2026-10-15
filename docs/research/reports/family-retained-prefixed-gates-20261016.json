@@ -1,0 +1,85 @@
+[
+  {
+    "family": "protocol:curve-lp",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T16:36:04.809691+00:00",
+    "finishedAt": "2026-10-15T16:36:55.408688+00:00",
+    "logSha256": "8f15af29f91d45c2bcf6646b5590147040de8c9a4e38acc5f6d1a5695d28f3af",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate121-selection.json",
+    "manifestSha256": "20d2408d45cfaf61c1cf254c9ec3a638e9482db7890b2b74635a4acc9dce269a",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:curve-lp",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "family": "protocol:compound-ctoken",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T16:36:55.409053+00:00",
+    "finishedAt": "2026-10-15T16:37:45.864750+00:00",
+    "logSha256": "e876696557cf00efbdd2284cb568d138925699e249408f4b6e57db1c0857c398",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate121-selection.json",
+    "manifestSha256": "b4cee063e7d77f30cd267a2e26f4497029dc632102e648fe301bcc17f47dadac",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:compound-ctoken",
+          "passed": false,
+          "failures": [
+            "cUSDC CErc20 redeem: execution evidence",
+            "cDAI CErc20Delegator -> CErc20Delegate redeem: execution evidence"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "family": "protocol:badger-sett-withdraw",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T16:37:45.865172+00:00",
+    "finishedAt": "2026-10-15T16:38:36.650983+00:00",
+    "logSha256": "1759b7adb1c3ee75a8876a09d383d637f94b16733077a7b8903cf3717492c66d",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate121-selection.json",
+    "manifestSha256": "9659ff6ef8631639f81d9cff7ef3bc8ce1844af71048d34af71406464b630711",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:badger-sett-withdraw",
+          "passed": false,
+          "failures": [
+            "TheVault synchronous unlocked withdraw: execution evidence"
+          ]
+        }
+      ]
+    }
+  }
+]

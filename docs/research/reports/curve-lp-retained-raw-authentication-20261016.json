@@ -1,0 +1,87 @@
+{
+  "scope": "Readonly reauthentication of OLD execution evidence, not a new EVM run",
+  "positive": 48,
+  "negativeDeclaredRevert": 32,
+  "transferLogsChecked": 96,
+  "oldArtifactSha256": "a2fa22791cc41f82738d6a17f8328b4cda10ec0a71e161c4ce59ac3219e99437",
+  "oldOwnerPatchedRuntimeHash": "0xa7658a48b1f846bdf423c27ccd5fb1cfd573973b76993f6d885955ea7a621419",
+  "metadata": [
+    {
+      "path": "src/BotVM.sol",
+      "keccak256": "0x56b2c959bba3574e408f9c0eb7dfb7f889cda7298142a6a8affef7f106d24126"
+    },
+    {
+      "path": "src/Constants.sol",
+      "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "keccak256": "0x7da208ed582d0b82f542265d0b06c47486f9ab0c9f2a7d3d6760e94d502a26d4"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+    }
+  ],
+  "raws": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/current/logs/curve-lp-20261010.rm1nXW/dual-26152335-1.json",
+      "sha256": "59bef1775d6f314503d0a9ba37faed6b4ee4f10197123d2e38beff03a32b0ce2",
+      "block": 26152335,
+      "source": {
+        "number": 26152335,
+        "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+        "generation": 26152335
+      },
+      "tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+      "inputs": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/ready.json",
+          "sha256": "7266cc43d9d6f07568cc643cf7d43de1958f004d1506a676cfde87e5e97ce3c6"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/prices/prices.json",
+          "sha256": "06f6ae8d32a3f232998a7574dd517955ed878017ca48e79379ba4fe3a3c1ab25"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152335-r2/prices/input.json",
+          "sha256": "dbd5aa2040ed4501528b80b6dbb8d4d70ccc1468196bd62a3f3e308d47ff5474"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
+          "sha256": "c45e90a12b340895b2320c23be36d5d1318d7b39f25b3337859ffa36580ee5d3"
+        }
+      ]
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/current/logs/curve-lp-20261010.rm1nXW/dual-26152194-1.json",
+      "sha256": "c0232bb2f4ba7563e3456273dd8b165ff646a5aca0017ac831f212fe6608c9f2",
+      "block": 26152194,
+      "source": {
+        "number": 26152194,
+        "hash": "0x11408489e6cea134aa9414ba735f99fdcc1c1f78ad8156d04dcbe5f6c6c0cde6",
+        "generation": 26152194
+      },
+      "tx": "0x3090f50f31cb6d02b87a575fb1770418b62f230868c177b2ac81591ed0650539",
+      "inputs": [
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152194/ready.json",
+          "sha256": "53ce55065d52c7e9262c35e47247e1f1868c5c08104cd10e8122da8fb0f000d9"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152194/prices/prices.json",
+          "sha256": "1f917838a316b4c3cf66fe0d6345171fd2b953fb242d31f2e8af40e0eb87ec56"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-lp-20261010.rm1nXW/natural-26152194/prices/input.json",
+          "sha256": "ac255c66ba9e081c194e719690a20702f2b3a56eaef98f626072b931e3a94339"
+        },
+        {
+          "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
+          "sha256": "c45e90a12b340895b2320c23be36d5d1318d7b39f25b3337859ffa36580ee5d3"
+        }
+      ]
+    }
+  ],
+  "result": "pass"
+}

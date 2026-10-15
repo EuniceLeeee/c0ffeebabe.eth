@@ -1,0 +1,163 @@
+{
+  "result": "pass-scoped-current-bytecode-and-source-compatibility; no new EVM",
+  "basis": {
+    "exactByteReemit": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/reemit115.json",
+      "sha256": "13f57eda3094d69a7d9d136f1850f8b15c7f636d928cff2125b9518922fe3e86"
+    },
+    "oldRawAndArtifact": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/raw-metadata115.json",
+      "sha256": "0fc3b9a5169100cc86ff06f97e7ec1a6be8e5f6dbd00fd0d0b8b881988f77bfb"
+    },
+    "allFamilyUnchanged": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/family-source-join114.json",
+      "sha256": "f872c60df22a8998650cdf346a8179bf162ead8a87b60a254ec4c79ebfe5d206"
+    },
+    "currentAllSource": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/production-source97.json",
+      "sha256": "487afab9784fa4b1720c6f95fdc289d4cc899dd1e2f2994bac6e6cfdc3908828"
+    },
+    "vmDiff": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/BotVM.sol.diff",
+        "sha256": "5167eec9913302cb514459631e9a4bae4593aaa57840fab4f1be24bd30ceccd0"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/RuntimeAmountVM.sol.diff",
+        "sha256": "833d951c2594bfc2f29afb51ff6b0b99d6be844f0dce636c61e262c0ab2462e3"
+      }
+    ],
+    "builderDiff": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/runtime-amount-program.ts.diff",
+      "sha256": "878ecd8ea3c24ca61c3f3d018a416f0e46b7ed29f42a779c73b8ee8014b1c994"
+    }
+  },
+  "programs": [
+    {
+      "encoding": "quoted-fragment",
+      "label": "production-P",
+      "scriptHash": "0x009105158cefb786f193de6eb0193b88fc6191e7c7a513d24fbbb023a602bcd0",
+      "entryOpcode": "0x0e",
+      "version": 1,
+      "operations": {
+        "0": 8,
+        "1": 15,
+        "2": 13,
+        "3": 6,
+        "6": 14
+      },
+      "callModes": {
+        "0": 1,
+        "1": 14
+      },
+      "mathKinds": {
+        "0": 3,
+        "1": 6,
+        "2": 2,
+        "3": 2
+      },
+      "noNativeValue": true,
+      "noCallback": true,
+      "noSubprogram": true,
+      "noFlowOpcode": true
+    },
+    {
+      "encoding": "runtime-program",
+      "label": "production-P",
+      "scriptHash": "0x3949c1db13b6626d3f9e8188eadbc35b3b38b60e828114c568748ff8f61804b0",
+      "entryOpcode": "0x0e",
+      "version": 1,
+      "operations": {
+        "0": 7,
+        "1": 15,
+        "2": 11,
+        "3": 6,
+        "6": 14
+      },
+      "callModes": {
+        "0": 1,
+        "1": 14
+      },
+      "mathKinds": {
+        "0": 2,
+        "1": 5,
+        "2": 2,
+        "3": 2
+      },
+      "noNativeValue": true,
+      "noCallback": true,
+      "noSubprogram": true,
+      "noFlowOpcode": true
+    },
+    {
+      "encoding": "quoted-fragment",
+      "label": "historical-amount-at-N",
+      "scriptHash": "0xa7b74050205861e9f2577f17dc8b3d03eafb6f8476d4e3fa93c3d2d97c19cbf1",
+      "entryOpcode": "0x0e",
+      "version": 1,
+      "operations": {
+        "0": 8,
+        "1": 15,
+        "2": 13,
+        "3": 6,
+        "6": 14
+      },
+      "callModes": {
+        "0": 1,
+        "1": 14
+      },
+      "mathKinds": {
+        "0": 3,
+        "1": 6,
+        "2": 2,
+        "3": 2
+      },
+      "noNativeValue": true,
+      "noCallback": true,
+      "noSubprogram": true,
+      "noFlowOpcode": true
+    },
+    {
+      "encoding": "runtime-program",
+      "label": "historical-amount-at-N",
+      "scriptHash": "0x5c5167cb255c292fe4bf6f5c4c5aa8456eb7523eba04995f9479b51e37455dab",
+      "entryOpcode": "0x0e",
+      "version": 1,
+      "operations": {
+        "0": 7,
+        "1": 15,
+        "2": 11,
+        "3": 6,
+        "6": 14
+      },
+      "callModes": {
+        "0": 1,
+        "1": 14
+      },
+      "mathKinds": {
+        "0": 2,
+        "1": 5,
+        "2": 2,
+        "3": 2
+      },
+      "noNativeValue": true,
+      "noCallback": true,
+      "noSubprogram": true,
+      "noFlowOpcode": true
+    }
+  ],
+  "reasoning": [
+    "All4 current pureFamily withdrawProgram+runtimeProgramScript bytes equal saved actual execute calldata; quoted minimum preserved, runtime never borrows oldQ.",
+    "Family source/execution and runtime-execution unchanged; builder additions emit no new bytes for used constant/math/equality/call/load operations.",
+    "Both VM artifacts match respective actual Solidity metadata; old owner-patched runtime is exact raw hash8811c106, current owner-patched runtime dbebd147 is explicitly different.",
+    "Saved scripts enter BotVM opcode0x0e directly; neither invokes changed0x0c flow/rounding nor native wrapping. Current0x0e entry still invokes _runRuntimeProgram same amount/program.",
+    "New function wrapper initializes readOnly=false/depth0 and empty-flow diagnostic context. Used op0/1/2/3/6 retain same arithmetic/load/equality/register effects; mode0/1 call configuration and prior transient restoration unchanged. No callback/value/revert-mode2/nesting or diagnostic failure occurs in these successful calls.",
+    "Current unused new maximum-input, rounding, callback/deferred, nested/readOnly, diagnostic failure branches do not justify invalidating the four unchanged successful single-leg programs."
+  ],
+  "limits": [
+    "This is retained4 historical execution certification plus source/current bytecode recomputation, not4 fresh currentVM EVM runs.",
+    "No negative or unsupported settlement new executions; no new native inventory fault matrix.",
+    "Original reverse-verified sameN descriptor is used for recomputation, not a newly issued currentReady or natural valuation claim.",
+    "No full opportunity, deposit, locker realization, latency or performance conclusion."
+  ]
+}

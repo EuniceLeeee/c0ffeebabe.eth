@@ -1,0 +1,20 @@
+{
+  "result": "fresh-independent-scoped-review-pass",
+  "positiveExecutions": 4,
+  "independentRawBalanceSlots": 8,
+  "protocolWithdrawInputs": 4,
+  "protocolOutputTransfers": 4,
+  "sourceCompatibility": "Inspected old/current RuntimeAmountVM and BotVM diffs: direct0e default readOnly=false/depth0, used op0/1/2/3/6 mode0/1 retain success semantics. Added flow policies/nesting/diagnostic paths not exercised. Current exact script reemission certificate and4program classifications authenticated.",
+  "evidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/actual/logs/family-three-history.0rIF4l/26138511/dual-indexed-final.json",
+      "sha256": "4136236467d05b83162bd1f62a27833bcc004656440e193311c8381c760b43af"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/badger113/current-compat116.json",
+      "sha256": "9ee8c5f872924e0a56b05f4573be9852319c1966d024ebffbee3507390387c9a"
+    }
+  ],
+  "scope": "Historical4 accepted caller-only liquid-balance withdraw executions authenticated plus bounded current-source compatibility. No new EVM, no absent negative/native/strategy.withdraw execution claim.",
+  "blockingFindings": []
+}

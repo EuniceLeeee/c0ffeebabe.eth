@@ -1,0 +1,25 @@
+{
+  "findingClass": "tooling_defect",
+  "result": "confirmed-by-independent-source-review",
+  "baseHead": "8a277504455baaa07251e1c91e7a244771e5018c",
+  "problem": "Settlement capability gate rejects internal-only/no/not-required even when actual deployment has only Comptroller-style internal hooks and no caller continuation. Marking execution verified conflates ordinary execution with a new settlement mode.",
+  "minimalRepair": "Accept internal-only/no/not-required only with typed ordinary execution evidence and matching hash-bound independent classification explicitly denying callerContinuation. Keep none and existing verified settlement path unchanged.",
+  "requiredOrdinaryEvidence": [
+    "positive safe integer count >0",
+    "rejection safe integer count >=0 (booleans rejected)",
+    "familyId and variantIds",
+    "exact current family/common source arrays",
+    "actual-input-debit",
+    "actual-output-receipt",
+    "old-inventory",
+    "nonempty immutable saved-evidence references with valid SHA256 and checked bytes"
+  ],
+  "negativeBoundary": "Ordinary evidence does not invent independently observed negative storageDiff. Original root-revert evidence remains documented separately. Genuine supported callback modes cannot use the new internal-only classification when their independent review disagrees.",
+  "implementation": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/gate122/handoff.json",
+    "sha256": "b607842debb4c6378360dfa5ccc8ef8ba2afdb41f70f119a97ccde9cd77d9351"
+  },
+  "canonicalStatus": "Not run by this reviewer. Parent owns original failure preservation, guarded application, canonical regression/current gate execution, LearningCase and codify_commit.",
+  "productionModified": false,
+  "historicalExecutionRepeated": false
+}

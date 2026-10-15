@@ -1,0 +1,105 @@
+[
+  {
+    "tool": "listener:searcher:family-settlement-review-contract",
+    "args": [],
+    "exitCode": 0,
+    "startedAt": "2026-10-15T16:40:40.821270+00:00",
+    "finishedAt": "2026-10-15T16:40:43.652660+00:00",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+    "manifestSha256": "a494ab486f8de04ac4e2da4e1ea2ef7e274dbe8afc32ffac3bd196e2ac043761",
+    "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-contract.log",
+    "logSha256": "2fb0e2a5ee69a17e76939f7078fa5eb6ecab20287417be7743b622b493b77fa0",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json --tool listener:searcher:family-settlement-review-contract --\n\n\n> mev-listener@0.1.0 searcher:family-settlement-review-contract\n> node --import tsx --test src/searcher/test/family-settlement-review-contract.ts\n\n\u2714 acceptance requires complete identity, interface, wiring and real execution evidence (1.065498ms)\n\u2714 unsupported operations need interface evidence, while callbacks and receiver modes cannot skip execution (0.161151ms)\n\u2714 installed coverage cannot omit disabled entries, duplicate Families or silently add variants (3.379129ms)\n\u2714 changed or missing production code invalidates saved acceptance without overwriting old evidence (0.242083ms)\n\u2714 omitted reviewed variants and interface-only files cannot manufacture execution acceptance (4.378267ms)\n\u2714 reviewers cannot replace relevant source closure with arbitrary unchanged files (0.396144ms)\n\u2714 internal-only caller hooks require independent classification and ordinary real execution (4.021833ms)\n\u2139 tests 7\n\u2139 suites 0\n\u2139 pass 7\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 2383.44755\ntool-run receipt=listener:searcher:family-settlement-review-contract exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json\n"
+  },
+  {
+    "tool": "listener:searcher:family-settlement-review",
+    "args": [
+      "--family",
+      "protocol:curve-lp"
+    ],
+    "exitCode": 0,
+    "startedAt": "2026-10-15T16:40:43.652989+00:00",
+    "finishedAt": "2026-10-15T16:41:34.618828+00:00",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+    "manifestSha256": "5036faa7bb721d729902002d019ea82f3942739890c2e361ee0d300526480d02",
+    "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-curve-lp.log",
+    "logSha256": "8f9c4bbdfe154860f52c74dfc7c8c514596ebb10b9d1ed589667d24188d6f308",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:curve-lp",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "tool": "listener:searcher:family-settlement-review",
+    "args": [
+      "--family",
+      "protocol:compound-ctoken"
+    ],
+    "exitCode": 0,
+    "startedAt": "2026-10-15T16:41:34.619246+00:00",
+    "finishedAt": "2026-10-15T16:42:24.920648+00:00",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+    "manifestSha256": "92b3fe07316733a722a254f97848a32296e3151546bdfefbb8175088c7241771",
+    "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-compound-ctoken.log",
+    "logSha256": "ad21d143a2d9d46fdbef0bf0e2e18765885d8f2d94f1cb5011d3701c62a83464",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:compound-ctoken",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  },
+  {
+    "tool": "listener:searcher:family-settlement-review",
+    "args": [
+      "--family",
+      "protocol:badger-sett-withdraw"
+    ],
+    "exitCode": 0,
+    "startedAt": "2026-10-15T16:42:24.921312+00:00",
+    "finishedAt": "2026-10-15T16:43:15.623826+00:00",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-selection.json",
+    "manifestSha256": "5ab82cf21c44d8ecc8d21bdbbf6e485305f3345756c64e5f4df5c61b0b4b2d88",
+    "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/retained-gate122-badger-sett-withdraw.log",
+    "logSha256": "a33b45aca551ab398d4fb8480a2d5940e5d3d352f0ba80ff59b6cbfe8c19a4ab",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:badger-sett-withdraw",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  }
+]

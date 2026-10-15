@@ -1,0 +1,657 @@
+{
+  "schema": "compound-vm-program-reuse/v1",
+  "result": "byte-authenticated-scoped-compatibility",
+  "artifacts": [
+    {
+      "artifact": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/old-artifact-62a3d76f.json",
+        "sha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+      },
+      "originalReportedArtifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+      "artifactJsonHashEqualsOriginal": true,
+      "owner": "0x1000000000000000000000000000000000000001",
+      "runtimeKeccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+      "immutablePatchAlgorithm": "Replace only every compiler-declared deployed immutable reference (length 32) with left-zero-padded recorded owner; no other byte modified.",
+      "patches": [
+        {
+          "immutableId": "40501",
+          "start": 136,
+          "length": 32
+        },
+        {
+          "immutableId": "40501",
+          "start": 480,
+          "length": 32
+        },
+        {
+          "immutableId": "40501",
+          "start": 559,
+          "length": 32
+        }
+      ],
+      "metadataSources": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/BotVM.sol",
+          "compilerSourcePath": "src/BotVM.sol",
+          "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/Constants.sol",
+          "compilerSourcePath": "src/Constants.sol",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/RuntimeAmountVM.sol",
+          "compilerSourcePath": "src/RuntimeAmountVM.sol",
+          "sha256": "9dd2974a39370dcaca2bf5f031a4f5a147640bee6dc1988b9f7bc2446e8b2ff8",
+          "keccak256": "0xf8d87fc9d3286cf5e5d327e9a943ff60eccf1e8383739ccdb9ce7d32edfb8d19"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/interfaces/IERC20.sol",
+          "compilerSourcePath": "src/interfaces/IERC20.sol",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+        }
+      ]
+    },
+    {
+      "artifact": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/out/BotVM.sol/BotVM.json",
+        "sha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "originalReportedArtifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+      "artifactJsonHashEqualsOriginal": true,
+      "owner": "0x1000000000000000000000000000000000000001",
+      "runtimeKeccak256": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "immutablePatchAlgorithm": "Replace only every compiler-declared deployed immutable reference (length 32) with left-zero-padded recorded owner; no other byte modified.",
+      "patches": [
+        {
+          "immutableId": "40501",
+          "start": 136,
+          "length": 32
+        },
+        {
+          "immutableId": "40501",
+          "start": 480,
+          "length": 32
+        },
+        {
+          "immutableId": "40501",
+          "start": 559,
+          "length": 32
+        }
+      ],
+      "metadataSources": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source06/src/BotVM.sol",
+          "compilerSourcePath": "src/BotVM.sol",
+          "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source06/src/Constants.sol",
+          "compilerSourcePath": "src/Constants.sol",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source06/src/RuntimeAmountVM.sol",
+          "compilerSourcePath": "src/RuntimeAmountVM.sol",
+          "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+          "keccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source06/src/interfaces/IERC20.sol",
+          "compilerSourcePath": "src/interfaces/IERC20.sol",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+        }
+      ]
+    }
+  ],
+  "programs": [
+    {
+      "programHash": "0x17dc92be91fc5f31b4102a6f62c132d99deaa04dd54294cedfc2e2f90aa2fc5d",
+      "bytes": 464,
+      "opcodes": [
+        0,
+        1,
+        2,
+        3,
+        6
+      ],
+      "calls": [
+        {
+          "target": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "mode": 0,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 1,
+          "selector": "0xdb006a75"
+        },
+        {
+          "target": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        }
+      ]
+    },
+    {
+      "programHash": "0xd15c4af60815b15cfaad1f392b343af9f47b49ec724ef31c97fce226a86e25ca",
+      "bytes": 464,
+      "opcodes": [
+        0,
+        1,
+        2,
+        3,
+        6
+      ],
+      "calls": [
+        {
+          "target": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "mode": 0,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 1,
+          "selector": "0xdb006a75"
+        },
+        {
+          "target": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        }
+      ]
+    },
+    {
+      "programHash": "0x7c7a791ed3c082b10c45c787597416a7bb3b8edf169d8d4dcf6ee9b881a0efec",
+      "bytes": 464,
+      "opcodes": [
+        0,
+        1,
+        2,
+        3,
+        6
+      ],
+      "calls": [
+        {
+          "target": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "mode": 0,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 1,
+          "selector": "0xdb006a75"
+        },
+        {
+          "target": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        }
+      ]
+    },
+    {
+      "programHash": "0xfca4113b263d7893411eb5aa24456298f73fa058d8c2cfd837ea691b4050abd7",
+      "bytes": 464,
+      "opcodes": [
+        0,
+        1,
+        2,
+        3,
+        6
+      ],
+      "calls": [
+        {
+          "target": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "mode": 0,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 1,
+          "selector": "0xdb006a75"
+        },
+        {
+          "target": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        }
+      ]
+    },
+    {
+      "programHash": "0x0d585a0421fc36504d2cbf188b2b808cbff5f025537737708cf8830251f12918",
+      "bytes": 464,
+      "opcodes": [
+        0,
+        1,
+        2,
+        3,
+        6
+      ],
+      "calls": [
+        {
+          "target": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "mode": 0,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 1,
+          "selector": "0xdb006a75"
+        },
+        {
+          "target": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        }
+      ]
+    },
+    {
+      "programHash": "0x2ce58875a0755d6855fd3bca5a5bd80a36ad7727a8ed2687d4443389eac05f00",
+      "bytes": 464,
+      "opcodes": [
+        0,
+        1,
+        2,
+        3,
+        6
+      ],
+      "calls": [
+        {
+          "target": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "mode": 0,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 1,
+          "selector": "0xdb006a75"
+        },
+        {
+          "target": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x6b175474e89094c44da98b954eedeac495271d0f",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        }
+      ]
+    },
+    {
+      "programHash": "0x935b017ea57e0dc46e9b8d8224000f99c9c8daf7d15e055f3c4c8b04b9b2772d",
+      "bytes": 464,
+      "opcodes": [
+        0,
+        1,
+        2,
+        3,
+        6
+      ],
+      "calls": [
+        {
+          "target": "0x35a18000230da775cac24873d00ff85bccded550",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x35a18000230da775cac24873d00ff85bccded550",
+          "mode": 0,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 1,
+          "selector": "0xdb006a75"
+        },
+        {
+          "target": "0x35a18000230da775cac24873d00ff85bccded550",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        }
+      ]
+    },
+    {
+      "programHash": "0x119f6864af8a3e60cfbfe7dee5e4b3e299a9d3a7529d83f4a618f6c05f0e61ce",
+      "bytes": 464,
+      "opcodes": [
+        0,
+        1,
+        2,
+        3,
+        6
+      ],
+      "calls": [
+        {
+          "target": "0x35a18000230da775cac24873d00ff85bccded550",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x35a18000230da775cac24873d00ff85bccded550",
+          "mode": 0,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 1,
+          "selector": "0xdb006a75"
+        },
+        {
+          "target": "0x35a18000230da775cac24873d00ff85bccded550",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        }
+      ]
+    },
+    {
+      "programHash": "0x961d3c4a0d022d59adde577f182ac2d4b1e2688ad4678e0b4002c3e03bb2165f",
+      "bytes": 464,
+      "opcodes": [
+        0,
+        1,
+        2,
+        3,
+        6
+      ],
+      "calls": [
+        {
+          "target": "0x35a18000230da775cac24873d00ff85bccded550",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x35a18000230da775cac24873d00ff85bccded550",
+          "mode": 0,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 1,
+          "selector": "0xdb006a75"
+        },
+        {
+          "target": "0x35a18000230da775cac24873d00ff85bccded550",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        },
+        {
+          "target": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+          "mode": 1,
+          "valueReg": 255,
+          "incoming": 0,
+          "outgoing": 0,
+          "patchCount": 0,
+          "selector": "0x70a08231"
+        }
+      ]
+    }
+  ],
+  "scope": "Old 62a3 execution and current dbeb code remain separate. No current EVM re-execution. Existing instruction paths retain behavior; new mode 2, nested opcode 8, new math eq/min and native/deferred paths are absent from all retained programs.",
+  "runtimeVmDiff": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/diffs06/src__RuntimeAmountVM.sol",
+    "sha256": "8f891cae6016b18f82d40dba2be09fd631d50d108b6a6452c25c05bae096f255"
+  },
+  "unchangedCompilerSources": [
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    }
+  ]
+}

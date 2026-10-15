@@ -1,0 +1,807 @@
+{
+  "schema": "compound-current-compatibility/v1",
+  "result": "pass-scoped-reuse",
+  "scope": "Existing Compound V2 ERC20 redeem(shares): current emitted bytes and selected VM paths are compatible with retained cUSDC/cDAI/cUNI single-leg evidence. Not new historical execution.",
+  "readHead": "679ce58091b1aa0433499916f2a1c0e15da07b82",
+  "currentFamilySource": [
+    {
+      "path": "listener/src/adapters/protocol-legs.ts",
+      "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/compound-ctoken.production.ts",
+      "sha256": "add31c3b3e04eb91442f04ad1cb360d54eed9efffae26c67d3b501a0d1924599"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/abi.ts",
+      "sha256": "7d871bf7d5cdcc151743558fad1175580f402fb2c3aaea09ec09cf0d6cb56fdd"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/action.ts",
+      "sha256": "4d9065ba8fd92270aa5cc3f43339ed87c7f01872175330aa2a74ddde7810d335"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/behavior.ts",
+      "sha256": "e49891d05387c5603fc213e40ad2940d060b8ddd2e5bf141fb66b1054cbd6bf9"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+      "sha256": "35e407ad7dcf1bdd58659cf168c99096ae5e487564e5b81fa54b726d47f1e607"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/execution.ts",
+      "sha256": "3b69acda476edb6cd7f9b31a8ebc0ec33c3da4a6cce7630e04715589124d603a"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/identity.ts",
+      "sha256": "b20ce971ab58a53b5b1247e79f0894a77f4d3f2bcf32feee674a7c1d73c1a4fa"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+      "sha256": "47e3ba4b683f53da0823f423b00a879a8f5ddd2eb2572baebda88e9ff7dda97b"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/redeem-program.ts",
+      "sha256": "89121e6767a712bb42ac8bc2daca15526182220653a489d7555b0c30f40b386e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/routes.ts",
+      "sha256": "3945c9b788b71efbb2f1b1fb78072a336ae85d133524a45bf2c98e973cbccef7"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+      "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    }
+  ],
+  "currentCommonSource": [
+    {
+      "path": "listener/src/adapters/registry.ts",
+      "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/compiler.ts",
+      "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-credit-runtime.ts",
+      "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+      "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+      "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+      "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+    },
+    {
+      "path": "listener/src/searcher/adapter-funding-runtime.ts",
+      "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+    },
+    {
+      "path": "listener/src/searcher/adapter-work-intent.ts",
+      "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+    },
+    {
+      "path": "listener/src/searcher/amount-quote-continuity.ts",
+      "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-route-identity.ts",
+      "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+    },
+    {
+      "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+      "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+    },
+    {
+      "path": "listener/src/searcher/exact-prefix-plan.ts",
+      "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+    },
+    {
+      "path": "listener/src/searcher/exact-trial-state.ts",
+      "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
+    },
+    {
+      "path": "listener/src/searcher/identity-asset-metadata.ts",
+      "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+    },
+    {
+      "path": "listener/src/searcher/runtime-evidence.ts",
+      "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+    },
+    {
+      "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+      "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+      "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-bounds.ts",
+      "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-rejection.ts",
+      "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-builder.ts",
+      "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+      "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+    },
+    {
+      "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+      "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+    },
+    {
+      "path": "listener/src/searcher/strategy-taxonomy.ts",
+      "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+    },
+    {
+      "path": "listener/src/searcher/strict-production-runtime-session.ts",
+      "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+      "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-program.ts",
+      "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+    },
+    {
+      "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+      "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/constants/addresses.ts",
+      "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/BotVMEncoder.sol",
+      "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+    },
+    {
+      "path": "src/BotVMScriptBuilder.sol",
+      "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/FlashArb.sol",
+      "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    },
+    {
+      "path": "src/interfaces/IFluidVault.sol",
+      "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+    },
+    {
+      "path": "src/interfaces/IMorpho.sol",
+      "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+    },
+    {
+      "path": "src/interfaces/ISwap.sol",
+      "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+    }
+  ],
+  "allAdditionalReviewedPins": [
+    {
+      "path": "listener/src/adapters/protocol-legs.ts",
+      "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+    },
+    {
+      "path": "listener/src/adapters/registry.ts",
+      "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/compiler.ts",
+      "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-credit-runtime.ts",
+      "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+      "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+      "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+      "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+    },
+    {
+      "path": "listener/src/searcher/adapter-funding-runtime.ts",
+      "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+    },
+    {
+      "path": "listener/src/searcher/adapter-work-intent.ts",
+      "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+    },
+    {
+      "path": "listener/src/searcher/amount-quote-continuity.ts",
+      "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-route-identity.ts",
+      "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+    },
+    {
+      "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+      "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+    },
+    {
+      "path": "listener/src/searcher/exact-prefix-plan.ts",
+      "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+    },
+    {
+      "path": "listener/src/searcher/exact-trial-state.ts",
+      "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
+    },
+    {
+      "path": "listener/src/searcher/identity-asset-metadata.ts",
+      "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+    },
+    {
+      "path": "listener/src/searcher/runtime-evidence.ts",
+      "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+    },
+    {
+      "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+      "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+      "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-bounds.ts",
+      "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-rejection.ts",
+      "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-builder.ts",
+      "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+      "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+    },
+    {
+      "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+      "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+    },
+    {
+      "path": "listener/src/searcher/strategy-taxonomy.ts",
+      "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+    },
+    {
+      "path": "listener/src/searcher/strict-production-runtime-session.ts",
+      "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+      "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-program.ts",
+      "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+    },
+    {
+      "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+      "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/compound-ctoken.production.ts",
+      "sha256": "add31c3b3e04eb91442f04ad1cb360d54eed9efffae26c67d3b501a0d1924599"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/abi.ts",
+      "sha256": "7d871bf7d5cdcc151743558fad1175580f402fb2c3aaea09ec09cf0d6cb56fdd"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/action.ts",
+      "sha256": "4d9065ba8fd92270aa5cc3f43339ed87c7f01872175330aa2a74ddde7810d335"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/behavior.ts",
+      "sha256": "e49891d05387c5603fc213e40ad2940d060b8ddd2e5bf141fb66b1054cbd6bf9"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/capture.ts",
+      "sha256": "ceea254071e88258b623ac156c93f97fdbc054027482680a6bfa6cbd7aa2ba00"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/codec.ts",
+      "sha256": "35e407ad7dcf1bdd58659cf168c99096ae5e487564e5b81fa54b726d47f1e607"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/discovery.ts",
+      "sha256": "3db1c07f25904790a7e4b3839065cace68d92fb01d97779205062442685044bf"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/exact.ts",
+      "sha256": "9e9b94431c30afe695c05e239c30451fec227431c21aa79152ee2044ebb043ab"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/execution.ts",
+      "sha256": "3b69acda476edb6cd7f9b31a8ebc0ec33c3da4a6cce7630e04715589124d603a"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/identity.ts",
+      "sha256": "b20ce971ab58a53b5b1247e79f0894a77f4d3f2bcf32feee674a7c1d73c1a4fa"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/instance.ts",
+      "sha256": "d76a9aaab5ac46f41bc7fdf40583869cff52fe0108789f1176b916a52c36b0eb"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+      "sha256": "47e3ba4b683f53da0823f423b00a879a8f5ddd2eb2572baebda88e9ff7dda97b"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/nomination.ts",
+      "sha256": "d76827be0f9261eb1156343a18a76b012a978135678dc24945bb9a4896085430"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/pricing.ts",
+      "sha256": "2bc0762b4559d8565298c835617bfba3c3a52787dd5a2ac179da136930c8164c"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/protocol.ts",
+      "sha256": "cb32c7b4e8ef8d9eed3b0508648ab16e0e93932832ca911ac0f3204bee7f216a"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/redeem-program.ts",
+      "sha256": "89121e6767a712bb42ac8bc2daca15526182220653a489d7555b0c30f40b386e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/routes.ts",
+      "sha256": "3945c9b788b71efbb2f1b1fb78072a336ae85d133524a45bf2c98e973cbccef7"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/types.ts",
+      "sha256": "6f6d7fba934b2fa281f6d9e0a2fea8fd66688563e27a9b17912ac1654ac957f2"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+      "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/capture.ts",
+      "sha256": "a56e400079997b1fa4423dbfbc89d88c84fcba46fc9117ac1e2449e5aa357ce1"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/discovery.ts",
+      "sha256": "fcd17196a9d341b985568446f75c46b84c037737986fa894ba9a2024172169aa"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/exact.ts",
+      "sha256": "e9bb9a1761e987b6d5915275276c3b9833e75907b95ac74483bef2f4864ab702"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/nomination.ts",
+      "sha256": "6b38cb5aed198b6cf607c5cc152bf9388ba434b34872c9de13d01fb11d2fe08b"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/pricing.ts",
+      "sha256": "240f95ed024ac1b84e0249e4ddd48a19e4625199f373df3e59980cd37a6b47b9"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/refresh-scope.ts",
+      "sha256": "b013bb584c136d74759e085f135d7985286d75186ca556286bc44f836ba85fa2"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/swap.ts",
+      "sha256": "c9121bcfa217a2a8531088a4b28dc6f7c2f8b886cb66a538400a0a86b500f40b"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/balancer-v3-family/types.ts",
+      "sha256": "4559c490431619317fc2a05ac69f86ea7d066e7d59df7ff40eb9b46f8a3bd27a"
+    },
+    {
+      "path": "listener/src/shared/constants/addresses.ts",
+      "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/BotVMEncoder.sol",
+      "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+    },
+    {
+      "path": "src/BotVMScriptBuilder.sol",
+      "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/FlashArb.sol",
+      "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    },
+    {
+      "path": "src/interfaces/IFluidVault.sol",
+      "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+    },
+    {
+      "path": "src/interfaces/IMorpho.sol",
+      "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+    },
+    {
+      "path": "src/interfaces/ISwap.sol",
+      "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+    }
+  ],
+  "fileComparison": {
+    "reference": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source-comparison06.json",
+      "sha256": "38149f167ea28a75feb32c965418d7a2cfe9f39de9f379406f21be6ec6bfebc3"
+    },
+    "retainedTree": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/frozen",
+    "equalFiles": 67,
+    "all17FamilyProductionModulesEqual": true,
+    "wholeTreeEqualityClaimed": false,
+    "note": "No original sourceTree hash is rewritten; exact raw trees de8c875… and 853eb200… remain distinct. The retained snapshot supports file-level comparison, while byte reconstruction directly binds every observed script."
+  },
+  "changes": [
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "currentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+      "retainedSource": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/frozen/listener/src/adapters/runtime-amount-program.ts",
+      "retainedSha256": "5ab89da1040c55ffa7ecd74eafe781b9aa83c24f7b06987ffe0d8fbc91322ce6",
+      "equal": false,
+      "interpretation": "Selected 9 distinct programs use original opcodes 0/1/2/3/6 and CALL/STATICCALL modes 0/1 only. New math eq/min, expected-revert, nested programs and settlement paths are unused; byte-identical program reconstruction proves emitted layout unchanged.",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/diffs06/listener__src__adapters__runtime-amount-program.ts",
+        "sha256": "ac973064498c6c7b1fbb2dc05fe0191bb7bcd72a5bd1a4241a6f96d84ca373ab"
+      }
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "currentSha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4",
+      "retainedSource": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/frozen/listener/src/searcher/execution-asset-boundary.ts",
+      "retainedSha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e",
+      "equal": false,
+      "interpretation": "All selected routes have ERC20 share and ERC20 underlying, no native executionAssets. Existing early return retains raw runtime and quoted behavior; new native conversions/direct/deferred branches are not selected.",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/diffs06/listener__src__searcher__execution-asset-boundary.ts",
+        "sha256": "91005f3821bb30c80ac0bbe6c3deddbc46db224a8bee82c2cead2cd478e1eb03"
+      }
+    },
+    {
+      "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "currentSha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+      "retainedSource": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/frozen/listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "retainedSha256": "29ad091621e689a7da0565ed45446309008a73d3aa3b47299b5f2bfda907c865",
+      "equal": false,
+      "interpretation": "Optional callback composer requires absent quote/direct/deferred capabilities. It cannot promote these legs to caller-continuation settlement. Old single-leg evidence does not claim full-loop scheduler behavior.",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/diffs06/listener__src__searcher__simulator__blockscan-sim-amount-selector.ts",
+        "sha256": "322a2d801009ed8918dea06108d3b3b191069ead1425c61c3763b1ae0b642d48"
+      }
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "currentSha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+      "retainedSource": null,
+      "retainedSha256": null,
+      "equal": false,
+      "interpretation": "New composer is not applicable to the selected caller-only Compound legs, which emit no settlement capability.",
+      "note": "No file at old retained TS snapshot; new optional composer not called."
+    },
+    {
+      "path": "listener/src/searcher/strict-production-runtime-session.ts",
+      "currentSha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19",
+      "retainedSource": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/frozen/listener/src/searcher/strict-production-runtime-session.ts",
+      "retainedSha256": "8ccaa0084655f92697c9a848faf648fba308a1c40693c0775c9ec388db888c08",
+      "equal": false,
+      "interpretation": "Passes optional settlement request. Existing omitted request remains undefined; this Family receives the same default construction inputs.",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/diffs06/listener__src__searcher__strict-production-runtime-session.ts",
+        "sha256": "cbcdb1710dd62ad3ed9797a51db45016d272e8bacf8a6d6b53905f546d783acd"
+      }
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "currentSha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+      "retainedSource": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/frozen/listener/src/searcher/venues/adapter-family-plugin.ts",
+      "retainedSha256": "305bf247789b7104ec55fdd99edceea87db0082abd2a0280de16cea16ecc0347",
+      "equal": false,
+      "interpretation": "Adds optional settlement and tolerance type fields. This unchanged Family does not declare them; no protocol behavior change.",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/diffs06/listener__src__searcher__venues__adapter-family-plugin.ts",
+        "sha256": "b6ded21217cde99519420e0a333cdc6e4583976ae3a8ed765c18c9bd0edad9cc"
+      }
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "currentSha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+      "retainedSource": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/frozen/listener/src/searcher/venues/adapter-family-runtime.ts",
+      "retainedSha256": "e8aa9084cecd3881d7957813b8b9594199c06a76e2e347d5671c2e826e644f8b",
+      "equal": false,
+      "interpretation": "Ownership/source/generation/caller checks retained. Omitted settlement request and absent echo remain equal. Explicit quote/direct/deferred requests fail closed because unchanged Family supplies no echo/capability. Native mapping leaves selected ERC20 routes unchanged.",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/diffs06/listener__src__searcher__venues__adapter-family-runtime.ts",
+        "sha256": "f9e1c168970dbe42e978ab13129eab04ca2af3e9e4129f9e964d80975b42691b"
+      }
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "currentSha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15",
+      "retainedSource": "/Users/eunice/src/MEV/logs/planner-offline-5b6114-20261012.5Bn2XE/cloud-evidence/frozen/listener/src/shared/state/state-backend.ts",
+      "retainedSha256": "6e5542510343839c78d681c64da8b161da88638722fb6e4931f39cc0f956229a",
+      "equal": false,
+      "interpretation": "Adds opt-in counterfactual Cancun selection. Existing saved historical calls retain their recorded state/header; no new provider execution or timing equivalence is asserted.",
+      "diff": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/diffs06/listener__src__shared__state__state-backend.ts",
+        "sha256": "1c3943b23b7ac52bc4849e0dbc09e28b3e366e7f8dc73b3c63a003e613746355"
+      }
+    }
+  ],
+  "programReconstruction": {
+    "reference": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/reemit06.json",
+      "sha256": "ab7643b4b23a9c435f714dda764ce5b9670c02f060db6dde91a8307900199f21"
+    },
+    "harness": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/reemit06.mjs",
+      "sha256": "28fc137b37c569d7b750202270e83ad7dbd1af48a94a19559529f8c293679d0e"
+    },
+    "runner": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/reemit06.py",
+      "sha256": "a6a699eed682197ed888ef7d17030cc3ebc30983216fd06385e2b9a19f35a61a"
+    },
+    "positiveFullCalldataMatches": 24,
+    "negativeFullCalldataMatches": 12,
+    "quotesTakenFromPriorEvidenceOnlyForReconstruction": true,
+    "newExactIssuerOrEvmClaim": false
+  },
+  "vmAndProgramBinding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/vm-program-binding08.json",
+    "sha256": "6db7b06542a0e993070a8f1a87bc165b6497fdb0a37197dbd3598621a4adcd93"
+  },
+  "vmCompatibility": "Old artifact JSON 1e3429… is an exact hash match; patched runtime 62a3… is the original runtime. Current artifact 6a8295… maps separately to dbeb…. All 4 compiler source keccaks independently validated for both artifacts. BotVM/Constants/IERC20 source bytes are identical; RuntimeAmountVM diff adds only paths unused by the 9 saved programs. Existing mode 0/1 parsing/patching, arithmetic, equality, load, failure rejection and transient restoration retain their behavior.",
+  "solidityChange": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/diffs06/src__RuntimeAmountVM.sol",
+    "sha256": "8f891cae6016b18f82d40dba2be09fd631d50d108b6a6452c25c05bae096f255"
+  },
+  "noCurrentEvmRun": true,
+  "broaderCompatibilityReference": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/current-compat08.json",
+    "sha256": "16757f74bd7b4f8e3d314e6fdaef1c8d2ff2db757f093e533f86ad5f3d49ea91"
+  },
+  "limits": [
+    "Current whole-tree/source-tree equality to old execution is not claimed.",
+    "This preserves single-leg correctness for exact existing byte programs, not gas/performance, new natural valuation, a whole opportunity, full Adapter Replay or merge readiness.",
+    "No external recipient, deferred payment, mint, borrow, liquidation, redeemUnderlying or native alias capability is added."
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "schema": "compound-independent-final-review/v1",
+  "reviewer": "v1_accept26",
+  "result": "pass-scoped-retained-correctness",
+  "blockingFindings": [],
+  "reviewedImmutableFiles": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/v1-independent08.json",
+      "sha256": "f98aa036d67b986a50e58827e19e291a6c2bd510665267f7d99f3f9cafac5012"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/compact09.json",
+      "sha256": "c74fcb964a10a06c5e2a67b2d223e1312f82591a4b637977505d2bfb8d3b4b23"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/current-compat09.json",
+      "sha256": "ee2417d58f5c43ecc26409e3a12fcca1806d6aab01d04a404001b4926cf0f355"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/inventory-proposal09.json",
+      "sha256": "542770f7e43d183a390c531836978bc0519a2c42165aa88320cc74ce27444634"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/handoff09.json",
+      "sha256": "d5c12c2ca6b128e10a123ded946c5f3d7bb7f79df3d633778e41e70bef31a9ec"
+    }
+  ],
+  "basis": "Fresh independent raw/identity/source/artifact review is preserved in v1-independent08.json. This addendum binds the author final compact, compatibility, inventory proposal and handoff without rewriting that review.",
+  "verifiedScope": {
+    "markets": [
+      "cUSDC",
+      "cDAI",
+      "cUNI"
+    ],
+    "operation": "redeem(uint256 shares)",
+    "positive": 24,
+    "rootRevertNoInput": 12,
+    "rawActorBalanceSlots": 48,
+    "shareSupplyBurns": 24,
+    "familyFilesByteIdentical": 17,
+    "currentFullCalldataMatches": 36,
+    "newHistoricalExecutions": 0
+  },
+  "finalDocumentChecks": [
+    "Exact historical number/hash cache joins market runtime, implementation slots and implementation code; real delegate frames bind the actual implementation target. Read-only implementation bytes are not falsely attributed to every diff-mode prestate.",
+    "Original and current exact BotVM artifacts, owner immutables and eight Solidity metadata entries remain bound to independent08. Ordinary emitted instruction/call paths retain the reviewed VM semantics.",
+    "Two original inventory variant IDs are preserved; cUNI is an additional existing instance, not a renamed/new machine variant.",
+    "Full share input, numeric zero return, underlying caller receipt and old output inventory remain independently verified; protocol Comptroller hooks are not presented as executor callback capability.",
+    "Negative evidence remains complete root revert with EVM atomicity semantics, not independently observed negative storageDiff.",
+    "Manual/spliced amount provenance, original redeemUnderlying versus tested redeem(shares), absence of surplus-old-input new testing and natural/AdapterReplay/performance limitations are explicit."
+  ],
+  "decision": "The scoped proposal is suitable for root-owned reconciliation. It closes retained historical identity/current compatibility gaps only; no new execution, expanded operation or whole-task completion claim.",
+  "reconciliation": {
+    "mode": "reuse-existing-canonical-evidence",
+    "newToolExecution": "not applicable: final immutable certificate and hash binding only; no production/tool changes or historical execution"
+  }
+}

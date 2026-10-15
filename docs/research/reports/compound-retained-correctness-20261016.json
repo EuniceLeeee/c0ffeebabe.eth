@@ -1,0 +1,211 @@
+{
+  "schema": "compound-identity-current-join/v1",
+  "result": "pass-scoped-retained-correctness",
+  "implementationReady": true,
+  "blockingFindings": [],
+  "scope": "Existing installed cUSDC/cDAI/cUNI share-redemption correctness and applicable settlement inventory. All work in this increment was read-only evidence/source analysis.",
+  "sourceReviewPreserved": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source/docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
+    "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+  },
+  "rawRecalculation": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/raw-readback07.json",
+    "sha256": "df69fb66171b49f9b19a3f5bc7f63d53010caedacd593dc181482077be2f0dd5"
+  },
+  "historicalIdentity": {
+    "projection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/cache-projection05.json",
+      "sha256": "543788a8f5cd01b5075526cee932cbc175abcbf9d05645cbfa3bccfe4fef3794"
+    },
+    "source": "Retained Foundry RPC caches at exact historical block numbers and hashes, plus original actual call traces and prestate code. Cache transport-host metadata is excluded. Not a new RPC/state proof.",
+    "joins": [
+      "cUSDC exact historical code matches verified CErc20 runtime 37ead445…",
+      "cDAI proxy exact code matches verified 3f1d4a4…; slot 0x12 and actual redeem delegate frame bind 3363bae…; implementation code matches verified 7e243019…",
+      "cUNI actual proxy code d32dbe57… has executable body identical to cDAI excluding their 50-byte compiler metadata, slot 0x12 and actual redeem delegate bind the same exact verified implementation.",
+      "Comptroller proxy d853b1… slot 0x2 binds bafe01… runtime c9bfb6… at both blocks. Actual redeemAllowed/redeemVerify frames match; no caller continuation observed."
+    ]
+  },
+  "retainedCounts": {
+    "cUSDC": {
+      "positive": 8,
+      "noInputDeclaredRevert": 4
+    },
+    "cDAI": {
+      "positive": 8,
+      "noInputDeclaredRevert": 4
+    },
+    "cUNI": {
+      "positive": 8,
+      "noInputDeclaredRevert": 4
+    },
+    "totalPositive": 24,
+    "totalDeclaredRevert": 12,
+    "independentTokenDeltas": 48,
+    "shareSupplyBurns": 24,
+    "actualOutputTransferCalls": 24,
+    "nativeObservations": 24,
+    "newHistoricalExecutions": 0
+  },
+  "currentCompatibility": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/current-compat09.json",
+    "sha256": "ee2417d58f5c43ecc26409e3a12fcca1806d6aab01d04a404001b4926cf0f355"
+  },
+  "inventoryProposal": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/inventory-proposal09.json",
+    "sha256": "542770f7e43d183a390c531836978bc0519a2c42165aa88320cc74ce27444634"
+  },
+  "originalVm": {
+    "artifact": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/old-artifact-62a3d76f.json",
+      "sha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853"
+    },
+    "originalReportedArtifactSha256": "1e3429abd181b7130c7086195e95ff4a19614a76d30db6fc21581222f405b853",
+    "artifactJsonHashEqualsOriginal": true,
+    "owner": "0x1000000000000000000000000000000000000001",
+    "runtimeKeccak256": "0x62a3d76f7ecfe898eb464b137b29ec92659b58e7bc795ba075f366df72970aec",
+    "immutablePatchAlgorithm": "Replace only every compiler-declared deployed immutable reference (length 32) with left-zero-padded recorded owner; no other byte modified.",
+    "patches": [
+      {
+        "immutableId": "40501",
+        "start": 136,
+        "length": 32
+      },
+      {
+        "immutableId": "40501",
+        "start": 480,
+        "length": 32
+      },
+      {
+        "immutableId": "40501",
+        "start": 559,
+        "length": 32
+      }
+    ],
+    "metadataSources": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/BotVM.sol",
+        "compilerSourcePath": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+        "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/Constants.sol",
+        "compilerSourcePath": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+        "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/RuntimeAmountVM.sol",
+        "compilerSourcePath": "src/RuntimeAmountVM.sol",
+        "sha256": "9dd2974a39370dcaca2bf5f031a4f5a147640bee6dc1988b9f7bc2446e8b2ff8",
+        "keccak256": "0xf8d87fc9d3286cf5e5d327e9a943ff60eccf1e8383739ccdb9ce7d32edfb8d19"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/balancer-v3-104/source06/logs/blockscan-direct-sync-20261012.MCA5F4/source/src/interfaces/IERC20.sol",
+        "compilerSourcePath": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+        "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+      }
+    ]
+  },
+  "currentVm": {
+    "artifact": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/out/BotVM.sol/BotVM.json",
+      "sha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+    },
+    "originalReportedArtifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+    "artifactJsonHashEqualsOriginal": true,
+    "owner": "0x1000000000000000000000000000000000000001",
+    "runtimeKeccak256": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "immutablePatchAlgorithm": "Replace only every compiler-declared deployed immutable reference (length 32) with left-zero-padded recorded owner; no other byte modified.",
+    "patches": [
+      {
+        "immutableId": "40501",
+        "start": 136,
+        "length": 32
+      },
+      {
+        "immutableId": "40501",
+        "start": 480,
+        "length": 32
+      },
+      {
+        "immutableId": "40501",
+        "start": 559,
+        "length": 32
+      }
+    ],
+    "metadataSources": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source06/src/BotVM.sol",
+        "compilerSourcePath": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+        "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source06/src/Constants.sol",
+        "compilerSourcePath": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+        "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source06/src/RuntimeAmountVM.sol",
+        "compilerSourcePath": "src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+        "keccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source06/src/interfaces/IERC20.sol",
+        "compilerSourcePath": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+        "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+      }
+    ]
+  },
+  "scopeBoundaries": [
+    "All actual calls use redeem(uint256) with full requested shares and numeric return zero, paid from preowned shares; underlying goes to msg.sender.",
+    "Comptroller hooks are internal protocol checks; no user callback/payer continuation or recipient ABI is exposed.",
+    "cUSDC/cDAI retain pass-with-spliced-reference; cUNI retains incomplete-production-reference overall with the user-authorized manual amount correctness pass.",
+    "Original transactions called redeemUnderlying; N-end redeem(shares) is not original-interface/pre-call parity.",
+    "Old output inventory is independently separated from new receipts. Positive surplus old share input was not newly tested.",
+    "12 no-input controls have no independent storage rollback observation. No new EVM claim.",
+    "Mint/borrow/liquidation/native/additional variants, opportunity, natural valuation, Adapter Replay, full production delivery and performance remain outside this certificate."
+  ],
+  "reconciliation": {
+    "mode": "reuse-existing-canonical-executions",
+    "newExecution": "n/a; evidence-only hash/arithmetic/byte comparison authorized, no production or tool mutation",
+    "canonicalReceiptReferences": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/raw02/logs/cuni-manual-tx-20261013.gzo43m9o/tool-selection.json",
+        "sha256": "4955c1d4af1b84ed80cff98be0f38e7b65ab88990ba760df131cb9f78388cbf3"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/source/docs/research/reports/current-executor-acceptance-20261012.json",
+        "sha256": "42cf4b0b5f30505910bb08085ce3d9f7066a743780f5b2efc73d6598379ec496"
+      }
+    ],
+    "localAnalysisFailureRetained": {
+      "script": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/check07.cjs",
+        "sha256": "e7191ad184d7b700ad366e5753c465218c2426e9d119ad56d919c56361456ffd"
+      },
+      "stderr": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/check07.stderr",
+        "sha256": "eb6574f1dd1789b3ab4d1efe341eb0d8fd793b57070a18ffd2f2f1cd17d57c9b"
+      },
+      "correctedScript": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/check07b.cjs",
+        "sha256": "ec504fc685ce189d22f19a9bbf656dd467f06b4fd2d2f0ee7db5dd972f3a2eea"
+      },
+      "correctedLog": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/compound109/check07b.log",
+        "sha256": "734c8cda380d8f6b12f666fef7daa634520eb87c947873c36258fb1fba6964f7"
+      },
+      "cause": "Initial local checker required zero initial output slot in diff.pre. Corrected to require slot in pre OR post and interpret omitted zero per diff semantics. No canonical production/tool defect."
+    }
+  },
+  "rootActions": [
+    "Independently review exact scope then merge proposal through current evidence gate using compatibility view, preserving original reviews/hashes.",
+    "No source implementation change or repeated historical execution is needed for these closed identity gaps."
+  ]
+}

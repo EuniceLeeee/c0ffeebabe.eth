@@ -3198,21 +3198,40 @@
         {
           "id": "TheVault synchronous unlocked withdraw",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 runtime/source 已匹配；代理实现槽原始绑定未独立保存。",
-            "内部 strategy 交互及当前源码对应行为证据待 join；旧默认 withdraw 证据保留原范围。"
-          ],
+          "execution": "not-required",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/badger-retained-correctness-20261016.json",
+              "sha256": "3f16ebb40126b37c3f62584e19e13ba7ddb1fb3da1a85f298794ff3818c77800"
+            },
+            {
+              "path": "docs/research/reports/badger-retained-interface-20261016.json",
+              "sha256": "bc6aa3cd36a2a8119c33ffe1006edb9501f663d16209d32eca8186cecb760150"
+            },
+            {
+              "path": "docs/research/reports/badger-retained-compatibility-20261016.json",
+              "sha256": "7de8dbacb3dece8351726fc40b99354778938a42ea1b44cd0c014264f33bc40b"
+            },
+            {
+              "path": "docs/research/reports/badger-retained-independent-20261016.json",
+              "sha256": "fc65706215710a030dde269842587be782006e99b41306a2bc844da7f3e11fc7"
             }
-          ]
+          ],
+          "scope": "Existing4 actualN liquid withdrawal retained, old/current scripts equal and executed VM branches source-compatible; no new EVM. No negative/rollback or strategy external-liquidity actual execution claimed.",
+          "ordinaryExecutionEvidence": {
+            "path": "docs/research/reports/badger-retained-ordinary-behavior-20261016.json",
+            "sha256": "feb9fc3c87089febf009a8c5eb2bf75a6bba5613fb785eab8b9fafc63b66d9ab"
+          },
+          "settlementModeReason": "recipient=no; callback=internal-only; no new external-recipient or deferred caller-settlement mode exists"
         }
       ],
       "domain": "protocol",
@@ -3223,7 +3242,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -3299,8 +3318,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
-        "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+        "path": "docs/research/reports/current-interface-badger-sett-withdraw-retained-20261016.json",
+        "sha256": "4a9b74f40b000172499a9f45da05171cdcefea7cbd8666a02fc58a2302f9189a"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/badger-retained-correctness-20261016.json",
+        "sha256": "3f16ebb40126b37c3f62584e19e13ba7ddb1fb3da1a85f298794ff3818c77800"
       }
     },
     {
@@ -3310,40 +3333,102 @@
         {
           "id": "cUSDC CErc20 redeem",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "实际部署源码已核对，历史 market runtime 尚未绑定。",
-            "需 join 当前源码与内部 Comptroller hook 对应证据；既有默认同状态回执仍有效于原范围。"
-          ],
+          "execution": "not-required",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-correctness-20261016.json",
+              "sha256": "c74fcb964a10a06c5e2a67b2d223e1312f82591a4b637977505d2bfb8d3b4b23"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-compatibility-20261016.json",
+              "sha256": "ee2417d58f5c43ecc26409e3a12fcca1806d6aab01d04a404001b4926cf0f355"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-raw-authentication-20261016.json",
+              "sha256": "df69fb66171b49f9b19a3f5bc7f63d53010caedacd593dc181482077be2f0dd5"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-vm-program-binding-20261016.json",
+              "sha256": "6db7b06542a0e993070a8f1a87bc165b6497fdb0a37197dbd3598621a4adcd93"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-independent-20261016.json",
+              "sha256": "f98aa036d67b986a50e58827e19e291a6c2bd510665267f7d99f3f9cafac5012"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-independent-final-20261016.json",
+              "sha256": "25e9898c78d76ad1f17a493a765e5e14c30aa6e273be12077d60f512edf5d13c"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-settlement-classification-20261016.json",
+              "sha256": "e71c0e3ef3703c8aa07414f61ade691675d585ba1c91b720aabb5dcf75edd4d6"
             }
-          ]
+          ],
+          "scope": "Existing cUSDC/cDAI/cUNI redeem(shares), retained24positive12rootrevert, full input debit/actual output. Caller-only recipient; internal Comptroller hooks expose no caller settlement mode. Current36calldata byte-identical, old/current VM paths compatible. No negative storageDiff or fresh EVM; no redeemUnderlying original-TX equivalence.",
+          "ordinaryExecutionEvidence": {
+            "path": "docs/research/reports/compound-retained-ordinary-behavior-20261016.json",
+            "sha256": "6c07d64f49e359ea6e8650207991ac1c59c4b1ec7dcccab38b760091ee11b48f"
+          },
+          "settlementModeReason": "recipient=no and callback=internal-only; ordinary retained correctness evidence is separate"
         },
         {
           "id": "cDAI CErc20Delegator -> CErc20Delegate redeem",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "internal-only",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "最新 delegate 不能替代 N25944463 的代理实现绑定。",
-            "需 join 当前源码与历史 delegate 对应行为证据；旧默认回执范围不变。"
-          ],
+          "execution": "not-required",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-correctness-20261016.json",
+              "sha256": "c74fcb964a10a06c5e2a67b2d223e1312f82591a4b637977505d2bfb8d3b4b23"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-compatibility-20261016.json",
+              "sha256": "ee2417d58f5c43ecc26409e3a12fcca1806d6aab01d04a404001b4926cf0f355"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-raw-authentication-20261016.json",
+              "sha256": "df69fb66171b49f9b19a3f5bc7f63d53010caedacd593dc181482077be2f0dd5"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-vm-program-binding-20261016.json",
+              "sha256": "6db7b06542a0e993070a8f1a87bc165b6497fdb0a37197dbd3598621a4adcd93"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-independent-20261016.json",
+              "sha256": "f98aa036d67b986a50e58827e19e291a6c2bd510665267f7d99f3f9cafac5012"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-independent-final-20261016.json",
+              "sha256": "25e9898c78d76ad1f17a493a765e5e14c30aa6e273be12077d60f512edf5d13c"
+            },
+            {
+              "path": "docs/research/reports/compound-retained-settlement-classification-20261016.json",
+              "sha256": "e71c0e3ef3703c8aa07414f61ade691675d585ba1c91b720aabb5dcf75edd4d6"
             }
-          ]
+          ],
+          "scope": "Existing cUSDC/cDAI/cUNI redeem(shares), retained24positive12rootrevert, full input debit/actual output. Caller-only recipient; internal Comptroller hooks expose no caller settlement mode. Current36calldata byte-identical, old/current VM paths compatible. No negative storageDiff or fresh EVM; no redeemUnderlying original-TX equivalence.",
+          "ordinaryExecutionEvidence": {
+            "path": "docs/research/reports/compound-retained-ordinary-behavior-20261016.json",
+            "sha256": "6c07d64f49e359ea6e8650207991ac1c59c4b1ec7dcccab38b760091ee11b48f"
+          },
+          "settlementModeReason": "recipient=no and callback=internal-only; ordinary retained correctness evidence is separate"
         }
       ],
       "domain": "protocol",
@@ -3354,7 +3439,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -3434,8 +3519,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
-        "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+        "path": "docs/research/reports/current-interface-compound-ctoken-retained-20261016.json",
+        "sha256": "b63668c83d160142b574104339e2ff635a31e1cc184cc0477f457fa0ff70f425"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/compound-retained-correctness-20261016.json",
+        "sha256": "c74fcb964a10a06c5e2a67b2d223e1312f82591a4b637977505d2bfb8d3b4b23"
       }
     },
     {
@@ -3455,8 +3544,17 @@
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-lp-current-retained-compatibility-20261016.json",
+              "sha256": "08d80b856a5200b495a9ca1dcc4792cd05f51544298139631bc41e0cdc3a47bc"
+            },
+            {
+              "path": "docs/research/reports/curve-lp-retained-raw-authentication-20261016.json",
+              "sha256": "b341dd0a303c27cf3d10044b4cea2c754f27cd75747950bab581732e834cbbaf"
             }
-          ]
+          ],
+          "scope": "Original FRAXBP two-coin mint/redeem for both coins at two fixed non-ramping historical states. Current source compatibility certification, not new EVM execution. Original48 positive32declaredreverts authenticated with exact old artifact. No new callback/recipient mode, no new EVM."
         },
         {
           "id": "FRAXBP remove_liquidity_one_coin",
@@ -3471,8 +3569,17 @@
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/curve-lp-current-retained-compatibility-20261016.json",
+              "sha256": "08d80b856a5200b495a9ca1dcc4792cd05f51544298139631bc41e0cdc3a47bc"
+            },
+            {
+              "path": "docs/research/reports/curve-lp-retained-raw-authentication-20261016.json",
+              "sha256": "b341dd0a303c27cf3d10044b4cea2c754f27cd75747950bab581732e834cbbaf"
             }
-          ]
+          ],
+          "scope": "Original FRAXBP two-coin mint/redeem for both coins at two fixed non-ramping historical states. Current source compatibility certification, not new EVM execution. Original48 positive32declaredreverts authenticated with exact old artifact. No new callback/recipient mode, no new EVM."
         }
       ],
       "domain": "protocol",
@@ -3483,7 +3590,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -3563,8 +3670,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+        "path": "docs/research/reports/current-interface-curve-lp-retained-20261016.json",
+        "sha256": "358695ec870f9ad05ebfa9ba424a52ca5a03cc773cc6fbeb7cc9bc846f96ee3b"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/curve-lp-current-retained-compatibility-20261016.json",
+        "sha256": "08d80b856a5200b495a9ca1dcc4792cd05f51544298139631bc41e0cdc3a47bc"
       }
     },
     {
@@ -8286,8 +8397,13 @@
     ]
   },
   "currentScopedUpdate": {
-    "scope": "xWin two sameN actual directions current VM dual execution, generic test-only quote transport; BTB unchanged.",
-    "priorInventorySha256": "a6f318ede2cfa24ac1fc3ddd969ba26148608452251e3d2a639f8b9f6f6ea46d",
+    "scope": "Retained Curve LP, Compound and Badger ordinary execution authenticated against current source. No new settlement mode, historical EVM or full delivery claim.",
+    "families": [
+      "protocol:curve-lp",
+      "protocol:compound-ctoken",
+      "protocol:badger-sett-withdraw"
+    ],
+    "priorInventorySha256": "58d923c397f1f6279a65e37db98b9689045f81bc85de9d2ab0a8f016570c5062",
     "allOtherVariantStatesPreserved": true,
     "allFamiliesPassed": false
   }

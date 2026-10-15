@@ -19,6 +19,7 @@ export type VariantReview = {
   execution: "verified" | "not-required" | "unverified";
   evidence: { path: string; sha256: string }[];
   executionEvidence?: Pin;
+  ordinaryExecutionEvidence?: Pin;
   gaps: string[];
 };
 export type FamilyReview = { familyId: string; domain: string; coverage: "complete" | "partial";
@@ -104,7 +105,7 @@ export function reviewFailures(row: FamilyReview): string[] {
       ...(["yes", "conditional", "no"].includes(v.recipient) ? [] : ["recipient semantics"]),
       ...(v.wiring === "verified" ? [] : ["capability wiring"]),
       ...(v.execution === "verified" || (v.execution === "not-required" && v.recipient === "no" &&
-        v.callback === "none") ? [] : ["execution evidence"]),
+        (v.callback === "none" || (v.callback === "internal-only" && v.ordinaryExecutionEvidence !== undefined))) ? [] : ["execution evidence"]),
       ...(v.evidence.length > 0 ? [] : ["interface/evidence references"]), ...v.gaps,
     ];
     if (missing.length) failures.push(`${v.id}: ${missing.join("; ")}`);
@@ -121,13 +122,42 @@ export function checkPins(pins: Pin[], read: (path: string) => Buffer): string[]
 
 export function evidenceFailures(row: FamilyReview, commonSource: Pin[], read: (path: string) => Buffer): string[] {
   const failures = checkPins([row.review, ...row.variants.flatMap(v => [...v.evidence,
-    ...(v.executionEvidence ? [v.executionEvidence] : [])])], read);
+    ...(v.executionEvidence ? [v.executionEvidence] : []),
+    ...(v.ordinaryExecutionEvidence ? [v.ordinaryExecutionEvidence] : [])])], read);
   if (failures.length) return failures;
   try {
     const reviewed = JSON.parse(read(row.review.path).toString()).families.find((r: any) => r.familyId === row.familyId);
     assert(reviewed, "Family absent from independent interface review");
     assert.deepEqual(row.variants.map(v => v.id).sort(), reviewed.variants.map((v: any) => v.id ?? v.variant).sort(),
       "variant inventory differs from hashed interface review");
+    // Internal protocol hooks do not create a caller settlement continuation.
+    // Exemption from a new settlement mode still requires ordinary real execution.
+    for (const v of row.variants.filter(v => v.execution === "not-required" && v.callback === "internal-only")) {
+      assert.equal(v.recipient, "no", "recipient mode cannot skip settlement execution");
+      const independent = reviewed.variants.find((x: any) => (x.id ?? x.variant) === v.id);
+      assert.equal(independent.callback, "internal-only", "internal-only classification must be independently reviewed");
+      assert.equal(independent.recipient, "no", "caller-only recipient must be independently reviewed");
+      assert.equal(independent.callerContinuation, false, "caller continuation cannot skip settlement execution");
+      assert(v.ordinaryExecutionEvidence, `${v.id}: missing ordinary execution report`);
+      const ordinary = JSON.parse(read(v.ordinaryExecutionEvidence.path).toString());
+      assert.equal(ordinary.kind, "family-ordinary-execution-evidence-v1");
+      assert.equal(ordinary.familyId, row.familyId);
+      assert(Array.isArray(ordinary.variantIds) && ordinary.variantIds.every((x: unknown) => typeof x === "string"));
+      assert(ordinary.variantIds.includes(v.id));
+      assert.equal(ordinary.result, "pass");
+      assert(Number.isSafeInteger(ordinary.positiveExecutions) && ordinary.positiveExecutions > 0);
+      assert(Number.isSafeInteger(ordinary.rejections) && ordinary.rejections >= 0);
+      assert.deepEqual(ordinary.source, row.source, "ordinary execution did not use the reviewed Family source");
+      assert.deepEqual(ordinary.commonSource, commonSource, "ordinary execution did not use the reviewed common executor");
+      assert(Array.isArray(ordinary.verifiedAssertions) && ordinary.verifiedAssertions.every((x: unknown) => typeof x === "string"));
+      for (const required of ["actual-input-debit", "actual-output-receipt", "old-inventory"]) {
+        assert(ordinary.verifiedAssertions.includes(required), `${v.id}: missing ${required}`);
+      }
+      assert(Array.isArray(ordinary.evidence) && ordinary.evidence.length > 0, "ordinary execution needs saved evidence references");
+      for (const pin of ordinary.evidence) assert(typeof pin.path === "string" && pin.path.length > 0 &&
+        typeof pin.sha256 === "string" && hash.test(pin.sha256), "ordinary execution needs exact evidence pins");
+      failures.push(...checkPins(ordinary.evidence, read));
+    }
     for (const v of row.variants.filter(v => v.execution === "verified")) {
       assert(v.executionEvidence, `${v.id}: missing execution report`);
       const behavior = JSON.parse(read(v.executionEvidence.path).toString());

@@ -1,0 +1,1012 @@
+{
+  "schema": "impl-scoped-completion-audit/v1",
+  "result": "scope-audit-complete-no-new-mandatory-code-gap-found",
+  "reviewer": "/root/v1_accept26",
+  "asOfImplTitle": "**当前进度（2026-10-16 00:02 UTC+8；累计有效成果与待办分列）**",
+  "inputs": [
+    {
+      "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+      "sha256": "f278ebf68eb04c44423eebbbcc54cdb0702311078387f63ef7070ef9ece8516a"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/scope119/impl-snapshot119.md",
+      "sha256": "f278ebf68eb04c44423eebbbcc54cdb0702311078387f63ef7070ef9ece8516a"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/current/docs/research/reports/family-settlement-interface-review-20261014.json",
+      "sha256": "eb47285c2a3340ce3327a6f548e2787b4c10cb902652b940b72363f85a0621c3"
+    }
+  ],
+  "scopeRule": "Latest user narrowing: complete actual IMPL Family implementation and applicable correctness. All-family interface inspection does not automatically promise every unselected ABI/profile or new settlement mode on every global catalog entry. Preserve all global unverified modes; do not call global inventory fully accepted.",
+  "rows": [
+    {
+      "line": 29,
+      "title": "**Few／Vault：适用范围适配正确性完成，新增收款已验，原自然核心净EV为负**",
+      "families": [
+        "protocol:few-wrapped",
+        "vault-spot"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "10346202d940773310740a8e9da191b85a218b88995b9dc3bb446a3fa4375942",
+      "latestStatement": "2026-10-15 18:37 UTC+8：Few指定收款分支补齐正额、完整输入扣款、返回值／到账、原生币／旧库存和临时授权清零；N26182689两实例四方向20次外收成功、80故障拒绝、4零额拒绝。Vault双向12次外收成功、48故障拒绝、6容量／零输出状态拒绝、2零额拒绝。32正例及全部拒绝已独立复核，旧默认双执行证据认证复用，当前结算门、生产build及全族双接口通过。",
+      "existingEvidenceLinks": [
+        "https://etherscan.io/tx/0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+        "https://etherscan.io/tx/0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058/20261013T1013-live-gap-depth456.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/78cb6625c52f4b1e0f7c4fc432a1332979683b31/docs/research/reports/few-wrapped-acceptance-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/78cb6625c52f4b1e0f7c4fc432a1332979683b31/docs/research/reports/few-wrapped-independent-review-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/df4641bed475323c203952e3c8026553c12d36e4/docs/research/reports/vault-swap-historical-preparation-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/3a6d8a7f5d8a42ac35a1f45e1d13e594900e9891/docs/research/reports/vault-spot-family-acceptance-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/344a04c99ffeee6bde85ee14791e2e93e968682a/docs/research/reports/few-vault-blockscan-acceptance-20261014.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058/20261014-few-vault-bb-core-ev-reject.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:18",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/formal-family-acceptance-review.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/few-vault-recipient-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/few-vault-recipient-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/few-vault-curve-ekubo-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/few-vault-curve-ekubo-settlement-gates-20261015.json"
+      ]
+    },
+    {
+      "line": 30,
+      "title": "**KyberSwap Elastic：九池已覆盖方向及新增收款／回调结算正确性完成**",
+      "families": [
+        "kyberswap-elastic"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "b8650e55e85bda3a7ff8301ee5deea7b27e9300e62a0d3a9d2df6fe48f7bf96b",
+      "latestStatement": "2026-10-15 21:05 UTC+8：Kyber九实际池37组金额：新增148正执行（direct74／deferred74）、740故障回滚及148非活跃callback安全no-op。独立1184项原始余额核对完成，完整请求输入、实扣实收、返回值、债务与旧库存保护成立；旧默认执行经源码及真实VM artifact认证复用。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/da1356db5c25e42b20bf4e9d6192b3a08c1ee3df/docs/research/reports/kyber-range-acceptance-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/dd070171c02d017f4a8e6b859e06f90a3365dc68/docs/research/reports/kyber-remaining-acceptance-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/be642ac6ee805129a0cce264b381b40d643f00e2/docs/research/reports/kyber9-mid-acceptance-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:19",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/kyber-settlement-actual-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/kyber-settlement-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/kyber-settlement-default-reuse-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/family-settlement-five-family-gates-20261015.json"
+      ]
+    },
+    {
+      "line": 31,
+      "title": "**Balancer V3：已覆盖 Hook v1/v2 和无 Hook Weighted，36/36方向正确性通过**",
+      "families": [
+        "balancer-v3",
+        "protocol:erc4626"
+      ],
+      "status": "actual correctness evidence complete; current evidence/inventory reconciliation in progress, no new EVM needed on available results",
+      "rowSha256": "05c5c5be1f100eaa3677a9f699e7cf8663a2fb705d5af1892f03afcf2770db47",
+      "latestStatement": "2026-10-16 00:02 UTC+8：Balancer V3：已覆盖 Hook v1/v2 和无 Hook Weighted，36/36方向正确性通过。",
+      "existingEvidenceLinks": [
+        "https://etherscan.io/tx/0x1969dedd475168204d782dc62d65efa62d650e60d000ba040fea5cbe979dbd20",
+        "https://etherscan.io/tx/0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3",
+        "https://etherscan.io/tx/0xf244dd0b413f99bb171d698d9b0c4392bdaad674329f70d26d11bf0183ccabd2",
+        "https://etherscan.io/tx/0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+        "https://etherscan.io/tx/0x663e4452f85b0b91c729cc81122e565b61a76a85319fda2a0742ccdb7b1a0de0",
+        "https://etherscan.io/tx/0x7a068e5feffb98831e18cc0853c33072133ee233d0a215595002f0da71000640",
+        "https://etherscan.io/tx/0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+        "https://etherscan.io/tx/0x1eb6e238d7d3027a4d534347f2d4fb4b00f852b4545414c7eafed03ce4fd2e28",
+        "https://etherscan.io/tx/0x1969dedd475168204d782dc62d65efa62d650e60d000ba040fea5cbe979dbd20",
+        "https://etherscan.io/tx/0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3",
+        "https://etherscan.io/tx/0xf244dd0b413f99bb171d698d9b0c4392bdaad674329f70d26d11bf0183ccabd2",
+        "https://etherscan.io/tx/0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+        "https://etherscan.io/tx/0x663e4452f85b0b91c729cc81122e565b61a76a85319fda2a0742ccdb7b1a0de0",
+        "https://etherscan.io/tx/0x7a068e5feffb98831e18cc0853c33072133ee233d0a215595002f0da71000640",
+        "https://etherscan.io/tx/0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212",
+        "https://etherscan.io/tx/0x1eb6e238d7d3027a4d534347f2d4fb4b00f852b4545414c7eafed03ce4fd2e28",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/24bf641caf480e5ca0a22af94dfce41d39bb7519/docs/research/reports/balancer-v3-stable-surge-acceptance-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ad1afa1729b1d6c98527a03eaed465b9f4ebfc18/docs/research/reports/balancer-v3-four-token-natural-reference-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/67d9aa095a759450f96cdb4be65f723245dcbe06/docs/research/reports/balancer-v3-natural-reference-supplement-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/62af2802c8c612f4bfe343ea2b58afe7e8bac771/docs/research/reports/erc4626-strict-output-observation-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/20a3f30c68bfb336bc314104a4210e9407b7fa4d/docs/research/reports/erc4626-deposit-fallback-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/238597bd86bdb978906b940b8bbb40e0a7704806/docs/research/reports/erc4626-wrapper-dual-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/e93eb1d59119d5c6297c222b6a2dbc343e9c5c1f/docs/research/reports/siusd-gateway-diagnosis-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/0f6684ff2871a2703711044af711c21bfa4a8646/docs/research/reports/siusd-gateway-implementation-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/62207b524ddd8e8621cc07ee66543db98f3e23a4/docs/research/reports/siusd-refresh-natural-reference-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/a26711f94fee8baffab4527e4cb13ed81c51694d/docs/research/reports/balancer-v3-v4-natural-reference-20261010.json",
+        "/Users/eunice/src/MEV/logs/infinifi-cache-20261011.y8UEmr/acceptance.json",
+        "/Users/eunice/src/MEV/logs/effective-recovery-20261011.kMOklL/acceptance.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/951e61d7fd11b3a9faf625f5ff6248363462aae7/docs/research/reports/v3-historical-safety-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/68a2c182b6b1ca646dee0c31eb5131de327a6994/docs/research/reports/v3-current-execution-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/v3-donor-reference-guard-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/15a9b09eb1b1c7a9dc9f4867d06bba90667f5e24/docs/research/reports/manual-four-hop-reference-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:20",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7951cc66884a111aa6ef4fc19170a581afc893ab/docs/research/reports/infinifi-recipient-implementation-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ad9f0e9a510c28e504e32e11536f84521eaf8879/docs/research/reports/infinifi-recipient-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ad9f0e9a510c28e504e32e11536f84521eaf8879/docs/research/reports/infinifi-recipient-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2ef3215bac0edb0e18faaa4ca6dbd7f10820116c/docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2ef3215bac0edb0e18faaa4ca6dbd7f10820116c/docs/research/reports/erc4626-standard-independent-index-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2ef3215bac0edb0e18faaa4ca6dbd7f10820116c/docs/research/reports/family-erc4626-standard-gates-20261015.json"
+      ]
+    },
+    {
+      "line": 32,
+      "title": "**Frax frxUSD Custodian：同步双向及当前收款路径适配正确性完成**",
+      "families": [
+        "protocol:erc4626"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "c54fcc0e81146ee16f1f6689a2125eddc25f012ba532ae306434ccc8922bbcab",
+      "latestStatement": "2026-10-15 22:06 UTC+8：复用ERC4626同步Custodian，N26017168身份／proxy implementation／份额与asset绑定。当前direct16正、64故障拒绝、6零尘拒绝；补当前默认quoted/runtime16正、16欠资拒绝，未重复已过direct。完整请求输入、实际扣款／到账／mint-burn、原生币和旧库存、临时授权已独立核对；current VM metadata与1244文件生产源绑定，构造Exact=0、无fallback。原旧artifact未寻获仍保留缺证记录，新default只补该真实缺口。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/921509cb7cdc4c4ed12688f90b6c88ee8bf80e64/docs/research/reports/frax-custodian-acceptance-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:21",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/786cc776b1dad36aceae310251bf054628cab468/docs/research/reports/frax-custodian-current-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/786cc776b1dad36aceae310251bf054628cab468/docs/research/reports/frax-custodian-direct-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/786cc776b1dad36aceae310251bf054628cab468/docs/research/reports/frax-custodian-default-independent-20261015.json"
+      ]
+    },
+    {
+      "line": 33,
+      "title": "**Yield Basis LT：三实例普通存入／赎回适配正确性完成**",
+      "families": [
+        "protocol:yieldbasis-lt"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "7360f04624085b028aa5d44ad6416479de7e7d8453fdbfff05067b3f732bc320",
+      "latestStatement": "2026-10-15 23:05 UTC+8：三个实际WETH／cbBTC／WBTC实例存入及普通赎回新增direct-self/external48正／48严格拒绝；独立216余额delta、48native、48完整输入Transfer/burn与48实际输出Transfer/mint、24授权清零完成。真实当前BotVM5/5，合同26/26；旧默认48正／24拒逐24程序和精确旧artifact认证复用，不重跑。当前实际范围正确性已独立核验并提交推送。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/3e10e8119aed02bb65f830e76822b4b96ba1536f/docs/research/reports/stage1-evidence-reuse-audit-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c527866fc36e95fc0bafead28e3e5b1582329443/docs/research/reports/yb-cuni-additional-acceptance-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/687ff9dbbacef57a558132fd4560f5c19ab19b94/docs/research/reports/current-executor-acceptance-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:22",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/root-independent92.json",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/yieldbasis85/compact11.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f5183f58fcf705ec6400a3a7db3b4f84c685d135/docs/research/reports/yieldbasis-recipient-actual-correctness-20261015.json"
+      ]
+    },
+    {
+      "line": 34,
+      "title": "**Compound V2 cToken：cUSDC/cDAI/cUNI 已覆盖方向正确性通过**",
+      "families": [
+        "protocol:compound-ctoken"
+      ],
+      "status": "historical correctness retained; current identity/source evidence join assigned to independent active agent, not newly missing implementation",
+      "rowSha256": "0df87ec13e030c099ff59d8482455610db5cb6545fe3b81661ce8f945d90cb74",
+      "latestStatement": "2026-10-14 17:48 UTC+8：Compound V2 cToken：cUSDC/cDAI/cUNI 已覆盖方向正确性通过。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/compound-reference-acceptance-20261009.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/3e10e8119aed02bb65f830e76822b4b96ba1536f/docs/research/reports/cuni-multi-amount-acceptance-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c527866fc36e95fc0bafead28e3e5b1582329443/docs/research/reports/yb-cuni-additional-acceptance-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/687ff9dbbacef57a558132fd4560f5c19ab19b94/docs/research/reports/current-executor-acceptance-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/cuni-manual-tx-input-acceptance-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:23",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md"
+      ]
+    },
+    {
+      "line": 35,
+      "title": "**Algebra Integral：六个Cypher实际实例的新增收款／回调结算正确性完成**",
+      "families": [
+        "swap:algebra-integral"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "ca17bc6b38159ed00a43086d69ee47a87196553e3dde4bdcd54dcc4a788637e3",
+      "latestStatement": "2026-10-15 21:05 UTC+8：六实际实例均为Cypher动态插件，24组金额新增96正执行、480故障回滚、96非活跃callback安全no-op；独立768余额槽及144项成功后故障回滚复核完成。旧默认96次执行与报价来源经源码及artifact认证复用，构造Exact／quoted／RPC=0且无fallback。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/687ff9dbbacef57a558132fd4560f5c19ab19b94/docs/research/reports/algebra-current-executor-acceptance-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:24",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/algebra-settlement-actual-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/algebra-settlement-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/algebra-settlement-provenance-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/family-settlement-five-family-gates-20261015.json"
+      ]
+    },
+    {
+      "line": 36,
+      "title": "**Curve plain＋Fluid native ETH：Curve实际收款路径正确性完成，Fluid已验三池结算正确性完成**",
+      "families": [
+        "curve-plain",
+        "fluid-dex"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "93ddea9f6c7a0ac41f0e2974dbc280ce433c34833ae45b402b836ee6e4fa0336",
+      "latestStatement": "2026-10-15 22:06 UTC+8：Curve plain五类实际收款路径累计112正、56零额、168故障拒绝已完成并独立复核。int128／uint clone／received／full／native均有真实同N执行；native原12成功复用，只补原失败4项。共用direct native输入容差0／1明确，stETH实际欠扣1原始单位路径完成修复，请求及报价输入不减少，下一跳按实收；真实共同EVM10/10、Curve EVM8/8与相关回归通过。三种无独立实例声明模式保留未验证边界，不扩报通过。",
+      "existingEvidenceLinks": [
+        "https://etherscan.io/tx/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+        "https://etherscan.io/tx/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+        "/Users/eunice/src/MEV/logs/tx5b6114-live-gap-20261009.XGipla/report.txt",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261009-live-fluid-native-curveplain-5b6114-xgipla.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2f1f3da75e1aaa1ea19262af4f1b58ba38f28bd2/docs/research/reports/native-asset-rounding-acceptance-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/87ac63281b6aa3c25542e554ff399c4ae805bca2/docs/research/reports/native-family-boundary-migration-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/cdaea4ce998ba8d585e8bfc9cae300c6fa31d4ac/docs/research/reports/ethertoken-native-ready-progress-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/ethertoken-astra-native-acceptance-20261010.json",
+        "https://etherscan.io/tx/0xef53c889b7270ffc8556569a9682227c905e32491d55689249a1c4ca7fee74da",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/ella-native-historical-acceptance-20261010.json",
+        "https://etherscan.io/tx/0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/selfburn-native-historical-acceptance-20261010.json",
+        "https://etherscan.io/tx/0x2068e9fc151ad0ea2cf273e50a8a0153cc1d0303deb9cf660f13dbbf8571548c",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/v4-nohook-native-historical-acceptance-20261010.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261011-native-fivehop-bb-gap-fx7zdx.json",
+        "/Users/eunice/src/MEV/logs/native-loop-20261011.FX7zDx/acceptance.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261011-native-fivehop-prefix-0wjxkh.json",
+        "/Users/eunice/src/MEV/logs/native-causal-20261011.0wJXKh/acceptance.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261011-fivehop-backrun-correctness-q81kxu.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/backrun-validation-integrity-20261011.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261011-fivehop-backrun-readiness-capacity-kKF39X.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261012-backrun-cli-degree10-planner-lexpxg.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/951e61d7fd11b3a9faf625f5ff6248363462aae7/docs/research/reports/stage2-curve-v3-audit-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/68a2c182b6b1ca646dee0c31eb5131de327a6994/docs/research/reports/curve-native-current-execution-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/99e80fccd43c341e4141ec9a638c0d1b68fcb52b/docs/research/reports/curve-variants-current-execution-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/41e23217e507f075481faa7042228ef78792356e/docs/research/reports/curve-btc-spliced-reference-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/446a4415ef62231a0ab9cbb779db048b09ff57e0/docs/research/reports/curve-atomic-identity-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f54b7275d551be9f1c2db0882d35c758fcae7abb/docs/research/reports/curve-plain-native-steth-acceptance-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663/20261014-curve-fluid-prefix-dependency-zjxu28bh.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/curve-fluid-prefix-dependency-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:25",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/180d11c5344ba930dcd2983428bc75e828714e73/docs/research/reports/fluid-recipient-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/180d11c5344ba930dcd2983428bc75e828714e73/docs/research/reports/fluid-recipient-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/180d11c5344ba930dcd2983428bc75e828714e73/docs/research/reports/fluid-recipient-receipts-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/180d11c5344ba930dcd2983428bc75e828714e73/docs/research/reports/fluid-settlement-evidence-review-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/180d11c5344ba930dcd2983428bc75e828714e73/docs/research/reports/fluid-settlement-gate-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2def7aee6364663aa3309cfd5815bdf68a0e9d0e/docs/research/reports/curve-plain-recipient-implementation-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2def7aee6364663aa3309cfd5815bdf68a0e9d0e/docs/research/reports/curve-plain-recipient-implementation-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2def7aee6364663aa3309cfd5815bdf68a0e9d0e/docs/research/reports/curve-plain-recipient-review-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/curve-plain-recipient-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/curve-plain-recipient-independent-native-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/native-direct-rounding-current-20261015.json",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/root-independent87.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/786cc776b1dad36aceae310251bf054628cab468/docs/research/reports/fluid-current-settlement-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/786cc776b1dad36aceae310251bf054628cab468/docs/research/reports/fluid-prior-execution-current-reuse-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/786cc776b1dad36aceae310251bf054628cab468/docs/research/reports/fluid-insufficient-input-independent-20261015.json"
+      ]
+    },
+    {
+      "line": 37,
+      "title": "**eUSD PSV：双向收款方接线与局部正确性通过，原净EV拒绝保留**",
+      "families": [
+        "protocol:psv"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "4f4858f71fdd332dc6fe85a4204f390d286cc05e6abc7284ef6dd0e6e58bd592",
+      "latestStatement": "2026-10-14 21:12 UTC+8：双向按实际recipient报价及direct-output已接通，默认／普通外部／treasury／执行器自收款均验；40正执行／20声明回滚，quote与实收差0，构造期Exact／RPC／quoted fallback为0，PSV结算能力门通过。",
+      "existingEvidenceLinks": [
+        "https://etherscan.io/tx/0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/e9e4d4a2ef6f8f7790708dff19728d89dcb5f8f6/docs/research/reports/psv-recipient-correctness-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/e9e4d4a2ef6f8f7790708dff19728d89dcb5f8f6/docs/research/reports/psv-recipient-evidence-review-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/e9e4d4a2ef6f8f7790708dff19728d89dcb5f8f6/docs/research/reports/psv-self-recipient-evidence-review-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/e9e4d4a2ef6f8f7790708dff19728d89dcb5f8f6/docs/research/reports/psv-settlement-gate-20261014.json",
+        "https://etherscan.io/tx/0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+        "/Users/eunice/src/MEV/logs/psv-acceptance-20261010.bjwvqD/psv-correctness-20261010.json",
+        "/Users/eunice/src/MEV/logs/tx-d62e-live-gap-20261009.qquzEq/report.txt",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8/20261009-live-psv-gap-d62e-qquzeq.json",
+        "/Users/eunice/src/MEV/logs/psv-loop-20261011.yxRNJU/acceptance.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8/20261011-psv-core-bb-yxrnju.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:26",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md"
+      ]
+    },
+    {
+      "line": 38,
+      "title": "**Yearn Auction＋Curve LP：选定拍卖实例默认／收款／四参回调适配正确性完成；原机会成果有效**",
+      "families": [
+        "protocol:yearn-auction",
+        "protocol:curve-lp"
+      ],
+      "status": "actual correctness evidence complete; current evidence/inventory reconciliation in progress, no new EVM needed on available results",
+      "rowSha256": "a01f4b683fd3abad363fe58ba24db24b6582cbe4d8ca0b08caab98b0b21a6771",
+      "latestStatement": "2026-10-15 17:00 UTC+8：Yearn选定v1.0.4实际拍卖在N26152335同状态四参非空data回调验收通过：4金额×空输入／旧库存共8正执行、48逐storage及余额核验回滚、8非活跃context安全no-op，独立复核通过，当前结算门PASS。真实协议/token代码未覆盖；实际先交付ALCX→callback→精确债务授权→拍卖拉取crvUSD→授权清零，输入最大预算保持原额，未用余款2／0／2／17原样退回。当前runtime构造Exact=0、quoted=0、RPC=0。旧默认／direct 16正执行、8声明回滚及4零输入余额只读quote经源码闭包复核有效，未重复运行；新旧计数分列，旧8负例仍仅记声明回滚。生产build及7项观察器回归通过。",
+      "existingEvidenceLinks": [
+        "https://etherscan.io/tx/0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+        "https://etherscan.io/tx/0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+        "/Users/eunice/src/MEV/logs/five-tx-live-gap-20261009.TISPfP/0x6cc7a620-report.txt",
+        "/Users/eunice/src/MEV/logs/five-tx-live-gap-20261009.TISPfP/0x6cc7a620-analysis.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b/20261009-live-gap-6cc7a620-tispfp.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/251aeb1fda0d13b27da33006d011ee94cc54d15d/docs/research/reports/yearn-auction-correctness-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/622461e7714a69c8651d2ed5a740ea94d2f93db1/docs/research/reports/curve-lp-correctness-20261010.json",
+        "/Users/eunice/src/MEV/logs/effective-recovery-20261011.kMOklL/acceptance.json",
+        "/Users/eunice/src/MEV/logs/yearn-loop-20261011.UxhkBO/acceptance.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b/20261011-yearn-curve-lp-bb-uxhkbo.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:27",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/6664f04f00589388240889b422731a3b2d685e16/docs/research/reports/yearn-callback-progress-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/6664f04f00589388240889b422731a3b2d685e16/docs/research/reports/yearn-callback-validation-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/6664f04f00589388240889b422731a3b2d685e16/docs/research/reports/yearn-callback-code-review-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/fae96aeadebeef86d4ea1ec91af7ac0baf1afc17/docs/research/reports/yearn-recipient-historical-progress-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/fae96aeadebeef86d4ea1ec91af7ac0baf1afc17/docs/research/reports/yearn-recipient-historical-receipts-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/fae96aeadebeef86d4ea1ec91af7ac0baf1afc17/docs/research/reports/yearn-recipient-historical-review-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2def7aee6364663aa3309cfd5815bdf68a0e9d0e/docs/research/reports/curve-plain-recipient-implementation-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2def7aee6364663aa3309cfd5815bdf68a0e9d0e/docs/research/reports/curve-plain-recipient-implementation-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2def7aee6364663aa3309cfd5815bdf68a0e9d0e/docs/research/reports/curve-plain-recipient-review-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/021fb291dc144c63ce6ba6835cf83b0e1838d121/docs/research/reports/yearn-callback-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/021fb291dc144c63ce6ba6835cf83b0e1838d121/docs/research/reports/yearn-callback-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/021fb291dc144c63ce6ba6835cf83b0e1838d121/docs/research/reports/yearn-default-evidence-reuse-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/021fb291dc144c63ce6ba6835cf83b0e1838d121/docs/research/reports/yearn-settlement-gate-20261015.json"
+      ]
+    },
+    {
+      "line": 39,
+      "title": "**jrUSDe／Fluid＋Strata：已有自然复现及正净EV成果**",
+      "families": [
+        "protocol:erc4626",
+        "protocol:erc4626-silo-redeem"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "5c1f41fd542de28bf3250cb44c129e340c62a27d5f2f193f1a298007d8cc7d92",
+      "latestStatement": "2026-10-16 00:02 UTC+8：原jrUSDe／Fluid＋Strata自然复现及正净EV成果保留。Silo同步redeem两真实部署：junior N26130609及senior N25462190，cooldown=0；proxy／implementation／CDO／strategy已绑定，3金额×4模式各12正／24严格声明拒绝，合计24正／48拒绝，实扣shares、burn／supply、receiver实际sUSDe到账及native保护由独立raw核对。原senior withdraw assets不冒充redeem shares。真实BotVM安全5/5、修正依赖指纹后19项合同回归通过，无重复EVM。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01/20261006-jrusde-natural-usdt-ev-i4ioos.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01/20261006-core-gross20-user-acceptance-i4ioos.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:28",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/180d11c5344ba930dcd2983428bc75e828714e73/docs/research/reports/fluid-recipient-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9430d86da5e978bd660ac77c5b5c1ea7a5727b48/docs/research/reports/silo-recipient-implementation-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/silo-recipient-actual-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/silo-recipient-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/silo-recipient-evm-certified-reuse-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/family-settlement-five-family-gates-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/2ef3215bac0edb0e18faaa4ca6dbd7f10820116c/docs/research/reports/erc4626-standard-independent-last-two-20261015.json"
+      ]
+    },
+    {
+      "line": 40,
+      "title": "**OneSwap：当前独立Family已接回，所选两池双向适配正确性通过**",
+      "families": [
+        "custom-swap:oneswap"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "430f22b0f71d6dfe1c6ee4c923ad4f1c69d0cf23fa0ae7a00d451fe292201f9e",
+      "latestStatement": "2026-10-15 17:59 UTC+8：`custom-swap:oneswap` 已接回当前生产，保留旧身份／数学／AMM及AMM+orderbook实例能力；原生币与指定收款走共用包装。N26130639两池双向、8组金额，quoted／runtime／direct自收／外收共32正执行、16零额拒绝及24其他拒绝，完整输入扣款与实际到账同状态逐项一致，独立复算通过。生产构建、全族双接口与当前结算门通过。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xdf6b912487a08189ea8a69e93fba7e1428df1edb22d41c1c5cd85c994e23cfef/20261006-oneswap-natural-runtime-ev-i4ioos.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xdf6b912487a08189ea8a69e93fba7e1428df1edb22d41c1c5cd85c994e23cfef/20261006-core-gross20-user-acceptance-i4ioos.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:29",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/scope50-review.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7fc5bf1935b5fe15f8334c0c85b4092881ecded7/docs/research/reports/oneswap-current-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7fc5bf1935b5fe15f8334c0c85b4092881ecded7/docs/research/reports/oneswap-precision-aqua-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7fc5bf1935b5fe15f8334c0c85b4092881ecded7/docs/research/reports/oneswap-precision-aqua-settlement-gates-20261015.json"
+      ]
+    },
+    {
+      "line": 41,
+      "title": "**PrecisionPool／V4：Precision独立Family已接回，所选native池双向适配正确性通过**",
+      "families": [
+        "custom-swap:precision-pool",
+        "univ4"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "5ce257d80954b830fda6b76fa2cadf9adcd70112bf9994e034ae34423a46bf49",
+      "latestStatement": "2026-10-15 17:59 UTC+8：`custom-swap:precision-pool` 已接回当前生产，与路线V4分别记账。N26129175原native池双向、4组金额、quoted／runtime／direct自收／外收共16正执行、16strict声明拒绝；21族合同及4组真实本地BotVM故障测试通过。独立复算确认实际扣款、到账、Swap日志及原生币库存；生产构建、全族双接口、当前结算门通过。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554/20261006-precision-natural-runtime-ev-i4ioos.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554/20261006-core-gross20-user-acceptance-i4ioos.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:30",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/scope50-review.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7fc5bf1935b5fe15f8334c0c85b4092881ecded7/docs/research/reports/precision-pool-current-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7fc5bf1935b5fe15f8334c0c85b4092881ecded7/docs/research/reports/oneswap-precision-aqua-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7fc5bf1935b5fe15f8334c0c85b4092881ecded7/docs/research/reports/oneswap-precision-aqua-settlement-gates-20261015.json"
+      ]
+    },
+    {
+      "line": 42,
+      "title": "**Curve underlying：既有native／FRAX及三个经典元池收款正确性完成**",
+      "families": [
+        "curve-underlying"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "b1597a3afdf436015c074019769020a36d86565af483e361131941bf93110db6",
+      "latestStatement": "2026-10-15 21:05 UTC+8：既有full runtime／a85461 clone两nativeAlias实现64正执行、32零额／96故障拒绝，FRAX／5f旧26外收及26零额、双调A与12方向成果继续有效。新增经典213be／rateSlot16 c270 N26138094与2c7796／rateSlot10 BAC N25982128、USTP N26015090，合计144正、144零额、288故障拒绝，覆盖12方向及生产输入／10倍输入。c270原48成功复读观察器，不重复执行；BAC／USTP新增96正。当前报价与到账、完整输入、返回值、库存和故障回滚已独立复核；默认MAX授权政策如实保留，不冒称已清零。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/fd263e28c796b6caa2db3ec0c1a1cf2ab747f32d/docs/research/reports/curve-underlying-recipient-implementation-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/fd263e28c796b6caa2db3ec0c1a1cf2ab747f32d/docs/research/reports/curve-underlying-recipient-implementation-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/e5e8f5d0a01aecab2b41e36afe8ab11056057977/docs/research/reports/curve-underlying-frax-5f-correctness-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/e5e8f5d0a01aecab2b41e36afe8ab11056057977/docs/research/reports/curve-underlying-frax-5f-correctness-20261014.json",
+        "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-evidence08-independent-review.json",
+        "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/frax-recipient-independent-review.json",
+        "https://etherscan.io/tx/0x7d996f99247b03b809e5eea4989de17f674946b75b1bfddae601311bf0e85a70",
+        "/Users/eunice/src/MEV/logs/impl-adaptation-20261014.67jcntav/impl-before-frax13.md",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/curve-core-rank-main-check-20261006.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/curve-1024-20261006.khSAeg/B-natural-output/input.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/curve-1024-20261006.khSAeg/B-natural-output/enumeration.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x2d91ec2d34e3626c391d76aae12253218a4a1a2dc76d392ab9fd80b6b5255532/20261006-curve-user-special-exception-i4ioos.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/curve-selected-continuation-20261006.WnmAwt/summary.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/curve-selected-continuation-20261006.WnmAwt/rank-873/final-1.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x2d91ec2d34e3626c391d76aae12253218a4a1a2dc76d392ab9fd80b6b5255532/20261006-curve-same-amount-hop-attribution-i4ioos.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/curve-selected-continuation-20261006.WnmAwt/preflight.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/99e80fccd43c341e4141ec9a638c0d1b68fcb52b/docs/research/reports/curve-variants-current-execution-20261012.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/049c15f628a410a4662f16e99052eae9acf8d02a/docs/research/reports/curve-underlying-native-acceptance-20261012.json",
+        "https://etherscan.io/tx/0x4df016bdf45675f8680769ef3403712c92e76d7466fb0597d2cdb4c02cbe0db3",
+        "https://etherscan.io/tx/0x20cd15f804bf2c420c2058f9d8f85f822c8aa3493758af32c97ab26cb9446e94",
+        "https://etherscan.io/tx/0x45a21b27dc863d356250c863f5f3fa95a54b9552f3dfa3f3d17dcc086b398fe7",
+        "https://etherscan.io/tx/0x6a59fd7bfd63127c31a1c488c5a95b7003a135e345d36f17840c693e243f850c",
+        "https://etherscan.io/tx/0xa520edda7bd95363d3fcabacf2f0d8a96dff473193396d848fc7623967632512",
+        "https://etherscan.io/tx/0xdb897a88585c2103e31907744ff509e07b63005c822253dd4d5a69ab9a1bbd7f",
+        "https://etherscan.io/tx/0x6b02a33297a985d3e3a040d71321e98e5dd6e68d5c0fd99ce6ffc73bf94ed855",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/532f6abdc4be3c1ff2577eaff1fc5e735b0c086a/docs/research/reports/curve-underlying-cohort-acceptance-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/6e76c16354977a7f1826ead839233f048c26905f/docs/research/reports/curve-underlying-erc20-acceptance-20261013.json",
+        "https://etherscan.io/tx/0x99ed07d8a915fd2f7d32562af8290caaab322cca8462f818741d097759878807",
+        "https://etherscan.io/tx/0x0fa81dfb7a7756eef6df554ab17ba5ce748ee52c3e8262b0f677557f08843495",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/a12f692e6c1d35ee22a29e17c7782d8d29045092/docs/research/reports/curve-underlying-anchor-acceptance-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/67071036b85c9fd1916f92e6c8534578f9cd2300/docs/research/reports/curve-underlying-ramp-acceptance-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/1d6273d2df0ff0596d66afd9d5bac7bb0f287b65/docs/research/reports/curve-underlying-active-ramp-support-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c0683dff351171802fb70ca87a2b32cc7b191ba2/docs/research/reports/curve-underlying-historical-factory-acceptance-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/d81f5548594adfd582c57ed33a208bc2eef87535/docs/research/reports/curve-underlying-v1-factory-acceptance-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c2a3e7871085e1da2228c5e41bc478552253b830/docs/research/reports/curve-underlying-susd-acceptance-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/20cea9fb8276a850cd22edc8cc074240af1c5b9b/docs/research/reports/curve-underlying-lending-acceptance-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/881bf70c53740026c528ded124f63103f2c5c339/docs/research/reports/family-boundary-strict-catalog-repair-20261014.json",
+        "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/family-boundary-evidence-20261014/reports/family-boundary-strict-catalog-repair-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:31",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/curve-combinations/remaining-combinations-acceptance.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/curve-underlying-native-recipient-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/curve-underlying-native-recipient-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/curve-underlying-frax-direct-reuse-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/few-vault-curve-ekubo-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/few-vault-curve-ekubo-settlement-gates-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/curve-underlying-classic-recipient-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/curve-classic-recipient-independent-c270-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/curve-classic-recipient-independent-bac-ustp-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/976d707c98521c623184da539f7264ba80f79c6e/docs/research/reports/family-settlement-five-family-gates-20261015.json"
+      ]
+    },
+    {
+      "line": 43,
+      "title": "**Set BasicIssuance：实际四组件及指定收款适配正确性完成**",
+      "families": [
+        "protocol:set-redemption"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "18f94340cdacdd84551fb50c747c2601ac6d02a3029b24445abacc3f4085cc31",
+      "latestStatement": "2026-10-16 00:02 UTC+8：N26130046四组件篮子8组金额，新runtime指定收款自收／外收及两组库存32正、32故障声明拒绝；独立核对480条代币变化、32原生币变化、Set销毁与完整篮子事件。只转发选中组件本次实收，其他组件留在执行器，不伪装单组件输出，不新增库存策略。旧默认／quoted16次通过精确旧VM、程序及相关源码认证复用；旧版Set Core220个正负程序／调用数据当前逐字节相同，未重复执行。构建、合同及真实BotVM安全回归通过，已提交推送。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c471b5a5bf0fd3d3b678b9baf180dccfedc28552/docs/research/reports/set-runtime-nested-20261007.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e/set-historical-20261006T075451/checkpoint-ready.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e/set-historical-20261006T075451/N-prices/prices.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e/set-small-P-20261006.3i19Mu/P0005/input.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e/set-small-P-20261006.3i19Mu/P0005/prices.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e/set-small-P-20261006.3i19Mu/P0005/enumeration.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e/20261006-set-directed-parity-status-i4ioos.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e/20261006-set-small-P0005-natural-core-3i19Mu-main-checked.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e/set-small-P-20261006.3i19Mu/downstream-attempt2/downstream-final-rank-1-candidate-0-simulation-12.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/nine-tx-gap-20261006.i4IoOS/set-small-P-main-check-20261006.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:32",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c479aea51176983873032af121fdae5942cc6fc8/docs/research/reports/set-basic-recipient-actual-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c479aea51176983873032af121fdae5942cc6fc8/docs/research/reports/set-basic-recipient-legacy-compatibility-20261015.json"
+      ]
+    },
+    {
+      "line": 44,
+      "title": "**旧版 Set Core：实际单组件四方向及非零费用收款正确性完成**",
+      "families": [
+        "protocol:set-redemption"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "f6bd9c9ffec3deb2ccfdb1ffd8b8a9a8104591653efc56cf307a64d52e5a9ad4",
+      "latestStatement": "2026-10-15 22:06 UTC+8：SetToken／RebalancingV3单组件issue/redeem四方向＋真实0.5%entryFee，N26132613／24642392共11金额组，44实际成功／176故障拒绝，其中88次成功调用后祖先整体回滚；288原始存储余额及12fee mint独立核对，quote/net fee/完整A/实收/授权清零/native及旧库存一致。默认／quoted字节保留，旧default证据保持原pin，不称本批重跑。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/set-legacy-redemption-acceptance-20261009.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/set-legacy-issuance-acceptance-20261009.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/0299d0b2e0f05cb19721ad0f167e8fded2a68339/docs/research/reports/set-legacy-natural-reference-20261010.json",
+        "/Users/eunice/src/MEV/logs/set-reference-search-20261011.n6gBSt/result.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/74210fa8624ecdb8dd6f40f6d8c9a77f9201a875/docs/research/reports/set-legacy-manual-fee-acceptance-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:33",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/786cc776b1dad36aceae310251bf054628cab468/docs/research/reports/set-legacy-recipient-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/786cc776b1dad36aceae310251bf054628cab468/docs/research/reports/set-legacy-recipient-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/786cc776b1dad36aceae310251bf054628cab468/docs/research/reports/set-legacy-recipient-provenance-20261015.json"
+      ]
+    },
+    {
+      "line": 45,
+      "title": "**DODO GSP：两池四方向适配正确性完成**",
+      "families": [
+        "custom-swap:dodo-v2"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "f44e80959bf1c33822b964ec4fefe5b750fcecda0a71043d693b1f95415cf68b",
+      "latestStatement": "2026-10-15 23:05 UTC+8：两GSP池N26016874注册表反向身份与clone→implementation同状态绑定，新增4方向8金额组direct32正／32严格声明拒绝；独立96余额delta、32native及完整输入／实际输出Transfer核对完成。当前真实BotVM5/5，原默认16次经精确旧artifact、16程序／相关源指纹独立认证复用，本批已提交推送。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/dodo-gsp-acceptance-20261009.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:34",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/dodo86/root-independent94.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f5183f58fcf705ec6400a3a7db3b4f84c685d135/docs/research/reports/dodo-gsp-recipient-actual-correctness-20261015.json"
+      ]
+    },
+    {
+      "line": 46,
+      "title": "**Balancer V1：Family双接口与原交易腿已验**",
+      "families": [
+        "balancer-v1"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "0e15c7932f7ca4449c94319af88b44cdfdc4f3a17acbcc74f8db85e41af46c2c",
+      "latestStatement": "2026-10-14 17:48 UTC+8：Balancer V1：Family双接口与原交易腿已验。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c471b5a5bf0fd3d3b678b9baf180dccfedc28552/docs/research/reports/family-three-historical-integration-20261007.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c471b5a5bf0fd3d3b678b9baf180dccfedc28552/docs/research/reports/family-original-exact-parity-20261008.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c471b5a5bf0fd3d3b678b9baf180dccfedc28552/docs/research/reports/family-goal-closeout-20261008.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:35",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md"
+      ]
+    },
+    {
+      "line": 47,
+      "title": "**Balancer V2：正确性已覆盖，代表性性能仍失败/未完成**",
+      "families": [
+        "balancer-v2"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "172bb838c507aa8e53ea615823789519f48de8fb7552fa98c4da169d5d5454da",
+      "latestStatement": "2026-10-14 17:48 UTC+8：Balancer V2：正确性已覆盖，代表性性能仍失败/未完成。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c471b5a5bf0fd3d3b678b9baf180dccfedc28552/docs/research/reports/family-three-historical-integration-20261007.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c471b5a5bf0fd3d3b678b9baf180dccfedc28552/docs/research/reports/family-original-exact-parity-20261008.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:36",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/balancer23-independent-review-20261014.json"
+      ]
+    },
+    {
+      "line": 48,
+      "title": "**graviAURA／Badger Sett：现有流动余额赎回正确性通过**",
+      "families": [
+        "protocol:badger-sett-withdraw"
+      ],
+      "status": "historical correctness retained; current identity/source evidence join assigned to independent active agent, not newly missing implementation",
+      "rowSha256": "7f4fe76d1d636e49df129c79d976544203311d648187fd6422d50210dd737d11",
+      "latestStatement": "2026-10-14 17:48 UTC+8：graviAURA／Badger Sett：现有流动余额赎回正确性通过。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c471b5a5bf0fd3d3b678b9baf180dccfedc28552/docs/research/reports/family-three-historical-integration-20261007.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/c471b5a5bf0fd3d3b678b9baf180dccfedc28552/docs/research/reports/family-original-exact-parity-20261008.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:37",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md"
+      ]
+    },
+    {
+      "line": 49,
+      "title": "**Uniswap V1：TransferInput收款与ETH/WETH交付正确性通过**",
+      "families": [
+        "custom-swap:uniswap-v1"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "5d34059b00a593c4e84cd8b092b0596c71ae035532139b35ccf28775ac2c55ac",
+      "latestStatement": "2026-10-15 15:26 UTC+8：standard与issuerFee双方向，32次quoted／runtime／direct自收／外收真实执行，16次零金额回滚；TransferInput指定收款、实扣实收、原生币包装／旧库存与授权清理核对通过，当前build、25项本地EVM及独立复核通过。构造期Exact=0，无quoted fallback。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/v1-token-off/offline-1/summary.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/v1-token-off/offline-1/enumeration.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x4a4255cbfc0521233d4565f2073323a88c3ac1f8600a501aa5731ee8230288fc/20260929-three-policy-v1-token-off-poepph.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x4a4255cbfc0521233d4565f2073323a88c3ac1f8600a501aa5731ee8230288fc/20260930-six-family-ev-v1-pc1pv8.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/summary.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x4a4255cbfc0521233d4565f2073323a88c3ac1f8600a501aa5731ee8230288fc/20261005-cloud-sim-autonomous-v1-goxbeh.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/code-evidence/changes.patch",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:38",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-final-review-20261015.json"
+      ]
+    },
+    {
+      "line": 50,
+      "title": "**Ekubo＋PSM：两族本次适用范围适配正确性完成，机会／时效另列**",
+      "families": [
+        "custom-swap:ekubo-router-v1",
+        "protocol:psm"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "0a88c5137d8f2881ce041dc3bf462e929f6b1e4b38c940a4d6fd51c2e6a3c115",
+      "latestStatement": "2026-10-15 19:46 UTC+8：PSM N26029876普通DAI/USDC双向、自收／外收40正执行、160故障及6零额／不足一单位拒绝均通过非作者独立复核；完整请求budget、实际cost／未用budget、真实到账、返回值、旧库存／native和临时授权清零已核。旧12次quoted/runtime经相关源码兼容认证复用；同N实际runtime与已验证DssLitePsm部署字节全等，token/pocket/scale/fee绑定一致。当前结算门、生产及独立提交构建、修后全族双接口通过，已提交推送。",
+      "existingEvidenceLinks": [
+        "https://etherscan.io/tx/0xed014b884a511a4abd1c0e5f218be8dbcd1209cd7bb645d440334fdfecf928f0",
+        "https://etherscan.io/tx/0x868b69ff429fea8ec1e483c8be1d9e236aabe00065e355ff5a60af0596a75847",
+        "https://etherscan.io/tx/0xed014b884a511a4abd1c0e5f218be8dbcd1209cd7bb645d440334fdfecf928f0",
+        "https://etherscan.io/tx/0x868b69ff429fea8ec1e483c8be1d9e236aabe00065e355ff5a60af0596a75847",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/ekubo-token-off/offline-1/summary.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/ekubo-token-off/offline-1/enumeration.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72/20260929-three-policy-ekubo-token-off-poepph.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72/20260930-six-family-ev-ekubo-pc1pv8.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/summary.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72/20261005-cloud-sim-autonomous-ekubo-goxbeh.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/code-evidence/changes.patch",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b2efc329a64a83a8af1f0caf6f0d7deeeffc4579/docs/research/reports/ekubo-coffee-acceptance-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/377a86b04b233859fff720a517cdeec55be1bf8d/docs/research/reports/psm-runtime-budget-and-ekubo-replay-20261014.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72/20261014-current-runtime-ekubo-psm-1rjnj0zh.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f18c09df1a8d4457771bdfa4d1915f566a6ad2ef/docs/research/reports/ready-noop-edge-order-acceptance-20261014.json",
+        "/Users/eunice/src/MEV/logs/cloud-progress-20261013.5VQLT9/ready-noop-current-evidence-20261014/reports/ready-noop-edge-order-acceptance-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:39",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/formal-family-acceptance-review.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/8345acbe29dbb199bb6284cf8d698276728f639b/docs/research/reports/ekubo-native-recipient-implementation-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/ekubo-native-recipient-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/ekubo-native-recipient-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/ekubo-native-default-reuse-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/few-vault-curve-ekubo-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/130bd1250f9ba75ddd3dce78749e743333a537f0/docs/research/reports/few-vault-curve-ekubo-settlement-gates-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/20b74b6f1bec533653a06be704515453c58057fd/docs/research/reports/psm-recipient-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/20b74b6f1bec533653a06be704515453c58057fd/docs/research/reports/psm-recipient-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/20b74b6f1bec533653a06be704515453c58057fd/docs/research/reports/psm-recipient-identity-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/20b74b6f1bec533653a06be704515453c58057fd/docs/research/reports/psm-recipient-settlement-gate-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/767feeb1a3af4d2e83a108c7db547ce3f84786cf/docs/research/reports/ekubo-erc20-recipient-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/767feeb1a3af4d2e83a108c7db547ce3f84786cf/docs/research/reports/ekubo-erc20-recipient-independent-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/767feeb1a3af4d2e83a108c7db547ce3f84786cf/docs/research/reports/ekubo-recipient-settlement-gate-20261015.json"
+      ]
+    },
+    {
+      "line": 51,
+      "title": "**GenericTokenMigration：实际ACX→USDC适配正确性完成**",
+      "families": [
+        "protocol:token-migration"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "aa8849b4d3288480b4a263df4e8cc1869c645dc4866b98e2a9c31ac34979276d",
+      "latestStatement": "2026-10-16 00:02 UTC+8：N26029585当前生产同状态quote/quoted/runtime完成8正／16故障拒绝／1零输入拒绝；原TX输入数量及十分之一手工CLI补数，未改原价格表。实际部署代码绑定，完整输入扣款、实收、事件／供应与旧库存／native、临时授权清零独立核验。runtime构造Exact=0、无fallback；caller-only无任意收款／延迟付款。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/migration-pool-off/offline-1/summary.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/migration-pool-off/offline-1/enumeration.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583/20260929-three-policy-migration-pool-off-poepph.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583/20260930-six-family-ev-migration-pc1pv8.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/summary.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583/20261005-cloud-sim-autonomous-migration-goxbeh.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/code-evidence/changes.patch",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:40",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/scope50-review.json",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/final-handoff93.json",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/root-independent100.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/52000e3f19b73e724b2d1923a0c2f7e6803594c6/docs/research/reports/caller-only-current-correctness-20261015.json"
+      ]
+    },
+    {
+      "line": 52,
+      "title": "**V4 Sat1Hook：原生币收款／回调结算正确性通过**",
+      "families": [
+        "univ4-fee-hook"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "b96d890786704c275d6c24ad297fef7e304aa2f335248516242a565907d83a01",
+      "latestStatement": "2026-10-15 15:26 UTC+8：40次真实正执行／32次缺资金拒绝，包含quoted、默认runtime、direct自收／外收及输出先交付后回调付款；ETH/WETH共同边界、完整债务、实扣实收／旧库存验证通过。Sat1本地报价路径保留；当前构建、共用348项EVM与独立复核通过。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/sat1-token-off/offline-1/summary.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/sat1-token-off/offline-1/enumeration.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x0be85b68578d45e449cf2285b2d331b8e3ed3f68240b3166e67abb2727f30b55/20260929-three-policy-sat1-token-off-poepph.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x0be85b68578d45e449cf2285b2d331b8e3ed3f68240b3166e67abb2727f30b55/20260930-six-family-ev-sat1-pc1pv8.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/summary.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x0be85b68578d45e449cf2285b2d331b8e3ed3f68240b3166e67abb2727f30b55/20261005-cloud-sim-autonomous-sat1-goxbeh.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/code-evidence/changes.patch",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/codex/family-runtime-actual-20261007/docs/research/reports/sat1-native-historical-acceptance-20261010.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:41",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-final-review-20261015.json"
+      ]
+    },
+    {
+      "line": 53,
+      "title": "**Uniswap V4无Hook：指定收款／原生币／延迟付款正确性通过**",
+      "families": [
+        "univ4"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "44b234ed8aea50fa2c2a7eb875120c92fd7f8f016bfe78af923264fa3d745765",
+      "latestStatement": "2026-10-15 15:26 UTC+8：两个实例合计80次真实正执行／64次缺资金拒绝；quote＋quoted与runtime、direct自收／外收、deferred完整债务和零预付回调均已覆盖，实扣实收一致，Exact=0／无fallback及共用安全回归通过。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-final-review-20261015.json"
+      ]
+    },
+    {
+      "line": 54,
+      "title": "**V4 fa439 Fee Hook：本次实际接入范围适配正确性完成**",
+      "families": [
+        "univ4-fee-hook"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "dc56cce04e91a23673544b64a5c06a93efbfaca47d8cef88e77769a58793dc99",
+      "latestStatement": "2026-10-15 16:00 UTC+8：修复Quoter与真实swap sender导致的费率差异，复用现有生产executor-program模拟读取实扣实收，绑定executor／origin，旧Quoter凭证禁止执行。原4e15 WETH输入保留，报价与实际到账差0；40次正执行／32次拒绝及相关回归、独立复核通过。",
+      "existingEvidenceLinks": [
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b393243b5454bfda52754889bc45909ed6f3c280/docs/research/reports/univ1-v4-settlement-final-review-20261015.json"
+      ]
+    },
+    {
+      "line": 55,
+      "title": "**Fluid Credit／wstUSR：旧授权留仓成果保留，本批保守闭环不适用**",
+      "families": [
+        "credit:fluid"
+      ],
+      "status": "excluded from current conserving-swap task; prior separately-authorized credit result retained",
+      "rowSha256": "de960b99fc15038896cb8187ea1907bdc940569ce8c98b4cb82ef85d2128e7fc",
+      "latestStatement": "2026-10-14 17:48 UTC+8：Fluid Credit／wstUSR：旧授权留仓成果保留，本批保守闭环不适用。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/fluid-token-off/offline-1/summary.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/fluid-token-off/offline-1/enumeration.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970/20260929-three-policy-fluid-token-off-poepph.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/fluid-wstusr-sim-20260930.eCmtBe/fluid-ready.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/fluid-wstusr-sim-20260930.eCmtBe/run/prices.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/fluid-wstusr-sim-20260930.eCmtBe/run/enumeration.json",
+        "/Users/eunice/src/MEV/logs/fluid-approved-replay-20261005.qbCXHC/report.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970/20261005-fluid-approved-sim-qbcxhc.json",
+        "/Users/eunice/src/MEV/logs/fluid-approved-replay-20261005.qbCXHC/fluid-approved-qbcxhc/pipeline/simulation-25.json",
+        "/Users/eunice/src/MEV/logs/fluid-approved-replay-20261005.qbCXHC/fluid-approved-qbcxhc/pipeline/ev-1.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:42",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md"
+      ]
+    },
+    {
+      "line": 56,
+      "title": "**Curve Tricrypto＋Mooniswap：Mooniswap收款方接线通过，原完整前序正EV保留**",
+      "families": [
+        "curve-plain",
+        "mooniswap"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "dbbbaef8ab4294feb67a6cd353f9348f470a6fda573796bf3a1b3fb991c08a47",
+      "latestStatement": "2026-10-14 22:27 UTC+8：当前ERC20 runtime实现的quote-output／direct-output接线通过；双方向各4个输入，32次实际正执行（quoted／默认runtime／direct自收／direct外收各8）、16次声明revert、4次未预付输入的只读报价，实扣实收与同状态quote差0；构造期Exact／quoted／RPC=0且无fallback，当前源码限域结算门与独立复核通过。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/mooniswap-reusable-allowance.uDf9wD/backrun-planning.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x03d2dc13a13e6a71bcf21c1f3134c4167eb29cd20bb96ad7853249d1816a2dd8/20260928-impl-mooniswap-reusable-allowance.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:43",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ae68664f83099c9abff4165809bc6ef90b260c78/docs/research/reports/mooniswap-recipient-correctness-20261014.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ae68664f83099c9abff4165809bc6ef90b260c78/docs/research/reports/mooniswap-recipient-correctness-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ae68664f83099c9abff4165809bc6ef90b260c78/docs/research/reports/mooniswap-recipient-evidence-review-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ae68664f83099c9abff4165809bc6ef90b260c78/docs/research/reports/mooniswap-settlement-gate-20261014.json"
+      ]
+    },
+    {
+      "line": 57,
+      "title": "**xWin：既有自然正EV成果，当前历史方向正确性已补**",
+      "families": [
+        "protocol:token-conversion"
+      ],
+      "status": "actual correctness evidence complete; current evidence/inventory reconciliation in progress, no new EVM needed on available results",
+      "rowSha256": "9e69b2949adcaff893a826bc9802f1ef966a041dad66a41b9d25b8b9176cc0a4",
+      "latestStatement": "2026-10-16 00:02 UTC+8：既有N26075823两方向16执行／8负例及原自然正EV保留原配置；N26144845 paused仍为真实状态正确拒绝。已绑定N26075823实际proxy实现及runtime。补当前VM两方向双执行已运行完成，等待独立实收复核；原105参数配置失败、106 fork reader超时、110公开参数命名被安全入口拒绝分别保留。最小测试传输修正沿生产上游在固定同N读quote，真实执行仍隔离fork，不改定价、窗口或价格表。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/xwin-token-off/offline-1/summary.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/xwin-token-off/offline-1/enumeration.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xacb3f261665bb1516ff03be65b890b3edf9413edc5ea32a78ff4b5a667b3ea8b/20260929-three-policy-xwin-token-off-poepph.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xacb3f261665bb1516ff03be65b890b3edf9413edc5ea32a78ff4b5a667b3ea8b/20260930-six-family-ev-xwin-pc1pv8.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/summary.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0xacb3f261665bb1516ff03be65b890b3edf9413edc5ea32a78ff4b5a667b3ea8b/20261005-cloud-sim-autonomous-xwin-goxbeh.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/code-evidence/changes.patch",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b66aef53567a0c07f118c56faeb278c44cd73b00/docs/research/reports/xwin-pause-acceptance-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/3fa3d22e438ac8c5f742d1b060fe2aa23546676a/docs/research/reports/xwin-active-single-block-progress-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/b5472f94ec649d15c1a65724fd2260ffa59d10c0/docs/research/reports/xwin-active-dual-acceptance-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ad1afa1729b1d6c98527a03eaed465b9f4ebfc18/docs/research/reports/xwin-natural-reference-acceptance-20261010.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:44",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md"
+      ]
+    },
+    {
+      "line": 58,
+      "title": "**BTBBear：mint／redeem适配正确性完成**",
+      "families": [
+        "protocol:token-conversion"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "e10c38f11d12fe26f39c2f2e772014bd51468cb0e9845d722f9101dab48c66aa",
+      "latestStatement": "2026-10-16 00:02 UTC+8：N26029369当前生产双方向quote/quoted/runtime完成16正／32故障拒绝／2零输入拒绝。原Minted数量及十分之一只借输入，逆向借原输出token数量作输入，不借期望结果。实际runtime／身份、完整输入及实收、mint/burn与总供应、旧库存／native和mint临时授权清零独立核验；普通转账税不套在mint/burn。构造Exact=0、无fallback。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/btb-pool-off/offline-1/summary.json",
+        "/Users/eunice/src/MEV-worktrees/s1-unified-integration-20260907/logs/repeat-policy-three-final.POePpH/btb-pool-off/offline-1/enumeration.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91/20260929-three-policy-btb-pool-off-poepph.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91/20260930-six-family-ev-btb-pc1pv8.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/summary.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91/20261005-cloud-sim-autonomous-btb-goxbeh.json",
+        "/Users/eunice/src/MEV/logs/seven-sim-amount-final-20261005.GoxBEh/code-evidence/changes.patch",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:45",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/scope50-review.json",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/final-handoff93.json",
+        "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/caller-only92/root-independent100.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/52000e3f19b73e724b2d1923a0c2f7e6803594c6/docs/research/reports/caller-only-current-correctness-20261015.json"
+      ]
+    },
+    {
+      "line": 59,
+      "title": "**1inch Aqua／SwapVM：两个实际策略四方向适配正确性完成，默认／收款／回调已验**",
+      "families": [
+        "aqua-swapvm"
+      ],
+      "status": "existing scoped correctness accepted; retain exclusions in row",
+      "rowSha256": "bb0d88cc48fca71e2ee374b1e7a4117b622b045b7274731740b5d62142779264",
+      "latestStatement": "2026-10-15 17:59 UTC+8：N25680170／171两个注册策略四方向新增20次真实output-first callback执行、120次deferred拒绝、50次direct拒绝及20次非活跃context安全no-op。完整输入、真实maker／executor／资金腿扣款到账、精确授权清零、原生币／旧库存、回调顺序与回滚经非作者独立复算通过；旧quoted／默认／direct及static quote证据经相关源码闭包复核有效，未重复跑旧成功。当前结算门与生产build通过。",
+      "existingEvidenceLinks": [
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x36764eba7fc601d36c67d575a2e656d803ce9c07240e0cb0ad32a0aed154307a/20261009-aqua-standing-d02f05d3-2aps2b.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9810a009fa628a35e00433c9c8118903864c862e/docs/research/reports/family-progress-audit-20261013.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ced758336da7c58603f89ebedd04b182dc2e64ea/docs/research/reports/aqua-historical-identity-caller-audit-20261014.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x36764eba7fc601d36c67d575a2e656d803ce9c07240e0cb0ad32a0aed154307a/20261014-aqua-identity-permission-20ddf8e5-dts7m7vt.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/377a86b04b233859fff720a517cdeec55be1bf8d/docs/research/reports/aqua-configured-origin-binding-20261014.json",
+        "/Users/eunice/src/MEV/logs/replay-history/1/0x36764eba7fc601d36c67d575a2e656d803ce9c07240e0cb0ad32a0aed154307a/20261014-aqua-configured-origin-binding-8uveia9.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/impl-before.md:46",
+        "/opt/mev-cloud/family-runtime-20261007/logs/stage3-aqua-adaptation-20261014.x12rn6y8/dual-A02.json",
+        "/opt/mev-cloud/family-runtime-20261007/logs/stage3-aqua-adaptation-20261014.x12rn6y8/dual-B01.json",
+        "/opt/mev-cloud/family-runtime-20261007/logs/stage3-aqua-adaptation-20261014.x12rn6y8/dual-A01.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interface-review-20261014.json",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-acceptance-20261014.md",
+        "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/aqua-history20-independent-review-20261014.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7fc5bf1935b5fe15f8334c0c85b4092881ecded7/docs/research/reports/aqua-current-correctness-20261015.json",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7fc5bf1935b5fe15f8334c0c85b4092881ecded7/docs/research/reports/oneswap-precision-aqua-correctness-20261015.md",
+        "https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/7fc5bf1935b5fe15f8334c0c85b4092881ecded7/docs/research/reports/oneswap-precision-aqua-settlement-gates-20261015.json"
+      ]
+    }
+  ],
+  "scopeCounts": {
+    "implRows": 31,
+    "mappedFamilyIds": 32,
+    "globalCatalogFamilyIds": 48
+  },
+  "requiredRemainingAtAudit": [
+    {
+      "item": "Compound actual cUSDC/cDAI/cUNI historical runtime/delegator implementation and current evidence join",
+      "owner": "/root/interface_protocols_b",
+      "classification": "evidence reconciliation; old actual success retained",
+      "newExecutionRequired": "Only if exact relevant old evidence cannot be authenticated; not established by this audit"
+    },
+    {
+      "item": "Badger Sett actual proxy implementation/strategy state and current old evidence join",
+      "owner": "/root/v4_accept26",
+      "classification": "evidence reconciliation",
+      "newExecutionRequired": "Only if exact relevant old evidence cannot be authenticated; not established by this audit"
+    },
+    {
+      "item": "Parent final scoped machine inventory/document reconciliation for Balancer V3/Curve LP/xWin",
+      "owner": "/root",
+      "classification": "ready/document evidence linkage",
+      "newExecutionRequired": false
+    }
+  ],
+  "completedCurrentReviews": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-lp112/current-compatibility115.json",
+      "sha256": "08d80b856a5200b495a9ca1dcc4792cd05f51544298139631bc41e0cdc3a47bc"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/v1-independent-raw112.json",
+      "sha256": "9c83b4fe1938f72e4d03d09e17dda5306eae3d09742eba138a03dbd4436e673f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/v1-negative-trace118.json",
+      "sha256": "2c28446fac3990a490f725fc3de341eecf97a2cfbb4b8af95033d578a50f98a4"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/v1-standard18-index110.json",
+      "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+    }
+  ],
+  "balancerV1": {
+    "decision": "Do not reopen/re-execute",
+    "evidence": {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interfaces-swaps-root-20261014.json",
+      "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+    },
+    "reason": "Existing captured pool bytecode at N26138731 exactly bound to verified BPool; chosen swapExactAmountIn pays msg.sender only, no payment callback. Current inventory interface/identity/wiring verified, receiver/callback execution not-required, no gaps. Old date alone is not evidence invalidation."
+  },
+  "univ2AndUniv3": {
+    "classification": "Global newly-declared settlement modes remain unverified; no independent new-mode promise bound to current actual IMPL targets found",
+    "evidence": {
+      "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/settlement-docs/family-settlement-interfaces-swaps-c-20261014.json",
+      "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+    },
+    "implFacts": [
+      "No dedicated Uniswap V2 or V3 adaptation row in current IMPL.",
+      "Line42 Curve underlying/TBTC + V3 has an old ordinary same-amount control and user case-specific opportunity acceptance; it does not certify newly-added arbitrary receiver/deferred funding.",
+      "Line56 UniV2 degraded background is a preserved natural graph/integration limitation, not a selected new settlement path success."
+    ],
+    "unverifiedGlobalModes": [
+      "U2 default30 quote/direct/deferred: public 7b09/Ring implementations reviewed, fixture/source provenance incomplete in inventory; historical new-mode execution not recorded.",
+      "U2 measured25, pool-get-amount-out, taxed-input compositions: no bound actual profile target in this task; special pool-getAmountOut direct is disabled (null), not tested success.",
+      "U3 no-isSwapper direct/deferred: c7bb public runtime matches fixture descriptor, but provenance/actual sourceReady absent; no historical new-mode execution in inventory.",
+      "U3 isSwapper branch: actual selected deployment/interface not established."
+    ],
+    "decision": "Do not erase these machine gaps or infer every U2/U3 clone supports the modes. They are not mandatory new executions for the narrower listed IMPL Family completion without a selected route/mode binding. If claiming all globally installed Family new modes delivered, these would remain blockers; this audit makes no such claim.",
+    "ordinaryV3Reference": {
+      "path": "/Users/eunice/src/MEV/logs/replay-history/1/0x2d91ec2d34e3626c391d76aae12253218a4a1a2dc76d392ab9fd80b6b5255532/20261006-curve-user-special-exception-i4ioos.json",
+      "sha256": "e41de569cf0be5379f4cc4d09a7518ff5ed678578b14315238a5fcd0c9d4659a"
+    }
+  },
+  "unselectedBoundaries": [
+    {
+      "scope": "Algebra ordinary global-state/no-plugin and payment-in-advance",
+      "reason": "Six real current targets are Cypher; other profile no independent selected sample or unselected entry, not upgraded."
+    },
+    {
+      "scope": "Curve plain three declared extra modes; other hypothetical underlying precision/rate combinations",
+      "reason": "No distinct actual selected deployment/sample; preserve unverified, do not force fixture success."
+    },
+    {
+      "scope": "DODO DSP/DVM/DPP beyond two registered GSP targets",
+      "reason": "No selected task input/profile binding; GSP actual4directions complete, not all DODO forks."
+    },
+    {
+      "scope": "Set Basic issue",
+      "reason": "ABI present but route uninstalled; no new issue required in selected redeem task."
+    },
+    {
+      "scope": "Mooniswap57fb additional provenance-stripped instance",
+      "reason": "Extra instance unverified; selected2c4 real profile and actual dual/direct complete; do not automatically reopen all extra instances."
+    },
+    {
+      "scope": "Native variants without real instances",
+      "reason": "Shared ETH/WETH capability safety verified where applicable; no need manufacture native pools for every Family."
+    }
+  ],
+  "globalCatalogOutsideMappedImpl": [
+    "custom-swap:angstrom-v4",
+    "ella-exchange",
+    "flash-loan:balancer-v2",
+    "flash-loan:morpho",
+    "protocol:astra-multitoken",
+    "protocol:eigenpie",
+    "protocol:ethertoken-native-redeem",
+    "protocol:goldx",
+    "protocol:metronome-hgusdc",
+    "protocol:metronome-synth",
+    "protocol:peapods-debond",
+    "protocol:rocksolid",
+    "protocol:self-burn-native",
+    "protocol:wsteth"
+  ],
+  "outOfScope": [
+    "Fluid credit/inventory/borrow/liquidation",
+    "Other global catalog entries not mapped to actual IMPL rows (no implicit status upgrade)",
+    "New strategies, mainnet deployment/sign/broadcast"
+  ],
+  "deferredOriginalWork": [
+    "Natural Ready/valuation integration gaps remain where recorded, and original opportunity replay/final EV are separate.",
+    "Stage4A/4B still unrun/failed where recorded; BalancerV2,V3,Curveplain/underlying explicitly retained. No performance pass from this audit."
+  ],
+  "notAGoalCompletion": "This scope audit does not mark the original four-stage goal complete. Remaining evidence joins, original integration/opportunity and stage4 claims retain their own state.",
+  "newRpc": 0,
+  "newEvm": 0,
+  "productionWrites": 0
+}
