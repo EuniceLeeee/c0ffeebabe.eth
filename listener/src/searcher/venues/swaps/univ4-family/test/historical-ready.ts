@@ -1,6 +1,6 @@
 // Thin same-N production Ready/prices caller; receipt is an assertion, not a seed.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { ethers } from "ethers";
@@ -16,9 +16,11 @@ async function main() {
   const args = new Map<string, string>();
   for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i], value = process.argv[i + 1];
-    assert([...names, "--ready"].includes(key) && !args.has(key) && value && !value.startsWith("--")); args.set(key, value);
+    assert([...names, "--ready", "--prior-ready", "--ready-only"].includes(key) && !args.has(key) && value && !value.startsWith("--")); args.set(key, value);
   }
   assert(names.every(key => args.has(key)));
+  if (args.has("--ready-only")) assert.equal(args.get("--ready-only"), "true");
+  assert(!(args.has("--ready") && args.has("--prior-ready")), "ready reuse and prior revalidation are exclusive");
   const out = resolve(args.get("--out")!); assert(!existsSync(out));
   const executor = ethers.getAddress(args.get("--executor")!).toLowerCase(), owner = ethers.getAddress(args.get("--owner")!).toLowerCase();
   assert(executor !== owner && executor !== ethers.ZeroAddress && owner !== ethers.ZeroAddress);
@@ -41,12 +43,28 @@ async function main() {
     save("input.json", { tx: SAMPLE.tx, N: SAMPLE.block, hash: header.hash, stateRoot: header.stateRoot,
       families, executor, owner, claim: "same-N end-state; not original pre-call, opportunity or timing" });
     const checkpoint = args.has("--ready") ? resolve(args.get("--ready")!) : resolve(out, "ready.json");
+    let priorSha: string | undefined;
+    if (args.has("--prior-ready")) {
+      const priorPath = resolve(args.get("--prior-ready")!);
+      const bytes = readFileSync(priorPath), prior = await new UniverseRebuildCheckpointStore({ path: priorPath }).load();
+      assert(prior && !prior.inProgressRun && prior.readyGeneration, "prior Ready must be completed");
+      assert.equal(prior.readyGeneration.cutoff.number, SAMPLE.block);
+      assert.equal(prior.readyGeneration.cutoff.hash.toLowerCase(), header.hash.toLowerCase());
+      assert.equal(prior.readyGeneration.universeRange.fromBlock, SAMPLE.block);
+      assert.equal(prior.readyGeneration.universeRange.toBlock, SAMPLE.block);
+      assert.equal(prior.readyGeneration.observationScope, undefined, "full single-block prior required");
+      copyFileSync(priorPath, checkpoint, constants.COPYFILE_EXCL);
+      priorSha = createHash("sha256").update(bytes).digest("hex");
+      save("prior-ready.json", { path: priorPath, sha256: priorSha,
+        policy: "copy only; current production selective revalidation; no source/hash/admission edits" });
+    }
     const store = new UniverseRebuildCheckpointStore({ path: checkpoint });
     const wiring = createRebuildWiring({ rpcUrl, familyIds: families, executionIdentity: { executor, transactionOrigin: owner } });
     stage = "natural-single-block-ready";
     const ready = args.has("--ready") ? (await store.load())?.readyGeneration : await rebuildUniverse({ ...wiring, store,
       runId: `v4-sat1-single-${SAMPLE.block}`, observationRange: { fromBlock: SAMPLE.block, toBlock: SAMPLE.block },
       attestationConcurrency: 1, log: message => console.log(message) });
+    if (priorSha) assert.equal(createHash("sha256").update(readFileSync(args.get("--prior-ready")!)).digest("hex"), priorSha, "prior Ready changed");
     assert(ready); assert.equal(ready.cutoff.number, SAMPLE.block); assert.equal(ready.cutoff.hash, header.hash);
     assert.equal(ready.universeRange.fromBlock, SAMPLE.block); assert.equal(ready.universeRange.toBlock, SAMPLE.block);
     const { graph } = resolveStrictReadyRuntime(ready);
@@ -54,9 +72,13 @@ async function main() {
       edge.instanceKey?.toLowerCase() === SAT1_INSTANCE);
     save("ready-summary.json", { family: "univ4-fee-hook", families, tx: SAMPLE.tx, poolId: SAMPLE.poolId,
       block: SAMPLE.block, blockHash: header.hash, graphHash: ready.graphHash, instances: ready.activeInstanceKeys,
-      totalEdges: graph.length, targetEdges, checkpoint, reusedReady: args.has("--ready"), attestationConcurrency: 1, broadcast: false,
+      totalEdges: graph.length, targetEdges, checkpoint, reusedReady: args.has("--ready"), selectivelyRevalidatedPrior: args.has("--prior-ready"), attestationConcurrency: 1, broadcast: false,
       readySha256: createHash("sha256").update(readFileSync(checkpoint)).digest("hex") });
     assert.equal(targetEdges.length, 2, "Sat1 must first be naturally admitted with both directions");
+    if (args.has("--ready-only")) {
+      save("prices-not-run.json", { reason: "explicit Ready-only adaptation acceptance; old production rows may provide input only; no natural valuation claim" });
+      return;
+    }
     stage = "production-prices";
     await runAtBlock(["--ready", checkpoint, "--block", String(SAMPLE.block), "--through", "prices", "--execution-mode", "source-block",
       "--out", resolve(out, "prices"), "--executor", executor, "--owner", owner, "--revm-bin", args.get("--revm-bin")!]);

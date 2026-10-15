@@ -1,0 +1,24 @@
+{
+  "reviewer": "/root/v4_accept26",
+  "status": "PASS-for-observer-repair",
+  "actualReportSha256": "a5170702b73035fa2a1d9017b7ed48a179b630f113fb9956a7d7cca4e0373271",
+  "baselineSha256": "dae5f04398cc2e69e85b11c9c99cb8edcd0283c203e546419a2633ad03d20700",
+  "repairSha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43",
+  "actual": {
+    "amountIn": "500798859",
+    "amountOut": "500729883",
+    "payer": "0x9008d19f58aabd9ed0d60971565aa8510560ab41",
+    "spender": "0x000000000022d473030f116ddee9f6b43ac78ba3",
+    "managerBalanceIncrease": "500798859",
+    "settleReturn": "500798859",
+    "emptyReturn": "output field omitted in original geth trace"
+  },
+  "checks": {
+    "baselineReject": true,
+    "rawOriginalAccepted": true,
+    "positiveReturnForms": 3,
+    "negativeControls": 8
+  },
+  "scope": "Offline fresh independent decode of complete original trace and receipt, and before/after observer evaluation; no EVM/RPC. Only explicit ERC20 historical observer broadened; native default unchanged.",
+  "conclusion": "Original token payment was genuine nested transferFrom within current sync/settle, distinct payer supported without broadening production identity or execution."
+}

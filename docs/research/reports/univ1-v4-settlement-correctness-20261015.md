@@ -1,0 +1,11 @@
+# V1 / V4 sampled settlement correctness
+
+V1 standard and issuerFee variants, V4 no-hook, Sat1, and fa439 tiered ERC20 passed the scoped correctness checks. V1 now uses TransferInput for explicit recipients. V4 shares native conversion, direct delivery, and output-first callback debt settlement through the existing central execution boundary.
+
+The additional fa439 check exposed a real quote defect: at N25811499, input 4,000,000,000,000,000 WETH raw units quoted 9,641,655 USDC raw units while execution received 9,352,406. The hook hashes the actual swap sender and historical environment. The repair quotes with the existing production executor-program simulation, checks full debit and positive receipt, binds executor/origin in evidence/cache, and rejects old Quoter evidence for execution. The original failed report remains immutable; the same amount now matches execution exactly. Sat1 retains its prior pricing path.
+
+Evidence: 32 V1 positive executions and 16 zero-amount rollbacks; four V4 matrices of 40 positive executions and 32 missing-funding rejections each. Historical no-funding traces are not whole-account rollback proofs: local BotVM tests separately cover targeted faults, old inventory and rollback (25 V1, 348 V4, 55 VM safety cases). Existing valid native/no-hook results are reused with scoped source review. Current production and owned-only builds and affected contracts pass. Runtime construction invokes no chain-external Exact or quoted fallback.
+
+No fa439 native pool was found through pinned block 26195865. This is an absence boundary, not a real native execution pass. Input-only amounts from preserved production prices do not establish natural valuation at the target block. Opportunity replay, final EV and 4A/4B performance remain separate and unverified by this report. No live run, deployment or broadcast occurred.
+
+The actual working-source evidence includes preserved peer changes. The owned-only snapshot validates the staged contribution separately; peer changes are not silently committed. Full source pins, transactions, amounts, command receipts, independent reviews and retained failures are in [the evidence summary](univ1-v4-settlement-correctness-20261015.json).

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { ethers } from 'ethers';
@@ -18,13 +19,17 @@ import { loadBotVmRuntimeCode, buildExecuteCalldata } from '../../shared/executo
 import { buildUniV4RuntimeLeg } from '../venues/swaps/univ4-family/runtime-execution.js';
 import { univ4Routes } from '../venues/swaps/univ4-family/routes.js';
 import { UNIV4_FAMILY_ID, UNIV4_MANAGER_LINEAGE_ID } from '../venues/swaps/univ4-family/manifest.js';
-import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary } from '../execution-asset-boundary.js';
+import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary, mapRuntimeAssetSettlementRequest } from '../execution-asset-boundary.js';
 import { ADDR } from '../../shared/constants/addresses.js';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url)).replace(/\/$/, ''), abi = ethers.AbiCoder.defaultAbiCoder();
 const token0 = '0x' + '11'.repeat(20), token1 = '0x' + '22'.repeat(20);
 const manager = '0x' + '33'.repeat(20), executor = '0x' + '44'.repeat(20), owner = '0x' + '55'.repeat(20);
 const returnLeg = '0x' + '66'.repeat(20), other = '0x' + '77'.repeat(20);
+const continuation = '0x' + '88'.repeat(20);
+const wrapFaultAbi = new ethers.Interface(['function configureWrapFault(int256,int256,int256)']);
+const swapFaultAbi = new ethers.Interface(['function configureSwapFault(address,uint256,int256)']);
+const continuationAbi = new ethers.Interface(['function pay(address,address,uint256,uint256,address,uint256,uint256)']);
 const tokenAbi = new ethers.Interface(['function mint(address,uint256)', 'function balanceOf(address) view returns(uint256)']);
 const managerAbi = new ethers.Interface(['function configure(uint128,uint128,int256)', 'function paid() view returns(uint256)', 'function requested() view returns(uint256)',
   'function lastHook() view returns(address)', 'function hookDataHash() view returns(bytes32)']);
@@ -49,6 +54,41 @@ const artifact = (name: string) => {
   }
   return parsed.deployedBytecode.object;
 };
+const pinEvidence = () => {
+  const sourceFiles = [
+    'listener/src/searcher/venues/swaps/univ4-family/runtime-execution.ts',
+    'listener/src/searcher/venues/swaps/univ4-family/execution.ts',
+    'listener/src/searcher/venues/swaps/univ4-family/routes.ts',
+    'listener/src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts',
+    'listener/src/searcher/venues/swaps/univ4-fee-hook-family/routes.ts',
+    'listener/src/searcher/venues/swaps/univ4-fee-hook-family/sat1.ts',
+    'listener/src/searcher/execution-asset-boundary.ts',
+    'listener/src/searcher/venues/adapter-family-runtime.ts',
+    'listener/src/searcher/venues/runtime-execution.ts',
+    'listener/src/adapters/runtime-amount-program.ts',
+    'listener/src/searcher/simulator/runtime-settlement.ts',
+    'listener/src/encoder.ts',
+    'listener/src/shared/executor/botvm-executor.ts',
+    'listener/src/shared/executor/botvm-program-entry.ts',
+    'listener/src/searcher/test/runtime-payment-evm.ts',
+    'test/RuntimePaymentMocks.sol',
+  ];
+  const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+  const vmArtifact = fs.readFileSync(root + '/out/BotVM.sol/BotVM.json');
+  const parsed = JSON.parse(vmArtifact.toString()), metadata = typeof parsed.metadata === 'string' ? JSON.parse(parsed.metadata) : parsed.metadata;
+  const vmSources = Object.entries(metadata.sources).map(([path, entry]: [string, any]) => {
+    assert(!path.startsWith('/') && !path.split('/').includes('..'));
+    const bytes = fs.readFileSync(root + '/' + path); assert.equal(ethers.keccak256(bytes), entry.keccak256, 'BotVM artifact source binding');
+    return { path, sha256: sha(bytes), keccak256: entry.keccak256 };
+  });
+  const runtime = loadBotVmRuntimeCode(owner);
+  return { sources: sourceFiles.map(path => ({ path, sha256: sha(fs.readFileSync(root + '/' + path)) })),
+    mockArtifacts: ['RuntimePaymentToken', 'RuntimePaymentManager', 'RuntimePaymentReturnLeg', 'RuntimePaymentContinuation']
+      .map(name => ({ name, sha256: sha(fs.readFileSync(mockArtifacts + `/RuntimePaymentMocks.sol/${name}.json`)) })),
+    botvm: { artifactSha256: sha(vmArtifact), runtimeCodeHash: ethers.keccak256(runtime.code), sources: vmSources } };
+};
+const evidencePins = pinEvidence();
+save('source-pins-before.json', evidencePins);
 const tokenCode = artifact('RuntimePaymentToken'), managerCode = artifact('RuntimePaymentManager');
 const anvil = spawn(option('--anvil-bin', 'anvil'), ['--host', '127.0.0.1', '--port', '0', '--accounts', '0', '--hardfork', 'cancun', '--gas-limit', '60000000', '--base-fee', '0'],
   { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -91,6 +131,8 @@ try {
   await rpc('anvil_setCode', [manager, managerCode]); await rpc('anvil_setBalance', [manager, ethers.toQuantity(10n ** 20n)]);
   await rpc('anvil_setCode', [returnLeg, artifact('RuntimePaymentReturnLeg')]);
   await rpc('anvil_setCode', [executor, loadBotVmRuntimeCode(owner).code]);
+  await rpc('anvil_setCode', [continuation, artifact('RuntimePaymentContinuation')]);
+  await rpc('anvil_setBalance', [continuation, ethers.toQuantity(10n ** 20n)]);
   const rows: any[] = [];
   const compile = (node: ResolvedPlanNode): Uint8Array => {
     const action = PRODUCTION_STRICT_SHADOW_ACTION_ADAPTERS.find(a => a.id === node.adapterId);
@@ -118,9 +160,11 @@ try {
     assert(rawLeg);
     const leg = applyRuntimeAssetBoundary({ route, executor, leg: rawLeg });
     const name = `${variant}-${native ? 'native' : 'erc20'}-${reverse ? 'reverse' : 'forward'}`;
-    const execution: any = { descriptor, route, executor,
+    // Handwritten evidence is a fixture for executor plumbing, not a real quote receipt.
+    const execution: any = { descriptor, route, executor, transactionOrigin: owner,
       amountIn: 100n, quotedAmountOut: 7n, minAmountOut: 0n, runtimeEvidence: [],
-      exactEvidence: { kind: variant === 'sat1' ? 'sat1-local-exact-in' : feeHook ? 'univ4-fee-hook-quoter' : 'univ4-no-hook-quoter',
+      exactEvidence: { kind: variant === 'sat1' ? 'sat1-local-exact-in' : feeHook ? 'tiered-executor-receipt' : 'univ4-no-hook-quoter',
+        ...(variant === 'fee-hook' ? { executor, transactionOrigin: owner } : {}),
         source: { number: 20000000, hash: '0x' + 'aa'.repeat(32), generation: 1 },
         poolId, poolKeyFingerprint: poolKeyFingerprint(key), quoter: other,
         tokenIn: route.tokenIn, tokenOut: route.tokenOut, amountIn: 100n, amountOut: 7n,
@@ -155,6 +199,128 @@ try {
       }
       rows.push({ name, debt, skew, success, gasUsed: receipt.gasUsed });
       assert(await rpc('evm_revert', [snapshot]));
+    }
+    if (native) {
+      const build = (request: any) => {
+        const mapped = mapRuntimeAssetSettlementRequest({ route, executor, request }); assert(mapped);
+        const raw = (feeHook ? univ4FeeHookExecution : univ4Execution).buildRuntimeLeg({ descriptor, route, executor, settlement: mapped });
+        assert(raw, `${name} explicit settlement supported`);
+        assert.deepEqual(raw.settlementRequest, mapped);
+        // This is the same graph/native request mapping performed by the issuer.
+        return applyRuntimeAssetBoundary({ route, executor, leg: { ...raw, settlementRequest: request } });
+      };
+      const initial = async (funded: boolean, oldInput = 1000n) => {
+        await tx(route.tokenIn, tokenAbi.encodeFunctionData('mint', [executor, oldInput + (funded ? 100n : 0n)]));
+        await tx(route.tokenOut, tokenAbi.encodeFunctionData('mint', [executor, 777n]));
+        await tx(route.tokenOut, tokenAbi.encodeFunctionData('mint', [manager, 1000n]));
+        await tx(route.tokenIn, tokenAbi.encodeFunctionData('mint', [other, 313n]));
+        await tx(route.tokenOut, tokenAbi.encodeFunctionData('mint', [other, 919n]));
+        await rpc('anvil_setBalance', [executor, ethers.toQuantity(17n)]);
+        await rpc('anvil_setBalance', [other, ethers.toQuantity(23n)]);
+      };
+      // Direct modes protect existing input/output/native inventories for both
+      // self and an external recipient. A pool delta must debit exactly r0.
+      for (const recipient of [executor, other])
+      for (const [caseName, debt, received, skew, success] of [
+        ['positive', 100n, 200n, 0n, true], ['zero-debt', 0n, 200n, 0n, false],
+        ['short-debt', 99n, 200n, 0n, false], ['over-debt', 101n, 200n, 0n, false],
+        ['zero-output', 100n, 0n, 0n, false], ['settlement-plus-one', 100n, 200n, 1n, false],
+        ['settlement-minus-one', 100n, 200n, -1n, false],
+      ] as const) {
+        const snapshot = await rpc('evm_snapshot', []); await initial(true);
+        await tx(manager, managerAbi.encodeFunctionData('configure', [debt, received, skew]));
+        const direct = build({ kind: 'direct-output', recipient });
+        const receipt = await tx(executor, buildExecuteCalldata(runtimeProgramScript(ethers.getBytes(direct.program), 100n)));
+        assert.equal(receipt.status === '0x1', success, `${name} direct ${recipient} ${caseName}`);
+        assert.equal(await balance(route.tokenIn, executor), success ? 1000n : 1100n);
+        assert.equal(await balance(route.tokenOut, executor), success && recipient === executor ? 777n + received : 777n);
+        assert.equal(await balance(route.tokenIn, other), 313n);
+        assert.equal(await balance(route.tokenOut, other), success && recipient === other ? 919n + received : 919n);
+        assert.equal(BigInt(await rpc('eth_getBalance', [executor, 'latest'])), 17n);
+        assert.equal(BigInt(await rpc('eth_getBalance', [other, 'latest'])), 23n);
+        rows.push({ name, kind: 'native-direct', caseName, recipient, debt, received, skew, success, gasUsed: receipt.gasUsed });
+        assert(await rpc('evm_revert', [snapshot]));
+      }
+      // There is no r0 prefunding. Old input is seeded only as an attack control.
+      // The continuation must deliver the exact fresh debt to the declared payee
+      // and may spend only the fresh output released inside this callback.
+      for (const [caseName, debt, received, consumed, credit, result, gift, oldSpend, skew, success] of [
+        ['positive', 100n, 200n, 20n, 100n, 100n, 0n, 0n, 0n, true],
+        ['zero-old-input', 100n, 200n, 20n, 100n, 100n, 0n, 0n, 0n, true],
+        ['zero-debt', 0n, 200n, 20n, 0n, 0n, 0n, 0n, 0n, false],
+        ['short-debt', 99n, 200n, 20n, 99n, 99n, 0n, 0n, 0n, false],
+        ['over-debt', 101n, 200n, 20n, 101n, 101n, 0n, 0n, 0n, false],
+        ['zero-credit', 100n, 200n, 20n, 0n, 100n, 0n, 0n, 0n, false],
+        ['short-credit', 100n, 200n, 20n, 99n, 100n, 0n, 0n, 0n, false],
+        ['over-credit', 100n, 200n, 20n, 101n, 100n, 0n, 0n, 0n, false],
+        ['lying-return-short', 100n, 200n, 20n, 100n, 99n, 0n, 0n, 0n, false],
+        ['lying-return-over', 100n, 200n, 20n, 100n, 101n, 0n, 0n, 0n, false],
+        ['short-output', 100n, 19n, 20n, 100n, 100n, 0n, 0n, 0n, false],
+        ['old-output-consumed', 100n, 200n, 201n, 100n, 100n, 0n, 0n, 0n, false],
+        ['old-input-consumed', 100n, 200n, 20n, 100n, 100n, 0n, 1n, 0n, false],
+        ['native-gift', 100n, 200n, 20n, 100n, 100n, 1n, 0n, 0n, false],
+        ['settlement-plus-one', 100n, 200n, 20n, 100n, 100n, 0n, 0n, 1n, false],
+        ['settlement-minus-one', 100n, 200n, 20n, 100n, 100n, 0n, 0n, -1n, false],
+      ] as const) {
+        const snapshot = await rpc('evm_snapshot', []);
+        const oldInput = caseName === 'zero-old-input' ? 0n : 1000n; await initial(false, oldInput);
+        await tx(manager, managerAbi.encodeFunctionData('configure', [debt, received, skew]));
+        const payee = reverse ? manager : executor;
+        const payment = new RuntimeAmountProgram().call(continuation,
+          continuationAbi.encodeFunctionData('pay', [route.tokenIn, route.tokenOut, consumed, credit, payee, gift, oldSpend])).constant(0, result);
+        const deferred = build({ kind: 'deferred-input', paymentProgram: ethers.hexlify(payment.bytes()), paymentAmount: 20n });
+        assert.equal(deferred.settlement?.deferredInput?.toLowerCase(), payee.toLowerCase());
+        const receipt = await tx(executor, buildExecuteCalldata(runtimeProgramScript(ethers.getBytes(deferred.program), 100n)));
+        assert.equal(receipt.status === '0x1', success, `${name} deferred ${caseName}`);
+        assert.equal(await balance(route.tokenIn, executor), oldInput, 'old input preserved including rollback');
+        assert.equal(await balance(route.tokenOut, executor), success ? 777n + received - consumed : 777n, 'only fresh output may be spent');
+        assert.equal(await balance(route.tokenIn, other), 313n);
+        assert.equal(await balance(route.tokenOut, other), 919n);
+        assert.equal(BigInt(await rpc('eth_getBalance', [executor, 'latest'])), 17n);
+        assert.equal(BigInt(await rpc('eth_getBalance', [other, 'latest'])), 23n);
+        if (success) assert.equal(await read(manager, managerAbi, 'paid'), debt);
+        rows.push({ name, kind: 'native-deferred', caseName, oldInput, payee, debt, received, consumed, credit, result, gift, oldSpend, skew, success, gasUsed: receipt.gasUsed });
+        assert(await rpc('evm_revert', [snapshot]));
+      }
+      // Perturb the actual native/WETH movement, not only the asserted return.
+      // A native gift during native-output swap is fresh received ETH: it is
+      // measured and delivered, not confused with old inventory or discarded.
+      const faults = reverse ? [
+        { name: 'short-wrap-mint', mint: -1n }, { name: 'over-wrap-mint', mint: 1n },
+      ] : [
+        { name: 'short-unwrap-native', nativePaid: -1n }, { name: 'over-unwrap-native', nativePaid: 1n },
+        { name: 'short-unwrap-debit', debit: -1n }, { name: 'over-unwrap-debit', debit: 1n },
+      ];
+      const allFaults: { name: string; mint?: bigint; nativePaid?: bigint; debit?: bigint; gift?: bigint; wrapped?: bigint }[] = [
+        ...faults, { name: 'swap-weth-gift', wrapped: 1n }, { name: 'swap-old-weth-burn', wrapped: -1n },
+        { name: 'swap-native-gift', gift: 1n },
+      ];
+      for (const fault of allFaults) {
+        const snapshot = await rpc('evm_snapshot', []); await initial(false);
+        await tx(manager, managerAbi.encodeFunctionData('configure', [100n, 200n, 0n]));
+        await tx(ADDR.WETH, wrapFaultAbi.encodeFunctionData('configureWrapFault', [fault.mint ?? 0n, fault.nativePaid ?? 0n, fault.debit ?? 0n]));
+        await tx(manager, swapFaultAbi.encodeFunctionData('configureSwapFault', [ADDR.WETH, fault.gift ?? 0n, fault.wrapped ?? 0n]));
+        const payee = reverse ? manager : executor;
+        const payment = new RuntimeAmountProgram().call(continuation,
+          continuationAbi.encodeFunctionData('pay', [route.tokenIn, route.tokenOut, 20n, 100n, payee, 0n, 0n])).constant(0, 100n);
+        const deferred = build({ kind: 'deferred-input', paymentProgram: ethers.hexlify(payment.bytes()), paymentAmount: 20n });
+        const success = reverse && fault.name === 'swap-native-gift';
+        const receipt = await tx(executor, buildExecuteCalldata(runtimeProgramScript(ethers.getBytes(deferred.program), 100n)));
+        assert.equal(receipt.status === '0x1', success, `${name} deferred movement ${fault.name}`);
+        assert.equal(await balance(route.tokenIn, executor), 1000n);
+        assert.equal(await balance(route.tokenOut, executor), success ? 958n : 777n);
+        assert.equal(await balance(route.tokenIn, other), 313n);
+        assert.equal(await balance(route.tokenOut, other), 919n);
+        assert.equal(BigInt(await rpc('eth_getBalance', [executor, 'latest'])), 17n);
+        assert.equal(BigInt(await rpc('eth_getBalance', [other, 'latest'])), 23n);
+        rows.push({ name, kind: 'native-deferred-movement-fault', fault, success,
+          actualReceived: success ? 201n : 0n, continuationConsumed: success ? 20n : 0n, gasUsed: receipt.gasUsed });
+        assert(await rpc('evm_revert', [snapshot]));
+      }
+      for (const paymentAmount of [0n, -1n, ethers.MaxUint256 + 1n])
+        assert.throws(() => build({ kind: 'deferred-input', paymentAmount, paymentProgram: ethers.hexlify(new RuntimeAmountProgram().constant(0, 100n).bytes()) }), /payment amount/);
+      for (const recipient of [ethers.ZeroAddress, route.tokenIn, route.tokenOut, ...(reverse ? [] : [manager])])
+        assert.throws(() => build({ kind: 'direct-output', recipient }));
     }
     assert.deepEqual(rawQuotedScript, runtimeProgramScript(ethers.getBytes(rawLeg.program), 100n),
       'quoted construction must use the identical framed settlement program');
@@ -205,6 +371,8 @@ try {
   const payment = runtimePayment(new RuntimeAmountProgram(), 1, 2);
   assert.throws(() => payment.verifySettled(1), /settlement register/);
   assert.throws(() => payment.verifySettled(0), /settlement register/);
-  save('summary.json', { scope: 'Production no-hook/fee-hook/Sat1 encoders, common native boundary and real BotVM on local Anvil; stateful mocks check hookData delivery, not actual hook logic, historical liquidity, Ready or opportunity evidence.', rows });
+  const afterPins = pinEvidence(); assert.deepEqual(afterPins, evidencePins, 'sources/artifacts changed during EVM acceptance');
+  save('source-pins-after.json', afterPins);
+  save('summary.json', { before: evidencePins, after: afterPins, immutable: true, scope: 'Production no-hook/fee-hook/Sat1 encoders, common native boundary and real BotVM on local Anvil; stateful mocks check hookData delivery, not actual hook logic, historical liquidity, Ready or opportunity evidence.', rows });
   console.log(json({ out, cases: rows.length, passed: rows.length }));
 } finally { anvil.kill('SIGTERM'); await closed; }

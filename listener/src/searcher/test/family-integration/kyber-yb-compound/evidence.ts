@@ -13,11 +13,17 @@ import { originalXwinLeg } from "../../../venues/protocols/token-conversion-fami
 import { originalStandardErc4626Leg } from "../../../venues/protocols/erc4626-family/test/history-evidence.js";
 import { originalEtherTokenLeg } from "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.js";
 import { originalSelfBurnLeg } from "../../../venues/protocols/self-burn-native-family/test/history-evidence.js";
-import { SAT1_SAMPLE, SAT1_INSTANCE, originalV4Leg } from "../../../venues/swaps/univ4-family/test/history-evidence.js";
+import { SAT1_SAMPLE, SAT1_INSTANCE, originalV4Leg, V4_OBSERVATION_ABI } from "../../../venues/swaps/univ4-family/test/history-evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {
+  "v4-erc20-nohook": { family: "univ4", number: 26029537,
+    tx: "0x6adebef71c8c464ca2096b092ed7093ba797199122351c6cf807be0255a92e8b",
+    instances: ["0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x0fb0e40cec3bb23e13abc585958a93c796fbea56955e19a23727a716a0423239"] },
+  "v4-erc20-tiered-fee": { family: "univ4-fee-hook", number: 25811499,
+    tx: "0x65d0517289a6de7ad8c813799011907fadbb6b2bf6e5e8f8cf1ff872f93725f6",
+    instances: ["0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x789916d8a8b4ebf881fe58cab68a47455c994e22b3cc536055e497ef2238b62e"] },
   "v4-native-nohook": { family: "univ4", number: 26029537,
     tx: "0x2068e9fc151ad0ea2cf273e50a8a0153cc1d0303deb9cf660f13dbbf8571548c",
     instances: ["0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x9ecc2b9b4171c12e89ea93ed63eb2b0b18048c51be2846e94be3d7c478354441"] },
@@ -150,7 +156,7 @@ export const ERC20 = new ethers.Interface(["function balanceOf(address) view ret
 export function options(argv: string[]) {
   const v = new Map<string, string>();
   const required = ["--family", "--ready", "--prices", "--port", "--out"];
-  const names = [...required, "--reference-prices", "--reference-edges", "--expected-executor-code-hash"];
+  const names = [...required, "--reference-prices", "--reference-edges", "--expected-executor-code-hash", "--v4-settlement-artifact", "--input-only-reference", "--target-header", "--revm-bin"];
   for (let i = 0; i < argv.length; i += 2) {
     assert(names.includes(argv[i]!) && !v.has(argv[i]!), "unknown/duplicate argument");
     const value = argv[i + 1]; assert(value && !value.startsWith("--"), "missing argument"); v.set(argv[i]!, value);
@@ -167,7 +173,17 @@ export function options(argv: string[]) {
   const port = Number(portText); assert(port >= 1024 && port <= 65535 && Number.isSafeInteger(port));
   const expectedExecutorCodeHash = v.get("--expected-executor-code-hash");
   if (expectedExecutorCodeHash !== undefined) assert(ethers.isHexString(expectedExecutorCodeHash, 32));
-  return { family: family as SampleKey, port, ready: v.get("--ready")!, prices: v.get("--prices")!, out: v.get("--out")!,
+  const inputOnlyReference = v.get("--input-only-reference") === "true";
+  if (v.has("--input-only-reference")) assert(inputOnlyReference && ["v4-native-nohook", "v4-sat1", "v4-erc20-nohook", "v4-erc20-tiered-fee"].includes(family), "explicit input-only V4 mode required");
+  const v4SettlementArtifact = v.get("--v4-settlement-artifact");
+  if (v4SettlementArtifact) assert(["v4-native-nohook", "v4-sat1", "v4-erc20-nohook", "v4-erc20-tiered-fee"].includes(family), "native V4 settlement fixed samples only");
+  const erc20InputOnly = ["v4-erc20-nohook", "v4-erc20-tiered-fee"].includes(family);
+  if (erc20InputOnly) assert(inputOnlyReference, "ERC20 acceptance explicitly requires saved-input-only mode");
+  if (v.has("--target-header")) assert(erc20InputOnly && inputOnlyReference, "target header override is ERC20 input-only evidence only");
+  const revmBin = v.get("--revm-bin");
+  if (family === "v4-erc20-tiered-fee") assert(revmBin, "tiered executor quote requires the existing production REVM binary");
+  else assert(revmBin === undefined, "REVM extension is confined to tiered acceptance here");
+  return { revmBin, targetHeader: v.get("--target-header"), erc20InputOnly, inputOnlyReference, v4SettlementArtifact, family: family as SampleKey, port, ready: v.get("--ready")!, prices: v.get("--prices")!, out: v.get("--out")!,
     referencePrices: v.get("--reference-prices"), referenceEdges: referenceEdges as string[], expectedExecutorCodeHash };
 }
 
@@ -301,6 +317,20 @@ function successfulCalls(trace: any, target: string, selector: string): any[] {
 /** Extract only one unambiguous real successful call + event per instance. */
 export function originalLeg(key: SampleKey, instance: string, descriptor: any, receipt: any, trace: any) {
   assert(!trace.error && !trace.revertReason, "original transaction reverted");
+  if (key === "v4-erc20-nohook" || key === "v4-erc20-tiered-fee") {
+    assert(descriptor.poolKey.currency0 !== ethers.ZeroAddress && descriptor.poolKey.currency1 !== ethers.ZeroAddress);
+    const swaps: any[] = [];
+    const walk = (f: any) => {
+      if (!f || f.error || f.revertReason) return;
+      if (f.type === "CALL" && same(f.to ?? "", descriptor.managerBinding.manager) && f.input?.startsWith(V4_OBSERVATION_ABI.getFunction("swap")!.selector)) {
+        const a = V4_OBSERVATION_ABI.decodeFunctionData("swap", f.input);
+        const id = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["address", "address", "uint24", "int24", "address"], a.key));
+        if (same(id, descriptor.poolId)) swaps.push(a);
+      }
+      for (const child of f.calls ?? []) walk(child);
+    }; walk(trace); assert.equal(swaps.length, 1, "one original target swap required");
+    return originalV4Leg(instance, descriptor, receipt, trace, swaps[0].params.zeroForOne, true);
+  }
   if (key === "v4-sat1" || key === "v4-native-nohook") return originalV4Leg(instance, descriptor, receipt, trace, true);
   if (key === "ethertoken-native") return originalEtherTokenLeg(instance, descriptor, receipt, trace);
   if (key === "self-burn-native") return originalSelfBurnLeg(instance, descriptor, receipt, trace);

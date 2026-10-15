@@ -1,0 +1,185 @@
+{
+  "reviewer": "/root/v4_accept26",
+  "status": "PASS",
+  "scope": "Current issuer ERC20 no-hook or fa439 tiered fee hook, both directions, actual quote/quoted/runtime and explicit direct/deferred settlement",
+  "source": {
+    "number": 25811499,
+    "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+    "generation": 25811499
+  },
+  "originalTx": "0x65d0517289a6de7ad8c813799011907fadbb6b2bf6e5e8f8cf1ff872f93725f6",
+  "pool": "0x789916d8a8b4ebf881fe58cab68a47455c994e22b3cc536055e497ef2238b62e",
+  "hook": "0xfa439315b015a4c283ded9815a4af6cef0b90880",
+  "report": {
+    "path": "logs/family-implementation-20261015.0exjskqq/evidence44/v4-erc20-tiered-fee-recipient44.json",
+    "sha256": "ed624380fa57051bbecfe83a7f17107482322669c7e38a69f27ad1317c3a8b91"
+  },
+  "ready": {
+    "path": "logs/family-implementation-20261015.0exjskqq/v4-accept26/downloaded/tiered-ready44.json",
+    "sha256": "8d5fb22209f6f3afdc7ade11ee3c349069880d87377e5a61230ae09fee538110",
+    "memoFingerprint": "cf69bd696970cfa43db4ba8c93e9292ef59994279779ed48c826cc4723d506cd",
+    "familyDefinitionHash": "5aa2f9b9e5f73e0a09c2081ffb66c778fc7393fe98a18b79094000172d68c30a"
+  },
+  "sourcePins": {
+    "sourceTreeSha256": "bac5dbd82e63b545a93bb16f5b7fb3f45ec17de26598cd9f2807bcb3ca12ff6c",
+    "harnessSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+    "evidenceSha256": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4",
+    "observationHelpers": [
+      {
+        "path": "./v4-native-settlement.ts",
+        "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+      },
+      {
+        "path": "../three-family/historical-input-observations.ts",
+        "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+      },
+      {
+        "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+        "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+      },
+      {
+        "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+        "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+      },
+      {
+        "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+        "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+      },
+      {
+        "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+        "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+      },
+      {
+        "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+        "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+      },
+      {
+        "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+        "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+      },
+      {
+        "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+        "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+      },
+      {
+        "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+        "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+      }
+    ]
+  },
+  "runtimeCode": {
+    "keccak256": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+  },
+  "donor": {
+    "donorPricesPath": "/opt/mev-cloud/family-runtime-20261007/logs/v4-native-historical-20261010.6yy5wf/prices-resume-2/prices/prices.json",
+    "donorReadyPath": "/opt/mev-cloud/family-runtime-20261007/logs/v4-native-historical-20261010.6yy5wf/single-N26029537-1/ready.json",
+    "donorReadySha256": "aecef833d4dc0a6edd4aba570ea7f610945cef11d7386664285e3baf545b4284",
+    "donorSourceTreeSha256": "25354d3b8f0a6cf5fccac6c89bf02861387ed32d396924260d36b42ab7bca201",
+    "targetSourceTreeSha256": "bac5dbd82e63b545a93bb16f5b7fb3f45ec17de26598cd9f2807bcb3ca12ff6c",
+    "donorState": {
+      "number": 26029537,
+      "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+      "generation": 26029537
+    },
+    "targetState": {
+      "number": 25811499,
+      "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+      "generation": 25811499
+    },
+    "configuration": {
+      "maxHops": 6,
+      "deduplicateRotations": true,
+      "allowRepeatedPools": true,
+      "allowRepeatedTokens": false,
+      "prefixPruningEnabled": true,
+      "maxPrefixDrawdownBps": 0,
+      "enumerationMethod": "joint-dfs",
+      "enumerationBackend": "typescript",
+      "rustEnumerationThreads": 1,
+      "rustEnumerationScratchMb": 512,
+      "ethSignalPairsPerToken": 50,
+      "hopTokensPerStep": 3,
+      "hopPoolsPerPair": 3,
+      "minSpreadBps": 0,
+      "requireDislocatedPair": true,
+      "exactAdmissionSpreadBps": 0,
+      "minCapitalFraction": 0.001,
+      "maxCandidates": 100,
+      "budgetMs": 2000,
+      "pricedTokens": {
+        "$type": "map",
+        "entries": [
+          [
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "2000000000000000000000"
+              }
+            }
+          ],
+          [
+            "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000"
+              }
+            }
+          ],
+          [
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000000"
+              }
+            }
+          ],
+          [
+            "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000000"
+              }
+            }
+          ],
+          [
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            {
+              "maxBorrow": {
+                "$type": "bigint",
+                "value": "5000000000000000000000000"
+              }
+            }
+          ]
+        ]
+      }
+    },
+    "policy": "borrow amountIn only; current Ready identity and current same-state quote/quoted/runtime independently verified; donor output is not used or compared; current natural valuation NOT RUN"
+  },
+  "counts": {
+    "positive": 40,
+    "rejected": 32,
+    "explicit": 24,
+    "zeroPrefund": 4,
+    "quotes": 4,
+    "managerCodeObservations": 24
+  },
+  "checks": [
+    "independent raw actor/receiver/funder storage deltas and old native/input/output conservation",
+    "actual Manager swap packed input/output and caller take/settle; manager sync-to-settle balance increase equals debt",
+    "direct recipient routing, deferred fixed 1 unit output funding and zero prefund success",
+    "current identity/memo/graph directions and target state bound separately from donor input-only provenance",
+    "runtime construction exact=quoted=RPC=0, no quoted fallback"
+  ],
+  "limits": [
+    "No new reviewer EVM run; independently decoded actual root-run raw traces and stateDiffs.",
+    "Funding helper is a fork-only fixture, not a real market return route or profitability evidence.",
+    "Call-only negative traces prove rejection, not independently observed complete rollback.",
+    "Unchanged helper code may be omitted in diffMode; fixture artifact binding is runner metadata, token movements independently verified.",
+    "Natural valuation, original transaction opportunity replay and phase4 performance excluded."
+  ]
+}

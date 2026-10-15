@@ -378,7 +378,16 @@
     "searcher:mooniswap-runtime-recipient-evm": "FOUNDRY_PROFILE=mooniswap_recipient forge test --ffi --match-contract MooniswapRuntimeRecipientTest",
     "searcher:ekubo-native-recipient-evm": "node --import tsx src/searcher/venues/swaps/ekubo-family/test/recipient-runtime-evm.ts",
     "searcher:infinifi-contract": "node --import tsx --test src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts",
-    "searcher:erc4626-silo-direct-recipient": "node --import tsx --test src/searcher/test/erc4626-silo-direct-recipient.ts"
+    "searcher:erc4626-silo-direct-recipient": "node --import tsx --test src/searcher/test/erc4626-silo-direct-recipient.ts",
+    "searcher:runtime-payment-evm": "node --import tsx src/searcher/test/runtime-payment-evm.ts",
+    "searcher:univ1-recipient-ready": "node --import tsx src/searcher/venues/swaps/univ1-family/test/recipient-ready.ts",
+    "searcher:univ1-recipient-historical": "node --import tsx src/searcher/venues/swaps/univ1-family/test/recipient-historical.ts",
+    "searcher:univ1-recipient-evm": "node --import tsx src/searcher/venues/swaps/univ1-family/test/recipient-runtime-evm.ts",
+    "searcher:v4-native-settlement-contract": "node --import tsx --test src/searcher/test/family-integration/kyber-yb-compound/v4-native-settlement.test.ts",
+    "searcher:v4-erc20-settlement-ready": "tsx src/searcher/test/family-integration/kyber-yb-compound/v4-erc20-ready.ts",
+    "searcher:v4-erc20-observation-contract": "node --import tsx --test src/searcher/venues/swaps/univ4-family/test/history-erc20-observation.test.ts",
+    "searcher:v4-tiered-exact-contract": "node --import tsx --test src/searcher/venues/swaps/univ4-fee-hook-family/test/tiered-exact.ts",
+    "searcher:v4-fee-hook-reference-contract": "node --import tsx --test src/searcher/venues/swaps/univ4-fee-hook-family/test/sat1.ts src/searcher/venues/swaps/univ4-fee-hook-family/test/sat1-local.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

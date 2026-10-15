@@ -1,0 +1,340 @@
+{
+  "reviewer": "/root/v4_accept26",
+  "verdict": "PASS for sampled no-hook native ETH/APE and Sat1 native/SAT1 new direct/deferred correctness; no blocking discrepancy in raw execution evidence",
+  "historical": [
+    {
+      "file": "v4-native-nohook-recipient33.json",
+      "sha256": "3e533c09c8fba78eadaabc24a48e67ad21c4d3b4129c510e1a5e9fbcd0e8901b",
+      "source": {
+        "number": 26029537,
+        "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+        "generation": 26029537
+      },
+      "originalTx": "0x2068e9fc151ad0ea2cf273e50a8a0153cc1d0303deb9cf660f13dbbf8571548c",
+      "admission": [
+        {
+          "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x9ecc2b9b4171c12e89ea93ed63eb2b0b18048c51be2846e94be3d7c478354441",
+          "memoFingerprint": "e68e51c4eda7a43b4386e5c9d9d8149c25a4dc8fba5549790bf9c260f5ebb67c",
+          "familyDefinitionHash": "ecf9f48a75193dfba19a80b0e9613bf20f51dbbff0b5d9c0991e41aaf85ffac6",
+          "candidate": {
+            "adapter": "univ4",
+            "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+            "blockHash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+            "blockNumber": 26029537,
+            "candidateKind": "univ4-pool-key",
+            "familyId": "univ4",
+            "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+            "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x9ecc2b9b4171c12e89ea93ed63eb2b0b18048c51be2846e94be3d7c478354441",
+            "poolId": "0x9ecc2b9b4171c12e89ea93ed63eb2b0b18048c51be2846e94be3d7c478354441",
+            "poolKey": {
+              "currency0": "0x0000000000000000000000000000000000000000",
+              "currency1": "0x4d224452801ACEd8B2F0aebE155379bb5D594381",
+              "fee": 3000,
+              "hooks": "0x0000000000000000000000000000000000000000",
+              "tickSpacing": 60
+            },
+            "sourceKind": "manager-swap-call",
+            "transactionHash": "0x2068e9fc151ad0ea2cf273e50a8a0153cc1d0303deb9cf660f13dbbf8571548c"
+          }
+        }
+      ],
+      "sourcePin": {
+        "sourceTreeSha256": "13adfa9e17ea643b5e40123640ab43ea71eb992aa92e14a217bbb88d589fa423",
+        "harnessSha256": "387abb27a4815c65acc37a8b83a5ad0c441c2e5bec22a53f66677c14b37feec2",
+        "evidenceSha256": "f3c88df7e6a7442e5cc8f9c736132eabebe83992ead495339a89497212855520",
+        "observationHelpers": [
+          {
+            "path": "./v4-native-settlement.ts",
+            "sha256": "9939d7677295030292c0eed0a911dad4a7300214e9530074071d5b323f8ff1ef"
+          },
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "runtimeCode": {
+        "keccak256": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "positives": 40,
+      "rejections": 32,
+      "exact": 4,
+      "quoted": 4,
+      "explicit": 24,
+      "zeroPrefund": 4,
+      "returnedDebts": 24
+    },
+    {
+      "file": "v4-sat1-recipient33.json",
+      "sha256": "a2c5b72eaece9e8e88686c0727fa4db0546e28d798922f7a6e819a126190833e",
+      "source": {
+        "number": 26029537,
+        "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+        "generation": 26029537
+      },
+      "originalTx": "0x0be85b68578d45e449cf2285b2d331b8e3ed3f68240b3166e67abb2727f30b55",
+      "admission": [
+        {
+          "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f",
+          "memoFingerprint": "a47c87e98e613e2db9c2447e14e7256ea21b3ede8325a6b5e19c8f0c470e1525",
+          "familyDefinitionHash": "5aa2f9b9e5f73e0a09c2081ffb66c778fc7393fe98a18b79094000172d68c30a",
+          "candidate": {
+            "adapter": "univ4-fee-hook",
+            "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+            "blockHash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+            "blockNumber": 26029537,
+            "candidateKind": "univ4-pool-key",
+            "familyId": "univ4-fee-hook",
+            "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+            "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f",
+            "poolId": "0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f",
+            "poolKey": {
+              "currency0": "0x0000000000000000000000000000000000000000",
+              "currency1": "0x8f66337a0c2A02202fd91Dd596c411CF977c6060",
+              "fee": 3000,
+              "hooks": "0x2a0A30dd78aF7698E6f40212b8B8324fcE2ee888",
+              "tickSpacing": 60
+            },
+            "sourceKind": "manager-swap-call",
+            "transactionHash": "0x0be85b68578d45e449cf2285b2d331b8e3ed3f68240b3166e67abb2727f30b55"
+          }
+        }
+      ],
+      "sourcePin": {
+        "sourceTreeSha256": "13adfa9e17ea643b5e40123640ab43ea71eb992aa92e14a217bbb88d589fa423",
+        "harnessSha256": "387abb27a4815c65acc37a8b83a5ad0c441c2e5bec22a53f66677c14b37feec2",
+        "evidenceSha256": "f3c88df7e6a7442e5cc8f9c736132eabebe83992ead495339a89497212855520",
+        "observationHelpers": [
+          {
+            "path": "./v4-native-settlement.ts",
+            "sha256": "9939d7677295030292c0eed0a911dad4a7300214e9530074071d5b323f8ff1ef"
+          },
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "02ea89ce6b0204fa8a1a3ef8fcb9d6e038107cb34ef3fc1be181678bfe8f19d1"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "runtimeCode": {
+        "keccak256": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      },
+      "positives": 40,
+      "rejections": 32,
+      "exact": 4,
+      "quoted": 4,
+      "explicit": 24,
+      "zeroPrefund": 4,
+      "returnedDebts": 24
+    }
+  ],
+  "mock": {
+    "file": "summary.json",
+    "sha256": "91e3ece5bcf95d5422ebaaf02eb7ef15363b9b633efb708b63a9413d0476614c",
+    "count": 348,
+    "counts": {
+      "quoted-partial-settlement": 60,
+      "native-direct": 84,
+      "native-deferred": 96,
+      "native-deferred-movement-fault": 36,
+      "quoted-output-minimum": 12,
+      "closed-runtime-flow": 60
+    },
+    "ownerPatchedRuntimeNote": "Mock and historical owners differ, therefore runtime hashes differ; their compiled BotVM artifact SHA is identical.",
+    "pins": {
+      "sources": [
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-family/runtime-execution.ts",
+          "sha256": "57ccf7daf32aa4fb2638e87bc752c7c7dd03e84e265ffe8eb629175b03d5a06a"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-family/execution.ts",
+          "sha256": "014cdde4a592a1f052e4e6c96c38600fa3c373c62cd30efaf28428fe83d5f728"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-family/routes.ts",
+          "sha256": "e8f282cef6b4e0d9c7c8849a18c9b74d202edc1b45cd56060cde2367b4be983e"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts",
+          "sha256": "14ffa84da49484c0da47867c85da40488b1a8cbb57b44f9ee4ccb81d76d90752"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/routes.ts",
+          "sha256": "fb3486d8e12e026c18883d83babf1cd54c414416784eb95a739a9051e22ba9bd"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/sat1.ts",
+          "sha256": "29799ce950142150d09b905e69a3279a4ae659c46bc954e3105ea68d827e0d14"
+        },
+        {
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+          "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+        },
+        {
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+        },
+        {
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+        },
+        {
+          "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+          "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+        },
+        {
+          "path": "listener/src/encoder.ts",
+          "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+        },
+        {
+          "path": "listener/src/shared/executor/botvm-executor.ts",
+          "sha256": "0725c2f4798b0a292dfec6f0ccad5cc4299da7e9187db2dc7635b0b895a4bfa0"
+        },
+        {
+          "path": "listener/src/shared/executor/botvm-program-entry.ts",
+          "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+        },
+        {
+          "path": "listener/src/searcher/test/runtime-payment-evm.ts",
+          "sha256": "427df470e548e65b5a702dbeb023ac5d1295aba2c4a91caa300e06577200a80c"
+        },
+        {
+          "path": "test/RuntimePaymentMocks.sol",
+          "sha256": "b39bd75a1dc5f7bfe5337456e9e1d9af24f1365118945e1527b2885978dd2ca0"
+        }
+      ],
+      "mockArtifacts": [
+        {
+          "name": "RuntimePaymentToken",
+          "sha256": "30683a52877d1f1186c78ab27ceb12e9b12b036f77db36da20fe12346b7793eb"
+        },
+        {
+          "name": "RuntimePaymentManager",
+          "sha256": "4e0e7d847bc93c6df340e25c3dfc95483883b404eccda7b45857baccf84d472b"
+        },
+        {
+          "name": "RuntimePaymentReturnLeg",
+          "sha256": "da8ea1699d807e0bb58eb89caf3b236f2f8fb1fd880f8e69f2eb326bed843328"
+        },
+        {
+          "name": "RuntimePaymentContinuation",
+          "sha256": "2fd0dabc533cc6e38281d4ff7ff403cef55d67531de452d4c2805e99cf35946f"
+        }
+      ],
+      "botvm": {
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+        "runtimeCodeHash": "0x8cada2d28dde0e325fbed3c950b06336018854dfdfe84c7acbbc81296ee9bf08",
+        "sources": [
+          {
+            "path": "src/BotVM.sol",
+            "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+            "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+          },
+          {
+            "path": "src/Constants.sol",
+            "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+            "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+          },
+          {
+            "path": "src/RuntimeAmountVM.sol",
+            "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+            "keccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565"
+          },
+          {
+            "path": "src/interfaces/IERC20.sol",
+            "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+            "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+          }
+        ]
+      }
+    },
+    "immutable": true
+  },
+  "independentChecks": [
+    "recomputed all positive actor/receiver/funder raw storage deltas; old input/output/native preserved",
+    "decoded actual Manager.swap returned packed debt/output and take/settle calldata/results for every explicit mode",
+    "confirmed take before funding before settle; native input unwrap after fresh funding, native output wrap before continuation",
+    "proved eight native deferred executions begin with zero actor input (four per Family); fixture consumes one independently budgeted raw output unit",
+    "executor remainder plus independently measured fixture receipt equals same-state exact output; no quote output supplied to runtime continuation",
+    "missing-funding/error traces preserved separately; no whole-account rollback inferred from call-only failure traces",
+    "current selective-revalidated Ready has 40 preserved instances, target identity/memo/family hashes and both direction graph edges match actual execution; current source/test hashes, canonical N, donor amount-only provenance and exact/quoted-free runtime construction counters bound"
+  ],
+  "limits": [
+    "No new reviewer RPC/EVM: independently analyzed root actual fork results and original raw traces/stateDiffs.",
+    "Unchanged funding fixture code is omitted by diffMode state traces; fixture source/artifact override binding comes from runner metadata, while its actual token movements and callback call ordering are independently decoded.",
+    "Funding actor is an isolated fork-only fixture; this is not a production return route, profit/repayment opportunity, or natural valuation result.",
+    "Original TX pre-call replay and phase4 performance remain separate and unrun here.",
+    "Tiered fa439 native pool absent through pinned N26195865 per separate continuous Initialize evidence; does not mean its native EVM was executed.",
+    "ERC20 old-mode evidence and any new issuer supplementation are outside this native review."
+  ]
+}

@@ -1,0 +1,1006 @@
+{
+  "schemaVersion": 1,
+  "reviewPass": 3,
+  "reviewer": "non-author /root/interface_protocols_b",
+  "status": "PASS-scoped-implementation-and-settlement-correctness",
+  "reviewFinal": true,
+  "updatedAt": "2026-10-15T07:17:07.468250+00:00",
+  "scope": {
+    "stage": "Completed third and final read-only review: scoped actual working-source implementation and declared settlement correctness",
+    "reviewerRanEvmRpcBuildTests": false,
+    "reviewerEditedProduction": false,
+    "baselineHead": "9430d86da5e978bd660ac77c5b5c1ea7a5727b48",
+    "reviewPassesUsed": 3,
+    "mergeReady": false,
+    "cleanCommitAllPeerCapabilitiesProven": false,
+    "opportunityProven": false,
+    "performanceProven": false,
+    "otherFamiliesReaccepted": 0,
+    "otherFamiliesUnaccepted": 43
+  },
+  "implementationReady": true,
+  "blockingFindings": [],
+  "families": [
+    {
+      "familyId": "custom-swap:uniswap-v1",
+      "coverage": "complete",
+      "variants": [
+        {
+          "id": "uniswap-v1-997 ETH→token",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "scope": "Tested standard/issuer-fee profile and stated direction on actual worktree including retained peer V1 identity/default work; not an isolated owned-commit identity acceptance.",
+          "behaviorEvidence": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/review-final30.json",
+            "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c"
+          },
+          "evidenceMode": "Original current-worktree historical proof retained; current unchanged execution scope and prior local EVM reused."
+        },
+        {
+          "id": "uniswap-v1-997 token→ETH",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "scope": "Tested standard/issuer-fee profile and stated direction on actual worktree including retained peer V1 identity/default work; not an isolated owned-commit identity acceptance.",
+          "behaviorEvidence": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/review-final30.json",
+            "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c"
+          },
+          "evidenceMode": "Original current-worktree historical proof retained; current unchanged execution scope and prior local EVM reused."
+        },
+        {
+          "id": "anyswap-v1 issuerFee ETH→token",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "scope": "Tested standard/issuer-fee profile and stated direction on actual worktree including retained peer V1 identity/default work; not an isolated owned-commit identity acceptance.",
+          "behaviorEvidence": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/review-final30.json",
+            "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c"
+          },
+          "evidenceMode": "Original current-worktree historical proof retained; current unchanged execution scope and prior local EVM reused."
+        },
+        {
+          "id": "anyswap-v1 issuerFee token→ETH",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "scope": "Tested standard/issuer-fee profile and stated direction on actual worktree including retained peer V1 identity/default work; not an isolated owned-commit identity acceptance.",
+          "behaviorEvidence": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/review-final30.json",
+            "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c"
+          },
+          "evidenceMode": "Original current-worktree historical proof retained; current unchanged execution scope and prior local EVM reused."
+        }
+      ]
+    },
+    {
+      "familyId": "univ4",
+      "coverage": "complete",
+      "variants": [
+        {
+          "id": "no-hook/ERC20-ERC20",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "output-first",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "scope": "Declared profile and both directions in the cited actual same-state evidence, plus current real-BotVM synthetic fault regressions. Not arbitrary hooks/implementations, opportunity or performance acceptance.",
+          "evidenceScope": "Current-source same-state no-hook ERC20 evidence: 40 positive executions, 32 declared rejections; rejection-only history and synthetic EVM rollback remain distinct.",
+          "behaviorEvidence": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/downloaded/v4-erc20-nohook-recipient39.json",
+            "sha256": "da63cf49fd73c355f62f5dcd848f7f0ffe1b721d6a83c20c9c7162120e2eb19a"
+          },
+          "historicalCounts": {
+            "positive": 40,
+            "declaredRejections": 32,
+            "exactQuotes": 4,
+            "explicitPositive": 24,
+            "zeroPrefund": 4
+          },
+          "evidenceMode": "Previously executed immutable history, statically compatible final branches; no new historical rerun claimed."
+        },
+        {
+          "id": "no-hook/native input or output",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "output-first",
+          "recipient": "conditional",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "scope": "Declared profile and both directions in the cited actual same-state evidence, plus current real-BotVM synthetic fault regressions. Not arbitrary hooks/implementations, opportunity or performance acceptance.",
+          "behaviorEvidence": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/downloaded/v4-native-nohook-recipient33.json",
+            "sha256": "3e533c09c8fba78eadaabc24a48e67ad21c4d3b4129c510e1a5e9fbcd0e8901b"
+          },
+          "historicalCounts": {
+            "positive": 40,
+            "declaredRejections": 32,
+            "exactQuotes": 4,
+            "explicitPositive": 24,
+            "zeroPrefund": 4
+          },
+          "evidenceMode": "Previously executed immutable history, statically compatible final branches; no new historical rerun claimed."
+        }
+      ]
+    },
+    {
+      "familyId": "univ4-fee-hook",
+      "coverage": "complete",
+      "variants": [
+        {
+          "id": "tiered hook fa439/ERC20-ERC20",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "output-first",
+          "recipient": "conditional",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "scope": "Admitted fa439 ERC20 tiered profile only: actual Manager ABI/PoolKey/runtime identity and same-state behavior, including retained 4e15 failure flip. Public verified hook source is unavailable; this does not verify complete internal hook semantics or a native instance.",
+          "behaviorEvidence": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence44/v4-erc20-tiered-fee-recipient44.json",
+            "sha256": "ed624380fa57051bbecfe83a7f17107482322669c7e38a69f27ad1317c3a8b91"
+          },
+          "historicalCounts": {
+            "positive": 40,
+            "declaredRejections": 32,
+            "exactQuotes": 4,
+            "explicitPositive": 24,
+            "zeroPrefund": 4
+          },
+          "evidenceMode": "New actual44 same-state execution",
+          "interfaceVerificationBasis": "Real Manager interface, historical hook runtime identity and observed beforeSwap/settlement behavior for the supported tiered profile; not full source-code verification."
+        },
+        {
+          "id": "SAT1/native-SAT1",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "output-first",
+          "recipient": "conditional",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "scope": "Declared profile and both directions in the cited actual same-state evidence, plus current real-BotVM synthetic fault regressions. Not arbitrary hooks/implementations, opportunity or performance acceptance.",
+          "behaviorEvidence": {
+            "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/downloaded/v4-sat1-recipient33.json",
+            "sha256": "a2c5b72eaece9e8e88686c0727fa4db0546e28d798922f7a6e819a126190833e"
+          },
+          "historicalCounts": {
+            "positive": 40,
+            "declaredRejections": 32,
+            "exactQuotes": 4,
+            "explicitPositive": 24,
+            "zeroPrefund": 4
+          },
+          "evidenceMode": "Previously executed immutable history, statically compatible final branches; no new historical rerun claimed."
+        }
+      ]
+    }
+  ],
+  "completedChecks": {
+    "exportedFileHashes": {
+      "matched": 25,
+      "mismatched": 0
+    },
+    "currentSourceClosure": {
+      "entries": 128,
+      "uniquePaths": 86,
+      "candidateMatches": 5,
+      "snapshotMatches": 23,
+      "exactHeadMatches": 58,
+      "unmatched": 0
+    },
+    "productionSixFiles": "Unchanged from reviewed pass2, with exact owned33 after/commit pins retained.",
+    "actualAndOwnedLocalV4": {
+      "casesEach": 348,
+      "positiveEach": 83,
+      "rejectionEach": 265,
+      "summaryBytesIdentical": true,
+      "sourceBeforeAfterIdentical": true,
+      "scope": "real BotVM; synthetic protocol/token/continuation"
+    },
+    "actualAndOwnedV1": {
+      "testsEach": 25,
+      "positive": 4,
+      "rejectionWithRollback": 21,
+      "programHashesIdentical": true,
+      "scope": "real BotVM synthetic faults; actual/owned execution.ts pins intentionally differ"
+    },
+    "vmSafety": {
+      "passed": 55,
+      "scope": "unchanged actual VM; sender/hash, nested scope and register/continuation restoration"
+    },
+    "sharedRegression": "Saved actual all-family 301, runtime-settlement 11, strict and build pass; owned-only build/all-family and catalog recorded pass."
+  },
+  "pass2Resolutions": [
+    "36 additional movement cases exercise short/excess wrap mint, short/excess withdrawal value/burn and native/WETH disturbances before take. Native-output gift is measured new receipt; it is not old-stock spending.",
+    "Runtime EVM report now records before/after source pins, four mock artifact hashes, BotVM metadata-to-source checks and owner-patched runtime hash.",
+    "V1 25-case test executed in actual and owned-only scopes with identical direct programs.",
+    "Native no-hook and SAT1 historical results have independent raw-delta and callback-order reviews."
+  ],
+  "historicalReviewedSoFar": {
+    "v1": {
+      "positive": 32,
+      "directPositive": 16,
+      "zeroAmountRejections": 16,
+      "warning": "Zero-amount control changes runtime amount to 0; it is not a same-calldata no-funding test.",
+      "scope": "standard and issuer-fee, both directions, current actual peer baseline"
+    },
+    "v4NativeNoHook": {
+      "positive": 40,
+      "declaredRejections": 32
+    },
+    "v4NativeSat1": {
+      "positive": 40,
+      "declaredRejections": 32
+    },
+    "v4RejectionLimit": "Historical noFunding call-only errors are rejection evidence; complete balance rollback is not inferred from them. Stateful real-local-EVM cases separately establish rollback guards.",
+    "fundingFixtureLimit": "Native deferred history uses an isolated fork-only funding actor with independently budgeted debt; not a production return path, opportunity or profit proof.",
+    "v4Erc20NoHook": {
+      "positive": 40,
+      "declaredRejections": 32,
+      "explicitPositive": 24,
+      "zeroPrefund": 4,
+      "source": {
+        "number": 26029537,
+        "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+        "generation": 26029537
+      },
+      "sourceTreeSha256": "13adfa9e17ea643b5e40123640ab43ea71eb992aa92e14a217bbb88d589fa423",
+      "review": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/erc20-nohook39-independent-review.json",
+        "sha256": "5c4577939c17bc88d6f1797b7e712fce028cf100820923b44f4bfa11188ac41c"
+      },
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/downloaded/v4-erc20-nohook-recipient39.json",
+        "sha256": "da63cf49fd73c355f62f5dcd848f7f0ffe1b721d6a83c20c9c7162120e2eb19a"
+      }
+    },
+    "v4Erc20Tiered": {
+      "positive": 40,
+      "declaredRejections": 32,
+      "explicitPositive": 24,
+      "zeroPrefund": 4,
+      "exactQuotes": 4,
+      "source": {
+        "number": 25811499,
+        "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+        "generation": 25811499
+      },
+      "sourceTreeSha256": "bac5dbd82e63b545a93bb16f5b7fb3f45ec17de26598cd9f2807bcb3ca12ff6c",
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence44/v4-erc20-tiered-fee-recipient44.json",
+        "sha256": "ed624380fa57051bbecfe83a7f17107482322669c7e38a69f27ad1317c3a8b91"
+      },
+      "independentReview": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/erc20-tiered44-independent-review.json",
+        "sha256": "1a2b0761f2d5c7fd715f903af7bf1a5c1cf8b76c746f6562cb9689e1bc7389a3"
+      },
+      "reviewerRecomputation": {
+        "tokenBalanceObservations": 144,
+        "explicitNativeBalanceObservations": 56,
+        "allMatchedRawDiff": true
+      },
+      "trials": [
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "5542702",
+          "amountOut": "2299476057538981"
+        },
+        {
+          "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "amountIn": "525284461",
+          "amountOut": "217904807560113086"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "2000000000000000",
+          "amountOut": "4820831"
+        },
+        {
+          "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "4000000000000000",
+          "amountOut": "9352406"
+        }
+      ],
+      "quoteReadMode": "Exactly one production-revm-effect read per input; quote script matches actual runtime script; sealed executor/origin and 0x1000000 production budget.",
+      "constructionCounts": {
+        "exact": 4,
+        "quoted": 4,
+        "forbiddenDuringBuild": 0
+      },
+      "rollbackBoundary": "Same-calldata call-only negative traces prove 32 rejections. Independent complete rollback evidence is the real local BotVM synthetic fault suite, not these historical traces."
+    }
+  },
+  "ownershipBoundary": {
+    "actual": "Historical tests use the current cloud worktree including unchanged peer V1 identity/default work.",
+    "ownedOnly": "Exact HEAD plus this task candidate is independently catalog-generated/built/tested; two overlapping files retain distinct commit hashes.",
+    "catalogDifferences": "Exactly nine V1 capability source differences between current working and owned catalog; do not claim ownership of peer work or transfer standard identity history to the isolated owned baseline."
+  },
+  "pending": [],
+  "permanentLimits": [
+    "fa439 has no public verified hook source; only the admitted tiered profile external Manager behavior and code/PoolKey identity may be accepted, not complete internal hook semantics.",
+    "Continuous native Initialize census through pinned N26195865 has no applicable fa439 native instance; this is neither native execution success nor proof of native incompatibility.",
+    "Old natural inputs are reused as input-only references; no new natural pricing, original TX call-prestate opportunity, formal Adapter Replay or performance claim."
+  ],
+  "references": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/three-review02.json",
+      "sha256": "0c8ba3cc699359409a76934b16fe15fe822aad2bf78d24d4e646bed31761e9fc"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence35/index.json",
+      "sha256": "67468f04ad0d7d17ec1b43d4dad4e527a35b557d650f99cc72313250e71babcd"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence35/1-owned33.json",
+      "sha256": "30d12dcbb1e1331c1bc46cec59f3dfcaa671b3b5ab6c4e845a6f58922d6fd25c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence35/10-current-source34.json",
+      "sha256": "6e8acbb104c2c9e7384ab66a7b656596926903b0fd8837b55ca85bbbf6529ed7"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence35/11-catalog-receipt34.json",
+      "sha256": "67f5251eb561d0782f8c1feb77dbc04e0424301746ded9700844cda4171bf144"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence35/9-checks34.json",
+      "sha256": "22ce60b03e9040395c3914032b67c73a0b043cbe9012743d09ea4cb5c1e05953"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence35/21-summary.json",
+      "sha256": "91e3ece5bcf95d5422ebaaf02eb7ef15363b9b633efb708b63a9413d0476614c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence35/22-summary.json",
+      "sha256": "91e3ece5bcf95d5422ebaaf02eb7ef15363b9b633efb708b63a9413d0476614c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence35/23-result.json",
+      "sha256": "7a7e9a72b98915bd076b42a2ce9101eb505f226f8412bb38cb40724248e415af"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence35/24-result.json",
+      "sha256": "5a4c5943cea708b4c4da0fed5f9747f0133976b71586561fe8d191b2641e2639"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/review-final30.json",
+      "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/native-final-evidence-review.json",
+      "sha256": "93a83063da08969c70f26efa786c03bff425a31a11f33b5e1ebb05512c81f81b"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/native-fee-discovery-summary.json",
+      "sha256": "ccde9d370ec3f64dad0322b6d378c4d5be4ff96eb5607ad0102ac306be4ca04c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/read36/family-settlement-interface-review-20261014.json",
+      "sha256": "e5c7acf68f0da7644a4c200255747a324bd21c54cb529e0f2a0bc457fbd6b0c1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/current-source45.json",
+      "sha256": "ca7ecbf7acde3998bf97f433231ea0bf7f45d39e81bfff8a136c865d241c9632"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/owned43b.json",
+      "sha256": "baf159b25ff43a354ca0dd4657b19064fe8904ba7499b20683369f4cc66ef0b5"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/checks43.json",
+      "sha256": "a1dc9aef16c34842c8af2224f81f0989fe878e9bdc6575e2097f011a03bf0abb"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/checks43b.json",
+      "sha256": "28bda57ac2b131bc4224979b8292552e5eea48275c0be13660943a67824a79cf"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/checks45.json",
+      "sha256": "509f2c478049573bd961e084cd692619274bfb5acff91cb9867c8bf38fbd3f93"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/catalog-receipt45.json",
+      "sha256": "152532b9bae8ae3e64945febedb3e254d88f351c8c9df58f68adbe21ef885ea0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/payment43b-summary.json",
+      "sha256": "37b2f281cdcae2181a78ac70187d3b4d5a3f888b38340dbecc2536adfe1b9ac5"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/owned-payment45-summary.json",
+      "sha256": "37b2f281cdcae2181a78ac70187d3b4d5a3f888b38340dbecc2536adfe1b9ac5"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence44/v4-erc20-tiered-fee-recipient44.json",
+      "sha256": "ed624380fa57051bbecfe83a7f17107482322669c7e38a69f27ad1317c3a8b91"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/erc20-final-evidence-review.json",
+      "sha256": "d9d92f6672d17444633025569199d43265311a72262eda541f68672b9af1f579"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/erc20-tiered44-independent-review.json",
+      "sha256": "1a2b0761f2d5c7fd715f903af7bf1a5c1cf8b76c746f6562cb9689e1bc7389a3"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/tiered44-quote-independent-review.json",
+      "sha256": "2714c34528ae88785f950374a6fbecbca29c99ce8d89498bda58b17673fb70eb"
+    }
+  ],
+  "resolvedFindings": [
+    {
+      "id": "FINAL-REPORT-STATE-OVERRIDE",
+      "scope": "artifact generation only",
+      "original": "The initial template asserted only reviewFinal and then forcibly set every variant to verified with empty gaps. A completed final review may still contain partial or blocked conclusions.",
+      "resolution": "The current template requires reviewFinal=true, implementationReady=true, blockingFindings=[], and every selected final review row verified with empty gaps before copying those fields. The downstream gate also compares exact variant inventory.",
+      "status": "resolved by static recheck",
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/final-docs-template.py",
+      "sha256": "77fade6848c2fae0151698d94193f1bd9b561aa9c5f178e59a3b7771752540f4"
+    },
+    {
+      "id": "TIERED-QUOTE-EXECUTION-MISMATCH",
+      "severity": "high",
+      "scope": "univ4-fee-hook tiered ERC20 quote correctness; first existing quoted execution, not caused by new direct/deferred funding",
+      "source": {
+        "number": 25811499,
+        "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786"
+      },
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "4000000000000000",
+      "quotedAmountOut": "9641655",
+      "actualAmountOut": "9352406",
+      "delta": "-289249",
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence40/v4-erc20-tiered-fee-recipient39.json",
+        "sha256": "273a667c4a8852b4844e0040f52126b39a4a35afb3aa179df25e93238a8c85e6"
+      },
+      "requiredResolution": "Correct the Family quote/execution context, retain the failing amount and exact receipt requirement, and re-run the affected same-state cases with fresh source/identity/catalog pins. Do not reduce amount or widen tolerance.",
+      "status": "resolved by same-source same-amount failure-to-pass evidence",
+      "resolution": {
+        "newQuote": "9352406",
+        "newActual": "9352406",
+        "signedDelta": "0",
+        "actualFeePips": "30000",
+        "inputAndActualOutputUnchanged": true,
+        "after": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence44/v4-erc20-tiered-fee-recipient44.json",
+          "sha256": "ed624380fa57051bbecfe83a7f17107482322669c7e38a69f27ad1317c3a8b91"
+        },
+        "independentFailureFlipReview": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/tiered44-quote-independent-review.json",
+          "sha256": "2714c34528ae88785f950374a6fbecbca29c99ce8d89498bda58b17673fb70eb"
+        }
+      }
+    },
+    {
+      "id": "TIERED-UNDECLARED-EMPTY-SUPPLY-OBSERVATION",
+      "scope": "New candidate contract validation; original43 failure retained",
+      "resolution": "Removed unused empty observation field only; existing central declaration validation remains strict. 43b contract and subsequent actual44 passed.",
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/checks43.json",
+        "sha256": "a1dc9aef16c34842c8af2224f81f0989fe878e9bdc6575e2097f011a03bf0abb"
+      },
+      "after": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/checks43b.json",
+        "sha256": "28bda57ac2b131bc4224979b8292552e5eea48275c0be13660943a67824a79cf"
+      }
+    }
+  ],
+  "settlementImplementationStaticReady": true,
+  "tieredCorrectionStaticReview": {
+    "status": "Confirmed by actual43b and actual44; final source pins checked in45",
+    "reviewPass": 3,
+    "reviewerExecutedTests": false,
+    "handoff": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/tiered40/handoff.json",
+      "sha256": "cbec7d18b232106268d808a02172cd7b4adc51fabac47170d8dd2788697b220d"
+    },
+    "candidateHashesMatched": 8,
+    "candidateSources": [
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+        "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/tiered40/listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+        "beforeSha256": "abd18d4c3134c3f7cfd9e77956626def9d02709f15de04a240c1e82b5a3c5d45",
+        "sha256": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+        "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/tiered40/listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+        "beforeSha256": "13b65d469916955f93c911de53e1cc6e3f799fef48580b2924a1be3efa16d94e",
+        "sha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/v4-native-settlement.test.ts",
+        "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/tiered40/listener/src/searcher/test/family-integration/kyber-yb-compound/v4-native-settlement.test.ts",
+        "beforeSha256": "5ee6aa177ae7ae84acbf6b9e2773b03a3c586269e8de747eed78492dba2d33ed",
+        "sha256": "ff47eff8ef37773864a0de7355122fdb17ba306a81298af14bbbdda15a817a6a"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/exact.ts",
+        "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/tiered40/listener/src/searcher/venues/swaps/univ4-fee-hook-family/exact.ts",
+        "beforeSha256": "3845aa23ef1de4edfdca227a4d67f5945416a528f371f299f413d627817f11e3",
+        "sha256": "a2b0b8fc1f926155693ecd03233eebfa8439e47ef37c90840be10bec2e0b75a5"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts",
+        "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/tiered40/listener/src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts",
+        "beforeSha256": "14ffa84da49484c0da47867c85da40488b1a8cbb57b44f9ee4ccb81d76d90752",
+        "sha256": "96ebbe4bcd48c08f9e489ecae981ff3e968de24ad7259ed70b314eb640dcd02c"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/test/tiered-exact.ts",
+        "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/tiered40/listener/src/searcher/venues/swaps/univ4-fee-hook-family/test/tiered-exact.ts",
+        "beforeSha256": null,
+        "sha256": "2f29d7215bc37e5dd7eff9427fc0c1487a68e7be9d238fc1fbd9fa8a1833e509"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/tiered-exact.ts",
+        "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/tiered40/listener/src/searcher/venues/swaps/univ4-fee-hook-family/tiered-exact.ts",
+        "beforeSha256": null,
+        "sha256": "3f3bec4d898e0fad96b6a13798d2a1cf548071b625df5c4890288dc93953054e"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/types.ts",
+        "candidatePath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/tiered40/listener/src/searcher/venues/swaps/univ4-fee-hook-family/types.ts",
+        "beforeSha256": "30296c0d527179e0ba31dd0b390dc47266dc8d9ed782d4f50243fdc76c775f0b",
+        "sha256": "c12a9c501bbde7f15d2735105b06b51958bad2600661eb81d13e018ddc758c26"
+      }
+    ],
+    "checks": [
+      "Tiered default selects executor-program effect-delta simulation only; no standard Quoter fallback. Existing pure Family emitter is called without Exact recursion.",
+      "Caller is sealed executor; nonzero distinct transactionOrigin excludes quote-only origins 0/1/2. Cache projection binds executor/origin/model/method; central quote handle binds source, amount, trusted executor code and caller authority.",
+      "Decoded result must be successful returned completion with empty return data, source number/hash/generation match, exactly two actor token deltas, input delta exactly -amountIn, positive uint256 output and one zero actor-native delta.",
+      "Quoted tiered fragment rejects old Quoter evidence and foreign executor/origin, and retains pool key/direction/amount/hookData validation. SAT1 local and explicit Quoter branch semantics remain unchanged.",
+      "Tiered prefix is omitted from eligible method set and program validation rejects it. No same-pool sequential-counter quote is claimed.",
+      "Historical extension uses the existing createRevmStrictSourceSimulation work-slot factory, trusted owner-patched BotVM, state root/source/header, explicit production 0x1000000 budget and mandatory closeAndDrain. Existing receipt/rollback observation logic is unchanged.",
+      "New unit regressions cover dispatch, input debit 0/short/excess, missing or ambiguous actor receipt, native loss, declared revert/data mismatch, cache actor/origin separation, native boundary declaration and old Quoter evidence refusal. These are model tests, not historical proof."
+    ],
+    "sourceBinding": {
+      "settlementClosure34IsSufficientForNewExact": false,
+      "reason": "Settlement identity/routes/execution closure omits exact.ts and relevant central quote transport. It cannot authenticate the changed Exact path by itself.",
+      "additionalCandidateSources": 8,
+      "finalEvidenceRequired": "Satisfied by finalSourceBinding, actual44 sourceTree/runtime/binary proof, actual43b and owned45 checks; settlement closure alone remains insufficient for Exact.",
+      "reviewedTransportAndConsumerSources": [
+        {
+          "path": "listener/src/searcher/revm-strict-source-simulation.ts",
+          "sha256": "347fb02581087c40bceba022349fa6ebe8127c9733d5cd2703fe6a44b87fff02",
+          "basis": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/actual40/listener/src/searcher/revm-strict-source-simulation.ts",
+          "snapshotEqualsExactHead": true,
+          "scope": "Final current pin read from frozen45; exact Git reference retained separately and is not substituted for peer-modified actual source.",
+          "finalCurrentPin": {
+            "path": "listener/src/searcher/revm-strict-source-simulation.ts",
+            "sha256": "347fb02581087c40bceba022349fa6ebe8127c9733d5cd2703fe6a44b87fff02"
+          },
+          "currentCloudHashVerified": true
+        },
+        {
+          "path": "listener/src/searcher/revm-strict-source-owner.ts",
+          "sha256": "09a07fe5a9ecb89a25a7d1b80569dc121fe3d9ab45dd61a46ac3f774af427ab1",
+          "basis": "exact Git HEAD 9430d86da5e978bd660ac77c5b5c1ea7a5727b48",
+          "snapshotEqualsExactHead": true,
+          "currentCloudHashVerified": true,
+          "scope": "Final current pin read from frozen45; exact Git reference retained separately and is not substituted for peer-modified actual source.",
+          "finalCurrentPin": {
+            "path": "listener/src/searcher/revm-strict-source-owner.ts",
+            "sha256": "09a07fe5a9ecb89a25a7d1b80569dc121fe3d9ab45dd61a46ac3f774af427ab1"
+          }
+        },
+        {
+          "path": "listener/src/searcher/revm-strict-simulation-transport.ts",
+          "sha256": "dcd6f1d8b0bf9cf8f17ea18ef1a8d39dfd3ed30a223730e0775bf48f336ad851",
+          "basis": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/actual40/listener/src/searcher/revm-strict-simulation-transport.ts",
+          "snapshotEqualsExactHead": true,
+          "scope": "Final current pin read from frozen45; exact Git reference retained separately and is not substituted for peer-modified actual source.",
+          "finalCurrentPin": {
+            "path": "listener/src/searcher/revm-strict-simulation-transport.ts",
+            "sha256": "dcd6f1d8b0bf9cf8f17ea18ef1a8d39dfd3ed30a223730e0775bf48f336ad851"
+          },
+          "currentCloudHashVerified": true
+        },
+        {
+          "path": "listener/src/searcher/revm-sim-client.ts",
+          "sha256": "a041f6f7d311d83c2788c3acdbc1ff0576f8aa43b50bf694e2810032e3d51bf0",
+          "basis": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/actual40/listener/src/searcher/revm-sim-client.ts",
+          "snapshotEqualsExactHead": true,
+          "scope": "Final current pin read from frozen45; exact Git reference retained separately and is not substituted for peer-modified actual source.",
+          "finalCurrentPin": {
+            "path": "listener/src/searcher/revm-sim-client.ts",
+            "sha256": "a041f6f7d311d83c2788c3acdbc1ff0576f8aa43b50bf694e2810032e3d51bf0"
+          },
+          "currentCloudHashVerified": true
+        },
+        {
+          "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+          "sha256": "383b074a3ed40976ac4fba2ecc4345bd7bfe183357e4bc9de4e3e1e7c412589e",
+          "basis": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/actual40/listener/src/searcher/strict-central-adapter-runtime.ts",
+          "snapshotEqualsExactHead": true,
+          "scope": "Final current pin read from frozen45; exact Git reference retained separately and is not substituted for peer-modified actual source.",
+          "finalCurrentPin": {
+            "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+            "sha256": "383b074a3ed40976ac4fba2ecc4345bd7bfe183357e4bc9de4e3e1e7c412589e"
+          },
+          "currentCloudHashVerified": true
+        },
+        {
+          "path": "listener/src/searcher/reth-adapter-work-runtime.ts",
+          "sha256": "d2be59d00c02ffa7ea1a1e34252a75fda1cb015d7fa70949b741d24c9b3bfd5d",
+          "basis": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/actual40/listener/src/searcher/reth-adapter-work-runtime.ts",
+          "snapshotEqualsExactHead": true,
+          "scope": "Final current pin read from frozen45; exact Git reference retained separately and is not substituted for peer-modified actual source.",
+          "finalCurrentPin": {
+            "path": "listener/src/searcher/reth-adapter-work-runtime.ts",
+            "sha256": "d2be59d00c02ffa7ea1a1e34252a75fda1cb015d7fa70949b741d24c9b3bfd5d"
+          },
+          "currentCloudHashVerified": true
+        },
+        {
+          "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+          "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10",
+          "basis": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/actual40/listener/src/searcher/adapter-family-exact-quote-cache.ts",
+          "snapshotEqualsExactHead": true,
+          "scope": "Read-only actual40 snapshot; current final frozen hash still checked when provided."
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-request-program.ts",
+          "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab",
+          "basis": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/actual40/listener/src/searcher/venues/adapter-request-program.ts",
+          "snapshotEqualsExactHead": true,
+          "scope": "Read-only actual40 snapshot; current final frozen hash still checked when provided."
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+          "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd",
+          "basis": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/actual40/listener/src/searcher/venues/adapter-family-runtime.ts",
+          "snapshotEqualsExactHead": false,
+          "scope": "Read-only actual40 snapshot; current final frozen hash still checked when provided."
+        },
+        {
+          "path": "listener/src/shared/executor/botvm-program-entry.ts",
+          "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+          "basis": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/actual40/listener/src/shared/executor/botvm-program-entry.ts",
+          "snapshotEqualsExactHead": true,
+          "scope": "Read-only actual40 snapshot; current final frozen hash still checked when provided."
+        },
+        {
+          "path": "listener/src/searcher/main.ts",
+          "sha256": "400ef8227a432006dc9c120de89358a3e789ff174d090822d36d8a3f38279c77",
+          "basis": "exact Git HEAD 9430d86da5e978bd660ac77c5b5c1ea7a5727b48",
+          "snapshotEqualsExactHead": true,
+          "currentCloudHashVerified": true,
+          "scope": "Final current pin read from frozen45; exact Git reference retained separately and is not substituted for peer-modified actual source.",
+          "finalCurrentPin": {
+            "path": "listener/src/searcher/main.ts",
+            "sha256": "ef78cf7e36734c4044245dc9547a3175ff95409cf84d59dc398717849a57c5fc"
+          }
+        },
+        {
+          "path": "listener/src/searcher/universe-rebuild-production.ts",
+          "sha256": "36f78fee49c79164b27549fdf0998241f1c30a3fd6a408b0eae9c9bbf5fb163f",
+          "basis": "exact Git HEAD 9430d86da5e978bd660ac77c5b5c1ea7a5727b48",
+          "snapshotEqualsExactHead": true,
+          "currentCloudHashVerified": true,
+          "scope": "Final current pin read from frozen45; exact Git reference retained separately and is not substituted for peer-modified actual source.",
+          "finalCurrentPin": {
+            "path": "listener/src/searcher/universe-rebuild-production.ts",
+            "sha256": "17d2a99d27593de5a8e77f6fd2c7d1c202d934449025871314b2e4d3a465adac"
+          }
+        }
+      ]
+    },
+    "regressionScope": {
+      "affected": "fa439 tiered Exact dispatch/cache/evidence guard and its historical transport adapter; revalidate derived tiered Ready under current fingerprints and rerun retained original 4e15 with smaller control and both directions/modes",
+      "plannedCurrentChecks": "Completed in saved actual43b/owned45 and historical44 records; see finalRegression.",
+      "permittedReuse": "Retain prior V1 25-case local EVM, VM 55-case safety, V1 history, native nohook/SAT1 history and ERC20 nohook history under their original hashes. Current source delta does not alter their execution branches; describe static compatibility reuse, not newly rerun history.",
+      "unchangedOtherFamilyAcceptance": 43,
+      "noExpandedClaim": "No other Family is newly accepted; no representative performance, opportunity, full prefix or Adapter Replay assertion."
+    },
+    "supportingReview": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v4-accept26/tiered-executor-quote-candidate-review.json",
+      "sha256": "58e1d9382b3aa1d72fb656eca101409231652ea2eb059e735d8914f486f71e19"
+    },
+    "productionGasRead": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/gas42b-output.log",
+      "sha256": "afd5c8275dad659442977c759462e2103369c3926a463ab70dfa99753979cfae"
+    },
+    "freezePlan": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/freeze45.py",
+      "sha256": "0e581b268f32e1d085ca2385a21ff7d02651e41f235a7c3028f69f5090ba30f8",
+      "executionStatus": "not executed by reviewer; actual frozen output pending"
+    }
+  },
+  "finalSourceBinding": {
+    "currentSource": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/current-source45.json",
+      "sha256": "ca7ecbf7acde3998bf97f433231ea0bf7f45d39e81bfff8a136c865d241c9632"
+    },
+    "ownedActualAndCommitPins": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/owned43b.json",
+      "sha256": "baf159b25ff43a354ca0dd4657b19064fe8904ba7499b20683369f4cc66ef0b5"
+    },
+    "settlementClosure": {
+      "common": 57,
+      "families": {
+        "custom-swap:uniswap-v1": 20,
+        "univ4": 24,
+        "univ4-fee-hook": 27
+      },
+      "entries": 128,
+      "uniquePaths": 86,
+      "deltaFrom34": "Only univ4-fee-hook-family/execution.ts changes in this settlement closure; new Exact is bound separately."
+    },
+    "additionalQuoteAndHarnessSource": [
+      {
+        "path": "listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+      },
+      {
+        "path": "listener/src/searcher/test/family-dual-execution.ts",
+        "sha256": "1191a47e70087625d9c68ff544fabfe1c89a4eab7e678a58f1d001b3adbc2009"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/execution.ts",
+        "sha256": "577f786c9efc0f43676423572e34d38b02a068b7189212e0723109d9bd33eaf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/recipient.ts",
+        "sha256": "dc1f6a386e80bb0174ac642d55079aa3615b2f5c20b9b4a8a6bcecc42c4cbca0"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-family/runtime-execution.ts",
+        "sha256": "57ccf7daf32aa4fb2638e87bc752c7c7dd03e84e265ffe8eb629175b03d5a06a"
+      },
+      {
+        "path": "listener/src/searcher/test/runtime-payment-evm.ts",
+        "sha256": "115cf42f865db1a0210ac0faa3bb7a95615dd5bff90c3860c0a99e91b6beb80a"
+      },
+      {
+        "path": "listener/package.json",
+        "sha256": "59ba6e20cf96071bbec08fb1bf90da6e7d7487d546006a81e8cce895cf486e5d"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/recipient-ready.ts",
+        "sha256": "e4ae9dc420858c04433cafb01b37cf3987e516a23d0f7136971cf724fea6febe"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/recipient-historical.ts",
+        "sha256": "1f55b67cc72f98ca0cee25e6a514fcc6067e8916e1940ad2f163405a8a7a781f"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+        "sha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+        "sha256": "21667eebf6b97b6e18ad9ec4230d615a1d8e46478fcd8fc19339f01ec9c800f4"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/v4-native-settlement.ts",
+        "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ1-family/test/recipient-runtime-evm.ts",
+        "sha256": "45c40aa6143c48bb0efaa9c640faa5f55823bdc7eb4eeac37bbe226d2ffce475"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-family/test/historical-ready.ts",
+        "sha256": "713f6fb7aea603e1f83e4f0395edada328c90976ecbdaffeba99e0417502c8e1"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/v4-native-settlement.test.ts",
+        "sha256": "ff47eff8ef37773864a0de7355122fdb17ba306a81298af14bbbdda15a817a6a"
+      },
+      {
+        "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/v4-erc20-ready.ts",
+        "sha256": "4b327452dcbf27c15885982d198da7af63c36b27e84530d2b04b263716ab4ed7"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-family/test/history-evidence.ts",
+        "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-family/test/history-erc20-observation.fixture.ts",
+        "sha256": "1c8e81a1bba1f88d829fdcccf7adca956128b18b8f8653d072f7c84d3ccee05f"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-family/test/history-erc20-observation.test.ts",
+        "sha256": "20f53f9de6f7c741890819a2efec00122d1f88e3853dc13449bf5c1b558961f5"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/exact.ts",
+        "sha256": "a2b0b8fc1f926155693ecd03233eebfa8439e47ef37c90840be10bec2e0b75a5"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts",
+        "sha256": "96ebbe4bcd48c08f9e489ecae981ff3e968de24ad7259ed70b314eb640dcd02c"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/test/tiered-exact.ts",
+        "sha256": "2f29d7215bc37e5dd7eff9427fc0c1487a68e7be9d238fc1fbd9fa8a1833e509"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/tiered-exact.ts",
+        "sha256": "5604f672978013061b2dbcb3c93bc08ce0e18d344006b7c46f86acf252683030"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/types.ts",
+        "sha256": "c12a9c501bbde7f15d2735105b06b51958bad2600661eb81d13e018ddc758c26"
+      },
+      {
+        "path": "listener/src/searcher/test/univ4-fee-hook-family-plugin.ts",
+        "sha256": "2e0086e863f569b8f274b78f8de229bed6d9b1814f13f7e316a79226bb682854"
+      },
+      {
+        "path": "listener/src/searcher/test/univ4-fee-hook-live-probe.ts",
+        "sha256": "4fa2737469cfb486cea2e0ea7e251d7a1d81144c883c331b21af624ed2ee1821"
+      }
+    ],
+    "additionalQuoteAndHarnessLocalFilesMatched": 27,
+    "existingProductionQuoteTransportSource": [
+      {
+        "path": "listener/src/searcher/revm-strict-source-simulation.ts",
+        "sha256": "347fb02581087c40bceba022349fa6ebe8127c9733d5cd2703fe6a44b87fff02"
+      },
+      {
+        "path": "listener/src/searcher/revm-strict-source-owner.ts",
+        "sha256": "09a07fe5a9ecb89a25a7d1b80569dc121fe3d9ab45dd61a46ac3f774af427ab1"
+      },
+      {
+        "path": "listener/src/searcher/revm-strict-simulation-transport.ts",
+        "sha256": "dcd6f1d8b0bf9cf8f17ea18ef1a8d39dfd3ed30a223730e0775bf48f336ad851"
+      },
+      {
+        "path": "listener/src/searcher/revm-sim-client.ts",
+        "sha256": "a041f6f7d311d83c2788c3acdbc1ff0576f8aa43b50bf694e2810032e3d51bf0"
+      },
+      {
+        "path": "listener/src/searcher/strict-central-adapter-runtime.ts",
+        "sha256": "383b074a3ed40976ac4fba2ecc4345bd7bfe183357e4bc9de4e3e1e7c412589e"
+      },
+      {
+        "path": "listener/src/searcher/reth-adapter-work-runtime.ts",
+        "sha256": "d2be59d00c02ffa7ea1a1e34252a75fda1cb015d7fa70949b741d24c9b3bfd5d"
+      },
+      {
+        "path": "listener/src/searcher/main.ts",
+        "sha256": "ef78cf7e36734c4044245dc9547a3175ff95409cf84d59dc398717849a57c5fc"
+      },
+      {
+        "path": "listener/src/searcher/universe-rebuild-production.ts",
+        "sha256": "17d2a99d27593de5a8e77f6fd2c7d1c202d934449025871314b2e4d3a465adac"
+      }
+    ],
+    "transportScope": "Six transport/source-owner pins match exact HEAD reference. Current main.ts and universe-rebuild-production.ts have retained peer changes and are bound to their actual45 hashes, not assumed identical to HEAD. Production budget excerpts are separately retained in gas42b-output.log.",
+    "tieredHistoricalSourceTreeSha256": "bac5dbd82e63b545a93bb16f5b7fb3f45ec17de26598cd9f2807bcb3ca12ff6c",
+    "tieredHistoricalRuntime": {
+      "keccak256": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+    },
+    "productionEffectQuote": {
+      "factory": "createRevmStrictSourceSimulation",
+      "source": {
+        "number": 25811499,
+        "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+        "generation": 25811499
+      },
+      "stateRoot": "0x68df57a534224c00a5ab255fb7efb3be79ceb81f824b00068d286502d249ad35",
+      "executor": "0x1000000000000000000000000000000000000002",
+      "transactionOrigin": "0x1000000000000000000000000000000000000001",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "executionGasLimit": 16777216,
+      "budgetScope": "0x1000000 matches current main/rebuild production strict-source factory and this harness execution; not performance evidence"
+    },
+    "exactFinalSource": {
+      "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/tiered-exact.ts",
+      "sha256": "5604f672978013061b2dbcb3c93bc08ce0e18d344006b7c46f86acf252683030",
+      "previousReviewedSha256": "3f3bec4d898e0fad96b6a13798d2a1cf548071b625df5c4890288dc93953054e",
+      "onlyDifference": "Remove undeclared unused observeTotalSupplies:[] field. No added effect permission or weakened check."
+    },
+    "catalogReceipt": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/catalog-receipt45.json",
+      "sha256": "152532b9bae8ae3e64945febedb3e254d88f351c8c9df58f68adbe21ef885ea0"
+    },
+    "catalogOwned": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/catalog-owned45.json",
+      "sha256": "f783050e4899760c1b2cb7a0aff6182338a51752484f4a0288b72b39a93c6578"
+    },
+    "catalogDifferenceScope": "Exactly nine retained peer V1 capability entries; owned catalog generated separately without overwriting actual catalog."
+  },
+  "finalRegression": {
+    "actualChecks43b": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/checks43b.json",
+      "sha256": "28bda57ac2b131bc4224979b8292552e5eea48275c0be13660943a67824a79cf"
+    },
+    "actualChecksRecorded": 8,
+    "actualChecksAllExitZero": true,
+    "ownedChecks45": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/checks45.json",
+      "sha256": "509f2c478049573bd961e084cd692619274bfb5acff91cb9867c8bf38fbd3f93"
+    },
+    "ownedChecksRecorded": [
+      "catalog",
+      "owned-build",
+      "owned-all-family",
+      "owned-v4-evm"
+    ],
+    "ownedChecksAllExitZero": true,
+    "actualV4Summary": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/payment43b-summary.json",
+      "sha256": "37b2f281cdcae2181a78ac70187d3b4d5a3f888b38340dbecc2536adfe1b9ac5"
+    },
+    "ownedV4Summary": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/owned-payment45-summary.json",
+      "sha256": "37b2f281cdcae2181a78ac70187d3b4d5a3f888b38340dbecc2536adfe1b9ac5"
+    },
+    "v4LocalEvm": {
+      "casesEach": 348,
+      "positiveEach": 83,
+      "rejectionsEach": 265,
+      "summariesByteIdentical": true,
+      "beforeAfterPinsIdentical": true,
+      "rowResultsIdenticalTo34": true,
+      "sourcePins": 16,
+      "scope": "Real BotVM with synthetic Manager/token/hook behavior; complete state rollback faults are not deployed hook negative-history claims."
+    },
+    "reuse": {
+      "V1LocalEvm": 25,
+      "VMSafety": 55,
+      "notRerun45": true,
+      "basis": "Exact correction does not change these programs/VM. Original actual/owned34 evidence remains independently bound."
+    },
+    "evidenceReviewMethod": "Read saved execution receipts/summaries and exact source files. Reviewer did not run RPC/build/tests/EVM."
+  },
+  "historicalTotalsWithinDeclaredScope": {
+    "V1Positive": 32,
+    "V1ZeroAmountRejection": 16,
+    "V4Positive": 160,
+    "V4DeclaredRejection": 128,
+    "V4ExactQuotes": 16,
+    "notOneFreshRun": true
+  },
+  "remainingAcceptance": [
+    "Parent-owned mechanical settlement gate and source/catalog commit bookkeeping remain separate; this review does not claim those commands executed.",
+    "Formal Adapter Replay, family_local/merge_ready, complete opportunity reproduction and representative phase-performance acceptance are not established.",
+    "No fresh target natural valuation is supplied by input-only donor amounts. All claimed quotes and execution bind target N independently.",
+    "Other43 installed Families keep prior unverified/not-accepted state; common-code regression success does not upgrade them.",
+    "No fa439 native execution instance is claimed. The bounded Initialize census is absence evidence through its pinned block only.",
+    "Confirmed original-TX observation tooling defect retains original failure and regression; parent records the codified LearningCase/codify_commit with the forthcoming source commit."
+  ],
+  "retainedEvidenceFailures": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence40/v4-erc20-tiered-fee-recipient39.json",
+      "sha256": "273a667c4a8852b4844e0040f52126b39a4a35afb3aa179df25e93238a8c85e6"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/checks43.json",
+      "sha256": "a1dc9aef16c34842c8af2224f81f0989fe878e9bdc6575e2097f011a03bf0abb"
+    }
+  ]
+}

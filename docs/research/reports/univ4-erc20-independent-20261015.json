@@ -1,0 +1,298 @@
+{
+  "reviewer": "/root/v4_accept26",
+  "status": "PASS-declared-ERC20-correctness",
+  "historical": [
+    {
+      "variant": "no-hook ERC20 USDC/USDT",
+      "status": "PASS",
+      "file": "logs/family-implementation-20261015.0exjskqq/v4-accept26/downloaded/v4-erc20-nohook-recipient39.json",
+      "sha256": "da63cf49fd73c355f62f5dcd848f7f0ffe1b721d6a83c20c9c7162120e2eb19a",
+      "positives": 40,
+      "rejections": 32,
+      "source": {
+        "number": 26029537,
+        "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2",
+        "generation": 26029537
+      },
+      "independentReview": {
+        "file": "logs/family-implementation-20261015.0exjskqq/v4-accept26/erc20-nohook39-independent-review.json",
+        "sha256": "5c4577939c17bc88d6f1797b7e712fce028cf100820923b44f4bfa11188ac41c"
+      }
+    },
+    {
+      "variant": "tiered fa439 ERC20 USDC/WETH",
+      "status": "PASS",
+      "file": "logs/family-implementation-20261015.0exjskqq/evidence44/v4-erc20-tiered-fee-recipient44.json",
+      "sha256": "ed624380fa57051bbecfe83a7f17107482322669c7e38a69f27ad1317c3a8b91",
+      "positives": 40,
+      "rejections": 32,
+      "source": {
+        "number": 25811499,
+        "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+        "generation": 25811499
+      },
+      "independentReview": {
+        "file": "logs/family-implementation-20261015.0exjskqq/v4-accept26/erc20-tiered44-independent-review.json",
+        "sha256": "1a2b0761f2d5c7fd715f903af7bf1a5c1cf8b76c746f6562cb9689e1bc7389a3"
+      },
+      "failureFlipReview": {
+        "file": "logs/family-implementation-20261015.0exjskqq/v4-accept26/tiered44-quote-independent-review.json",
+        "sha256": "2714c34528ae88785f950374a6fbecbca29c99ce8d89498bda58b17673fb70eb"
+      },
+      "failureFlip": {
+        "amountIn": "4000000000000000",
+        "oldQuote": "9641655",
+        "oldActual": "9352406",
+        "newQuote": "9352406",
+        "newActual": "9352406",
+        "actualFeePips": "30000"
+      }
+    }
+  ],
+  "retainedFailures": [
+    {
+      "file": "logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/v4-erc20-tiered-fee-recipient39.json",
+      "sha256": "273a667c4a8852b4844e0040f52126b39a4a35afb3aa179df25e93238a8c85e6",
+      "trial": {
+        "amountIn": "4000000000000000",
+        "input": "WETH",
+        "output": "USDC",
+        "quote": "9641655",
+        "actual": "9352406",
+        "difference": "289249",
+        "beforeSwapSelector": "0x575e24b4",
+        "feeOverride": "0x407530",
+        "lpFeePips": 30000,
+        "actualInputDebit": "4000000000000000",
+        "reverted": false,
+        "fixtureInvoked": false,
+        "failedAt": "first quoted default-self quote/output parity assertion; subsequent runtime and explicit modes for this amount not executed"
+      }
+    },
+    {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/checks43.json",
+      "sha256": "a1dc9aef16c34842c8af2224f81f0989fe878e9bdc6575e2097f011a03bf0abb",
+      "finding": "First contract validation rejected unused observeTotalSupplies:[] without declared supply effect; removed only empty field; actual43b passed. No added effect permission."
+    }
+  ],
+  "candidateReview": {
+    "file": "logs/family-implementation-20261015.0exjskqq/v4-accept26/tiered-executor-quote-candidate-review.json",
+    "sha256": "58e1d9382b3aa1d72fb656eca101409231652ea2eb059e735d8914f486f71e19",
+    "claim": "code review only; actual current-source acceptance pending"
+  },
+  "nativeFeeDeploymentBoundary": {
+    "file": "logs/family-implementation-20261015.0exjskqq/v4-accept26/native-fee-discovery-summary.json",
+    "sha256": "ccde9d370ec3f64dad0322b6d378c4d5be4ff96eb5607ad0102ac306be4ca04c",
+    "conclusion": "No native fa439 initialized pool through pinned N26195865, not an actual native execution pass or general unsupported claim."
+  },
+  "reuse": {
+    "native33": {
+      "review": "logs/family-implementation-20261015.0exjskqq/v4-accept26/native-final-evidence-review.json",
+      "sha256": "93a83063da08969c70f26efa786c03bff425a31a11f33b5e1ebb05512c81f81b",
+      "reason": "New tiered exact branch applies only to hookModel != sat1. No-hook production emitter/quote and Sat1 local quote/runtime path are not changed; fee fragment validation preserves Sat1 kinds and bindings. Old raw files/source hashes retained; reuse proves their original tested scope, not a newly executed current-source fork."
+    },
+    "nohook39": {
+      "reason": "No-hook Family exact/runtime and common asset/settlement implementation unchanged by tiered40 candidate. Historical runner source factory option restricted to v4-erc20-tiered-fee. Actual 39 USDC/USDT normal/direct/deferred bytecode evidence remains valid; no rerun claimed."
+    }
+  },
+  "limits": [
+    "Funding helper is fork-only isolated debt funding; no actual market return route, opportunity or profit claim.",
+    "Input donor prices are borrowed amount only; target quote/identity/execution must bind same target state.",
+    "No natural valuation, original transaction opportunity replay, live, deployment or phase4 performance claim."
+  ],
+  "sourceAndQuoteChecks": {
+    "allFourQuoteProgramsEqualActualRuntime": true,
+    "sameAmountsAndSourceAsFailure39": true,
+    "sameProductionBudget": 16777216,
+    "currentTieredExactSourceSha256": "5604f672978013061b2dbcb3c93bc08ce0e18d344006b7c46f86acf252683030",
+    "changeAfterCodeReview": "Remove unused observeTotalSupplies:[] field rejected by declared effect contract; no added permission or weakened check.",
+    "productionEffectQuote": {
+      "factory": "createRevmStrictSourceSimulation",
+      "source": {
+        "number": 25811499,
+        "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+        "generation": 25811499
+      },
+      "stateRoot": "0x68df57a534224c00a5ab255fb7efb3be79ceb81f824b00068d286502d249ad35",
+      "executor": "0x1000000000000000000000000000000000000002",
+      "transactionOrigin": "0x1000000000000000000000000000000000000001",
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "executionGasLimit": 16777216,
+      "budgetScope": "0x1000000 matches current main/rebuild production strict-source factory and this harness execution; not performance evidence"
+    }
+  },
+  "regressionReceipts": [
+    {
+      "file": "logs/family-implementation-20261015.0exjskqq/evidence43/checks43b.json",
+      "sha256": "28bda57ac2b131bc4224979b8292552e5eea48275c0be13660943a67824a79cf",
+      "allRecordedExitZero": true
+    }
+  ],
+  "finalRegressionIndependentReview": {
+    "summaries": [
+      {
+        "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence43/payment43b-summary.json",
+        "sha256": "37b2f281cdcae2181a78ac70187d3b4d5a3f888b38340dbecc2536adfe1b9ac5"
+      },
+      {
+        "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/owned-payment45-summary.json",
+        "sha256": "37b2f281cdcae2181a78ac70187d3b4d5a3f888b38340dbecc2536adfe1b9ac5"
+      }
+    ],
+    "count": 348,
+    "counts": {
+      "quoted-partial-settlement": 60,
+      "native-direct": 84,
+      "native-deferred": 96,
+      "native-deferred-movement-fault": 36,
+      "quoted-output-minimum": 12,
+      "closed-runtime-flow": 60
+    },
+    "immutable": true,
+    "identicalSummaries": true,
+    "source45": {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/current-source45.json",
+      "sha256": "ca7ecbf7acde3998bf97f433231ea0bf7f45d39e81bfff8a136c865d241c9632"
+    },
+    "matchedSourcePaths": [
+      "listener/src/searcher/venues/swaps/univ4-family/runtime-execution.ts",
+      "listener/src/searcher/venues/swaps/univ4-family/execution.ts",
+      "listener/src/searcher/venues/swaps/univ4-family/routes.ts",
+      "listener/src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts",
+      "listener/src/searcher/venues/swaps/univ4-fee-hook-family/routes.ts",
+      "listener/src/searcher/venues/swaps/univ4-fee-hook-family/sat1.ts",
+      "listener/src/searcher/execution-asset-boundary.ts",
+      "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "listener/src/searcher/venues/runtime-execution.ts",
+      "listener/src/adapters/runtime-amount-program.ts",
+      "listener/src/searcher/simulator/runtime-settlement.ts",
+      "listener/src/encoder.ts",
+      "listener/src/shared/executor/botvm-program-entry.ts",
+      "listener/src/searcher/test/runtime-payment-evm.ts"
+    ],
+    "sourcePins": {
+      "sources": [
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-family/runtime-execution.ts",
+          "sha256": "57ccf7daf32aa4fb2638e87bc752c7c7dd03e84e265ffe8eb629175b03d5a06a"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-family/execution.ts",
+          "sha256": "014cdde4a592a1f052e4e6c96c38600fa3c373c62cd30efaf28428fe83d5f728"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-family/routes.ts",
+          "sha256": "e8f282cef6b4e0d9c7c8849a18c9b74d202edc1b45cd56060cde2367b4be983e"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts",
+          "sha256": "96ebbe4bcd48c08f9e489ecae981ff3e968de24ad7259ed70b314eb640dcd02c"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/routes.ts",
+          "sha256": "fb3486d8e12e026c18883d83babf1cd54c414416784eb95a739a9051e22ba9bd"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/sat1.ts",
+          "sha256": "29799ce950142150d09b905e69a3279a4ae659c46bc954e3105ea68d827e0d14"
+        },
+        {
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+          "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+        },
+        {
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+        },
+        {
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+        },
+        {
+          "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+          "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+        },
+        {
+          "path": "listener/src/encoder.ts",
+          "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+        },
+        {
+          "path": "listener/src/shared/executor/botvm-executor.ts",
+          "sha256": "0725c2f4798b0a292dfec6f0ccad5cc4299da7e9187db2dc7635b0b895a4bfa0"
+        },
+        {
+          "path": "listener/src/shared/executor/botvm-program-entry.ts",
+          "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+        },
+        {
+          "path": "listener/src/searcher/test/runtime-payment-evm.ts",
+          "sha256": "115cf42f865db1a0210ac0faa3bb7a95615dd5bff90c3860c0a99e91b6beb80a"
+        },
+        {
+          "path": "test/RuntimePaymentMocks.sol",
+          "sha256": "b39bd75a1dc5f7bfe5337456e9e1d9af24f1365118945e1527b2885978dd2ca0"
+        }
+      ],
+      "mockArtifacts": [
+        {
+          "name": "RuntimePaymentToken",
+          "sha256": "30683a52877d1f1186c78ab27ceb12e9b12b036f77db36da20fe12346b7793eb"
+        },
+        {
+          "name": "RuntimePaymentManager",
+          "sha256": "4e0e7d847bc93c6df340e25c3dfc95483883b404eccda7b45857baccf84d472b"
+        },
+        {
+          "name": "RuntimePaymentReturnLeg",
+          "sha256": "da8ea1699d807e0bb58eb89caf3b236f2f8fb1fd880f8e69f2eb326bed843328"
+        },
+        {
+          "name": "RuntimePaymentContinuation",
+          "sha256": "2fd0dabc533cc6e38281d4ff7ff403cef55d67531de452d4c2805e99cf35946f"
+        }
+      ],
+      "botvm": {
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+        "runtimeCodeHash": "0x8cada2d28dde0e325fbed3c950b06336018854dfdfe84c7acbbc81296ee9bf08",
+        "sources": [
+          {
+            "path": "src/BotVM.sol",
+            "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+            "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+          },
+          {
+            "path": "src/Constants.sol",
+            "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+            "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+          },
+          {
+            "path": "src/RuntimeAmountVM.sol",
+            "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+            "keccak256": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565"
+          },
+          {
+            "path": "src/interfaces/IERC20.sol",
+            "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+            "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+          }
+        ]
+      }
+    },
+    "actualChecks45": {
+      "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence45/checks45.json",
+      "sha256": "509f2c478049573bd961e084cd692619274bfb5acff91cb9867c8bf38fbd3f93",
+      "ran": [
+        "catalog",
+        "owned-build",
+        "owned-all-family",
+        "owned-v4-evm"
+      ]
+    },
+    "notRerun45": "VM55 and V1 25 not rerun45; earlier34 evidence is reused by root separately; do not infer execution from stdout wording."
+  },
+  "overallScope": "Both declared ERC20 inventories independently accepted: no-hook USDC/USDT and supported fa439 tiered USDC/WETH, each quote+quoted+runtime plus direct/deferred recipient and inventory controls; tiered original4e15 quote defect flipped without changing actual output or input."
+}

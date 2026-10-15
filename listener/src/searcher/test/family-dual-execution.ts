@@ -593,7 +593,7 @@ test("settlement: V2 requests use actual recipient and emitted payment across ex
   }
 });
 
-test("settlement: both V4 owners bind receiver and requested payment; native requests stay unsupported", () => {
+test("settlement: both V4 owners bind receiver and requested payment; native capability is explicit", () => {
   const abi = new ethers.Interface(["function unlock(bytes)",
     "function swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes) returns(int256)",
     "function take(address,address,uint256)", "function sync(address)", "function settle() payable returns(uint256)"]);
@@ -605,7 +605,15 @@ test("settlement: both V4 owners bind receiver and requested payment; native req
     const native = same(r.realTokenIn, ethers.ZeroAddress) || same(r.realTokenOut, ethers.ZeroAddress);
     for (const request of requests) {
       const leg = family(d.familyId).execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request });
-      if (native) { assert.equal(leg, null); assert.equal(build(d, r).settlement, undefined); continue; }
+      if (native) {
+        const nativeInput = same(r.realTokenIn, ethers.ZeroAddress);
+        const capability = build(d, r).settlement;
+        assert.equal(capability.directOutput, true);
+        assert(same(capability.deferredInput, nativeInput ? executor : manager));
+        if (!nativeInput && request.kind === "direct-output") assert.equal(leg, null, "raw ETH receiver must be mapped to actor");
+        else { assert(leg); assert.deepEqual(leg.settlementRequest, request); }
+        continue; // Measured native execution has its own real-VM regression.
+      }
       assert(leg); assert.deepEqual(leg.settlementRequest, request);
       assert(same(leg.settlement.deferredInput, manager)); assert.equal(leg.settlement.directOutput, true);
       let output = 0n, paid = 0n, markers = 0; const events: string[] = [];

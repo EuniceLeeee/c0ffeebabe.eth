@@ -1,3 +1,4 @@
+import { directRecipientLeg } from "./recipient.js";
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
 import { runtimeLeg, runtimeExecutor, runtimeWrapReceipt } from "../../runtime-execution.js";
 import { POOL, WRAP } from "./codec.js";
@@ -10,6 +11,9 @@ export const execution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertRoute(d, r); runtimeExecutor(executor, d.pool, d.issuer, d.token);
+    const request = input.settlement;
+    if (request?.kind === "quote-output" || request?.kind === "deferred-input") return null;
+    if (request?.kind === "direct-output") return directRecipientLeg(d, r, executor, request);
     const p = new RuntimeAmountProgram();
     if (r.buy) {
       p.call(WETH, WRAP.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 0 }] })
@@ -19,7 +23,7 @@ export const execution = {
         .call(d.pool, POOL.encodeFunctionData("tokenToEthSwapInput", [0n, 1n, MAX_UINT]), { patches: [{ offset: 4, reg: 0 }] });
       runtimeWrapReceipt(p, WETH);
     }
-    return runtimeLeg(ACTION, p);
+    return { ...runtimeLeg(ACTION, p), settlement: { directOutput: true } };
   },
   runtimeProjection: ({ hop }) => ({ allowanceSpender: lower(hop.tokenIn) === WETH ? null : hop.target, prewarmQuoteCalls: [] }),
   buildFragment(i) {

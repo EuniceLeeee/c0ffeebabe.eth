@@ -2786,7 +2786,7 @@ export function buildFamilyRuntimeAmountLeg(input: {
   input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
   const builder = input.family.plugin.execution.buildRuntimeLeg;
   if (!builder) return null;
-  const native = executionNativeSides(record.route);
+  executionNativeSides(record.route);
   const requested = mapRuntimeAssetSettlementRequest({ route: record.route, executor: input.executor, request: input.settlement });
   if (requested === null) return null;
   const leg = builder(Object.freeze({ descriptor: record.instance.descriptor, route: record.route,
@@ -2814,12 +2814,9 @@ export function buildFamilyRuntimeAmountLeg(input: {
   if (requested?.kind === "quote-output" && leg.settlement?.quoteOutput !== true ||
       requested?.kind === "direct-output" && leg.settlement?.directOutput !== true ||
       requested?.kind === "deferred-input" && leg.settlement?.deferredInput === undefined) return null;
-  // Native quote/direct use the same Family contract. A native deferred
-  // callback still lacks a proven boundary and remains unavailable.
-  const settlement = native && leg.settlement ? {
-    ...(leg.settlement.quoteOutput ? { quoteOutput: true as const } : {}),
-    ...(leg.settlement.directOutput ? { directOutput: true as const } : {}),
-  } : leg.settlement;
+  // Native lifecycle is selected by the common boundary. Preserve the
+  // Family's declared debt recipient, including callback-funded native input.
+  const settlement = leg.settlement;
   return applyRuntimeAssetBoundary({ route: record.route, executor: input.executor,
     leg: Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program,
       ...(leg.inputMode === undefined ? {} : { inputMode: leg.inputMode }),

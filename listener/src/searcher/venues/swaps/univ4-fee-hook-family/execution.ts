@@ -85,13 +85,18 @@ function assertExecutionEvidence(input: {
   readonly exactEvidence: FeeHookExactEvidence;
   readonly minAmountOut?: bigint;
   readonly executor?: string;
+  readonly transactionOrigin?: string;
   readonly runtimeEvidence?: readonly unknown[];
 }): void {
   const evidence = input.exactEvidence;
   if (
     input.amountIn <= 0n || input.amountIn >= (1n << 127n) || input.quotedAmountOut <= 0n ||
     (input.minAmountOut !== undefined && (input.minAmountOut < 0n || input.minAmountOut > input.quotedAmountOut)) ||
-    !(evidence.kind === "univ4-fee-hook-quoter" ||
+    !((evidence.kind === "univ4-fee-hook-quoter" && input.descriptor.hookModel === "sat1") ||
+      (evidence.kind === "tiered-executor-receipt" && input.descriptor.hookModel !== "sat1" &&
+        typeof evidence.executor === "string" && sameAddress(evidence.executor, input.executor ?? "") &&
+        typeof evidence.transactionOrigin === "string" && typeof input.transactionOrigin === "string" &&
+        sameAddress(evidence.transactionOrigin, input.transactionOrigin)) ||
       (evidence.kind === "sat1-local-exact-in" && input.descriptor.hookModel === "sat1")) ||
     evidence.poolId !== input.descriptor.poolId ||
     evidence.poolKeyFingerprint !== poolKeyFingerprint(input.descriptor.poolKey) ||

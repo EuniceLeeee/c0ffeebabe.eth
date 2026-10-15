@@ -19,6 +19,8 @@ import { runtimeProgramScript } from "../../../../adapters/runtime-amount-progra
 import { concatBytes } from "../../../../encoder.js";
 import { atBlockJson, parseAtBlockJson } from "../../../blockscan-at-block-cli.js";
 import { createAdapterFamilyExactQuoteCache } from "../../../adapter-family-exact-quote-cache.js";
+import { createRevmStrictSourceSimulation } from "../../../revm-strict-source-simulation.js";
+import { RevmSimClient } from "../../../revm-sim-client.js";
 import { createStrictCentralAdapterRuntime } from "../../../strict-central-adapter-runtime.js";
 import { resolveStrictReadyRuntime } from "../../../strict-ready-runtime.js";
 import { UniverseRebuildCheckpointStore, activeReadyMemos } from "../../../universe-rebuild-checkpoint.js";
@@ -33,6 +35,8 @@ import { EKUBO_CORE } from "../../../venues/swaps/ekubo/abi.js";
 import { assertHistoricalDiscoveryReceipt } from "../three-family/historical-input-observations.js";
 import { SAMPLES, ERC20, options, same, json, sha, word, observeBalance, assertDeltas, originalLegs, originalDirections, historicalAmountTrials,
   assertReceipt, assertHeader, assertPriceInput, productionAmount, splicedMissingProductionAmount, constructionGuard, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory, assertExecutorCode } from "./evidence.js";
+
+import { loadV4FundingFixture, acceptV4NativeSettlement } from "./v4-native-settlement.js";
 
 const ROOT = fileURLToPath(new URL("../../../../../../", import.meta.url));
 type Overrides = Record<string, { code?: string; balance?: string; stateDiff?: Record<string, string> }>;
@@ -53,7 +57,7 @@ export function sourcePin() {
   return { sourceTreeSha256: sha(JSON.stringify(files)),
     harnessSha256: sha(readFileSync(fileURLToPath(import.meta.url))),
     evidenceSha256: sha(readFileSync(new URL("./evidence.ts", import.meta.url))),
-    observationHelpers: ["../three-family/historical-input-observations.ts",
+    observationHelpers: ["./v4-native-settlement.ts", "../three-family/historical-input-observations.ts",
       "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
       "../../../venues/swaps/univ4-family/test/history-evidence.ts",
       "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
@@ -96,6 +100,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const interrupt = () => abort.abort(new Error("interrupted"));
   process.once("SIGINT", interrupt); process.once("SIGTERM", interrupt);
   let secret = "", stage = "inputs", calls = 0, backend: AnvilStateBackend | undefined;
+  let simulation: ReturnType<typeof createRevmStrictSourceSimulation> | undefined;
   let finalChecks: (() => Promise<void>) | undefined;
   const guard = constructionGuard();
   const redact = (v: unknown) => String(v instanceof Error ? v.message : v).split(secret || "\0").join("[REDACTED]")
@@ -103,11 +108,15 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const failure = (e: unknown) => ({ stage, message: redact(e) });
   try {
     const codePin = sourcePin(); report.code = codePin;
+    const v4Fixture = args.v4SettlementArtifact ? loadV4FundingFixture(ROOT, args.v4SettlementArtifact) : undefined;
+    if (v4Fixture) report.v4FundingFixture = { ...v4Fixture, code: undefined };
     const readyPath = realpathSync(args.ready), pricesPath = realpathSync(args.prices);
     const inputPath = realpathSync(resolve(dirname(pricesPath), "input.json"));
     const referencePath = args.referencePrices ? realpathSync(args.referencePrices) : undefined;
     const declarationPath = referencePath ? realpathSync(resolve(dirname(referencePath), "declaration.json")) : undefined;
-    const inputHashes = () => [readyPath, pricesPath, inputPath, ...(referencePath ? [referencePath, declarationPath!] : [])]
+    const donorInput = args.inputOnlyReference ? parseAtBlockJson(readFileSync(inputPath, "utf8")) : undefined;
+    const donorReadyPath = donorInput ? realpathSync(donorInput.readyPath) : undefined;
+    const inputHashes = () => [readyPath, pricesPath, inputPath, ...(donorReadyPath ? [donorReadyPath] : []), ...(referencePath ? [referencePath, declarationPath!] : []), ...(args.targetHeader ? [realpathSync(args.targetHeader)] : []), ...(args.revmBin ? [realpathSync(args.revmBin)] : [])]
       .map(path => ({ path, sha256: sha(readFileSync(path)) }));
     report.inputHashes = inputHashes();
     const reference = referencePath ? { saved: parseAtBlockJson(readFileSync(referencePath, "utf8")),
@@ -118,12 +127,28 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       reference: reference.saved.runtime.pricing.effectiveMids.reference,
       referenceWethInput: reference.saved.runtime.pricing.effectiveMids.referenceWethInput };
     const saved = parseAtBlockJson(readFileSync(pricesPath, "utf8")), provenance = parseAtBlockJson(readFileSync(inputPath, "utf8"));
-    assert.equal(realpathSync(provenance.readyPath), readyPath); assert.equal(realpathSync(saved.readyPath), readyPath);
+    if (!args.inputOnlyReference) {
+      assert.equal(realpathSync(provenance.readyPath), readyPath); assert.equal(realpathSync(saved.readyPath), readyPath);
+    } else assert.equal(realpathSync(saved.readyPath), donorReadyPath);
     const envelope = await new UniverseRebuildCheckpointStore({ path: readyPath }).load(); assert(envelope);
     const memos = activeReadyMemos(envelope), { ready, graph } = resolveStrictReadyRuntime(envelope.readyGeneration);
-    assertPriceInput(saved, provenance, ready, { readySha256: report.inputHashes[0].sha256,
+    if (args.inputOnlyReference) {
+      const donor = await new UniverseRebuildCheckpointStore({ path: donorReadyPath! }).load();
+      assert(donor?.readyGeneration && !donor.inProgressRun, "complete input donor Ready required");
+      const donorHash = sha(readFileSync(donorReadyPath!));
+      assert(/^[a-f0-9]{64}$/.test(provenance.implementation?.sourceTreeSha256), "donor source fingerprint required");
+      assertPriceInput(saved, provenance, donor.readyGeneration, { readySha256: donorHash,
+        sourceTreeSha256: provenance.implementation.sourceTreeSha256, number: args.erc20InputOnly ? donor.readyGeneration.cutoff.number : sample.number });
+      assert.equal(ready.cutoff.number, sample.number);
+      if (!args.erc20InputOnly) assert.equal(ready.cutoff.hash.toLowerCase(), donor.readyGeneration.cutoff.hash.toLowerCase());
+      report.inputOnlyReference = { donorPricesPath: pricesPath, donorReadyPath, donorReadySha256: donorHash,
+        donorSourceTreeSha256: provenance.implementation.sourceTreeSha256, targetSourceTreeSha256: codePin.sourceTreeSha256,
+        donorState: donor.readyGeneration.cutoff, targetState: ready.cutoff, configuration: JSON.parse(atBlockJson(provenance.cfg)),
+        policy: "borrow amountIn only; current Ready identity and current same-state quote/quoted/runtime independently verified; donor output is not used or compared; current natural valuation NOT RUN" };
+    } else assertPriceInput(saved, provenance, ready, { readySha256: report.inputHashes[0].sha256,
       sourceTreeSha256: codePin.sourceTreeSha256, number: sample.number });
-    const source = ready.cutoff, header = provenance.sourceHeader;
+    const source = ready.cutoff, header = args.targetHeader ? JSON.parse(readFileSync(args.targetHeader, "utf8")) : provenance.sourceHeader;
+    assert.equal(Number(BigInt(header.number)), source.number); assert(same(header.hash, source.hash));
     assertHeader(header, header);
     const executor = ethers.getAddress(provenance.executor).toLowerCase(), owner = ethers.getAddress(provenance.owner).toLowerCase();
     assert(executor !== owner && executor !== ethers.ZeroAddress && owner !== ethers.ZeroAddress);
@@ -146,7 +171,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     });
     report.admission = entries.map(e => ({ instanceKey: e.instanceKey, memoFingerprint: e.memo.memoFingerprint,
       familyDefinitionHash: e.memo.familyDefinitionHash, candidate: e.memo.candidateSnapshot }));
-    const checkFiles = () => { assert.deepEqual(sourcePin(), codePin); assert.deepEqual(inputHashes(), report.inputHashes);
+    const checkFiles = () => { assert.deepEqual(sourcePin(), codePin);
+      if (v4Fixture) assert.deepEqual(loadV4FundingFixture(ROOT, args.v4SettlementArtifact!), v4Fixture); assert.deepEqual(inputHashes(), report.inputHashes);
       assert.deepEqual(botvm(owner), runtimeCode, "executor code/source changed during run"); };
     finalChecks = async () => checkFiles();
     secret = process.env.MAINNET_RPC_URL ?? ""; assert(/^https?:\/\//.test(secret), "operator-injected MAINNET_RPC_URL required");
@@ -208,7 +234,23 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       for (const [token, initial] of baselines) assert.equal(await balance(token, executor), initial, "simulation persisted actor state"); };
     const cache = createAdapterFamilyExactQuoteCache(); cache.advanceState(source);
     const quoteReads: any[] = [];
+    if (args.revmBin) {
+      const executorRuntimeCode = loadBotVmRuntimeCode(owner); assert.equal(executorRuntimeCode.keccak256, runtimeCode.keccak256);
+      simulation = createRevmStrictSourceSimulation({ identity: { source, rpcUrl: loopback, chainId: 1, stateRoot: header.stateRoot },
+        executorRuntimeCode, control: { signal: abort.signal, deadlineAtMs: deadline }, executionGasLimit: Number(BigInt(GAS)),
+        createClient: ({ onFatal }) => new RevmSimClient({ executablePath: args.revmBin!, timeoutMs: 90_000, onFatal }),
+        onFatal: () => abort.abort(new Error("production strict source/transport fatal")) });
+      report.productionEffectQuote = { factory: "createRevmStrictSourceSimulation", source, stateRoot: header.stateRoot,
+        executor, transactionOrigin: owner, executorCodeHash: executorRuntimeCode.keccak256, executionGasLimit: Number(BigInt(GAS)),
+        budgetScope: "0x1000000 matches current main/rebuild production strict-source factory and this harness execution; not performance evidence" };
+    }
+    const productionSimulation = simulation?.transport;
     const runtime = createStrictCentralAdapterRuntime({ executor, transactionOrigin: owner, exactQuoteCache: cache,
+      ...(productionSimulation ? { simulator: { ...productionSimulation, async simulate(invocation) {
+        guard.check(); const read: any = { kind: "production-revm-effect", request: invocation.request, source: invocation.source,
+          callerAuthority: invocation.callerAuthority }; quoteReads.push(read);
+        read.result = await productionSimulation.simulate(invocation); return read.result;
+      } } } : {}),
       generationFence: { assertCurrent(g, s) { assert.equal(g, source.generation); assert.deepEqual(s, source); } }, provider: {
         async call(t, b) {
           assert.equal(b, source.number);
@@ -220,12 +262,13 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         async getStorage(a, k, b) { assert.equal(b, source.number); quoteReads.push({ kind: "storage", to: a, slot: k }); return rpc("eth_getStorageAt", [a, k, pin]); },
       } });
     const slots = new Map<string, string>();
-    const slotFor = async (token: string, protectedAccount: string) => {
-      if (slots.has(token)) return slots.get(token)!;
+    const slotFor = async (token: string, protectedAccount: string, holder = executor) => {
+      const slotKey = token + ":" + holder;
+      if (slots.has(slotKey)) return slots.get(slotKey)!;
       assert(![owner, executor].includes(token) && !same(protectedAccount, executor));
-      const original = await balance(token, executor), protectedBalance = await balance(token, protectedAccount);
-      const supply = await call(token, ERC20.encodeFunctionData("totalSupply")); baselines.set(token, original);
-      const access = await rpc("eth_createAccessList", [{ from: owner, to: token, data: ERC20.encodeFunctionData("balanceOf", [executor]), gas: "0x100000" }, ethers.toQuantity(source.number)]);
+      const original = await balance(token, holder), protectedBalance = await balance(token, protectedAccount);
+      const supply = await call(token, ERC20.encodeFunctionData("totalSupply")); if (same(holder, executor)) baselines.set(token, original);
+      const access = await rpc("eth_createAccessList", [{ from: owner, to: token, data: ERC20.encodeFunctionData("balanceOf", [holder]), gas: "0x100000" }, ethers.toQuantity(source.number)]);
       assert(!access.error && Array.isArray(access.accessList));
       const candidates: string[] = [...new Set<string>(access.accessList.filter((a: any) => same(a.address, token)).flatMap((a: any) => a.storageKeys.map(word)))];
       assert(candidates.length > 0 && candidates.length <= 16, "bounded actor balance-slot proof unavailable");
@@ -238,7 +281,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           // Neither is a valid balance slot. Retain that evidence; never absorb
           // transport/unknown errors or a failure of an uninjected baseline.
           let returned: string;
-          try { returned = await call(token, ERC20.encodeFunctionData("balanceOf", [executor]), o); }
+          try { returned = await call(token, ERC20.encodeFunctionData("balanceOf", [holder]), o); }
           catch (error) {
             if (!isLocalBalanceProbeRevert(error)) throw error;
             (report.balanceSlotCandidateChecks ??= []).push({ token, slot: key, probe, matched: false,
@@ -253,9 +296,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         if (valid) matches.push(key);
       }
       assert.equal(matches.length, 1, "actor-only balance slot not uniquely proven");
-      (report.balanceSlotProofs ??= []).push({ token, actor: executor, slot: matches[0], originalBalance: original,
+      (report.balanceSlotProofs ??= []).push({ token, actor: holder, slot: matches[0], originalBalance: original,
         protectedAccount, protectedBalance, totalSupply: BigInt(supply), probes: [717171717171n, 919191919193n] });
-      slots.set(token, matches[0]!); return matches[0]!;
+      slots.set(slotKey, matches[0]!); return matches[0]!;
     };
     let unmet = false, naturalUnmet = false;
     const usedReferenceEdges = new Set<string>();
@@ -275,11 +318,19 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const route = entry.instance.routeHandles.filter(r => r.routeKey === routes[0]!.routeKey); assert.equal(route.length, 1);
       const edges = graph.filter(e => e.instanceKey === entry.instance.instanceKey && same(e.tokenIn, tokenIn) && same(e.tokenOut, tokenOut)); assert.equal(edges.length, 1);
       const edgeId = blockScanEdgeKey(edges[0]!);
-      assert(saved.runtime.graph.edges.some((e: any) => blockScanEdgeKey(e) === edgeId), "saved production graph lacks target direction");
+      if (!args.erc20InputOnly) assert(saved.runtime.graph.edges.some((e: any) => blockScanEdgeKey(e) === edgeId), "saved production graph lacks target direction");
       assert(saved.runtime.pricing.effectiveMids?.rows instanceof Map && saved.runtime.pricing.mids instanceof Map);
-      const effective = saved.runtime.pricing.effectiveMids.rows.get(edgeId);
-      if (effective) assert.equal(effective.edgeId, edgeId);
-      const p = productionAmount(effective, saved.runtime.pricing.mids.get(edgeId), edges[0], source, saved.runtime.generation);
+      // New ERC20 acceptance borrows only input from a deterministically selected
+      // saved production row for the same token. No target identity/output is borrowed.
+      const donorEdge = args.erc20InputOnly ? saved.runtime.graph.edges
+        .filter((e: any) => same(e.tokenIn, tokenIn) && saved.runtime.pricing.effectiveMids.rows.get(blockScanEdgeKey(e))?.status === "quoted")
+        .sort((a: any, b: any) => blockScanEdgeKey(a).localeCompare(blockScanEdgeKey(b)))[0] : edges[0];
+      assert(donorEdge, "no saved production input for target token");
+      const donorEdgeId = blockScanEdgeKey(donorEdge);
+      const donorSource = args.erc20InputOnly ? { number: saved.runtime.sourceBlock, hash: saved.runtime.sourceBlockHash } : source;
+      const effective = saved.runtime.pricing.effectiveMids.rows.get(donorEdgeId);
+      if (effective) assert.equal(effective.edgeId, donorEdgeId);
+      const p = productionAmount(effective, saved.runtime.pricing.mids.get(donorEdgeId), donorEdge, donorSource, saved.runtime.generation);
       const splice = p.status === "unmet" && reference
         ? splicedMissingProductionAmount(effective, tokenIn, reference.saved, reference.declaration, args.referenceEdges) : null;
       if (p.status === "unmet") { naturalUnmet = true; if (!splice) unmet = true; }
@@ -287,7 +338,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const row: any = { instance: entry.instanceKey, edgeId, tokenIn, tokenOut, originals,
         original: originals.length === 1 ? originals[0] : null,
         directionEvidence: originals.length ? "original transaction direction" : "opposite production Ready direction; not an original TX leg",
-        productionReferenceGate: p, splicedReferenceInput: splice, trials: [] }; report.samples.push(row);
+        productionReferenceGate: args.inputOnlyReference ? { status: "not-run-input-only", donorStatus: p.status,
+          ...(p.status === "met" ? { amountIn: p.amountIn, tokenIn, donorRow: donorEdgeId, donorSource, quotedAt: effective.quotedAt,
+            freshness: effective.freshness ?? effective.source ?? "recorded-in-donor-row", donorRowEvidence: effective } : { reason: p.reason }) } : p,
+        splicedReferenceInput: splice, trials: [] }; report.samples.push(row);
       const beforeBuild = { calls, ...guard.counts };
       const leg = guard.build(() => {
         const input = { family, route: route[0]!, source, executor, runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog };
@@ -307,7 +361,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       const pair = [tokenIn, tokenOut], keys = await Promise.all(pair.map(t => slotFor(t, protectedAccount)));
       const base = await Promise.all(pair.map(t => balance(t, executor)));
       assert(pair.every(t => ![executor, owner].includes(t)) && ![executor, owner].includes(entry.instanceKey));
-      const referenceAmount = p.status === "met" ? { label: "production-effective", amountIn: p.amountIn }
+      const referenceAmount = p.status === "met" ? { label: args.inputOnlyReference ? "saved-production-input-only" : "production-effective", amountIn: p.amountIn }
         : splice ? { label: "spliced-production-input-at-N", amountIn: splice.amountIn } : null;
       const trials = historicalAmountTrials(originals, referenceAmount,
         args.family === "xwin-mint" || args.family === "xwin-redeem" || args.family === "ethertoken-native" || args.family === "cuni");
@@ -376,7 +430,21 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               executed.status = "pass"; executed.executionMs = performance.now() - executionStart;
             }
           }
-          assert.equal(result.executions.length, 4); assert(result.executions.every((e: any) => e.status === "pass")); result.status = "pass";
+          assert.equal(result.executions.length, 4); assert(result.executions.every((e: any) => e.status === "pass"));
+          if (v4Fixture) {
+            stage = "native-explicit-settlement";
+            await acceptV4NativeSettlement({ fixture: v4Fixture, route: routes[0]!, descriptor: entry.instance.descriptor,
+              source, header, executor, owner, runtimeCode, amountIn, amountOut: quote.amountOut,
+              keys, base, pin, report, result, rpc, balance, slotFor,
+              build(settlement) {
+                const before = { calls, ...guard.counts };
+                const explicit = guard.build(() => buildFamilyRuntimeAmountLeg({ family, route: route[0]!, source, executor,
+                  runtime: guard.runtime(runtime), runtimeEvidence: [], actionOwnership: catalog, settlement }));
+                assert.deepEqual({ calls, ...guard.counts }, before, "explicit runtime must not quote or call RPC");
+                return explicit;
+              } });
+          }
+          result.status = "pass";
         } catch (e) { result.error = failure(e); }
         abort.signal.throwIfAborted();
       }
@@ -385,12 +453,14 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const trials = report.samples.flatMap((s: any) => s.trials);
     assert(trials.length > 0 && trials.every((t: any) => t.status === "pass"), "at least one real quote/execution failed");
     assert.deepEqual([...usedReferenceEdges].sort(), [...args.referenceEdges].sort(), "unused reference selection");
-    report.naturalProductionReferenceGate = naturalUnmet ? "unmet" : "met";
-    report.result = unmet ? "incomplete-production-reference" : usedReferenceEdges.size ? "pass-with-spliced-reference" : "pass";
+    report.naturalProductionReferenceGate = args.inputOnlyReference ? "not-run-input-only" : naturalUnmet ? "unmet" : "met";
+    report.result = unmet ? "incomplete-production-reference" : args.inputOnlyReference ? "pass-with-input-only-reference" : usedReferenceEdges.size ? "pass-with-spliced-reference" : "pass";
   } catch (e) { report.errors.push(failure(e)); }
   finally {
     stage = "final-pins";
     try { await finalChecks?.(); } catch (e) { report.errors.push(failure(e)); report.result = "failed"; }
+    stage = "strict-source-drain";
+    try { await simulation?.closeAndDrain(); } catch (e) { report.errors.push(failure(e)); report.result = "failed"; }
     stage = "owned-fork-cleanup";
     try { if (backend) await backend.stopAndWait(); } catch (e) { report.errors.push(failure(e)); report.result = "failed"; }
     backend?.provider.destroy(); clearTimeout(timer); process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", interrupt);
@@ -399,7 +469,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     try { writeFileSync(fd, redact(json(report)) + "\n"); fsyncSync(fd); } finally { closeSync(fd); }
   }
   console.log(json({ result: report.result, family: sample.family, out: resolve(args.out), errors: report.errors }));
-  if (!["pass", "pass-with-spliced-reference"].includes(report.result)) process.exitCode = report.result === "incomplete-production-reference" ? 2 : 1;
+  if (!["pass", "pass-with-spliced-reference", "pass-with-input-only-reference"].includes(report.result)) process.exitCode = report.result === "incomplete-production-reference" ? 2 : 1;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main().catch(() => {
   console.error("invalid arguments/output; existing files untouched; historical execution NOT established"); process.exitCode = 1;

@@ -5,15 +5,21 @@ pragma solidity ^0.8.24;
 // real BotVM on a local EVM, not price math, live identity or PoolManager conformance.
 contract RuntimePaymentToken {
     mapping(address => uint256) public balanceOf;
+    int256 public depositSkew;
+    int256 public withdrawalValueSkew;
+    int256 public withdrawalDebitSkew;
+    function configureWrapFault(int256 minted, int256 nativePaid, int256 debited) external {
+        depositSkew = minted; withdrawalValueSkew = nativePaid; withdrawalDebitSkew = debited;
+    }
     function mint(address to, uint256 amount) external { balanceOf[to] += amount; }
     function burn(address from, uint256 amount) external { balanceOf[from] -= amount; }
     function transfer(address to, uint256 amount) external returns (bool) {
         balanceOf[msg.sender] -= amount; balanceOf[to] += amount; return true;
     }
-    function deposit() external payable { balanceOf[msg.sender] += msg.value; }
+    function deposit() external payable { balanceOf[msg.sender] += uint256(int256(msg.value) + depositSkew); }
     function withdraw(uint256 amount) external {
-        balanceOf[msg.sender] -= amount;
-        (bool ok,) = msg.sender.call{value: amount}(""); require(ok, "withdraw");
+        balanceOf[msg.sender] -= uint256(int256(amount) + withdrawalDebitSkew);
+        (bool ok,) = msg.sender.call{value: uint256(int256(amount) + withdrawalValueSkew)}(""); require(ok, "withdraw");
     }
     receive() external payable {}
 }
@@ -33,6 +39,12 @@ contract RuntimePaymentManager {
     address private currencyIn;
     address private currencyOut;
     uint256 private synced;
+    address private faultWrapped;
+    uint256 private swapNativeGift;
+    int256 private swapWrappedSkew;
+    function configureSwapFault(address wrapped, uint256 nativeGift, int256 wrappedSkew) external {
+        faultWrapped = wrapped; swapNativeGift = nativeGift; swapWrappedSkew = wrappedSkew;
+    }
     function configure(uint128 debt, uint128 output, int256 skew) external {
         configuredDebt = debt; configuredOutput = output; settlementSkew = skew;
     }
@@ -46,6 +58,9 @@ contract RuntimePaymentManager {
     function swap(PoolKey calldata key, SwapParams calldata params, bytes calldata hookData) external returns (int256) {
         require(msg.sender == locker && params.amountSpecified < 0, "swap context");
         lastHook = key.hooks; hookDataHash = keccak256(hookData);
+        if (swapNativeGift > 0) { (bool ok,) = locker.call{value: swapNativeGift}(""); require(ok); }
+        if (swapWrappedSkew > 0) RuntimePaymentToken(payable(faultWrapped)).mint(locker, uint256(swapWrappedSkew));
+        if (swapWrappedSkew < 0) RuntimePaymentToken(payable(faultWrapped)).burn(locker, uint256(-swapWrappedSkew));
         requested = uint256(-params.amountSpecified);
         currencyIn = params.zeroForOne ? key.currency0 : key.currency1;
         currencyOut = params.zeroForOne ? key.currency1 : key.currency0;
@@ -77,4 +92,17 @@ contract RuntimePaymentReturnLeg {
     function swap(RuntimePaymentToken input, RuntimePaymentToken output, uint256 amount, uint256 received) external {
         input.burn(msg.sender, amount); output.mint(msg.sender, received);
     }
+}
+
+// Continuation fault injector: all assets are stateful balances, and rollback
+// assertions in the CLI independently observe the executor and receiver.
+contract RuntimePaymentContinuation {
+    function pay(RuntimePaymentToken input, RuntimePaymentToken output, uint256 consumed,
+        uint256 credit, address recipient, uint256 nativeGift, uint256 oldInputSpend) external {
+        output.burn(msg.sender, consumed);
+        if (oldInputSpend > 0) input.burn(msg.sender, oldInputSpend);
+        input.mint(recipient, credit);
+        if (nativeGift > 0) { (bool ok,) = msg.sender.call{value: nativeGift}(""); require(ok); }
+    }
+    receive() external payable {}
 }

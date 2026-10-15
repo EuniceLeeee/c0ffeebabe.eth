@@ -73,11 +73,68 @@ export function mapRuntimeAssetSettlementRequest(input: {
 }): RuntimeSettlementRequest | null | undefined {
   const native = executionNativeSides(input.route), request = input.request;
   if (!native || request === undefined) return request;
+  if (request.kind === "deferred-input") {
+    if (request.paymentAmount <= 0n || request.paymentAmount > ethers.MaxUint256) throw new Error("native deferred payment amount");
+    return request;
+  }
   if (request.kind !== "quote-output" && request.kind !== "direct-output") return null;
   const recipient = request.recipient ?? (request.kind === "quote-output" ? input.executor : undefined);
   if (typeof recipient !== "string") throw new Error("native settlement recipient missing");
   runtimeExecutor(recipient, input.route.tokenIn, input.route.tokenOut);
   return native.output ? Object.freeze({ ...request, recipient: input.executor }) : request;
+}
+
+/** Callback owners call these common conversion operations at their own
+ * output/payment boundaries. No protocol ABI, debt calculation or callback
+ * layout is part of this helper. Registers must survive the owning operation. */
+export function runtimeDeferredAssetBoundary(p: RuntimeAmountProgram, route: RouteAssets, executor: string,
+  registers: { nativeBefore: number; wrappedBefore: number; scratch: number; other: number }) {
+  const sides = executionNativeSides(route);
+  if (!sides) throw new Error("deferred native asset declaration");
+  const actor = runtimeExecutor(executor, route.tokenIn, route.tokenOut);
+  const { nativeBefore, wrappedBefore, scratch, other } = registers, used = Object.values(registers);
+  if (used.some(r => !Number.isInteger(r) || r <= 0 || r >= 16) || new Set(used).size !== 4) {
+    throw new Error("deferred native registers");
+  }
+  const balance = RUNTIME_ERC20.encodeFunctionData("balanceOf", [actor]);
+  const native = runtimeNativeBoundary(p, ADDR.WETH, nativeBefore, scratch);
+  p.call(ADDR.WETH, balance, { static: true }).load(wrappedBefore, 0);
+  return {
+    wrapOutput(): void {
+      if (!sides.output) throw new Error("deferred output is not native");
+      native.wrapOutput();
+      p.call(ADDR.WETH, balance, { static: true }).load(other, 0)
+        .math("sub", other, other, wrappedBefore).equal(other, scratch);
+      native.assertRestored();
+    },
+    unwrapPayment(debtReg: number): void {
+      if (!sides.input || !Number.isInteger(debtReg) || debtReg <= 0 || debtReg >= 16 || used.includes(debtReg)) {
+        throw new Error("deferred native debt register");
+      }
+      // A claimed continuation result cannot stand in for actual fresh WETH.
+      p.call(ADDR.WETH, balance, { static: true }).load(scratch, 0)
+        .math("sub", scratch, scratch, wrappedBefore).equal(scratch, debtReg);
+      native.unwrapInput(debtReg);
+      p.call(ADDR.WETH, balance, { static: true }).load(scratch, 0).equal(scratch, wrappedBefore)
+        .nativeBalance(scratch).math("sub", scratch, scratch, nativeBefore).equal(scratch, debtReg);
+    },
+    assertRestored(): void { native.assertRestored(); },
+  };
+}
+
+/** Deferred input is supplied inside the callback. Never apply a funded
+ * balance-r0 check or pre-unwrap here; the owning operation uses the shared
+ * callback conversion above. The outer composer retains its profit gate. */
+function deferredEnvelope(route: RouteAssets, executor: string, leg: RuntimeAmountLeg): RuntimeAmountProgram {
+  const actor = runtimeExecutor(executor, route.tokenIn, route.tokenOut);
+  const balance = RUNTIME_ERC20.encodeFunctionData("balanceOf", [actor]);
+  return new RuntimeAmountProgram().constant(4, 1n).math("sub", 5, 0, 4)
+    .call(route.tokenIn, balance, { static: true }).load(1, 0)
+    .call(route.tokenOut, balance, { static: true }).load(2, 0).nativeBalance(3)
+    .run(leg.program, 0, 6)
+    .call(route.tokenIn, balance, { static: true }).load(4, 0).equal(4, 1)
+    .call(route.tokenOut, balance, { static: true }).load(4, 0).math("sub", 4, 4, 2)
+    .nativeBalance(4).equal(4, 3);
 }
 
 /** A nested program keeps boundary registers private even for callback-heavy
@@ -158,7 +215,10 @@ export function applyRuntimeAssetBoundary(input: {
 }): RuntimeAmountLeg {
   if (!executionNativeSides(input.route)) return input.leg;
   if (input.leg.settlementRequest?.kind === "quote-output") return input.leg;
-  if (input.leg.settlementRequest?.kind === "deferred-input") throw new Error("native deferred settlement unsupported");
+  if (input.leg.settlementRequest?.kind === "deferred-input") {
+    if (!input.leg.settlement?.deferredInput) throw new Error("native deferred capability missing");
+    return Object.freeze({ ...input.leg, program: ethers.hexlify(deferredEnvelope(input.route, input.executor, input.leg).bytes()) });
+  }
   const program = envelope({ ...input,
     ...(input.leg.settlementRequest?.kind === "direct-output" ? { recipient: input.leg.settlementRequest.recipient } : {}),
     script: runtimeProgramScript(ethers.getBytes(input.leg.program)),

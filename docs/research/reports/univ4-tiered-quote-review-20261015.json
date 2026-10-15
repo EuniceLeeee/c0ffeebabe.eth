@@ -1,0 +1,82 @@
+{
+  "reviewer": "/root/v4_accept26",
+  "status": "PASS-failure-flip",
+  "beforeFile": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/v4-erc20-tiered-fee-recipient39.json",
+  "beforeSha256": "273a667c4a8852b4844e0040f52126b39a4a35afb3aa179df25e93238a8c85e6",
+  "afterFile": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/evidence44/v4-erc20-tiered-fee-recipient44.json",
+  "afterSha256": "ed624380fa57051bbecfe83a7f17107482322669c7e38a69f27ad1317c3a8b91",
+  "sameSamplesSameAmounts": true,
+  "source": {
+    "number": 25811499,
+    "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+    "generation": 25811499
+  },
+  "header": {
+    "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+    "stateRoot": "0x68df57a534224c00a5ab255fb7efb3be79ceb81f824b00068d286502d249ad35",
+    "sha256": "148a02d390a1032f99c0f7914a33853f01aa2967639da85ceb0778c2a2c8631f"
+  },
+  "productionEffectQuote": {
+    "factory": "createRevmStrictSourceSimulation",
+    "source": {
+      "number": 25811499,
+      "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+      "generation": 25811499
+    },
+    "stateRoot": "0x68df57a534224c00a5ab255fb7efb3be79ceb81f824b00068d286502d249ad35",
+    "executor": "0x1000000000000000000000000000000000000002",
+    "transactionOrigin": "0x1000000000000000000000000000000000000001",
+    "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "executionGasLimit": 16777216,
+    "budgetScope": "0x1000000 matches current main/rebuild production strict-source factory and this harness execution; not performance evidence"
+  },
+  "rows": [
+    {
+      "amountIn": "5542702",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountOut": "2299476057538981",
+      "executorQuoteProgramEqualsActualRuntime": true,
+      "programHash": "0x026f33c319c694387dfe0509c48f5dff906d5e14b890f3fdc790b59220d401a1",
+      "actualFeePips": "0"
+    },
+    {
+      "amountIn": "525284461",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountOut": "217904807560113086",
+      "executorQuoteProgramEqualsActualRuntime": true,
+      "programHash": "0xf4ef9afaa3c61741e8c9714ac0d595647c078a61fe1c4636dff70e56e0b638a7",
+      "actualFeePips": "0"
+    },
+    {
+      "amountIn": "2000000000000000",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountOut": "4820831",
+      "executorQuoteProgramEqualsActualRuntime": true,
+      "programHash": "0x126fa2180ba0cfe7d704fc84a7a35eba51c5932bad7c6c19d30486d36887b5c4",
+      "actualFeePips": "0"
+    },
+    {
+      "amountIn": "4000000000000000",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountOut": "9352406",
+      "executorQuoteProgramEqualsActualRuntime": true,
+      "programHash": "0x7a5622b4e872414652f706d1d68a5288ae40bc7b4846b10c07e80f21d648d6b7",
+      "actualFeePips": "30000"
+    }
+  ],
+  "failedAmountFlip": {
+    "amountIn": "4000000000000000",
+    "oldQuote": "9641655",
+    "oldActual": "9352406",
+    "newQuote": "9352406",
+    "newActual": "9352406",
+    "actualFeePips": "30000"
+  },
+  "checks": [
+    "All four executor quote script hashes exactly match actual runtime execution script hashes.",
+    "Actual source, actor/origin, funded input, returned input/output/native deltas match complete same-N receipts.",
+    "Original pool/state/directions/amounts retained; no lower amount or output tolerance introduced.",
+    "Quote correctly reproduces existing 3% execution fee; actual output unchanged from39 failure.",
+    "Historical source/bin/header files and reviewed runner/evidence source hashes bound; previous failed39 retained."
+  ]
+}

@@ -16,7 +16,7 @@
     },
     {
       "path": "listener/src/adapters/runtime-amount-program.ts",
-      "sha256": "a35a3210ea97e59e5a57dcaeba28004dfc5be4b84b8825f68ecfdcaf9340f4dc"
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
     },
     {
       "path": "listener/src/compiler.ts",
@@ -72,7 +72,7 @@
     },
     {
       "path": "listener/src/searcher/execution-asset-boundary.ts",
-      "sha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0"
+      "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
     },
     {
       "path": "listener/src/searcher/identity-asset-metadata.ts",
@@ -88,7 +88,7 @@
     },
     {
       "path": "listener/src/searcher/simulator/runtime-settlement.ts",
-      "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5"
+      "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
     },
     {
       "path": "listener/src/searcher/simulator/sim-amount-search.ts",
@@ -144,7 +144,7 @@
     },
     {
       "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
-      "sha256": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09"
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
     },
     {
       "path": "listener/src/searcher/venues/adapter-request-failure.ts",
@@ -220,7 +220,7 @@
     },
     {
       "path": "src/RuntimeAmountVM.sol",
-      "sha256": "6f628154f9641367ada5015c0776115981a7c3f8bc5609685d5bd89723c67655"
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
     },
     {
       "path": "src/interfaces/IERC20.sol",
@@ -1911,18 +1911,24 @@
           "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "实际 TransferInput 指定收款方 ABI 已核实，当前仅编码 SwapInput 且无 directOutput。",
-            "缺新收款方模式的实际执行与拒绝证据。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
-              "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-              "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+              "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+              "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
+            },
+            {
+              "path": "docs/research/reports/univ1-recipient-independent-20261015.json",
+              "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/univ1-settlement-behavior-20261015.json",
+            "sha256": "c723b87a5e379e5ce5e302226bc94b3a2d7b4d9ae055eb6417fc98ad71ffd140"
+          },
+          "evidenceNote": "standard and issuerFee, both directions, quote/quoted/runtime plus self/external TransferInput. Sixteen historical zero-amount rejections (not unchanged-calldata missing-funding trials); 25 local EVM tests supply targeted faults and rollback. Standard identity extension remains pre-existing peer dirty work."
         },
         {
           "id": "uniswap-v1-997 token→ETH",
@@ -1930,19 +1936,24 @@
           "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "实际 TransferInput 指定收款方 ABI 已核实，当前仅编码 SwapInput 且无 directOutput。",
-            "缺新收款方模式的实际执行与拒绝证据。",
-            "原生币直接收款须保留公共 WETH 边界；2300 gas send 回退不是延迟结算 continuation。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
-              "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-              "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+              "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+              "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
+            },
+            {
+              "path": "docs/research/reports/univ1-recipient-independent-20261015.json",
+              "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/univ1-settlement-behavior-20261015.json",
+            "sha256": "c723b87a5e379e5ce5e302226bc94b3a2d7b4d9ae055eb6417fc98ad71ffd140"
+          },
+          "evidenceNote": "standard and issuerFee, both directions, quote/quoted/runtime plus self/external TransferInput. Sixteen historical zero-amount rejections (not unchanged-calldata missing-funding trials); 25 local EVM tests supply targeted faults and rollback. Standard identity extension remains pre-existing peer dirty work."
         },
         {
           "id": "anyswap-v1 issuerFee ETH→token",
@@ -1950,18 +1961,24 @@
           "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "实际 TransferInput 指定收款方 ABI 已核实，当前仅编码 SwapInput 且无 directOutput。",
-            "缺新收款方模式的实际执行与拒绝证据。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
-              "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-              "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+              "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+              "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
+            },
+            {
+              "path": "docs/research/reports/univ1-recipient-independent-20261015.json",
+              "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/univ1-settlement-behavior-20261015.json",
+            "sha256": "c723b87a5e379e5ce5e302226bc94b3a2d7b4d9ae055eb6417fc98ad71ffd140"
+          },
+          "evidenceNote": "standard and issuerFee, both directions, quote/quoted/runtime plus self/external TransferInput. Sixteen historical zero-amount rejections (not unchanged-calldata missing-funding trials); 25 local EVM tests supply targeted faults and rollback. Standard identity extension remains pre-existing peer dirty work."
         },
         {
           "id": "anyswap-v1 issuerFee token→ETH",
@@ -1969,30 +1986,43 @@
           "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "实际 TransferInput 指定收款方 ABI 已核实，当前仅编码 SwapInput 且无 directOutput。",
-            "缺新收款方模式的实际执行与拒绝证据。",
-            "原生币直接收款须保留公共 WETH 边界；2300 gas send 回退不是延迟结算 continuation。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
-              "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-              "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+              "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+              "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
+            },
+            {
+              "path": "docs/research/reports/univ1-recipient-independent-20261015.json",
+              "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/univ1-settlement-behavior-20261015.json",
+            "sha256": "c723b87a5e379e5ce5e302226bc94b3a2d7b4d9ae055eb6417fc98ad71ffd140"
+          },
+          "evidenceNote": "standard and issuerFee, both directions, quote/quoted/runtime plus self/external TransferInput. Sixteen historical zero-amount rejections (not unchanged-calldata missing-funding trials); 25 local EVM tests supply targeted faults and rollback. Standard identity extension remains pre-existing peer dirty work."
         }
       ],
       "domain": "swap",
       "source": [
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
           "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+        },
+        {
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+        },
+        {
+          "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+          "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
         },
         {
           "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
@@ -2024,7 +2054,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/univ1-family/execution.ts",
-          "sha256": "081c4a47efbcc76ce01420925fce19d2be74093a935846361735e9a8d00ea32a"
+          "sha256": "577f786c9efc0f43676423572e34d38b02a068b7189212e0723109d9bd33eaf2"
         },
         {
           "path": "listener/src/searcher/venues/swaps/univ1-family/identity.ts",
@@ -2039,17 +2069,29 @@
           "sha256": "c85d7b98fecbe822418f19f7d10767691418500aa0b999311ee73fafacc589d5"
         },
         {
+          "path": "listener/src/searcher/venues/swaps/univ1-family/recipient.ts",
+          "sha256": "dc1f6a386e80bb0174ac642d55079aa3615b2f5c20b9b4a8a6bcecc42c4cbca0"
+        },
+        {
           "path": "listener/src/searcher/venues/swaps/univ1-family/routes.ts",
           "sha256": "f06ed74374da44522c1615d33bf7f6ea80feb23424c7e5e2e97282ddbd8d7296"
         },
         {
+          "path": "listener/src/shared/constants/addresses.ts",
+          "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+        },
+        {
           "path": "listener/src/shared/executor/amount-rounding.ts",
           "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+        },
+        {
+          "path": "listener/src/shared/executor/botvm-program-entry.ts",
+          "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+        "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+        "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
       }
     },
     {
@@ -6331,7 +6373,7 @@
     },
     {
       "familyId": "univ4",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "no-hook/ERC20-ERC20",
@@ -6340,17 +6382,27 @@
           "callback": "output-first",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "Manager 代码已绑定 N25811499/N26029537；新 direct/deferred 执行仍未在本报告实际验证。"
-          ],
-          "evidenceNote": "manager actual deployed runtime matches historical Ready N25811499 and N26029537",
+          "execution": "verified",
+          "gaps": [],
+          "evidenceNote": "Same-state quote/quoted/runtime plus self/external direct and deferred callback funding at representative inputs. Historical no-funding failures are call-only traces; complete rollback/fault invariants are established separately by local BotVM EVM cases. Funding fixture consumes one raw output unit and supplies exact input debt, and is not a production return route or profit claim.",
           "evidence": [
             {
-              "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-              "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+              "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+              "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
+            },
+            {
+              "path": "docs/research/reports/univ4-native-independent-20261015.json",
+              "sha256": "93a83063da08969c70f26efa786c03bff425a31a11f33b5e1ebb05512c81f81b"
+            },
+            {
+              "path": "docs/research/reports/univ4-erc20-independent-20261015.json",
+              "sha256": "d9d92f6672d17444633025569199d43265311a72262eda541f68672b9af1f579"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/univ4-settlement-behavior-20261015.json",
+            "sha256": "dd60e648370d79cd911390b345b7cad6b2487e6bb1a5d6e738c5334a88adc5a6"
+          }
         },
         {
           "id": "no-hook/native input or output",
@@ -6358,19 +6410,28 @@
           "identity": "verified",
           "callback": "output-first",
           "recipient": "conditional",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "协议 take 支持 native 收款，但当前 native route 拒绝所有新 settlement requests。",
-            "native direct/deferred 需要独立原生资产归属/转换保护与实际执行证据；不得把 ERC20 路径外推。"
-          ],
-          "evidenceNote": "interface supports receiver; current new-mode wiring intentionally absent",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "evidenceNote": "Same-state quote/quoted/runtime plus self/external direct and deferred callback funding at representative inputs. Historical no-funding failures are call-only traces; complete rollback/fault invariants are established separately by local BotVM EVM cases. Funding fixture consumes one raw output unit and supplies exact input debt, and is not a production return route or profit claim.",
           "evidence": [
             {
-              "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-              "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+              "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+              "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
+            },
+            {
+              "path": "docs/research/reports/univ4-native-independent-20261015.json",
+              "sha256": "93a83063da08969c70f26efa786c03bff425a31a11f33b5e1ebb05512c81f81b"
+            },
+            {
+              "path": "docs/research/reports/univ4-erc20-independent-20261015.json",
+              "sha256": "d9d92f6672d17444633025569199d43265311a72262eda541f68672b9af1f579"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/univ4-settlement-behavior-20261015.json",
+            "sha256": "dd60e648370d79cd911390b345b7cad6b2487e6bb1a5d6e738c5334a88adc5a6"
+          }
         }
       ],
       "sourceReport": "eight-family-interface-review-20261014.json",
@@ -6378,7 +6439,7 @@
       "source": [
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/adapters/univ4.ts",
@@ -6387,6 +6448,14 @@
         {
           "path": "listener/src/encoder.ts",
           "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+        },
+        {
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+        },
+        {
+          "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+          "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
         },
         {
           "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
@@ -6450,7 +6519,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/univ4-family/runtime-execution.ts",
-          "sha256": "7277a7d4648b48f8fb6179d64e4166df4965eb0f0131c97a0d15bf9329350608"
+          "sha256": "57ccf7daf32aa4fb2638e87bc752c7c7dd03e84e265ffe8eb629175b03d5a06a"
         },
         {
           "path": "listener/src/shared/constants/addresses.ts",
@@ -6459,57 +6528,78 @@
         {
           "path": "listener/src/shared/executor/amount-rounding.ts",
           "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+        },
+        {
+          "path": "listener/src/shared/executor/botvm-program-entry.ts",
+          "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-        "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+        "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+        "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
       }
     },
     {
       "familyId": "univ4-fee-hook",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "tiered hook fa439/ERC20-ERC20",
-          "interface": "partial",
-          "identity": "partial",
+          "interface": "verified",
+          "identity": "verified",
           "callback": "output-first",
           "recipient": "conditional",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "fa439 公开 API 有 runtime 但无 verified hook source/ABI；旧 Ready 没有原始 N hook bytecode。",
-            "Manager 结算语义已验证，hook 内部语义和新 direct/deferred 实际执行仍未完整验证。"
-          ],
-          "evidenceNote": "Current public hook runtime hash matches profile constant; historical N25811499 Ready binds same hook address/model. Archived hook bytecode not present in this Ready.",
+          "execution": "verified",
+          "gaps": [],
+          "evidenceNote": "Same-state quote/quoted/runtime plus self/external direct and deferred callback funding at representative inputs. Historical no-funding failures are call-only traces; complete rollback/fault invariants are established separately by local BotVM EVM cases. Funding fixture consumes one raw output unit and supplies exact input debt, and is not a production return route or profit claim.",
           "evidence": [
             {
-              "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-              "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+              "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+              "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
+            },
+            {
+              "path": "docs/research/reports/univ4-native-independent-20261015.json",
+              "sha256": "93a83063da08969c70f26efa786c03bff425a31a11f33b5e1ebb05512c81f81b"
+            },
+            {
+              "path": "docs/research/reports/univ4-erc20-independent-20261015.json",
+              "sha256": "d9d92f6672d17444633025569199d43265311a72262eda541f68672b9af1f579"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/univ4-fee-hook-settlement-behavior-20261015.json",
+            "sha256": "494f780bfafd0b753fbc0454e5703070d45ac6cc289b856d4fad501a1c2d78a7"
+          }
         },
         {
           "id": "SAT1/native-SAT1",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "output-first",
           "recipient": "conditional",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "SAT1 当前 verified runtime 匹配 profile，但旧 N Ready 未保留 hook 原始字节；不能声称逐字节历史重建。",
-            "当前 native-SAT1 新模式拒绝；不得把 recipient 替换为 hookData swapper/cooldown 身份。",
-            "native direct/deferred 接线及实际执行未验证。"
-          ],
-          "evidenceNote": "Current public verified SAT1 runtime matches profile constant; historical N26029537 Ready records sat1-code-and-poolkey proof, but omits raw hook code. New native modes decline.",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "evidenceNote": "Same-state quote/quoted/runtime plus self/external direct and deferred callback funding at representative inputs. Historical no-funding failures are call-only traces; complete rollback/fault invariants are established separately by local BotVM EVM cases. Funding fixture consumes one raw output unit and supplies exact input debt, and is not a production return route or profit claim.",
           "evidence": [
             {
-              "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-              "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+              "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+              "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
+            },
+            {
+              "path": "docs/research/reports/univ4-native-independent-20261015.json",
+              "sha256": "93a83063da08969c70f26efa786c03bff425a31a11f33b5e1ebb05512c81f81b"
+            },
+            {
+              "path": "docs/research/reports/univ4-erc20-independent-20261015.json",
+              "sha256": "d9d92f6672d17444633025569199d43265311a72262eda541f68672b9af1f579"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/univ4-fee-hook-settlement-behavior-20261015.json",
+            "sha256": "494f780bfafd0b753fbc0454e5703070d45ac6cc289b856d4fad501a1c2d78a7"
+          }
         }
       ],
       "sourceReport": "eight-family-interface-review-20261014.json",
@@ -6517,7 +6607,7 @@
       "source": [
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/adapters/univ4.ts",
@@ -6526,6 +6616,14 @@
         {
           "path": "listener/src/encoder.ts",
           "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+        },
+        {
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+        },
+        {
+          "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+          "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
         },
         {
           "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
@@ -6573,7 +6671,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/univ4-family/runtime-execution.ts",
-          "sha256": "7277a7d4648b48f8fb6179d64e4166df4965eb0f0131c97a0d15bf9329350608"
+          "sha256": "57ccf7daf32aa4fb2638e87bc752c7c7dd03e84e265ffe8eb629175b03d5a06a"
         },
         {
           "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/action.ts",
@@ -6581,7 +6679,7 @@
         },
         {
           "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts",
-          "sha256": "14ffa84da49484c0da47867c85da40488b1a8cbb57b44f9ee4ccb81d76d90752"
+          "sha256": "96ebbe4bcd48c08f9e489ecae981ff3e968de24ad7259ed70b314eb640dcd02c"
         },
         {
           "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/identity.ts",
@@ -6610,11 +6708,15 @@
         {
           "path": "listener/src/shared/executor/amount-rounding.ts",
           "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+        },
+        {
+          "path": "listener/src/shared/executor/botvm-program-entry.ts",
+          "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-c-20261014.json",
-        "sha256": "9ffe0ca08ff93336bf95f826febe181c3ba868b6f446035ef497bf311f190650"
+        "path": "docs/research/reports/univ1-v4-settlement-final-review-20261015.json",
+        "sha256": "cb741a5f1ad824603f4bd381b985a43929a5211139b5ae79defd2d592f4fa40c"
       }
     },
     {
@@ -6736,246 +6838,12 @@
     "sha256": "25cc557bcefd3b645883bd23b1a4c35edabad77a32bf5fe67315a0b4c4319cc3"
   },
   "lastScopedUpdate": {
-    "at": "2026-10-14T16:13:54.542087+00:00",
-    "familyId": "fluid-dex",
-    "sourceCommit": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
-    "previousCommonSource": [
-      {
-        "path": "listener/src/adapters/registry.ts",
-        "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
-      },
-      {
-        "path": "listener/src/adapters/runtime-amount-program.ts",
-        "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d"
-      },
-      {
-        "path": "listener/src/compiler.ts",
-        "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
-      },
-      {
-        "path": "listener/src/encoder.ts",
-        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
-      },
-      {
-        "path": "listener/src/searcher/adapter-credit-runtime.ts",
-        "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
-      },
-      {
-        "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
-        "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
-      },
-      {
-        "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
-        "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
-      },
-      {
-        "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
-        "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
-      },
-      {
-        "path": "listener/src/searcher/adapter-funding-runtime.ts",
-        "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
-      },
-      {
-        "path": "listener/src/searcher/adapter-work-intent.ts",
-        "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
-      },
-      {
-        "path": "listener/src/searcher/amount-quote-continuity.ts",
-        "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
-      },
-      {
-        "path": "listener/src/searcher/blockscan-route-identity.ts",
-        "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
-      },
-      {
-        "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
-        "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
-      },
-      {
-        "path": "listener/src/searcher/exact-prefix-plan.ts",
-        "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
-      },
-      {
-        "path": "listener/src/searcher/exact-trial-state.ts",
-        "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
-      },
-      {
-        "path": "listener/src/searcher/execution-asset-boundary.ts",
-        "sha256": "c8bd9ccf2379c36c020acb8f0f568dd27a4e5c526dd255a058495467c0f5dd1e"
-      },
-      {
-        "path": "listener/src/searcher/identity-asset-metadata.ts",
-        "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
-      },
-      {
-        "path": "listener/src/searcher/runtime-evidence.ts",
-        "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
-      },
-      {
-        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
-        "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
-      },
-      {
-        "path": "listener/src/searcher/simulator/runtime-settlement.ts",
-        "sha256": "16205a429dc46394f21cb28cd691577a53b212e40821e3eb9ebfd3c798eaa4c5"
-      },
-      {
-        "path": "listener/src/searcher/simulator/sim-amount-search.ts",
-        "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
-      },
-      {
-        "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
-        "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
-      },
-      {
-        "path": "listener/src/searcher/solver/amount-bounds.ts",
-        "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
-      },
-      {
-        "path": "listener/src/searcher/solver/amount-propagation.ts",
-        "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
-      },
-      {
-        "path": "listener/src/searcher/solver/amount-rejection.ts",
-        "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
-      },
-      {
-        "path": "listener/src/searcher/solver/plan-builder.ts",
-        "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
-      },
-      {
-        "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
-        "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
-      },
-      {
-        "path": "listener/src/searcher/solver/sequential-quote-error.ts",
-        "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
-      },
-      {
-        "path": "listener/src/searcher/strategy-taxonomy.ts",
-        "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
-      },
-      {
-        "path": "listener/src/searcher/strict-production-runtime-session.ts",
-        "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
-      },
-      {
-        "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
-        "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
-      },
-      {
-        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
-        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
-      },
-      {
-        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
-        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
-      },
-      {
-        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
-        "sha256": "70f8d6c64580f1814cedcbeca6d1fc8f7db2cb256f65f5064491f9ac0d66f845"
-      },
-      {
-        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
-        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
-      },
-      {
-        "path": "listener/src/searcher/venues/adapter-request-program.ts",
-        "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
-      },
-      {
-        "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
-        "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
-      },
-      {
-        "path": "listener/src/searcher/venues/canonical-value.ts",
-        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
-      },
-      {
-        "path": "listener/src/searcher/venues/family-capability-catalog.ts",
-        "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
-      },
-      {
-        "path": "listener/src/searcher/venues/family-owned-action.ts",
-        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
-      },
-      {
-        "path": "listener/src/searcher/venues/route-immutable-binding.ts",
-        "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
-      },
-      {
-        "path": "listener/src/searcher/venues/route-instance-identity.ts",
-        "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
-      },
-      {
-        "path": "listener/src/searcher/venues/runtime-execution.ts",
-        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
-      },
-      {
-        "path": "listener/src/shared/constants/addresses.ts",
-        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
-      },
-      {
-        "path": "listener/src/shared/executor/amount-rounding.ts",
-        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
-      },
-      {
-        "path": "listener/src/shared/executor/botvm-program-entry.ts",
-        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
-      },
-      {
-        "path": "listener/src/shared/state/state-backend.ts",
-        "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
-      },
-      {
-        "path": "src/BotVM.sol",
-        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
-      },
-      {
-        "path": "src/BotVMEncoder.sol",
-        "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
-      },
-      {
-        "path": "src/BotVMScriptBuilder.sol",
-        "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
-      },
-      {
-        "path": "src/Constants.sol",
-        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
-      },
-      {
-        "path": "src/FlashArb.sol",
-        "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
-      },
-      {
-        "path": "src/RuntimeAmountVM.sol",
-        "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf"
-      },
-      {
-        "path": "src/interfaces/IERC20.sol",
-        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
-      },
-      {
-        "path": "src/interfaces/IFluidVault.sol",
-        "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
-      },
-      {
-        "path": "src/interfaces/IMorpho.sol",
-        "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
-      },
-      {
-        "path": "src/interfaces/ISwap.sol",
-        "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
-      }
+    "at": "2026-10-15T07:17:42.184512+00:00",
+    "families": [
+      "custom-swap:uniswap-v1",
+      "univ4",
+      "univ4-fee-hook"
     ],
-    "previousScopedUpdate": {
-      "at": "2026-10-14T14:19:29.143316+00:00",
-      "familyId": "mooniswap",
-      "sourceCommit": "408e88eb581e7a23d43444158f65a2112e25e7d9",
-      "otherFamiliesRevalidated": false,
-      "note": "Only existing ERC20 implementation settlement profile. 57fb is still an unverified additional instance."
-    },
-    "scope": "Real shared source change and reviewed common regressions, not a hash substitution to obtain a pass. Other45 Family rows unchanged; their original source/evidence snapshots are retained and not promoted to current common-source pass."
+    "scope": "Current actual working baseline sampled settlement correctness; other Family evidence remains unchanged and has NOT been reaccepted against the new common source."
   }
 }

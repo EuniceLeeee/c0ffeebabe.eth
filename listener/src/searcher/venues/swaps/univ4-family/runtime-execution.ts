@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { RuntimeAmountProgram, runtimePayment, runtimeProgramScript, type RuntimeAmountLeg, type RuntimeSettlementRequest } from "../../../../adapters/runtime-amount-program.js";
 import { concatBytes, encodeReturn } from "../../../../encoder.js";
+import { runtimeDeferredAssetBoundary } from "../../../execution-asset-boundary.js";
 import { runtimeExecutor } from "../../runtime-execution.js";
 import type { UniV4Descriptor, UniV4Route } from "./types.js";
 import { poolKeyFingerprint, sameAddress } from "./codec.js";
@@ -30,9 +31,17 @@ export function buildV4RuntimeProgram(input: { descriptor: UniV4Descriptor; rout
   runtimeExecutor(executor, manager);
   const request = input.settlement;
   const native = sameAddress(r.realTokenIn, ethers.ZeroAddress) || sameAddress(r.realTokenOut, ethers.ZeroAddress);
-  if (request?.kind === "quote-output" || request !== undefined && native) return null;
+  if (request?.kind === "quote-output") return null;
+  const nativeInput = sameAddress(r.realTokenIn, ethers.ZeroAddress);
+  const nativeDeferred = native && request?.kind === "deferred-input";
   const recipient = request?.kind === "direct-output" ? ethers.getAddress(request.recipient) : executor;
   if (sameAddress(recipient, ethers.ZeroAddress) || sameAddress(recipient, manager)) throw new Error("univ4 runtime output recipient");
+  if (request?.kind === "direct-output") {
+    runtimeExecutor(recipient, manager, r.tokenIn, r.tokenOut);
+    // Raw ETH must first reach the common measured wrapping boundary.
+    if (native && !nativeInput && !sameAddress(recipient, executor)) return null;
+  }
+  if (nativeDeferred && (request.paymentAmount <= 0n || request.paymentAmount > ethers.MaxUint256)) throw new Error("univ4 deferred payment amount");
   if ((r.direction !== "zero-for-one" && r.direction !== "one-for-zero") ||
       r.instanceKey !== d.instanceKey || r.poolId !== d.poolId || !sameAddress(r.manager, manager) ||
       poolKeyFingerprint(r.poolKey) !== poolKeyFingerprint(key) ||
@@ -43,6 +52,9 @@ export function buildV4RuntimeProgram(input: { descriptor: UniV4Descriptor; rout
       !sameAddress(r.realTokenIn, zero ? key.currency0 : key.currency1) ||
       !sameAddress(r.realTokenOut, zero ? key.currency1 : key.currency0)) throw new Error("univ4 runtime route mismatch");
   const p = new RuntimeAmountProgram();
+  const nativeBoundary = nativeDeferred ? runtimeDeferredAssetBoundary(p, r, executor,
+    { nativeBefore: 11, wrappedBefore: 12, scratch: 13, other: 9 }) : undefined;
+  const outputBefore = nativeDeferred ? 8 : 13;
   p.constant(8, 127n).math("shr", 9, 0, 8).constant(10, 0n).equal(9, 10)
     .math("neg", 7, 0).call(manager, managerAbi.encodeFunctionData("swap", [key,
     { zeroForOne: zero, amountSpecified: 0n, sqrtPriceLimitX96: zero ? 4295128740n : 1461446703485210103287273052203988822378723970341n }, input.hookData]),
@@ -54,15 +66,23 @@ export function buildV4RuntimeProgram(input: { descriptor: UniV4Descriptor; rout
   const out = zero ? 4 : 5, debt = zero ? 5 : 4;
   p.constant(2, 1n << 128n).math("sub", 6, 2, debt).math("and", 6, 6, 3)
     .math("shr", 9, out, 8).equal(9, 10);
-  const payment = runtimePayment(p, 6, 12);
-  if(request?.kind==="deferred-input")p.equal(6,0);
-  if (request?.kind === "deferred-input") p.call(r.tokenOut, tokenAbi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(13, 0);
+  const payment = runtimePayment(p, 6, nativeDeferred ? 7 : 12);
+  if (request?.kind === "deferred-input" || native && request?.kind === "direct-output") {
+    p.equal(6, 0);
+    if (native) p.constant(14, 1n).math("sub", 15, 6, 14);
+  }
+  if (request?.kind === "deferred-input") p.call(r.tokenOut, tokenAbi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(outputBefore, 0);
   p.call(manager, managerAbi.encodeFunctionData("take", [r.realTokenOut, recipient, 0n]), { patches: [{ offset: 68, reg: out }] });
+  if (nativeBoundary && !nativeInput) nativeBoundary.wrapOutput();
   if (request?.kind === "deferred-input") p.call(r.tokenOut, tokenAbi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(15, 0)
-    .math("sub", 15, 15, 13).constant(14, request.paymentAmount).math("sub", 15, 15, 14);
+    .math("sub", 15, 15, outputBefore).constant(14, request.paymentAmount).math("sub", 15, 15, 14);
   if (sameAddress(r.realTokenIn, ethers.ZeroAddress)) {
-    // The issuer supplied native input before unlock. Only the actual signed
-    // PoolManager debt is settled here; it rewraps any unspent input afterward.
+    // Funded default/direct input is supplied by the issuer. Deferred input
+    // arrives as fresh WETH from the continuation and is converted only now.
+    if (nativeBoundary && request?.kind === "deferred-input") {
+      p.constant(14, request.paymentAmount).run(request.paymentProgram, 14, 15).equal(15, 6);
+      nativeBoundary.unwrapPayment(6);
+    }
     p.call(manager, managerAbi.encodeFunctionData("sync", [ethers.ZeroAddress]));
     payment.callValue(manager, managerAbi.encodeFunctionData("settle"));
   } else {
@@ -71,13 +91,15 @@ export function buildV4RuntimeProgram(input: { descriptor: UniV4Descriptor; rout
     else payment.transfer(r.realTokenIn, manager);
     p.call(manager, managerAbi.encodeFunctionData("settle"));
   }
-  payment.verifySettled(11);
+  // Read settle's result before helpers issue any other external call.
+  payment.verifySettled(nativeDeferred ? 10 : 11);
+  nativeBoundary?.assertRestored();
   const callback = concatBytes(runtimeProgramScript(p.bytes()),
     encodeReturn(ethers.getBytes(ethers.AbiCoder.defaultAbiCoder().encode(["bytes"], ["0x"]))));
   const outer = new RuntimeAmountProgram().call(manager, managerAbi.encodeFunctionData("unlock", [callback]), {
     callback: { incomingOffset: 68, outgoingOffset: 68 }, patches: [{ offset: 69, reg: 0 }],
   });
   return { actionAdapterId: input.actionAdapterId, program: ethers.hexlify(outer.bytes()),
-    ...(native ? {} : { settlement: { directOutput: true as const, deferredInput: manager } }),
+    settlement: { directOutput: true as const, deferredInput: nativeInput ? executor : manager },
     ...(request === undefined ? {} : { settlementRequest: request }) };
 }

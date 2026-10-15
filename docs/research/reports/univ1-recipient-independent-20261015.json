@@ -1,0 +1,336 @@
+{
+  "scope": "Uniswap V1 TransferInput direct settlement: standard and issuer-fee variants, native/WETH both directions",
+  "status": "passed raw evidence recheck",
+  "reviewedAt": "2026-10-15T05:38:02.153512+00:00",
+  "method": "independent raw prestate storage reconstruction and ABI call-tree decoding; does not trust stored balances or pass status alone",
+  "currentSources": [
+    {
+      "path": "listener/src/searcher/venues/swaps/univ1-family/execution.ts",
+      "sha256": "577f786c9efc0f43676423572e34d38b02a068b7189212e0723109d9bd33eaf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/univ1-family/recipient.ts",
+      "sha256": "dc1f6a386e80bb0174ac642d55079aa3615b2f5c20b9b4a8a6bcecc42c4cbca0"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "2bed735be216b7330ceb8871e796964043f025e3cbd6f7c8822377872d2d8872"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/univ1-family/test/recipient-historical.ts",
+      "sha256": "1f55b67cc72f98ca0cee25e6a514fcc6067e8916e1940ad2f163405a8a7a781f"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/univ1-family/test/recipient-ready.ts",
+      "sha256": "e4ae9dc420858c04433cafb01b37cf3987e516a23d0f7136971cf724fea6febe"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/univ1-family/test/RecipientRuntime.t.sol",
+      "sha256": "196e06c1509b7257044b03031c7da4f5577d957104e85a3493c0b12aab19f49f"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/univ1-family/test/recipient-runtime-evm.ts",
+      "sha256": "45c40aa6143c48bb0efaa9c640faa5f55823bdc7eb4eeac37bbe226d2ffce475"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/evidence30/v1-standard-recipient30.json",
+      "sha256": "ac32426354005b47c8ec64b340b16b0012a10e5dcd4e12b24ab721310b1453d3",
+      "sourcePin": {
+        "sourceTreeSha256": "13adfa9e17ea643b5e40123640ab43ea71eb992aa92e14a217bbb88d589fa423",
+        "fileCount": 1204,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "dd0e94353772a9a9bb27a77d473dd6594d7f357648a3e3dd6ac8c7c3d23985a6",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      }
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/evidence30/v1-anyswap-recipient30.json",
+      "sha256": "c7f8d93e66bf884d0fc6cf47ad0105618c70426c3471f36d6e56cf3b22350e4a",
+      "sourcePin": {
+        "sourceTreeSha256": "13adfa9e17ea643b5e40123640ab43ea71eb992aa92e14a217bbb88d589fa423",
+        "fileCount": 1204,
+        "soliditySha256": "8d7ba1d7cef1f184ea993a799a4f0ace3257911594175a857387edb788e0cf4d",
+        "packageSha256": "dd0e94353772a9a9bb27a77d473dd6594d7f357648a3e3dd6ac8c7c3d23985a6",
+        "testSha256": "b555f9dfb05ea884f38738510c60ca8c9e7ca23b824519ecdda47367d69e994e",
+        "helperSha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc",
+        "inputObservationSha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30",
+        "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+      }
+    }
+  ],
+  "cases": [
+    {
+      "source": {
+        "number": 25970301,
+        "hash": "0xc0edc029d55a0356f7a337f1ec4eb94803c7a047927e846c6bf43508f7f31455",
+        "generation": 25970301
+      },
+      "pool": "0xb7520a5f8c832c573d6bd0df955fc5c9b72400f7",
+      "model": "uniswap-v1-997",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x818fc6c2ec5986bc6e2cbf00939d90556ab12ce5",
+      "amountIn": "2000000000000000",
+      "quoteOut": "3324745035397993212872927",
+      "label": "reference-effective-input-only",
+      "actualReceipts": {
+        "quoted": "3324745035397993212872927",
+        "runtime": "3324745035397993212872927",
+        "direct-self": "3324745035397993212872927",
+        "direct-external": "3324745035397993212872927"
+      }
+    },
+    {
+      "source": {
+        "number": 25970301,
+        "hash": "0xc0edc029d55a0356f7a337f1ec4eb94803c7a047927e846c6bf43508f7f31455",
+        "generation": 25970301
+      },
+      "pool": "0xb7520a5f8c832c573d6bd0df955fc5c9b72400f7",
+      "model": "uniswap-v1-997",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x818fc6c2ec5986bc6e2cbf00939d90556ab12ce5",
+      "amountIn": "57916626869223",
+      "quoteOut": "97488850502742320364820",
+      "label": "historical-input-at-N",
+      "actualReceipts": {
+        "quoted": "97488850502742320364820",
+        "runtime": "97488850502742320364820",
+        "direct-self": "97488850502742320364820",
+        "direct-external": "97488850502742320364820"
+      }
+    },
+    {
+      "source": {
+        "number": 25970301,
+        "hash": "0xc0edc029d55a0356f7a337f1ec4eb94803c7a047927e846c6bf43508f7f31455",
+        "generation": 25970301
+      },
+      "pool": "0xb7520a5f8c832c573d6bd0df955fc5c9b72400f7",
+      "model": "uniswap-v1-997",
+      "tokenIn": "0x818fc6c2ec5986bc6e2cbf00939d90556ab12ce5",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "3324745035397993212872927",
+      "quoteOut": "1937918273179771",
+      "label": "reference-effective-input-only",
+      "actualReceipts": {
+        "quoted": "1937918273179771",
+        "runtime": "1937918273179771",
+        "direct-self": "1937918273179771",
+        "direct-external": "1937918273179771"
+      }
+    },
+    {
+      "source": {
+        "number": 25970301,
+        "hash": "0xc0edc029d55a0356f7a337f1ec4eb94803c7a047927e846c6bf43508f7f31455",
+        "generation": 25970301
+      },
+      "pool": "0xb7520a5f8c832c573d6bd0df955fc5c9b72400f7",
+      "model": "uniswap-v1-997",
+      "tokenIn": "0x818fc6c2ec5986bc6e2cbf00939d90556ab12ce5",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "1662372517698996606436463",
+      "quoteOut": "975093200141501",
+      "label": "half-effective",
+      "actualReceipts": {
+        "quoted": "975093200141501",
+        "runtime": "975093200141501",
+        "direct-self": "975093200141501",
+        "direct-external": "975093200141501"
+      }
+    },
+    {
+      "source": {
+        "number": 26029476,
+        "hash": "0x74997e992f9feddb1b373da2eb41e7cd3abe189c537b4fc79e7d15896c092c35",
+        "generation": 26029476
+      },
+      "pool": "0x97386862594f4cacea245e8dbfa6230ca696c37c",
+      "model": "anyswap-v1-issuer-fee-001",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+      "amountIn": "2000000000000000",
+      "quoteOut": "598719509585737556",
+      "label": "reference-effective-input-only",
+      "actualReceipts": {
+        "quoted": "598719509585737556",
+        "runtime": "598719509585737556",
+        "direct-self": "598719509585737556",
+        "direct-external": "598719509585737556"
+      }
+    },
+    {
+      "source": {
+        "number": 26029476,
+        "hash": "0x74997e992f9feddb1b373da2eb41e7cd3abe189c537b4fc79e7d15896c092c35",
+        "generation": 26029476
+      },
+      "pool": "0x97386862594f4cacea245e8dbfa6230ca696c37c",
+      "model": "anyswap-v1-issuer-fee-001",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+      "amountIn": "6369530603920567",
+      "quoteOut": "1902862207407486507",
+      "label": "historical-input-at-N",
+      "actualReceipts": {
+        "quoted": "1902862207407486507",
+        "runtime": "1902862207407486507",
+        "direct-self": "1902862207407486507",
+        "direct-external": "1902862207407486507"
+      }
+    },
+    {
+      "source": {
+        "number": 26029476,
+        "hash": "0x74997e992f9feddb1b373da2eb41e7cd3abe189c537b4fc79e7d15896c092c35",
+        "generation": 26029476
+      },
+      "pool": "0x97386862594f4cacea245e8dbfa6230ca696c37c",
+      "model": "anyswap-v1-issuer-fee-001",
+      "tokenIn": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "598719509585737556",
+      "quoteOut": "1980316248846600",
+      "label": "reference-effective-input-only",
+      "actualReceipts": {
+        "quoted": "1980316248846600",
+        "runtime": "1980316248846600",
+        "direct-self": "1980316248846600",
+        "direct-external": "1980316248846600"
+      }
+    },
+    {
+      "source": {
+        "number": 26029476,
+        "hash": "0x74997e992f9feddb1b373da2eb41e7cd3abe189c537b4fc79e7d15896c092c35",
+        "generation": 26029476
+      },
+      "pool": "0x97386862594f4cacea245e8dbfa6230ca696c37c",
+      "model": "anyswap-v1-issuer-fee-001",
+      "tokenIn": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "299359754792868778",
+      "quoteOut": "990622264617869",
+      "label": "half-effective",
+      "actualReceipts": {
+        "quoted": "990622264617869",
+        "runtime": "990622264617869",
+        "direct-self": "990622264617869",
+        "direct-external": "990622264617869"
+      }
+    }
+  ],
+  "mainExecutions": 32,
+  "directExecutions": 16,
+  "zeroInputRollbacks": 16,
+  "mockEvidence": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/evidence30/v1-recipient-local30/result.json",
+    "sha256": "7a7e9a72b98915bd076b42a2ce9101eb505f226f8412bb38cb40724248e415af",
+    "checks": 25,
+    "positive": 4,
+    "negativeAtomicRollback": 21,
+    "scope": "synthetic-local-EVM-fault-controls",
+    "stdoutSha256": "3ee842ff0e73ba9b374a22cfca6c601b0c6007875e86b936efb922288da94d11",
+    "passedTests": [
+      "testBuyExternal",
+      "testBuyInputUnderdebit",
+      "testBuyLyingReturn",
+      "testBuyMissingOutput",
+      "testBuySelf",
+      "testBuyShortCredit",
+      "testBuyShortUnwrapOldNativeProtected",
+      "testBuyWrongReceiver",
+      "testBuyZeroDebit",
+      "testBuyZeroInput",
+      "testSellAllowanceCleanupFailure",
+      "testSellBadApprovalReadback",
+      "testSellExternal",
+      "testSellInputOverdebitOldTokenProtected",
+      "testSellInputUnderdebit",
+      "testSellLyingReturn",
+      "testSellMissingOutput",
+      "testSellSelf",
+      "testSellShortNativeReceipt",
+      "testSellShortWethDelivery",
+      "testSellShortWrappingReceipt",
+      "testSellWethDeliveryOverdebitOldWethProtected",
+      "testSellWrongReceiver",
+      "testSellZeroDebit",
+      "testSellZeroInput"
+    ]
+  },
+  "limitations": [
+    "Borrowed only immutable old production/reference input amounts; no new natural valuation claim",
+    "N end-state plus N environment, not original call-prestate or opportunity reproduction",
+    "Standard identity support includes preserved peer dirty implementation; no ownership/commit claim on peer work",
+    "Local EVM fault models do not establish deployed protocol identity",
+    "Runtime construction zero-Exact/no-quoted-fallback proved through production issuer; full sim selector shared regressions reported by root separately",
+    "Performance 4A/4B not run"
+  ],
+  "readyBindings": [
+    {
+      "variant": "standard",
+      "readyPath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/evidence30/v1-standard-ready30/ready.json",
+      "readySha256": "054d4f18949a7117fb8e0e1bf1c8deb76bcc1317e68ca3cda8be0efaf07d94c8",
+      "pool": "0xb7520a5f8c832c573d6bd0df955fc5c9b72400f7",
+      "source": {
+        "number": 25970301,
+        "hash": "0xc0edc029d55a0356f7a337f1ec4eb94803c7a047927e846c6bf43508f7f31455",
+        "generation": 25970301
+      },
+      "graphHash": "eeb658b28a9ad88e7847558fe85d6fce9188e1a597755258024980db170a84f3",
+      "directions": 2,
+      "familyDefinitionHash": "3823474a2a2b1f574b59232491db1d18216505f244c48c63c93d357fafec1b24",
+      "memoFingerprint": "bcb8815b2018eca7db06080a35acf757cbbc8254cf56633983acbd7e264b7cae",
+      "identity": {
+        "implementation": "0x2157a7894439191e520825fe9399ab8655e0f708",
+        "implementationCodeHash": "0xb9205fc3f30b0ad30c6f03a0f464f8fd435fbf28cdbb6071054d62fb506a4b96",
+        "codeHash": "0x72e826e5ec1e970f37af4b41635535232c58bcb7795871b2738347fd8c1314ca",
+        "factory": "0xc0a47dfe034b400b47bdad5fecda2621de6c4d95",
+        "factoryCodeHash": "0x7e56b424b2c68a3b91749034670f2728eb01bd758b9bc4c5ba49874f4b6ffa36",
+        "token": "0x818fc6c2ec5986bc6e2cbf00939d90556ab12ce5",
+        "issuer": "0x0000000000000000000000000000000000000000",
+        "model": "uniswap-v1-997"
+      },
+      "identityProofKind": "immutable-vyper-bytecode-and-bidirectional-factory-registration",
+      "scope": "current production revalidation/memo/descriptor/Graph verified; no separate reviewer RPC run"
+    },
+    {
+      "variant": "anyswap",
+      "readyPath": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/v1-accept26/evidence30/v1-anyswap-ready30/ready.json",
+      "readySha256": "9cbcbc440cb2dbce32c153d111d2886768caa3d88c448e65d885ee98546b22cd",
+      "pool": "0x97386862594f4cacea245e8dbfa6230ca696c37c",
+      "source": {
+        "number": 26029476,
+        "hash": "0x74997e992f9feddb1b373da2eb41e7cd3abe189c537b4fc79e7d15896c092c35",
+        "generation": 26029476
+      },
+      "graphHash": "c7c324ecefc7c47150dbbf7e9749218dd9381bf36ad9e157b66086f29d927900",
+      "directions": 2,
+      "familyDefinitionHash": "3823474a2a2b1f574b59232491db1d18216505f244c48c63c93d357fafec1b24",
+      "memoFingerprint": "91ce48f80cdbaf484dd8482d1bfd877b8644992fc8d427d2bab198f00e9d77a6",
+      "identity": {
+        "implementation": "0x575ba30c7b77fa0eebd34cc5416538323c4e5612",
+        "implementationCodeHash": "0x149aa36e02a2583973be13ac2161eb3ada7ce722d148f1dfa04c94a680957b1b",
+        "codeHash": "0x78b0d75d8a9a3fa14a53c13ee5a7b6667980d120f5bec678433cee5abc58dbe4",
+        "factory": "0x73a001e72f0fe3ca366d6079dc3427af7865839b",
+        "factoryCodeHash": "0x7e56b424b2c68a3b91749034670f2728eb01bd758b9bc4c5ba49874f4b6ffa36",
+        "token": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+        "issuer": "0xcc4461636684868aab71037b29a11cc643e64500",
+        "model": "anyswap-v1-issuer-fee-001"
+      },
+      "identityProofKind": "immutable-vyper-bytecode-and-bidirectional-factory-registration",
+      "scope": "current production revalidation/memo/descriptor/Graph verified; no separate reviewer RPC run"
+    }
+  ],
+  "protocolReturnEncoding": "Verified old immutable Vyper proxies return a 4096-byte buffer; uint256 result is first ABI word, not the entire byte buffer. Independent parser initially treated full buffer as integer, corrected to ABI word 0 after observing raw output; no protocol/test result was altered."
+}

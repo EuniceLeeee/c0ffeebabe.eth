@@ -20,6 +20,7 @@ export const V4_OBSERVATION_ABI = new ethers.Interface([
   "function sync(address currency)",
   "function balanceOf(address holder) view returns(uint256)",
   "function transfer(address to,uint256 amount) returns(bool)",
+  "function transferFrom(address from,address to,uint256 amount) returns(bool)",
   "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
   "event Transfer(address indexed from,address indexed to,uint256 value)",
 ]);
@@ -44,9 +45,11 @@ export function assertSat1Receipt(receipt: any): void {
 export function originalV4Leg(instance: string, descriptor: {
   poolId: string; poolKey: { currency0: string; currency1: string; fee: number; tickSpacing: number; hooks: string };
   managerBinding: { manager: string };
-}, receipt: any, trace: any, zeroForOne: boolean) {
+}, receipt: any, trace: any, zeroForOne: boolean, allowNoReturnErc20 = false) {
   assert(!trace.error && !trace.revertReason && BigInt(receipt.status) === 1n);
   const manager = descriptor.managerBinding.manager.toLowerCase(), key = descriptor.poolKey;
+  if (allowNoReturnErc20) assert(!same(key.currency0, ethers.ZeroAddress) && !same(key.currency1, ethers.ZeroAddress));
+  const successfulTransferReturn = (output?: string) => allowNoReturnErc20 && (output === undefined || output === "0x") || ABI.decodeFunctionResult("transfer", output!)[0] === true;
   const id = descriptor.poolId;
   assert.equal(instance.toLowerCase(), `${manager}\u001f${id.toLowerCase()}`, "V4 instance is manager plus poolId, not poolId alone");
   assert(same(manager, ADDR.UNISWAP_V4_POOL_MANAGER));
@@ -93,7 +96,7 @@ export function originalV4Leg(instance: string, descriptor: {
     const transfers = payments.filter((f: any) => isCall(f, rawOut, "transfer") && same(f.from, manager)).filter((f: any) => {
       const a = ABI.decodeFunctionData("transfer", f.input); return same(a.to, recipient) && a.amount === amountOut;
     });
-    assert.equal(transfers.length, 1); assert.equal(ABI.decodeFunctionResult("transfer", transfers[0].output)[0], true);
+    assert.equal(transfers.length, 1); assert(successfulTransferReturn(transfers[0].output));
     const logs = receipt.logs.filter((l: any) => same(l.address, rawOut) && l.topics?.[0] === ABI.getEvent("Transfer")!.topicHash)
       .map((l: any) => ABI.parseLog(l)!.args);
     assert.equal(logs.filter((l: any) => same(l.from, manager) && same(l.to, recipient) && l.value === amountOut).length, 1);
@@ -118,12 +121,22 @@ export function originalV4Leg(instance: string, descriptor: {
       return BigInt(ABI.decodeFunctionResult("balanceOf", reads[0].output)[0]);
     };
     assert.equal(observedManagerBalance(settles[0]!.frame) - observedManagerBalance(sync.frame), amountIn);
-    assert.equal(scope.filter(x => x.order >= sync.end && x.end <= settles[0]!.order && isCall(x.frame, rawIn, "transfer") && same(x.frame.from, swap.from))
-      .filter(x => { const a = ABI.decodeFunctionData("transfer", x.frame.input);
-        return same(a.to, manager) && a.amount === amountIn && ABI.decodeFunctionResult("transfer", x.frame.output)[0] === true; }).length, 1);
+    // An ERC20 router may settle tokens supplied through transferFrom by its
+    // nested funding call (e.g. Permit2). Bind the payer from the actual token
+    // call, within the active sync/settle interval, never from the swap caller.
+    const payments = scope.filter(x => x.order >= sync.end && x.end <= settles[0]!.order).flatMap(x => {
+      const direct = isCall(x.frame, rawIn, "transfer") && same(x.frame.from, swap.from);
+      const delegated = allowNoReturnErc20 && isCall(x.frame, rawIn, "transferFrom");
+      if (!direct && !delegated) return [];
+      const a = ABI.decodeFunctionData(delegated ? "transferFrom" : "transfer", x.frame.input);
+      if (!same(a.to, manager) || a.amount !== amountIn || !successfulTransferReturn(x.frame.output)) return [];
+      return [{ payer: delegated ? String(a.from) : String(x.frame.from) }];
+    });
+    assert.equal(payments.length, 1, "one successful full input token payment within active sync/settle required");
+    const payer = payments[0]!.payer;
     const transfers = receipt.logs.filter((l: any) => same(l.address, rawIn) && l.topics?.[0] === ABI.getEvent("Transfer")!.topicHash)
       .map((l: any) => ABI.parseLog(l)!.args);
-    assert.equal(transfers.filter((l: any) => same(l.from, swap.from) && same(l.to, manager) && l.value === amountIn).length, 1,
+    assert.equal(transfers.filter((l: any) => same(l.from, payer) && same(l.to, manager) && l.value === amountIn).length, 1,
       "input transfer must be present in the successful receipt");
   }
   const swapsInReceipt = receipt.logs.filter((l: any) => same(l.address, manager) && l.topics?.[0] === ABI.getEvent("Swap")!.topicHash && same(l.topics[1], id))

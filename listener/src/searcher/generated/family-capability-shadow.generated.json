@@ -3724,7 +3724,7 @@
         "familyId": "custom-swap:uniswap-v1",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "4cc2870fb79ca16d7f543e5eb317795302c3aaff98a1150a344aceacaeaf5798",
+        "contentHash": "43ec1610f9cb44d4a5728ea0812b1efe7633611f723990fc144cf03e6b2a86f2",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -3732,6 +3732,8 @@
           "runtime:node:crypto@node-es2022-v1",
           "src/adapters/runtime-amount-program.ts",
           "src/encoder.ts",
+          "src/searcher/execution-asset-boundary.ts",
+          "src/searcher/solver/plan-fragment-requirements.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
@@ -3740,8 +3742,11 @@
           "src/searcher/venues/swaps/univ1-family/codec.ts",
           "src/searcher/venues/swaps/univ1-family/instance.ts",
           "src/searcher/venues/swaps/univ1-family/manifest.ts",
+          "src/searcher/venues/swaps/univ1-family/recipient.ts",
           "src/searcher/venues/swaps/univ1-family/routes.ts",
-          "src/shared/executor/amount-rounding.ts"
+          "src/shared/constants/addresses.ts",
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
         ],
         "provenanceCommit": null
       },
@@ -14893,7 +14898,7 @@
         "familyId": "univ4",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "d8334c2334c27bb0ed4d858a0d59fd085bedb698befc8c4dc1ffc7522cfbf7a0",
+        "contentHash": "4fb5c1804d446496d3f7be6a2355a6970fbb92e79421fe3cc501ca067f799fd6",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -14902,6 +14907,8 @@
           "src/adapters/runtime-amount-program.ts",
           "src/adapters/univ4.ts",
           "src/encoder.ts",
+          "src/searcher/execution-asset-boundary.ts",
+          "src/searcher/solver/plan-fragment-requirements.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
@@ -14913,7 +14920,8 @@
           "src/searcher/venues/swaps/univ4-family/manifest.ts",
           "src/searcher/venues/swaps/univ4-family/runtime-execution.ts",
           "src/shared/constants/addresses.ts",
-          "src/shared/executor/amount-rounding.ts"
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
         ],
         "provenanceCommit": null
       },
@@ -15237,25 +15245,40 @@
         "familyId": "univ4-fee-hook",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "6050b3e4aafc13a34d3a30c5020888d85274e3b0728005445fcd2fd6050f92db",
+        "contentHash": "bd1d467d861fb713ccfa9516c639fa8385ffe18d843eecd8e4e7e33fb9a3b6a0",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
           "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
           "src/searcher/blockscan-multicall.ts",
+          "src/searcher/execution-asset-boundary.ts",
+          "src/searcher/solver/plan-fragment-requirements.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/local-state-models/resources.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
           "src/searcher/venues/swaps/univ4-abi.ts",
           "src/searcher/venues/swaps/univ4-common.ts",
+          "src/searcher/venues/swaps/univ4-family/binding.ts",
           "src/searcher/venues/swaps/univ4-family/codec.ts",
+          "src/searcher/venues/swaps/univ4-family/routes.ts",
+          "src/searcher/venues/swaps/univ4-family/runtime-execution.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/manifest.ts",
+          "src/searcher/venues/swaps/univ4-fee-hook-family/routes.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/sat1-local.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/sat1-math.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/sat1.ts",
-          "src/shared/constants/addresses.ts"
+          "src/searcher/venues/swaps/univ4-fee-hook-family/tiered-exact.ts",
+          "src/shared/constants/addresses.ts",
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
         ],
         "provenanceCommit": null
       },
@@ -15275,7 +15298,7 @@
         "familyId": "univ4-fee-hook",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "8bd7d322b78c46f83931ec331d9924812f2014b5b9acc412a3d7207d9af08914",
+        "contentHash": "33d328704da6e5d3f01178b65d34c301be68b915a7050ff73506e6871d6a9fd4",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -15284,6 +15307,8 @@
           "src/adapters/runtime-amount-program.ts",
           "src/adapters/univ4.ts",
           "src/encoder.ts",
+          "src/searcher/execution-asset-boundary.ts",
+          "src/searcher/solver/plan-fragment-requirements.ts",
           "src/searcher/venues/adapter-family-identifiers.ts",
           "src/searcher/venues/adapter-family-plugin.ts",
           "src/searcher/venues/canonical-value.ts",
@@ -15299,7 +15324,8 @@
           "src/searcher/venues/swaps/univ4-fee-hook-family/routes.ts",
           "src/searcher/venues/swaps/univ4-fee-hook-family/sat1.ts",
           "src/shared/constants/addresses.ts",
-          "src/shared/executor/amount-rounding.ts"
+          "src/shared/executor/amount-rounding.ts",
+          "src/shared/executor/botvm-program-entry.ts"
         ],
         "provenanceCommit": null
       },
@@ -15885,5 +15911,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "de81fdb55512083e4a7294d5a86c85329fa71c02d66d0d9508cde5b19477c620"
+  "artifactHash": "1bfbb2fe2f480c38dffb07a0ca2e2b9bd9ab35ff306fe40e16d1dd158f020dde"
 }

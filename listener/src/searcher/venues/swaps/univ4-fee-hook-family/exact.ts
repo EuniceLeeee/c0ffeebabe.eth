@@ -1,4 +1,5 @@
 import { ethers } from "ethers";
+import { tieredActorContext, tieredExecutorProgram } from "./tiered-exact.js";
 import { hookDataFor, SAT1_MAX_BUY, sat1Permissions } from "./sat1.js";
 import { sat1LocalExactMethod } from "./sat1-local.js";
 import {
@@ -75,13 +76,9 @@ function supportsPrefix(input: ExactQuoteInput<FeeHookDescriptor, FeeHookRoute>)
   });
 }
 
-/**
- * Exact quotes reuse the standard V4 quoter (same poolKey, same
- * quoteExactInputSingle) with the audited fee-hook evidence kind. The tiered
- * dynamic fee is part of the pool's on-chain state at the quoted block, so
- * the quoter output already reflects the hook's actual fee; the mandatory
- * final simulation re-executes the hook on the fork as the fail-closed gate.
- */
+/** Explicit diagnostic Quoter mode. The tiered hook's sender and quote-only
+ * bypass differ from production execution; this is not the default tiered Exact.
+ * Sat1's existing explicit Quoter and local production methods remain available. */
 const feeHookRequestProgram: ExactRequestProgram<
   FeeHookDescriptor,
   FeeHookRoute,
@@ -135,7 +132,7 @@ const feeHookRequestProgram: ExactRequestProgram<
 // Quoter remains an explicit diagnostic/reference mode. Production Sat1 uses
 // one source-pinned state read plus integer local transitions; no prefix shape
 // or Family-name special case is needed for the local model.
-export function createUniv4FeeHookExact(sat1Mode: "local" | "quoter" = "local"):
+export function createUniv4FeeHookExact(sat1Mode: "local" | "quoter" = "local", tieredMode: "executor" | "quoter" = "executor"):
   ExactQuoteSemantics<FeeHookDescriptor, FeeHookRoute, FeeHookExactEvidence> {
   return {
     methods: (input: ExactQuoteInput<FeeHookDescriptor, FeeHookRoute>) => Object.freeze([
@@ -146,7 +143,10 @@ export function createUniv4FeeHookExact(sat1Mode: "local" | "quoter" = "local"):
           return zeroQuote(input);
         },
       ),
-      ...(input.descriptor.hookModel === "sat1" && sat1Mode === "local" ? [sat1LocalExactMethod(current => {
+      ...(input.descriptor.hookModel !== "sat1" && tieredMode === "executor"
+        ? (input.prefix?.length ? [] : [{ id: "tiered-executor-receipt", kind: "request-program" as const,
+          chainAmountQuote: true as const, program: tieredExecutorProgram }])
+        : input.descriptor.hookModel === "sat1" && sat1Mode === "local" ? [sat1LocalExactMethod(current => {
         assertRoute(current.descriptor, current.route);
         assertAmount(current.amountIn);
         if (current.descriptor.hookModel !== "sat1") throw new Error("unknown local hook model");
@@ -161,8 +161,9 @@ export function createUniv4FeeHookExact(sat1Mode: "local" | "quoter" = "local"):
         program: feeHookRequestProgram,
       })] : []),
     ]),
-    cacheCompatibilityProjection: ({ descriptor, route, executor }) => ({
-      quoteMode: descriptor.hookModel === "sat1" ? sat1Mode : "quoter",
+    cacheCompatibilityProjection: ({ descriptor, route, executor, transactionOrigin }) => ({
+      quoteMode: descriptor.hookModel === "sat1" ? sat1Mode : tieredMode,
+      ...(descriptor.hookModel === "sat1" ? {} : { model: "tiered-executor-receipt-v1", ...tieredActorContext({ executor, transactionOrigin }) }),
       ...(descriptor.hookModel === "sat1" && sat1Mode === "local" ? { localModel: "sat1-post-entropy-v1" } : {}),
       poolId: descriptor.poolId,
       poolKey: poolKeyProjection(descriptor.poolKey),

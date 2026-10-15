@@ -1,0 +1,70 @@
+{
+  "reviewer": "/root/v4_accept26",
+  "status": "actual-correctness-gap-confirmed",
+  "report": "logs/family-implementation-20261015.0exjskqq/v1-accept26/v4-erc20-final/v4-erc20-tiered-fee-recipient39.json",
+  "reportSha256": "273a667c4a8852b4844e0040f52126b39a4a35afb3aa179df25e93238a8c85e6",
+  "state": {
+    "number": 25811499,
+    "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786",
+    "generation": 25811499
+  },
+  "hook": "0xfa439315b015a4c283ded9815a4af6cef0b90880",
+  "codeHash": "0x95f45883ea4c59deaeb445e6fb6e07383b72a1f5cc046e3f22bfbca4f9aa521d",
+  "savedCodeEqualsActualPrestate": true,
+  "failedTrial": {
+    "amountIn": "4000000000000000",
+    "input": "WETH",
+    "output": "USDC",
+    "quote": "9641655",
+    "actual": "9352406",
+    "difference": "289249",
+    "beforeSwapSelector": "0x575e24b4",
+    "feeOverride": "0x407530",
+    "lpFeePips": 30000,
+    "actualInputDebit": "4000000000000000",
+    "reverted": false,
+    "fixtureInvoked": false,
+    "failedAt": "first quoted default-self quote/output parity assertion; subsequent runtime and explicit modes for this amount not executed"
+  },
+  "control": {
+    "amountIn": "2000000000000000",
+    "quoteAndActual": "4820831",
+    "feeOverride": "0x400000",
+    "lpFeePips": 0
+  },
+  "runtimeFindings": {
+    "beforeSwapEntry": "0x1106 -> 0x19de",
+    "originBypass": "0x1b5d / 0x1ca2 / 0x1cac explicitly detect tx.origin 0,1,2",
+    "gasBypass": "0x1c43 reads GAS and compares against slot2/BLOCKGASLIMIT derived threshold, with 0-fee branch at 0x1c15",
+    "noGasPriceOrBaseFeeOpcode": true,
+    "normalFeeEntropy": "0x1dc5 -> 0x1e88 hashes source block/environment plus caller-supplied swap context, modulo10000 then slot0/slot1 fee-tier selection",
+    "observedCounter": {
+      "slot": "0x8bf0bdc6a3ce29933c2f41359d0cd353c72173b4fd50dc9c0b30646c7018cffd",
+      "before": "1006",
+      "after": "1007"
+    },
+    "exactSourceIssue": "FeeHook exact assumes standard quoter with same poolKey reflects execution fee; no explicit sender/origin/gas-equivalence proof in current Family request.",
+    "normalFeeEntropyFields": [
+      "PREVRANDAO",
+      "blockhash(N-1)",
+      "timestamp",
+      "chainid",
+      "hook address",
+      "beforeSwap sender parameter",
+      "poolId",
+      "zeroForOne",
+      "amountSpecified",
+      "sqrtPriceLimitX96",
+      "incremented per-pool counter"
+    ],
+    "gasBypassExact": "gasleft > floor(min(storage[2], block.gaslimit) * 10100 / 10000)",
+    "configurationLimit": "storage[2] value not present in diffMode changed-storage-only raw evidence; root bounded source-pinned read required",
+    "senderImplication": "Standard quoter passes itself as beforeSwap sender while BotVM passes executor; sender is explicitly hashed, so adding tx.origin alone cannot prove quote parity."
+  },
+  "limits": [
+    "No additional RPC, EVM execution or production edit.",
+    "Exact quote eth_call from/gas omitted from saved read metadata; must verify actual transport binding before attributing a particular bypass.",
+    "Do not reduce amount, add output tolerance, relabel as state rejection, or use three passing trials to declare full tiered acceptance.",
+    "No-hook39 success remains independently valid."
+  ]
+}
