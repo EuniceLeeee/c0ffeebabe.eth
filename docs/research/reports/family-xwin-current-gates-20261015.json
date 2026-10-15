@@ -1,0 +1,28 @@
+[
+  {
+    "family": "protocol:token-conversion",
+    "exitCode": 0,
+    "startedAt": "2026-10-15T16:14:15.570518+00:00",
+    "finishedAt": "2026-10-15T16:15:06.270966+00:00",
+    "logSha256": "989c1f1f18c483a76d0d2f2a9089270bbcbaef93f7b2ff3be8e91716b299b6f2",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/xwin-gate118b-selection.json",
+    "manifestSha256": "5ab36d53cf2368f1400137ac3c46902a7769079c80d228e8d7185b7130f5909c",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:token-conversion",
+          "passed": true,
+          "failures": []
+        }
+      ]
+    }
+  }
+]

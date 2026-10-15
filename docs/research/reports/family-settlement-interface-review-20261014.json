@@ -6147,7 +6147,7 @@
     },
     {
       "familyId": "protocol:token-conversion",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "BTB Bear mint",
@@ -6218,38 +6218,108 @@
         {
           "id": "xWin Allocations deposit",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "not-required",
-          "gaps": [
-            "缺 N26075823 历史实现槽/实现 runtime 绑定；普通配置协议调用不属于调用者结算回调。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-correctness-20261015.json",
+              "sha256": "827ef638abbf0674aa6d8e8642e1b49c66df40b9fd40fbf76e0308448803782a"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-independent-20261015.json",
+              "sha256": "9c83b4fe1938f72e4d03d09e17dda5306eae3d09742eba138a03dbd4436e673f"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-transport-review-20261015.json",
+              "sha256": "663cc146d4398bdcdf04afa5ca55c93e60c23b10ff0e6d3e39c455ef3d32b8c1"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-argument-review-20261015.json",
+              "sha256": "9760ab8d39f2cd513944796cd34c6315ebbd8c00ba6731a341d36321cd716f3c"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-deployment-interface-20261015.json",
+              "sha256": "f974f278958d40e4ecfe0167e3c7e45b6bcc853ce2dd6e7b22d4d96ea73d574c"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-tooling-correction-20261015.json",
+              "sha256": "358e2bfa2d72b5db8cf4cc8038a4680178a5a91a454e3b16f43abe01a7acfea2"
+            },
+            {
+              "path": "docs/research/reports/xwin-historical-identity-binding-20261015.json",
+              "sha256": "54ba78e963932f3fafcc42bf8cc453c0a13ab6cbdee4fb6046944e2c76ef133b"
+            },
+            {
+              "path": "docs/research/reports/xwin-negative-root-revert-independent-20261015.json",
+              "sha256": "2c28446fac3990a490f725fc3de341eecf97a2cfbb4b8af95033d578a50f98a4"
             }
-          ]
+          ],
+          "scope": "Selected actual deployed caller-receiver deposit/withdraw; no callback settlement or explicit external receiver.",
+          "executionEvidence": {
+            "path": "docs/research/reports/xwin-current-behavior-20261015.json",
+            "sha256": "2670fa8b8ac732fcc6463ec528ae6db99b42d97ddc259293e85a860816b497cc"
+          }
         },
         {
           "id": "xWin Allocations withdraw",
           "interface": "verified",
-          "identity": "partial",
+          "identity": "verified",
           "callback": "none",
           "recipient": "no",
           "wiring": "verified",
-          "execution": "not-required",
-          "gaps": [
-            "缺 N26075823 历史实现槽/实现 runtime 绑定；普通配置协议调用不属于调用者结算回调。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-correctness-20261015.json",
+              "sha256": "827ef638abbf0674aa6d8e8642e1b49c66df40b9fd40fbf76e0308448803782a"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-independent-20261015.json",
+              "sha256": "9c83b4fe1938f72e4d03d09e17dda5306eae3d09742eba138a03dbd4436e673f"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-transport-review-20261015.json",
+              "sha256": "663cc146d4398bdcdf04afa5ca55c93e60c23b10ff0e6d3e39c455ef3d32b8c1"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-argument-review-20261015.json",
+              "sha256": "9760ab8d39f2cd513944796cd34c6315ebbd8c00ba6731a341d36321cd716f3c"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-deployment-interface-20261015.json",
+              "sha256": "f974f278958d40e4ecfe0167e3c7e45b6bcc853ce2dd6e7b22d4d96ea73d574c"
+            },
+            {
+              "path": "docs/research/reports/xwin-current-tooling-correction-20261015.json",
+              "sha256": "358e2bfa2d72b5db8cf4cc8038a4680178a5a91a454e3b16f43abe01a7acfea2"
+            },
+            {
+              "path": "docs/research/reports/xwin-historical-identity-binding-20261015.json",
+              "sha256": "54ba78e963932f3fafcc42bf8cc453c0a13ab6cbdee4fb6046944e2c76ef133b"
+            },
+            {
+              "path": "docs/research/reports/xwin-negative-root-revert-independent-20261015.json",
+              "sha256": "2c28446fac3990a490f725fc3de341eecf97a2cfbb4b8af95033d578a50f98a4"
             }
-          ]
+          ],
+          "scope": "Selected actual deployed caller-receiver deposit/withdraw; no callback settlement or explicit external receiver.",
+          "executionEvidence": {
+            "path": "docs/research/reports/xwin-current-behavior-20261015.json",
+            "sha256": "2670fa8b8ac732fcc6463ec528ae6db99b42d97ddc259293e85a860816b497cc"
+          }
         }
       ],
       "domain": "protocol",
@@ -6348,12 +6418,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/btb-current-deployment-interface-20261015.json",
-        "sha256": "5cb2d0a81fae275d439706e0c873c15796914ca450c809373197faf8b2d77580"
+        "path": "docs/research/reports/current-interface-token-conversion-after-xwin-20261015.json",
+        "sha256": "4d3bfb7400f10e5402a335cc12f24f96f31bfd9db17782a1ea04ec9669a0714b"
       },
       "currentScopedEvidence": {
-        "path": "docs/research/reports/caller-only-current-correctness-20261015.json",
-        "sha256": "0a9edded8549df15279c73cf66c79f92127c27b435344aa689f6036d4624d38d"
+        "path": "docs/research/reports/xwin-current-correctness-20261015.json",
+        "sha256": "827ef638abbf0674aa6d8e8642e1b49c66df40b9fd40fbf76e0308448803782a"
       }
     },
     {
@@ -8216,8 +8286,8 @@
     ]
   },
   "currentScopedUpdate": {
-    "scope": "Balancer V3 retained8pools36directions actual evidence and current compatibility join, no rerun.",
-    "priorInventorySha256": "eb47285c2a3340ce3327a6f548e2787b4c10cb902652b940b72363f85a0621c3",
+    "scope": "xWin two sameN actual directions current VM dual execution, generic test-only quote transport; BTB unchanged.",
+    "priorInventorySha256": "a6f318ede2cfa24ac1fc3ddd969ba26148608452251e3d2a639f8b9f6f6ea46d",
     "allOtherVariantStatesPreserved": true,
     "allFamiliesPassed": false
   }

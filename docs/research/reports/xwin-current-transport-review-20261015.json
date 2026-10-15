@@ -1,0 +1,50 @@
+{
+  "result": "fresh-non-author-source-review-pass-not-execution-acceptance",
+  "files": [
+    {
+      "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.ts",
+      "beforeSha256": "a2234560cd35f6c98a603e09d59e90c5b6894873d760796c57db87b0f266a43a",
+      "sha256": "ea1da25165ce4ca46cb5df5a379fddbba9922385d974543597f85bd22a1bbfd9"
+    },
+    {
+      "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+      "beforeSha256": "beb18634cce1c9c46bc9590a9d8038e5256caa5a5d9d91e2bd10512c8ffbea34",
+      "sha256": "691deca6ed8feaaaaa0b83af78ea47220c76bd574dd748b8645f0513a2081241"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/test/xwin-quote-read-transport.test.ts",
+      "beforeSha256": null,
+      "sha256": "fe1a4e5c482554999e951d8a0448a77283e7f8aae9368bc9fb971a9e0f2ac9da"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin100/evidence106/xwin-mint-dual106.json",
+      "sha256": "e4172da79e7d6d1f0354c2514f502ea2a5664b21e72369d3aeb68907ca0ed9a4"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin100/diagnostic107/reader-weth-upstream108.json",
+      "sha256": "be3ce9690975a2aeafb8d4e04cb19b5bff7ad65b6fb7b6fa2f131195fc8cfc3d"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/live111.jsonl",
+      "sha256": "15acee6b3919a36c72f3738c5214feea3406cecd673e3944f84f8be8cc004594"
+    }
+  ],
+  "findings": [
+    "Exact same USDC/WETH reader calldata and canonical source hash that lacked a response in106 succeeds upstream; deployed reader exists. This establishes a transport-path bottleneck hypothesis with actual evidence, not a missing Family implementation claim. Original106 failure retained.",
+    "Current main source uses liveRpcUrl/ethers provider at1386-1388 and createStrictCentralAdapterRuntime at1165 with common generation fence/caller authority. Current central eth-call transport uses production request to/data/from and source.number; quote cache/backend choices remain common. Historical candidate still calls this same issuer/runtime with unchanged Family math/request program. It does not reproduce live scheduler performance.",
+    "Explicit fork|upstream choice rejects arbitrary URL and duplicate flag; default fork preserved. Only eth_call/getCode/getStorage may take quote upstream, every call requires EIP1898 exact blockHash+requireCanonical and current generation/number validation. No latest quote path or writes accepted.",
+    "Only ethers-local blockTag is removed after requiring equality to source.number. Current central eth-call shape has no value; supported from preserved. Existing quoteOverlay contains only current executor code and is unchanged; no actor funding or protocol storage override is fed to quotation.",
+    "Current fork is still sameN end-state with seven EVM environment opcodes checked against header; final canonical header and unmodified executor/origin code/baseline balances rechecked. Upstream state header matches that exact source. All funding probes, call-only execution, trace execution and reject cases still use owned loopback fork.",
+    "No new quote method, hidden fallback, altered amount, smaller state reader window, timeout extension, or protocol branch. Runtime construction original Exact/quoted/RPC guard unchanged. Quote reads now record transport/error/elapsed details instead of silently leaving undefined results.",
+    "Two new offline tests cover default/explicit selection and hash-bound read-only enforcement; old xWin flag2 regressions should be run alongside. No test execution claimed in this source review."
+  ],
+  "limits": [
+    "Fresh source-only approval to apply and run minimum current xWin mint/redeem matrix; actual correctness pending.",
+    "106 transport timeout and105 runner argument error remain immutable failures.",
+    "Do not call this a production speed improvement or phase4 performance acceptance."
+  ],
+  "reviewer": "v1_accept26",
+  "nonAuthor": true
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "family": "protocol:token-conversion",
+    "exitCode": 1,
+    "startedAt": "2026-10-15T16:08:02.993582+00:00",
+    "finishedAt": "2026-10-15T16:08:53.800715+00:00",
+    "logSha256": "bc86cf13d57c4785c4bd0aaa099e1677af761dc33945ba5fffab1f7e60647ca7",
+    "manifest": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/xwin-gate118-selection.json",
+    "manifestSha256": "1ba051eeed9a251ddb6cf4f8c009777e1abae680495a0554ca5af59d749c660d",
+    "query": [
+      "family",
+      "settlement"
+    ],
+    "tool": "listener:searcher:family-settlement-review",
+    "allFamiliesPassedClaim": false,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "protocol:token-conversion",
+          "passed": false,
+          "failures": [
+            "invalid review evidence: AssertionError [ERR_ASSERTION]: xWin Allocations deposit: missing rollback"
+          ]
+        }
+      ]
+    }
+  }
+]

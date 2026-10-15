@@ -156,7 +156,7 @@ export const ERC20 = new ethers.Interface(["function balanceOf(address) view ret
 export function options(argv: string[]) {
   const v = new Map<string, string>();
   const required = ["--family", "--ready", "--prices", "--port", "--out"];
-  const names = [...required, "--reference-prices", "--reference-edges", "--expected-executor-code-hash", "--v4-settlement-artifact", "--input-only-reference", "--target-header", "--revm-bin"];
+  const names = [...required, "--reference-prices", "--reference-edges", "--expected-executor-code-hash", "--v4-settlement-artifact", "--input-only-reference", "--target-header", "--revm-bin", "--quote-read-transport"];
   for (let i = 0; i < argv.length; i += 2) {
     assert(names.includes(argv[i]!) && !v.has(argv[i]!), "unknown/duplicate argument");
     const value = argv[i + 1]; assert(value && !value.startsWith("--"), "missing argument"); v.set(argv[i]!, value);
@@ -174,7 +174,7 @@ export function options(argv: string[]) {
   const expectedExecutorCodeHash = v.get("--expected-executor-code-hash");
   if (expectedExecutorCodeHash !== undefined) assert(ethers.isHexString(expectedExecutorCodeHash, 32));
   const inputOnlyReference = v.get("--input-only-reference") === "true";
-  if (v.has("--input-only-reference")) assert(inputOnlyReference && ["v4-native-nohook", "v4-sat1", "v4-erc20-nohook", "v4-erc20-tiered-fee"].includes(family), "explicit input-only V4 mode required");
+  if (v.has("--input-only-reference")) assert(inputOnlyReference && ["v4-native-nohook", "v4-sat1", "v4-erc20-nohook", "v4-erc20-tiered-fee", "xwin-mint", "xwin-redeem"].includes(family), "explicit input-only supported historical sample required");
   const v4SettlementArtifact = v.get("--v4-settlement-artifact");
   if (v4SettlementArtifact) assert(["v4-native-nohook", "v4-sat1", "v4-erc20-nohook", "v4-erc20-tiered-fee"].includes(family), "native V4 settlement fixed samples only");
   const erc20InputOnly = ["v4-erc20-nohook", "v4-erc20-tiered-fee"].includes(family);
@@ -183,7 +183,9 @@ export function options(argv: string[]) {
   const revmBin = v.get("--revm-bin");
   if (family === "v4-erc20-tiered-fee") assert(revmBin, "tiered executor quote requires the existing production REVM binary");
   else assert(revmBin === undefined, "REVM extension is confined to tiered acceptance here");
-  return { revmBin, targetHeader: v.get("--target-header"), erc20InputOnly, inputOnlyReference, v4SettlementArtifact, family: family as SampleKey, port, ready: v.get("--ready")!, prices: v.get("--prices")!, out: v.get("--out")!,
+  const quoteReadRpc = v.get("--quote-read-transport") ?? "fork";
+  assert(quoteReadRpc === "fork" || quoteReadRpc === "upstream", "quote read RPC must be fork or upstream");
+  return { quoteReadRpc, revmBin, targetHeader: v.get("--target-header"), erc20InputOnly, inputOnlyReference, v4SettlementArtifact, family: family as SampleKey, port, ready: v.get("--ready")!, prices: v.get("--prices")!, out: v.get("--out")!,
     referencePrices: v.get("--reference-prices"), referenceEdges: referenceEdges as string[], expectedExecutorCodeHash };
 }
 
@@ -544,4 +546,16 @@ export function constructionGuard() {
       if (!["callerAuthority", "generationFence"].includes(String(key))) check(); return Reflect.get(target, key, receiver);
     } }); },
   };
+}
+
+/** Only immutable N-state reads can use the canonical upstream provider. All
+ * execution, funding probes and traces continue through the owned local fork. */
+export function assertPinnedQuoteRead(method: string, params: readonly unknown[], blockHash: string): void {
+ assert(["eth_call", "eth_getCode", "eth_getStorageAt"].includes(method));
+ const pin=params[method==="eth_getStorageAt"?2:1];assert.deepEqual(pin,{blockHash,requireCanonical:true});
+ assert.equal(params.length,method==="eth_getCode"?2:3);
+ if(method==="eth_call"){
+  const tx=params[0] as Record<string,unknown>;assert(tx&&typeof tx.to==="string"&&ethers.isAddress(tx.to)&&typeof tx.data==="string"&&ethers.isHexString(tx.data));
+  assert(!Object.hasOwn(tx,"blockTag"));assert(!Object.hasOwn(tx,"value"));
+ }
 }

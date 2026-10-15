@@ -1,0 +1,75 @@
+{
+  "scope": "Independent saved raw reanalysis; no EVM rerun",
+  "files": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/evidence111/xwin-mint-dual111.json",
+      "sha256": "2a1153dbb8b87d988862d0ec59c83605b705127a446270d53a5e2a626cf7575a"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/evidence111/xwin-redeem-dual111.json",
+      "sha256": "e63b91a812e75dac65e7360144be58b749d01dc47e234bef4094efc85f59f1e3"
+    }
+  ],
+  "positive": 16,
+  "noInputReverts": 8,
+  "rawBalanceSlots": 32,
+  "protocolCalls": 16,
+  "approvals": 24,
+  "quotes": [
+    {
+      "direction": "mint",
+      "label": "saved-production-input-only",
+      "amountIn": "5330762",
+      "amountOut": "5359753824301855890"
+    },
+    {
+      "direction": "mint",
+      "label": "historical-input-at-N",
+      "amountIn": "1",
+      "amountOut": "467922162323256"
+    },
+    {
+      "direction": "redeem",
+      "label": "saved-production-input-only",
+      "amountIn": "5359753824301855890",
+      "amountOut": "5296344"
+    },
+    {
+      "direction": "redeem",
+      "label": "historical-input-at-N",
+      "amountIn": "1484700796983592223",
+      "amountOut": "1467027"
+    }
+  ],
+  "sourceTreeSha256": "d1262f5b8707e314666535b602e7a3d1489f97e65848479cb272f0ccdc2b31f8",
+  "sourceRows": 1244,
+  "artifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+  "ownerPatchedRuntimeHash": "0x01896e590121eb338b36a7f22e5ee88c3baa184944e5f7318fc6077002a4a79f",
+  "result": "pass",
+  "limits": [
+    "N-end state execution; original transaction opportunity and pre-call parity NOT run",
+    "Saved production rows supply amountIn only; no natural valuation upgrade",
+    "No-input rejects have actual revert traces; no rollback stateDiff claimed for these probes",
+    "No performance acceptance; original 105/106/110 failures retained"
+  ],
+  "sourceReviews": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/v1-independent-source-review111.json",
+      "sha256": "663cc146d4398bdcdf04afa5ca55c93e60c23b10ff0e6d3e39c455ef3d32b8c1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/v1-increment-review112.json",
+      "sha256": "9760ab8d39f2cd513944796cd34c6315ebbd8c00ba6731a341d36321cd716f3c"
+    }
+  ],
+  "canonicalReceipts": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/evidence111/checks111.json",
+      "sha256": "14add041f1681a8cd1164cc655c9660358c82de21167594afdea83016c7366b7"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin-transport107/evidence111/selection111.json",
+      "sha256": "0ad85fcbc2b27a2aa737ab858b5aac852bcc6608e531691e72c4005dd24422f0"
+    }
+  ]
+}

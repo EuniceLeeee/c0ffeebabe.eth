@@ -7,6 +7,7 @@
 // Requires the Family's existing activation env flag; never changes defaults.
 // N-end + N environment single-leg evidence, NOT original-precall/EV/performance.
 import assert from "node:assert/strict";
+import { assertPinnedQuoteRead } from "./evidence.js";
 import { closeSync, fsyncSync, openSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -182,7 +183,9 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       guard.check(); abort.signal.throwIfAborted(); const id = ++calls;
       assert(id <= 1800 && Date.now() < deadline, "diagnostic read budget exhausted");
       assert(allowed.has(method) || (method === "anvil_setCoinbase" && backend && !upstream));
-      if (upstream) assert(["eth_getBlockByNumber", "eth_getTransactionReceipt", "eth_getTransactionByHash", "debug_traceTransaction"].includes(method));
+      if (upstream && !["eth_getBlockByNumber", "eth_getTransactionReceipt", "eth_getTransactionByHash", "debug_traceTransaction"].includes(method)) {
+        assert.equal(args.quoteReadRpc,"upstream");assertPinnedQuoteRead(method,params,source.hash);
+      }
       if (method === "anvil_setCoinbase") assert.deepEqual(params, [header.miner]);
       const res = await fetch(upstream ? secret : loopback, { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id, method, params }), signal: AbortSignal.any([abort.signal, AbortSignal.timeout(30_000)]) });
@@ -234,6 +237,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       for (const [token, initial] of baselines) assert.equal(await balance(token, executor), initial, "simulation persisted actor state"); };
     const cache = createAdapterFamilyExactQuoteCache(); cache.advanceState(source);
     const quoteReads: any[] = [];
+    report.quoteReadTransport={kind:args.quoteReadRpc,source,scope:"Explicit same-N read-only provider choice; full production requests unchanged; all actual execution/traces remain isolated local fork; not a performance acceptance"};
+    const quoteRead=(method:string,params:unknown[])=>{assertPinnedQuoteRead(method,params,source.hash);return rpc(method,params,args.quoteReadRpc==="upstream");};
     if (args.revmBin) {
       const executorRuntimeCode = loadBotVmRuntimeCode(owner); assert.equal(executorRuntimeCode.keccak256, runtimeCode.keccak256);
       simulation = createRevmStrictSourceSimulation({ identity: { source, rpcUrl: loopback, chainId: 1, stateRoot: header.stateRoot },
@@ -255,11 +260,14 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         async call(t, b) {
           assert.equal(b, source.number);
           const read: any = { kind: "call", to: t.to, selector: t.data.slice(0, 10), data: t.data, block: b };
-          quoteReads.push(read); read.result = await rpc("eth_call", [t, pin, quoteOverlay]); return read.result;
+          const {blockTag,...tx}=t;assert.equal(blockTag??b,source.number);read.transport=args.quoteReadRpc;read.startedAt=Date.now();quoteReads.push(read);
+          try { read.result = await quoteRead("eth_call", [tx, pin, quoteOverlay]); return read.result; }
+          catch(e){read.error=redact(e instanceof Error?e.message:e);throw e;}
+          finally{read.elapsedMs=Date.now()-read.startedAt;}
         },
         async getCode(a, b) { assert.equal(b, source.number); quoteReads.push({ kind: "code", to: a });
-          return args.expectedExecutorCodeHash && same(a, executor) ? runtimeCode.code : rpc("eth_getCode", [a, pin]); },
-        async getStorage(a, k, b) { assert.equal(b, source.number); quoteReads.push({ kind: "storage", to: a, slot: k }); return rpc("eth_getStorageAt", [a, k, pin]); },
+          return args.expectedExecutorCodeHash && same(a, executor) ? runtimeCode.code : quoteRead("eth_getCode", [a, pin]); },
+        async getStorage(a, k, b) { assert.equal(b, source.number); quoteReads.push({ kind: "storage", to: a, slot: k }); return quoteRead("eth_getStorageAt", [a, k, pin]); },
       } });
     const slots = new Map<string, string>();
     const slotFor = async (token: string, protectedAccount: string, holder = executor) => {

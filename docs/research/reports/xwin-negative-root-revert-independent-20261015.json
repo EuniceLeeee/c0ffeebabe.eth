@@ -1,0 +1,405 @@
+{
+  "result": "root-revert-proven-negative-state-diff-not-recorded",
+  "scope": "8 actual no-input full outer owner-to-executor traceCalls, no re-execution",
+  "count": 8,
+  "rows": [
+    {
+      "file": "xwin-mint-dual111.json",
+      "direction": "mint",
+      "amountIn": "5330762",
+      "encoding": "quoted",
+      "inventoryControl": true,
+      "rootError": "execution reverted",
+      "rootRevertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+      "failedFrames": [
+        {
+          "path": [],
+          "to": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "call failed"
+        },
+        {
+          "path": [
+            2
+          ],
+          "to": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0
+          ],
+          "to": "0xc77f5620cea9a67002b3511843f47bf9e2adc7ac",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0,
+            12
+          ],
+          "to": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0,
+            12,
+            0
+          ],
+          "to": "0x43506849d7c04f9138d1a2050bbf3a0c054402dd",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        }
+      ],
+      "successfulCallsBeforeAncestorRevert": 60
+    },
+    {
+      "file": "xwin-mint-dual111.json",
+      "direction": "mint",
+      "amountIn": "5330762",
+      "encoding": "runtime",
+      "inventoryControl": true,
+      "rootError": "execution reverted",
+      "rootRevertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+      "failedFrames": [
+        {
+          "path": [],
+          "to": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "runtime external call"
+        },
+        {
+          "path": [
+            2
+          ],
+          "to": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0
+          ],
+          "to": "0xc77f5620cea9a67002b3511843f47bf9e2adc7ac",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0,
+            12
+          ],
+          "to": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0,
+            12,
+            0
+          ],
+          "to": "0x43506849d7c04f9138d1a2050bbf3a0c054402dd",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        }
+      ],
+      "successfulCallsBeforeAncestorRevert": 60
+    },
+    {
+      "file": "xwin-mint-dual111.json",
+      "direction": "mint",
+      "amountIn": "1",
+      "encoding": "quoted",
+      "inventoryControl": true,
+      "rootError": "execution reverted",
+      "rootRevertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+      "failedFrames": [
+        {
+          "path": [],
+          "to": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "call failed"
+        },
+        {
+          "path": [
+            2
+          ],
+          "to": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0
+          ],
+          "to": "0xc77f5620cea9a67002b3511843f47bf9e2adc7ac",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0,
+            12
+          ],
+          "to": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0,
+            12,
+            0
+          ],
+          "to": "0x43506849d7c04f9138d1a2050bbf3a0c054402dd",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        }
+      ],
+      "successfulCallsBeforeAncestorRevert": 60
+    },
+    {
+      "file": "xwin-mint-dual111.json",
+      "direction": "mint",
+      "amountIn": "1",
+      "encoding": "runtime",
+      "inventoryControl": true,
+      "rootError": "execution reverted",
+      "rootRevertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+      "failedFrames": [
+        {
+          "path": [],
+          "to": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "runtime external call"
+        },
+        {
+          "path": [
+            2
+          ],
+          "to": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0
+          ],
+          "to": "0xc77f5620cea9a67002b3511843f47bf9e2adc7ac",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0,
+            12
+          ],
+          "to": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        },
+        {
+          "path": [
+            2,
+            0,
+            12,
+            0
+          ],
+          "to": "0x43506849d7c04f9138d1a2050bbf3a0c054402dd",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "ERC20: transfer amount exceeds balance"
+        }
+      ],
+      "successfulCallsBeforeAncestorRevert": 60
+    },
+    {
+      "file": "xwin-redeem-dual111.json",
+      "direction": "redeem",
+      "amountIn": "5359753824301855890",
+      "encoding": "quoted",
+      "inventoryControl": true,
+      "rootError": "execution reverted",
+      "rootRevertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+      "failedFrames": [
+        {
+          "path": [],
+          "to": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "call failed"
+        },
+        {
+          "path": [
+            0
+          ],
+          "to": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "Withdraw amount exceeds balance"
+        },
+        {
+          "path": [
+            0,
+            0
+          ],
+          "to": "0xc77f5620cea9a67002b3511843f47bf9e2adc7ac",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "Withdraw amount exceeds balance"
+        }
+      ],
+      "successfulCallsBeforeAncestorRevert": 2
+    },
+    {
+      "file": "xwin-redeem-dual111.json",
+      "direction": "redeem",
+      "amountIn": "5359753824301855890",
+      "encoding": "runtime",
+      "inventoryControl": true,
+      "rootError": "execution reverted",
+      "rootRevertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+      "failedFrames": [
+        {
+          "path": [],
+          "to": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "runtime external call"
+        },
+        {
+          "path": [
+            0
+          ],
+          "to": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "Withdraw amount exceeds balance"
+        },
+        {
+          "path": [
+            0,
+            0
+          ],
+          "to": "0xc77f5620cea9a67002b3511843f47bf9e2adc7ac",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "Withdraw amount exceeds balance"
+        }
+      ],
+      "successfulCallsBeforeAncestorRevert": 2
+    },
+    {
+      "file": "xwin-redeem-dual111.json",
+      "direction": "redeem",
+      "amountIn": "1484700796983592223",
+      "encoding": "quoted",
+      "inventoryControl": true,
+      "rootError": "execution reverted",
+      "rootRevertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000b63616c6c206661696c6564000000000000000000000000000000000000000000",
+      "failedFrames": [
+        {
+          "path": [],
+          "to": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "call failed"
+        },
+        {
+          "path": [
+            0
+          ],
+          "to": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "Withdraw amount exceeds balance"
+        },
+        {
+          "path": [
+            0,
+            0
+          ],
+          "to": "0xc77f5620cea9a67002b3511843f47bf9e2adc7ac",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "Withdraw amount exceeds balance"
+        }
+      ],
+      "successfulCallsBeforeAncestorRevert": 2
+    },
+    {
+      "file": "xwin-redeem-dual111.json",
+      "direction": "redeem",
+      "amountIn": "1484700796983592223",
+      "encoding": "runtime",
+      "inventoryControl": true,
+      "rootError": "execution reverted",
+      "rootRevertData": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+      "failedFrames": [
+        {
+          "path": [],
+          "to": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "runtime external call"
+        },
+        {
+          "path": [
+            0
+          ],
+          "to": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+          "type": "CALL",
+          "error": "execution reverted",
+          "revertReason": "Withdraw amount exceeds balance"
+        },
+        {
+          "path": [
+            0,
+            0
+          ],
+          "to": "0xc77f5620cea9a67002b3511843f47bf9e2adc7ac",
+          "type": "DELEGATECALL",
+          "error": "execution reverted",
+          "revertReason": "Withdraw amount exceeds balance"
+        }
+      ],
+      "successfulCallsBeforeAncestorRevert": 2
+    }
+  ],
+  "conclusion": "All 8 have error at root CALL, not only nested protocol frame. Descendant state effects are rolled back under EVM root revert semantics, including successful approval calls before downstream failure. This is actual outer call rejection evidence, not a manually expected error. However no negative pre/post diff or balance snapshot is saved, so independent raw rollback/state-accounting assertion remains unverified. Do not relabel this as a saved storage rollback proof.",
+  "minimalSupplement": "Only the exact 8 noInput requests from prior raw, same N/hash/header/actor code and funding overrides: prestateTracer(diffMode=true), full union of changed account/storage keys with absent-as-zero semantics, executor native and token balance checks. Preserve owner nonce/gas as transaction-envelope accounting. No repeat of 16 positive executions."
+}

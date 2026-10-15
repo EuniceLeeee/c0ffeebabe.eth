@@ -1,0 +1,22 @@
+{
+  "result": "fresh-source-increment-pass",
+  "scope": "Non-secret enum naming compatibility only; production and security gates unchanged",
+  "files": [
+    {
+      "path": "listener/src/searcher/test/family-integration/kyber-yb-compound/evidence.ts",
+      "beforeSha256": "691deca6ed8feaaaaa0b83af78ea47220c76bd574dd748b8645f0513a2081241",
+      "sha256": "e04b6406f70eafc2ba2c914ea5794bd085f321600274f020fd1327a70a3d2695"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/token-conversion-family/test/xwin-quote-read-transport.test.ts",
+      "beforeSha256": "fe1a4e5c482554999e951d8a0448a77283e7f8aae9368bc9fb971a9e0f2ac9da",
+      "sha256": "ce33572d2da621c358bfe15325109443ac2a4edae39e145dc9cc11859566365a"
+    }
+  ],
+  "findings": [
+    "Only public option key changes from --quote-read-rpc to --quote-read-transport; fork/upstream enum and defaultfork preserved.",
+    "Canonical assertNoSecretBearingToolArgs remains unchanged; regression calls real implementation, accepts public enum and rejects URL/old key; CLI also rejects old key.",
+    "No execution/quote/Family/source state changes; original110 pre-execution rejection preserved."
+  ],
+  "executionClaim": false
+}

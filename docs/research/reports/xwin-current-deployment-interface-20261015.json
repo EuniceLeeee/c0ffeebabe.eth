@@ -1,0 +1,74 @@
+{
+  "source": {
+    "number": 26075823,
+    "hash": "0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c"
+  },
+  "target": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+  "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+  "implementationWord": "0x000000000000000000000000c77f5620cea9a67002b3511843f47bf9e2adc7ac",
+  "implementation": "0xC77F5620Cea9A67002b3511843F47BF9e2AdC7aC",
+  "proxy": {
+    "address": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+    "codeHash": "0x6db6f209459b2881b3e5caf43b42a94a08748ab0399b36a85df02463735799d1",
+    "immutableProxyAdmin": "0x36E6fCCc1cE41CFd1b01418d02AA1ee7ff41e532",
+    "templateValidated": true
+  },
+  "implementationCode": {
+    "address": "0xC77F5620Cea9A67002b3511843F47BF9e2AdC7aC",
+    "codeHash": "0xa2ee2404f7434f475888a0770162d1cbcb52d0c1925a0cbc334d3691e61e4387",
+    "byteForBytePublicSourceMatch": true
+  },
+  "publicInterface": {
+    "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-b/public-sources/xwin-implementation.json",
+    "sha256": "c123a9f17f34dff942850b3cc95bb16e5157fb1771a0d56da80b77e885c623f6"
+  },
+  "sameStateReads": [
+    {
+      "sig": "baseToken() view returns(address)",
+      "data": "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "value": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    },
+    {
+      "sig": "xWinSwap() view returns(address)",
+      "data": "0x0000000000000000000000004d146413c0dd1794019f9adee8d28304d0afee05",
+      "value": "0x4D146413c0Dd1794019f9AdEE8d28304D0aFEe05"
+    },
+    {
+      "sig": "priceMaster() view returns(address)",
+      "data": "0x000000000000000000000000c0c01a95595a9b494e812d6cd95c3768ae82e64a",
+      "value": "0xc0C01a95595A9B494E812D6cD95C3768AE82E64a"
+    },
+    {
+      "sig": "lockingAddress() view returns(address)",
+      "data": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "value": "0x0000000000000000000000000000000000000000"
+    },
+    {
+      "sig": "getTargetNamesAddress() view returns(address[])",
+      "data": "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000030000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "value": [
+        "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      ]
+    },
+    {
+      "sig": "paused() view returns(bool)",
+      "data": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "value": false
+    }
+  ],
+  "kind": "same-state-deployment-interface-join",
+  "result": "pass",
+  "evidence": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/xwin100/identity-join104.json",
+    "sha256": "54ba78e963932f3fafcc42bf8cc453c0a13ab6cbdee4fb6046944e2c76ef133b"
+  },
+  "selectedMethods": [
+    "deposit(uint256,uint32)",
+    "withdraw(uint256,uint32)"
+  ],
+  "callbackSettlement": "none",
+  "explicitRecipient": "no; current selected methods deliver to caller",
+  "scope": "Historical active N26075823 deployment only; selected caller-receiver methods. No lock inventory/deposit alternative expansion. Original paused-state and earlier natural results retain original hashes."
+}
