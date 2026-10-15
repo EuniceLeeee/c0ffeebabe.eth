@@ -1,0 +1,1210 @@
+{
+  "schema": "curve-plain-recipient-code-review/v1",
+  "review": {
+    "round": 2,
+    "maximumRounds": 3,
+    "kind": "independent non-author source and offline-evidence review",
+    "reviewer": "/root/interface_protocols_b",
+    "interruptionResumedWithinSameRound": true,
+    "baselineHead": "fae96aeadebeef86d4ea1ec91af7ac0baf1afc17",
+    "scopeExpandedWithinRound": "The parent, following the latest user instruction to finish one Family before unified historical acceptance, added native direct delivery in this same pass. The original pass1 report is preserved."
+  },
+  "verdict": {
+    "status": "implementation_ready_unified_acceptance_pending",
+    "openProductionBlockingFindings": [],
+    "openToolingBlockingFindings": [],
+    "historicalAcceptance": "pending",
+    "independentUnifiedAcceptance": "pending",
+    "opportunityReplay": "not performed or claimed",
+    "performance": "not assessed",
+    "wholeFamilySettlementGate": "not passed by this report",
+    "familyLocal": "not asserted",
+    "mergeReady": "not asserted"
+  },
+  "boundaries": {
+    "localReadOnlyReview": true,
+    "rpcCallsByReviewer": 0,
+    "testsOrBuildsRunByReviewer": 0,
+    "cloudWritesByReviewer": 0,
+    "sourceEditsByReviewer": 0,
+    "catalogOrIMPLOrGitEditsByReviewer": 0,
+    "onlyOutput": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/curve-recipient-code-review.json",
+    "testExecutionEvidenceOwner": "Parent's serialized canonical/cloud runners; reviewer only reads and hashes saved artifacts."
+  },
+  "priorReview": {
+    "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/curve-recipient-design-review.json",
+    "sha256": "c58d1b8a315edf7d15cb03ad009543fb80382bfb20596c94a608ca750d458e9b",
+    "reuse": "Deployed ABI/source semantics and known historical code-identity gaps are reused. This pass does not repeat network or historical interface investigation."
+  },
+  "sourceAssessment": [
+    {
+      "component": "Optional capability and route binding",
+      "status": "accepted",
+      "files": [
+        "types.ts",
+        "instance.ts",
+        "routes.ts",
+        "identity.ts"
+      ],
+      "details": [
+        "recipientMode is optional, source-derived, included in staticBinding and route projection and compared against the descriptor direction before program construction.",
+        "Its permitted name is derived from bound native/non-native mode and quote index ABI. Absent optional properties keep the old projection; existing route keys, action IDs and mode priority remain.",
+        "The issuer continues to check sealed route/source/descriptor authority. Discovery selector nomination does not itself authorize a recipient capability.",
+        "A successful independent probe applies to its direction. Optional unavailable evidence keeps an already-proved default but does not invent recipient support. No per-pool allowlist was added."
+      ]
+    },
+    {
+      "component": "Identity probes",
+      "status": "accepted_with_historical_scope_pending",
+      "files": [
+        "identity.ts",
+        "native.ts",
+        "codec.ts"
+      ],
+      "details": [
+        "ERC20 receiver overloads are tested as an additional atomic external-recipient alternative in the existing final identity round; original mode priority and four-round lifecycle remain.",
+        "ERC20 receipt proof still checks exact observed input/output and pool effects, with the existing internal WETH wrap/unwrap event exception narrowly extended to the uint receiver overload.",
+        "Native input uses its own raw ETH balance override, no wrapped asset boundary, and four observed actor/receiver token balances plus exact actor native debit. It requires the chosen external receiver's output and zero stock changes.",
+        "Native output uses the already-admitted caller-output raw ABI, then the common measured WETH-delivery boundary. It does not pretend that caller-output proves an external raw-ETH receiver ABI.",
+        "Request source number/hash/generation, unique required result identities and unsupported-mode rejection remain enforced. Reverted optional probes remain distinct from unknown transport."
+      ]
+    },
+    {
+      "component": "ERC20 direct program",
+      "status": "accepted",
+      "files": [
+        "recipient.ts",
+        "execution.ts",
+        "codec.ts"
+      ],
+      "details": [
+        "The explicit branch requires A > 0 by checked subtraction and reserves actor input minus A before any swap.",
+        "Post-call actor input must equal that reserve. Chosen recipient output must increase positively. External recipient input, actor output and actor native stocks are checked unchanged.",
+        "Self recipient uses one balance set, so there is no contradictory external actor-output equality check.",
+        "Pull modes execute approve(0), approve(A), then clear and read allowance==0; received modes measure only the current pool input receipt as dx.",
+        "A pool return word or ERC20 transfer return does not substitute for actual receipt. The program guards measured balances and the surrounding flow consumes its measured output.",
+        "int128 receiver is five arguments; uint receiver is six with use_eth=false and zero value. Wrong/zero/pool/token raw recipients and unsupported requests fail closed."
+      ]
+    },
+    {
+      "component": "Native direct program and common boundary",
+      "status": "accepted_with_exact_debit_condition",
+      "files": [
+        "native.ts",
+        "execution.ts"
+      ],
+      "commonFiles": [
+        "listener/src/searcher/execution-asset-boundary.ts",
+        "listener/src/searcher/venues/adapter-family-runtime.ts"
+      ],
+      "details": [
+        "Native input requires a proved receiver mode, snapshots raw actor ETH and recipient ERC20 output, sends exactly A value, and requires raw actor ETH to fall exactly A. External old output/input stocks are guarded.",
+        "Native output requires the mapped raw receiver to be the executor, exact positive ERC20 debit A, measured positive new ETH, exact temporary approval and zero allowance after cleanup.",
+        "The unchanged production issuer maps the original native-output recipient to the raw executor, checks the raw echo, then restores the original request before applying the common boundary.",
+        "That boundary measures the raw ETH increase, wraps only this amount, checks that WETH increase equals it, transfers only the new WETH to the original recipient, checks actual recipient receipt and old inventories, and restores actor native balance.",
+        "Native default input/refund policy and possible one-unit retained input remain unchanged. Direct requires exact debit, so an A-1 default success is not a direct success and must not be cited as such.",
+        "Legacy native-input caller-only routes still do not advertise external direct support; admitted legacy native-output routes can use common WETH delivery without inventing a receiver ABI.",
+        "No native deferred request or quote-output program is added. No protocol-specific central production branch was introduced."
+      ]
+    },
+    {
+      "component": "Default, quoted and discovery compatibility",
+      "status": "accepted",
+      "files": [
+        "execution.ts",
+        "native.ts",
+        "codec.ts",
+        "discovery.ts",
+        "test/contract.ts"
+      ],
+      "details": [
+        "The runtimeProjection/buildFragment/expectedEffects source tail is byte-for-byte unchanged from the baseline. Quoted approval requirements and executor recipient remain unchanged.",
+        "The original nativeExchangeProgram and nativeExecutionProbe bodies are retained; new native functions are appended.",
+        "No-request ERC20 programs keep MAX_UINT for existing pull modes. Current synthetic tests compare a route with and without optional recipientMode and observe identical ordinary program bytes.",
+        "Default capability metadata can now expose direct delivery where supported; this metadata change is not new historical execution evidence.",
+        "The two new receiver selector patterns nominate through the existing reverse identity path. Native and ERC20 signatures share selectors; source-bound raw coin identity selects the transport. No exchange_extended callback admission was added."
+      ]
+    },
+    {
+      "component": "Historical CLI policy",
+      "status": "accepted_as_tooling_only",
+      "files": [
+        "test/historical-runtime-dual.ts",
+        "test/historical-runtime-dual-safety.test.ts"
+      ],
+      "details": [
+        "The new direct flag changes expected allowance only for explicit direct plain/uint pull actions; ordinary plain/uint and underlying standing-grant policies remain.",
+        "Native plain action IDs now require zero final allowance consistently with their pre-existing default and new direct programs.",
+        "The supplementary recipient mode still executes only runtime-direct-output, while retaining production Exact, runtime construction interception, independent balance-slot checks, actual credit/debit/inventory checks and same-calldata no-input rollback logic.",
+        "This review does not claim native historical balance-slot compatibility, quote matching, or successful historical execution merely because the allowance expectation is corrected."
+      ]
+    }
+  ],
+  "resolvedFindings": [
+    {
+      "id": "curve-pass2-stale-identity-regression",
+      "severity": "P2",
+      "classification": "test_entry_coverage_defect",
+      "originalLocation": "source/listener/src/searcher/venues/swaps/curve-plain-family/test/identity-execution.ts:52",
+      "original": "The existing regression expected six requests and classified every new unrecognized selector as received-no-receiver. After the added receiver probes there are eight ERC20 requests; the first pass's selected Family script did not execute this regression.",
+      "resolution": "Updated expected request count and selector decode to the shared discovery modes; added identity-execution.ts to the formal searcher:curve-plain-family script.",
+      "status": "fixed_regression_evidence_verified",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check14-family.log",
+          "sha256": "8557403893f7b7cb51bf921baeabd74a17a4b59b28a210eb21178eae18d7afe0",
+          "bytes": 2473
+        }
+      ]
+    },
+    {
+      "id": "curve-pass2-forbidden-getter-lost-by-spread",
+      "severity": "P2",
+      "classification": "test_sentinel_defect",
+      "originalLocation": "candidate/listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-runtime-evm.ts (pre-fix native input construction)",
+      "original": "Non-enumerable throwing getters were installed on input and dropped by the subsequent object spread, so the claimed guard against reading amountIn/quotedAmountOut/exactEvidence/minAmountOut was ineffective.",
+      "resolution": "The getters are installed directly on the final buildInput passed to the Family builder, with no later spread.",
+      "status": "fixed_regression_evidence_verified",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-evm.log",
+          "sha256": "70b33b3b999f9fe6429e45781218031c59b0d529d39f1a8724bbb274afb8727c",
+          "bytes": 1756
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/evm/result.json",
+          "sha256": "efefc142e6574ce2512de5bac9d140aeb2ab6348212a0a9afc14f77848e67e99",
+          "bytes": 2101
+        }
+      ]
+    },
+    {
+      "id": "curve-pass2-native-allowance-expectation",
+      "severity": "P2",
+      "classification": "historical_tool_policy_defect",
+      "originalLocation": "candidate/listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts:242",
+      "original": "The generic historical CLI treated native plain actions as standing-MAX pull actions although their raw programs clear approval, which would falsely reject valid native runs.",
+      "resolution": "Both native plain action IDs require zero allowance for default/quoted/direct; added tests rejecting 1, MAX and MAX-A while preserving old ERC20 and underlying policies.",
+      "status": "fixed_regression_evidence_verified",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-safety.log",
+          "sha256": "0acd443f5940b7934957d40142a6c32f1b9c2a6718f41d3fe2a7d911b3da207a",
+          "bytes": 2194
+        }
+      ]
+    },
+    {
+      "id": "curve-pass2-native-declared-revert-fixture-effects",
+      "severity": "P2",
+      "classification": "synthetic_fixture_defect",
+      "discoveredBy": "Parent's check14 execution; independently reviewed here",
+      "original": "The optional native receiver probe's synthetic declared-revert response omitted declared effect arrays, so the real central lifecycle validator rejected the fixture and one native contract test failed.",
+      "resolution": "Added empty tokenDeltas/nativeDeltas/logs arrays to the reverted fixture. Production validation was not loosened. Original check14 failure is retained.",
+      "status": "fixed_regression_evidence_verified",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check14-native.log",
+          "sha256": "dade0d928ec99965b734bb1a19ea55c6973cd39a0830783e808f11125fd608bc",
+          "bytes": 2912
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-native.log",
+          "sha256": "c0a6790623b003a7340dc4a8c5d58ada50ca18e87d7b2d0ab0165e35c64fee49",
+          "bytes": 1818
+        }
+      ]
+    }
+  ],
+  "negativeTestAssessment": {
+    "type": "Real local BotVM EVM, synthetic Curve and token/wrapper contracts",
+    "acceptedEvidence": "vm.expectRevert is applied to BotVM.execute before poststate assertions; poststate checks run outside the expected revert. Thus a success-only JavaScript postcondition is not the source of these negative results.",
+    "faultIsolation": "The fault contracts have sufficient balances/native funding for the deliberately wrong action. Zero/short/extra debit, missing/wrong receipt, old actor output or receiver input consumption, native surplus/refund and failed approval cleanup reach the emitted guards. The pinned BotVM has an empty payable receive, so the native-surplus negative is not merely rejection of incoming ETH.",
+    "erc20Matrix": "Both directions, int128/uint receiver plus received/received-uint; default/self/external; amounts 1 and 100; zero-requested-amount guard, actual receipt independent of 0/MAX return data, atomic rollback of actor/receiver/pool stocks, native and allowance.",
+    "nativeMatrix": "Both directions for signed/unsigned native receiver modes, legacy caller-output delivery, default/self/external where supported; 1 and 100; zero requested amount, measured native/WETH delivery, exact-debit/refund guards, zero allowance and atomic rollback.",
+    "intentionalExclusion": "Extra native output on a native-output trade is measured real receipt, so it is deliberately not classified as a refund failure. Legacy native-input direct lacks a receiver proof and is rejected.",
+    "limitations": [
+      "The new EVM generator manually calls the same mapping and boundary components as the production issuer using synthetic descriptors; it is not a sealed production issuer end-to-end historical test.",
+      "The EVM synthetic suite is not an actual deployed Curve interface, pool-state or clone-implementation proof.",
+      "Full test failures/successes are only accepted after matching saved fixture and source pins. No new execution was launched by this reviewer.",
+      "No separate guard-deletion mutation run is claimed. Negative validity was assessed from actual EVM results, fault code and independent poststate checks.",
+      "The zero-amount EVM tests use A=0. They are not identical-calldata positive-A executions with missing input funding; that historical control remains in unified acceptance."
+    ]
+  },
+  "evidence": {
+    "candidateFiles": [
+      {
+        "path": "listener/package.json",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/package.json",
+        "sha256": "e2289f0381123a7e72ccd981a437da0e1168de4a79df10490fc8f0e604f6c24e",
+        "bytes": 45289,
+        "baselineSha256": "9e9759f5d53b632448b4b9660a0f41ed87c1d0205b2c7e910981a250feed7519"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+        "sha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab",
+        "bytes": 9256,
+        "baselineSha256": "f2d01a805f9a47e10900f52696ec89784365aeb7c567c68a3c7f338b13a735e2"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/discovery.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/discovery.ts",
+        "sha256": "d1dc63f6da4c1b53d653bc573398f31a9eacc20fcc3f2a33eb2589e49bcc628a",
+        "bytes": 6176,
+        "baselineSha256": "00523a16063fe2e0aa8e2215b49bb8c332e946d2fe1129f90ce43c0a48f3e614"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+        "sha256": "35771544ec5276e38f6050076ef937a0155b997f436ccedd0cc49337d8d50fd8",
+        "bytes": 5803,
+        "baselineSha256": "df03913c60df766bd8e4c665fc506b4aac2db9fd0ee1fc972ca2182d4e690695"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "sha256": "62490e83fec328b0e9420e84cfea78b256d2c2d3568af362162288596e0a252b",
+        "bytes": 23553,
+        "baselineSha256": "e75201a70f15497e5feb423d04e9ea3c6e350bdceaa22a7c888e92ab784668b4"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/instance.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/instance.ts",
+        "sha256": "d5e237eb1e2dd588c79ee2f5e6a142fe58c190e1ca0c03eeb84b5007aa03f210",
+        "bytes": 1785,
+        "baselineSha256": "da365034326e82a78e2e02a2871129dd7c934265ebdf93c6fbc933a0b6dda5ce"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+        "sha256": "5cccac5c3b91b76a9aa0e3964ae65848ca08ce549c66fe9485888f54ac2b4a98",
+        "bytes": 8051,
+        "baselineSha256": "ac16f40a03cc658fa0d350d1299f736a20f771e414922954299da40a747d9714"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/recipient.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/recipient.ts",
+        "sha256": "73780154dcc3828a8ec231a355f64b7319b33f14616d6999ba43498d1707ce7c",
+        "bytes": 2896,
+        "baselineSha256": null
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
+        "sha256": "f19cf1164c368af5334151fc600203a9e18aacd32a717330402268a30db460d0",
+        "bytes": 4461,
+        "baselineSha256": "f770fd40376e1a5ad2406816edaaf4b8e6e57e1349289c63d7a8e198fa4acff1"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+        "sha256": "6dd23b3e514dd4b07578ea417fccae75cb84cb40ac1d95bd6990159a1f4f01fc",
+        "bytes": 43993,
+        "baselineSha256": "d69f5754c242006a31d7f5317f82ab4c681b92a8a243d9826d8b5f89b39818a5"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual-safety.test.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual-safety.test.ts",
+        "sha256": "9918d2f1faf1ad05096118f3017ab3d7c932bd5d7875e9e079ec8bd1b6b48761",
+        "bytes": 28830,
+        "baselineSha256": "2a6b8a68148d33783ab2cc54b26fe1a1f001514d7e4bc8b76813d63fab831496"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts",
+        "sha256": "f41c9b5877562e3b0fbcf86663ea91c74fdb8543858a0ad50681ac35ab13898c",
+        "bytes": 72238,
+        "baselineSha256": "aa5f78e4c478c4cb60124fe6da1d4d7baaa654fd7cb5883605c77861cc8b7b34"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/identity-execution.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/test/identity-execution.ts",
+        "sha256": "c6ceeed60b5f73ca3f4f64cd85cf06c8ed61e116a3a9597e69f2041bda00eb55",
+        "bytes": 8591,
+        "baselineSha256": "78d731fcd6a187456fc835548265be3d4c129494943273f257d6a1a882220521"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+        "sha256": "66ce2aafa83c5729a8407f41dca0402d23dad0323a72830ae68f00c31fdb4237",
+        "bytes": 38455,
+        "baselineSha256": "84efb06865b40000ddb56681b568f1a3a266489b2f36f08f16d8f6d7fbb835d8"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-runtime-evm.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-runtime-evm.ts",
+        "sha256": "0c124729c2ee9b302c3213fe4f02c0ac959d510fe89cee7659635fe9ef331111",
+        "bytes": 7388,
+        "baselineSha256": null
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/types.ts",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/listener/src/searcher/venues/swaps/curve-plain-family/types.ts",
+        "sha256": "33ea121d733695ce6ea85691f78119689319c14b527bc80f288ebb9292ffd904",
+        "bytes": 3335,
+        "baselineSha256": "1e379b7fd4ebcb0a04b7d89b840f4ecabb499a4992e6f4edbf86908404d205f0"
+      },
+      {
+        "path": "test/CurvePlainRecipient.t.sol",
+        "localPath": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/candidate/test/CurvePlainRecipient.t.sol",
+        "sha256": "349f8b1aa5d607d2afe3dbd5fe17388a6574b4f3f47223930f1b0a8f76ae138b",
+        "bytes": 15193,
+        "baselineSha256": null
+      }
+    ],
+    "priorPhase": {
+      "checks": [
+        {
+          "name": "generate",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check05-generate.log",
+          "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "build",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check05-build.log",
+          "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "contract",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check05-contract.log",
+          "sha256": "5d16dc0d4d925594f1e48397c391ed0a4570124afbebacbb44fbd1f9e4e988db",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "safety",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check05-safety.log",
+          "sha256": "f653788a1e04a36ed461614b1d370c09300972699c135e52342e6a8264958c47",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "native-regression",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check05-native-regression.log",
+          "sha256": "1511cb2cd9c35b02d9dee13a35a799be62ec9ca0ebd5257e2b33b9c8f77c469a",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "evm",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check05-evm.log",
+          "sha256": "ab38930f94517b990d93518783bd110b4203c02e879927a69ab81a160428b0c1",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "family-dual-execution",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check06-family-dual-execution.log",
+          "sha256": "d5799c24e68997fa0345c1b5b66a7f8b55ed3704b516056becc7ad30993ceb9f",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "strict-family-lifecycle-runner",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check06-strict-family-lifecycle-runner.log",
+          "sha256": "6ef7e8e525f87e9652311bf24bf58e50c0a400fe7ad8ebaccfab3bc1746a73b7",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "strict-central-adapter-runtime",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check06-strict-central-adapter-runtime.log",
+          "sha256": "34cc250d3fb8af25e869579123ccfccf02da217a36a2bdd130d437fd2bf99474",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "strict-execution-projection",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check06-strict-execution-projection.log",
+          "sha256": "2fcb18e90f6883ebe96b57862b8591c6193f9cb420543140407c2f160dd8d1b5",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "runtime-settlement",
+          "exitCode": 0,
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks06/check06-runtime-settlement.log",
+          "sha256": "3fc5ac82702548ec634060fbe21ec7fb936d38e5f3e732fdd6731841bfcea84a",
+          "receiptHashMatches": true
+        }
+      ],
+      "payloadHashMismatches": [],
+      "evmSourcesToOwned05": [
+        {
+          "path": "test/CurvePlainRecipient.t.sol",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/instance.ts",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/types.ts",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/recipient.ts",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-runtime-evm.ts",
+          "matches": true
+        }
+      ],
+      "evmFixtureMatches": true,
+      "quotedBodyUnchanged": true
+    },
+    "finalPhase": {
+      "artifactPins": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/catalog-receipt16.json",
+          "sha256": "52bb0c724c2c059aecbbc0b2c52bdf740dd8ce82b00ea30567446aabddcb8572",
+          "bytes": 721
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check13-build.log",
+          "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+          "bytes": 71
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check13-generate.log",
+          "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "bytes": 136
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check13-index.log",
+          "sha256": "78a5664fba194007a0d9bbe0306d6c0b406e80e7d21bc7ccc9229c35825da5c0",
+          "bytes": 2377
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check14-family.log",
+          "sha256": "8557403893f7b7cb51bf921baeabd74a17a4b59b28a210eb21178eae18d7afe0",
+          "bytes": 2473
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check14-generate.log",
+          "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "bytes": 136
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check14-native.log",
+          "sha256": "dade0d928ec99965b734bb1a19ea55c6973cd39a0830783e808f11125fd608bc",
+          "bytes": 2912
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-all-families.log",
+          "sha256": "28401ea0a556548ab9ba89fcfaf046424c16b1a789f8416d6596b35d9035166e",
+          "bytes": 58112
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-boundary.log",
+          "sha256": "9efecc349024e38d7313730b2d2888edbd1253557dfad0d91bb1341270e546e9",
+          "bytes": 641
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-evm.log",
+          "sha256": "70b33b3b999f9fe6429e45781218031c59b0d529d39f1a8724bbb274afb8727c",
+          "bytes": 1756
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-generate.log",
+          "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "bytes": 136
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-native.log",
+          "sha256": "c0a6790623b003a7340dc4a8c5d58ada50ca18e87d7b2d0ab0165e35c64fee49",
+          "bytes": 1818
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-safety.log",
+          "sha256": "0acd443f5940b7934957d40142a6c32f1b9c2a6718f41d3fe2a7d911b3da207a",
+          "bytes": 2194
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-strict.log",
+          "sha256": "36c630380c512a78e6a864107d73cce0c1e3f6894c8a8ec57eb764744800fa44",
+          "bytes": 16680
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check16-catalog.log",
+          "sha256": "4dfbbdbdbe9142a5f0dd6325f428235eea8fe0da028736b9ce3c3d6749c1ad3a",
+          "bytes": 361
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check16-owned-build.log",
+          "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+          "bytes": 71
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/checks13.json",
+          "sha256": "124d9f6a22200ae3d647d4607dd00dc420dd83968952a0e4e8bbd4f0b0875857",
+          "bytes": 570
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/checks14.json",
+          "sha256": "c80fc701731b432b80fac9d4f8dfbe83e78332f52364a6db21202b47c658340f",
+          "bytes": 572
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/checks15.json",
+          "sha256": "d83a0eebf2899c2869c524ff04f93735ed8c5c14566ea1b7674290ec3410b9b9",
+          "bytes": 1333
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/checks16.json",
+          "sha256": "261325b82aecd5316fed942b4bf489a8165808494c074dffcd978ee9f793933c",
+          "bytes": 277
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/current-source16.json",
+          "sha256": "19c5db27e69f434267cb563efd9e05b544857f45ea37cd49f90f6bb43650cdf7",
+          "bytes": 12654
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/evm/forge.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/evm/forge.stdout.log",
+          "sha256": "baec20a505244089fc43c2d46baaa4744f69974d5ef2705bdc4c132249e46646",
+          "bytes": 1024
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/evm/programs.json",
+          "sha256": "be35d2f8f30f3521c9790aa4a2b0bd4ffd08cc83e5ce4432288a876caaa52e1e",
+          "bytes": 287093
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/evm/result.json",
+          "sha256": "efefc142e6574ce2512de5bac9d140aeb2ab6348212a0a9afc14f77848e67e99",
+          "bytes": 2101
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/owned15.json",
+          "sha256": "84fc5a38efbdbae135459727d17c6ad2c8afc3d20f9e55ec4e02c735e805b5d4",
+          "bytes": 4117
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/selection13.json",
+          "sha256": "ab8b666918ebdc137f1417c4f678d2042037ee2823525f56d22656eb2b72f660",
+          "bytes": 8949
+        }
+      ],
+      "checks": [
+        {
+          "phase": 13,
+          "name": "generate",
+          "exitCode": 0,
+          "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "completedAt": "2026-10-15T03:11:33.711790+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check13-generate.log",
+          "actualSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "hashMatches": true,
+          "testCounts": {},
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 13,
+          "name": "build",
+          "exitCode": 0,
+          "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+          "completedAt": "2026-10-15T03:11:41.785422+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check13-build.log",
+          "actualSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+          "hashMatches": true,
+          "testCounts": {},
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 13,
+          "name": "index",
+          "exitCode": 0,
+          "logSha256": "78a5664fba194007a0d9bbe0306d6c0b406e80e7d21bc7ccc9229c35825da5c0",
+          "completedAt": "2026-10-15T03:11:42.131097+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check13-index.log",
+          "actualSha256": "78a5664fba194007a0d9bbe0306d6c0b406e80e7d21bc7ccc9229c35825da5c0",
+          "hashMatches": true,
+          "testCounts": {},
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 14,
+          "name": "generate",
+          "exitCode": 0,
+          "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "completedAt": "2026-10-15T03:13:50.340770+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check14-generate.log",
+          "actualSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "hashMatches": true,
+          "testCounts": {},
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 14,
+          "name": "family",
+          "exitCode": 0,
+          "logSha256": "8557403893f7b7cb51bf921baeabd74a17a4b59b28a210eb21178eae18d7afe0",
+          "completedAt": "2026-10-15T03:13:52.216435+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check14-family.log",
+          "actualSha256": "8557403893f7b7cb51bf921baeabd74a17a4b59b28a210eb21178eae18d7afe0",
+          "hashMatches": true,
+          "testCounts": {
+            "groups": 18
+          },
+          "identityRegressionPassed": true
+        },
+        {
+          "phase": 14,
+          "name": "native",
+          "exitCode": 1,
+          "logSha256": "dade0d928ec99965b734bb1a19ea55c6973cd39a0830783e808f11125fd608bc",
+          "completedAt": "2026-10-15T03:13:54.177365+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check14-native.log",
+          "actualSha256": "dade0d928ec99965b734bb1a19ea55c6973cd39a0830783e808f11125fd608bc",
+          "hashMatches": true,
+          "testCounts": {
+            "tests": 15,
+            "pass": 14,
+            "fail": 1,
+            "skipped": 0
+          },
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 15,
+          "name": "generate",
+          "exitCode": 0,
+          "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "completedAt": "2026-10-15T03:16:18.827945+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-generate.log",
+          "actualSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+          "hashMatches": true,
+          "testCounts": {},
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 15,
+          "name": "native",
+          "exitCode": 0,
+          "logSha256": "c0a6790623b003a7340dc4a8c5d58ada50ca18e87d7b2d0ab0165e35c64fee49",
+          "completedAt": "2026-10-15T03:16:20.801063+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-native.log",
+          "actualSha256": "c0a6790623b003a7340dc4a8c5d58ada50ca18e87d7b2d0ab0165e35c64fee49",
+          "hashMatches": true,
+          "testCounts": {
+            "tests": 15,
+            "pass": 15,
+            "fail": 0,
+            "skipped": 0
+          },
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 15,
+          "name": "evm",
+          "exitCode": 0,
+          "logSha256": "70b33b3b999f9fe6429e45781218031c59b0d529d39f1a8724bbb274afb8727c",
+          "completedAt": "2026-10-15T03:16:36.994955+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-evm.log",
+          "actualSha256": "70b33b3b999f9fe6429e45781218031c59b0d529d39f1a8724bbb274afb8727c",
+          "hashMatches": true,
+          "testCounts": {},
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 15,
+          "name": "safety",
+          "exitCode": 0,
+          "logSha256": "0acd443f5940b7934957d40142a6c32f1b9c2a6718f41d3fe2a7d911b3da207a",
+          "completedAt": "2026-10-15T03:16:38.596441+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-safety.log",
+          "actualSha256": "0acd443f5940b7934957d40142a6c32f1b9c2a6718f41d3fe2a7d911b3da207a",
+          "hashMatches": true,
+          "testCounts": {
+            "tests": 20,
+            "pass": 20,
+            "fail": 0,
+            "skipped": 0
+          },
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 15,
+          "name": "boundary",
+          "exitCode": 0,
+          "logSha256": "9efecc349024e38d7313730b2d2888edbd1253557dfad0d91bb1341270e546e9",
+          "completedAt": "2026-10-15T03:16:39.129807+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-boundary.log",
+          "actualSha256": "9efecc349024e38d7313730b2d2888edbd1253557dfad0d91bb1341270e546e9",
+          "hashMatches": true,
+          "testCounts": {
+            "tests": 4,
+            "pass": 4,
+            "fail": 0,
+            "skipped": 0
+          },
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 15,
+          "name": "all-families",
+          "exitCode": 0,
+          "logSha256": "28401ea0a556548ab9ba89fcfaf046424c16b1a789f8416d6596b35d9035166e",
+          "completedAt": "2026-10-15T03:16:47.661598+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-all-families.log",
+          "actualSha256": "28401ea0a556548ab9ba89fcfaf046424c16b1a789f8416d6596b35d9035166e",
+          "hashMatches": true,
+          "testCounts": {
+            "tests": 301,
+            "pass": 301,
+            "fail": 0,
+            "skipped": 0
+          },
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 15,
+          "name": "strict",
+          "exitCode": 0,
+          "logSha256": "36c630380c512a78e6a864107d73cce0c1e3f6894c8a8ec57eb764744800fa44",
+          "completedAt": "2026-10-15T03:16:50.343154+00:00",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check15-strict.log",
+          "actualSha256": "36c630380c512a78e6a864107d73cce0c1e3f6894c8a8ec57eb764744800fa44",
+          "hashMatches": true,
+          "testCounts": {
+            "tests": 174,
+            "pass": 174,
+            "fail": 0,
+            "skipped": 0
+          },
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 16,
+          "name": "catalog",
+          "exitCode": 0,
+          "logSha256": "4dfbbdbdbe9142a5f0dd6325f428235eea8fe0da028736b9ce3c3d6749c1ad3a",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check16-catalog.log",
+          "actualSha256": "4dfbbdbdbe9142a5f0dd6325f428235eea8fe0da028736b9ce3c3d6749c1ad3a",
+          "hashMatches": true,
+          "testCounts": {},
+          "identityRegressionPassed": false
+        },
+        {
+          "phase": 16,
+          "name": "owned-build",
+          "exitCode": 0,
+          "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+          "localLog": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/check16-owned-build.log",
+          "actualSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+          "hashMatches": true,
+          "testCounts": {},
+          "identityRegressionPassed": false
+        }
+      ],
+      "ownedCandidateCount": 17,
+      "ownedCandidateMismatches": [],
+      "currentSourceCounts": {
+        "commonSource": 57,
+        "source": 21
+      },
+      "materializedSourceChecks": [
+        {
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "actual": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "expected": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "actual": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0",
+          "expected": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+          "actual": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+          "expected": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+          "actual": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+          "expected": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+          "actual": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09",
+          "expected": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-request-program.ts",
+          "actual": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab",
+          "expected": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "actual": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "expected": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "matches": true
+        },
+        {
+          "path": "listener/src/adapters/curve.ts",
+          "actual": "83720d256a907bcd60830c0ec7d57e9c0f76d432396c53676bbb8bd0c2ba92bf",
+          "expected": "83720d256a907bcd60830c0ec7d57e9c0f76d432396c53676bbb8bd0c2ba92bf",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/production-families/curve-plain.production.ts",
+          "actual": "90091784214285a129782dd72460ae4e96e255952798f82f186d4961c366f2b8",
+          "expected": "90091784214285a129782dd72460ae4e96e255952798f82f186d4961c366f2b8",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/action.ts",
+          "actual": "b9874d95d2e433ea4961a29cf383482b97969062e3a04e2429f7a9d03d963d16",
+          "expected": "b9874d95d2e433ea4961a29cf383482b97969062e3a04e2429f7a9d03d963d16",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+          "actual": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab",
+          "expected": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+          "actual": "35771544ec5276e38f6050076ef937a0155b997f436ccedd0cc49337d8d50fd8",
+          "expected": "35771544ec5276e38f6050076ef937a0155b997f436ccedd0cc49337d8d50fd8",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+          "actual": "62490e83fec328b0e9420e84cfea78b256d2c2d3568af362162288596e0a252b",
+          "expected": "62490e83fec328b0e9420e84cfea78b256d2c2d3568af362162288596e0a252b",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/instance.ts",
+          "actual": "d5e237eb1e2dd588c79ee2f5e6a142fe58c190e1ca0c03eeb84b5007aa03f210",
+          "expected": "d5e237eb1e2dd588c79ee2f5e6a142fe58c190e1ca0c03eeb84b5007aa03f210",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/manifest.ts",
+          "actual": "efe96706e883d0f1f32df367ed6c39210c5887b6bc13c1450e3751498445049a",
+          "expected": "efe96706e883d0f1f32df367ed6c39210c5887b6bc13c1450e3751498445049a",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/native-transfer-quote.ts",
+          "actual": "f5f5bceaf6d59c3fdfb8c32f4365b0f363f804754a5e095a2a2f28631ef9d793",
+          "expected": "f5f5bceaf6d59c3fdfb8c32f4365b0f363f804754a5e095a2a2f28631ef9d793",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+          "actual": "5cccac5c3b91b76a9aa0e3964ae65848ca08ce549c66fe9485888f54ac2b4a98",
+          "expected": "5cccac5c3b91b76a9aa0e3964ae65848ca08ce549c66fe9485888f54ac2b4a98",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/recipient.ts",
+          "actual": "73780154dcc3828a8ec231a355f64b7319b33f14616d6999ba43498d1707ce7c",
+          "expected": "73780154dcc3828a8ec231a355f64b7319b33f14616d6999ba43498d1707ce7c",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
+          "actual": "f19cf1164c368af5334151fc600203a9e18aacd32a717330402268a30db460d0",
+          "expected": "f19cf1164c368af5334151fc600203a9e18aacd32a717330402268a30db460d0",
+          "matches": true
+        }
+      ],
+      "evmPins": [
+        {
+          "path": "src/BotVM.sol",
+          "executionSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "frozenSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "matches": true
+        },
+        {
+          "path": "src/RuntimeAmountVM.sol",
+          "executionSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+          "frozenSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+          "matches": true
+        },
+        {
+          "path": "test/CurvePlainRecipient.t.sol",
+          "executionSha256": "349f8b1aa5d607d2afe3dbd5fe17388a6574b4f3f47223930f1b0a8f76ae138b",
+          "frozenSha256": "349f8b1aa5d607d2afe3dbd5fe17388a6574b4f3f47223930f1b0a8f76ae138b",
+          "matches": true
+        },
+        {
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "executionSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "frozenSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "executionSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "frozenSha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/execution-asset-boundary.ts",
+          "executionSha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0",
+          "frozenSha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+          "executionSha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab",
+          "frozenSha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
+          "executionSha256": "f19cf1164c368af5334151fc600203a9e18aacd32a717330402268a30db460d0",
+          "frozenSha256": "f19cf1164c368af5334151fc600203a9e18aacd32a717330402268a30db460d0",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/instance.ts",
+          "executionSha256": "d5e237eb1e2dd588c79ee2f5e6a142fe58c190e1ca0c03eeb84b5007aa03f210",
+          "frozenSha256": "d5e237eb1e2dd588c79ee2f5e6a142fe58c190e1ca0c03eeb84b5007aa03f210",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/types.ts",
+          "executionSha256": "33ea121d733695ce6ea85691f78119689319c14b527bc80f288ebb9292ffd904",
+          "frozenSha256": "33ea121d733695ce6ea85691f78119689319c14b527bc80f288ebb9292ffd904",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/recipient.ts",
+          "executionSha256": "73780154dcc3828a8ec231a355f64b7319b33f14616d6999ba43498d1707ce7c",
+          "frozenSha256": "73780154dcc3828a8ec231a355f64b7319b33f14616d6999ba43498d1707ce7c",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+          "executionSha256": "5cccac5c3b91b76a9aa0e3964ae65848ca08ce549c66fe9485888f54ac2b4a98",
+          "frozenSha256": "5cccac5c3b91b76a9aa0e3964ae65848ca08ce549c66fe9485888f54ac2b4a98",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+          "executionSha256": "35771544ec5276e38f6050076ef937a0155b997f436ccedd0cc49337d8d50fd8",
+          "frozenSha256": "35771544ec5276e38f6050076ef937a0155b997f436ccedd0cc49337d8d50fd8",
+          "matches": true
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-runtime-evm.ts",
+          "executionSha256": "0c124729c2ee9b302c3213fe4f02c0ac959d510fe89cee7659635fe9ef331111",
+          "frozenSha256": "0c124729c2ee9b302c3213fe4f02c0ac959d510fe89cee7659635fe9ef331111",
+          "matches": true
+        }
+      ],
+      "fixtureMatches": true,
+      "programComparison": {
+        "priorCount": 72,
+        "currentCount": 120,
+        "changedPriorKeys": []
+      },
+      "evmPassNames": [
+        "testNativeDefaultSelfExternalAndLegacyOutputUseCommonBoundary",
+        "testNativeDirectRejectsFaultsAndRollsBack",
+        "testNativeDirectZeroAndIgnoredReturnData",
+        "testBothDirectionsAllModesDefaultSelfAndExternal",
+        "testDirectRejectsDebitReceiptInventoryAndNativeFaultsAtomically",
+        "testDirectZeroInputCannotUseOldInventory",
+        "testReturnDataCannotReplaceActualReceipt"
+      ],
+      "evmSummary": "Ran 2 test suites in 56.81ms (101.11ms CPU time): 7 tests passed, 0 failed, 0 skipped (7 total tests)",
+      "buildLogsEqual": true,
+      "catalog": {
+        "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+        "workingSha256": "cc424c8a3e1ebbcc680f4e46b83a678bd89338e7f88d7cefc77e06fb6bd6e564",
+        "ownedSha256": "0de0df4a76baa927d45d0c1c14a6a6e708cd18b0894428cd65d1b1f3634c36c7",
+        "peerOnlyDifferences": [
+          "custom-swap:uniswap-v1:capture",
+          "custom-swap:uniswap-v1:discovery",
+          "custom-swap:uniswap-v1:exact",
+          "custom-swap:uniswap-v1:execution",
+          "custom-swap:uniswap-v1:identity",
+          "custom-swap:uniswap-v1:instance",
+          "custom-swap:uniswap-v1:pricing",
+          "custom-swap:uniswap-v1:routes",
+          "custom-swap:uniswap-v1:victim"
+        ]
+      }
+    },
+    "integritySummary": {
+      "savedArtifactsHashed": 27,
+      "runLogsVerifiedAgainstReceipts": 15,
+      "finalCandidateFilesComparedWithCloudOwnedReceipt": 17,
+      "candidateMismatchCount": 0,
+      "evmExecutionPinsComparedWithFrozenPins": 14,
+      "evmPinMismatchCount": 0,
+      "locallyMaterializedSourcePinsRecomputed": 19,
+      "localSourcePinMismatchCount": 0,
+      "commonSourceRecordedPins": 57,
+      "familySourceRecordedPins": 21,
+      "note": "Only locally materialized files were independently rehashed. The remaining exported cloud dependency hashes are preserved receipt data; this review did not read their cloud contents or re-run the closure generator."
+    },
+    "catalogScope": {
+      "receipt": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/catalog-receipt16.json",
+      "ownedCatalogSha256": "0de0df4a76baa927d45d0c1c14a6a6e708cd18b0894428cd65d1b1f3634c36c7",
+      "workingCatalogSha256": "cc424c8a3e1ebbcc680f4e46b83a678bd89338e7f88d7cefc77e06fb6bd6e564",
+      "reportedPeerOnlyDifferences": [
+        "custom-swap:uniswap-v1:capture",
+        "custom-swap:uniswap-v1:discovery",
+        "custom-swap:uniswap-v1:exact",
+        "custom-swap:uniswap-v1:execution",
+        "custom-swap:uniswap-v1:identity",
+        "custom-swap:uniswap-v1:instance",
+        "custom-swap:uniswap-v1:pricing",
+        "custom-swap:uniswap-v1:routes",
+        "custom-swap:uniswap-v1:victim"
+      ],
+      "assessment": "The hashed canonical-generation receipt/log reports successful HEAD plus owned-input generation and only peer UniV1 catalog differences. Both resulting builds succeeded. This reviewer did not regenerate or overwrite either catalog and did not independently diff catalog files that were not included in the local export."
+    },
+    "pinnedAuxiliarySource": {
+      "path": "/Users/eunice/src/MEV/logs/fluid-recipient-20261014.bl4v6ufr/source/src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "reason": "Matches current EVM and freeze16 BotVM pin; line 95 confirms the payable receive used in native-surplus fault analysis."
+    },
+    "canonicalExecutionSelection": {
+      "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/selection13.json",
+      "tools": [
+        "listener:searcher:curve-plain-family",
+        "listener:searcher:curve-plain-recipient-evm"
+      ],
+      "executedByParent": true,
+      "receiptsExitCode": 0,
+      "note": "The saved selection contains actual execution receipts with descriptor, argv and stdout/stderr hashes. Reviewer launched no indexed tool or verification workload."
+    }
+  },
+  "instructionScope": "Applied the already-read family-plugin-adaptation skill and actual snapshot AGENTS rules. This is a continuation of pass2, not a new review round. No review artifact is an authorization to broadcast or alter unrelated work.",
+  "createdAt": "2026-10-15T03:22:51.288Z",
+  "scope": {
+    "familyId": "curve-plain",
+    "includes": [
+      "Optional ERC20 int128 five-argument and uint256 six-argument receiver modes",
+      "All explicit ERC20 direct guards including received variants",
+      "Native-input receiver behavior proof and raw direct program",
+      "Native-output raw exact-debit program using unchanged common ETH/WETH mapping and delivery",
+      "Default/quoted preservation, offline synthetic contract and actual BotVM EVM regressions, historical CLI allowance expectation"
+    ],
+    "excludes": [
+      "Historical deployed-pool acceptance",
+      "Independent unified acceptance or settlement gate",
+      "Opportunity replay",
+      "Performance/live/broadcast",
+      "Other Family completion including Yearn deferred"
+    ],
+    "implementationMeaning": "The reviewed 17-file candidate is ready as this implementation step with matching offline evidence. This boolean does not certify that every installed real deployment/variant has completed historical settlement acceptance."
+  },
+  "implementationReady": true,
+  "blockingFindings": [],
+  "remainingAcceptance": [
+    "Run the separately authorized unified historical matrix through real sealed production issuer handles after implementation completion; do not reuse a default run as a direct-mode pass.",
+    "Bind source N/hash/generation, executor program, production source closure, actual pool runtime and same-N clone implementation code to each tested variant/direction.",
+    "Independently establish payer/recipient balance locations and true before/after values, including share-based stETH semantics and old stock.",
+    "Prove exact positive payer debit and selected recipient actual ERC20/WETH credit for self/external aliases, plus same-calldata no-input rejection and observed atomic rollback.",
+    "Preserve configured 0/1 default tolerance while requiring exact debit for explicit direct; retained-one-unit default successes are not direct successes.",
+    "Keep actual interface coverage gaps for received-no-receiver, received-uint and native-exchange-uint where no distinct deployed Ready sample was supplied; synthetic support does not fill them.",
+    "Keep quote-output/deferred unsupported; no callback composition, Yearn deferred completion, opportunity replay, unified gate or performance claim follows from this patch.",
+    "Parent retains ownership of any required tooling_defect LearningCase/codify_commit closure. No source commit or final process closure was claimed by this review."
+  ],
+  "processClosure": {
+    "sourceCommitReviewed": false,
+    "codifyCommit": null,
+    "owner": "parent",
+    "note": "Confirmed test/tool defects were corrected and their regressions are verified; this read-only report does not claim LearningCase or commit completion."
+  },
+  "testSummary": {
+    "evidenceVerifiedNotRerun": true,
+    "familyContract": {
+      "groups": 18,
+      "identityRegressionPassed": true,
+      "phase": 14
+    },
+    "nativeContract": {
+      "pass": 15,
+      "fail": 0,
+      "phase": 15
+    },
+    "realBotVMEvm": {
+      "testFunctions": 7,
+      "fail": 0,
+      "skipped": 0,
+      "programFixtures": 120,
+      "poolAndTokens": "synthetic"
+    },
+    "historicalCliSafety": {
+      "pass": 20,
+      "fail": 0,
+      "phase": 15
+    },
+    "nativeBoundary": {
+      "pass": 4,
+      "fail": 0,
+      "phase": 15
+    },
+    "allFamilyDual": {
+      "pass": 301,
+      "fail": 0,
+      "phase": 15,
+      "scope": "actual dirty working baseline; no claim that unrelated peer tests belong to this patch"
+    },
+    "strictCentral": {
+      "pass": 174,
+      "fail": 0,
+      "phase": 15
+    },
+    "builds": {
+      "workingBuildLive": "exit 0",
+      "headPlusOwnedInputBuildLive": "exit 0",
+      "logsByteIdentical": true,
+      "note": "Equal logs are compatible outcomes, not proof of identical source trees. The separate catalog receipt identifies the peer UniV1 differences."
+    },
+    "originalFailure": {
+      "phase": 14,
+      "name": "native",
+      "pass": 14,
+      "fail": 1,
+      "classification": "synthetic declared-revert fixture omitted effects; retained and corrected"
+    },
+    "earlierERC20Programs": {
+      "previous": 72,
+      "current": 120,
+      "all72PreviousByteIdentical": true,
+      "note": "This compares saved emitted programs across the ERC20 and native-extension phases. Baseline preservation also follows from the unchanged default branches and existing regression assertions."
+    }
+  }
+}

@@ -1609,6 +1609,48 @@
       },
       "created_at": "2026-10-14T17:23:32.007215+00:00",
       "updated_at": "2026-10-14T17:23:32.007215+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261015-curve-recipient-acceptance-tools",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Adaptation test/tool defects, not an attributed opportunity-lane failure. Source and local regressions fixed; historical acceptance remains pending.",
+      "evidence": {
+        "independent_review": {
+          "path": "docs/research/reports/curve-plain-recipient-review-20261015.json",
+          "sha256": "aad440dd14d4a25a0f647c3a049ac84f34af8aa2d5fbc2d96be2df26459f19cb",
+          "findings": [
+            "curve-pass2-stale-identity-regression",
+            "curve-pass2-forbidden-getter-lost-by-spread",
+            "curve-pass2-native-allowance-expectation",
+            "curve-pass2-native-declared-revert-fixture-effects"
+          ]
+        },
+        "validation_report": "docs/research/reports/curve-plain-recipient-implementation-20261015.json",
+        "retained_failure": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-recipient-20261015.4_896o2d/check14-native.log",
+          "sha256": "dade0d928ec99965b734bb1a19ea55c6973cd39a0830783e808f11125fd608bc",
+          "result": "14/15; added declared-revert fixture lacked required observed-effect arrays; fixture corrected and expected optional-request count updated. Production validation was not weakened. check15 native 15/15 passed."
+        },
+        "native_policy_regression": "check15-safety.log: both native actions accept allowance=0 and reject 1/MAX/MAX-A for default and direct modes",
+        "no_historical_native_execution_claim": true
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-runtime-dual-historical-fork; listener:searcher:curve-plain-family; listener:searcher:curve-plain-recipient-evm",
+        "issue": "Historical native actions were misclassified as standing-MAX allowance; the old identity regression was omitted and had stale selector/request expectations; a native builder getter sentinel was lost by spread; a new reverted fixture lacked mandatory effect arrays.",
+        "evidence": "Non-author pass2 confirms all four fixes. Family + identity, native 15/15, actual local BotVM EVM 7/7 and CLI safety 20/20 passed; initial native fixture failure retained.",
+        "codify_target": "Curve plain Family package test entry, identity-execution.ts, native-contract.ts, recipient-runtime-evm.ts, historical-runtime-dual.ts and its safety test.",
+        "status": "codified",
+        "codify_commit": "ddc4dafdfd759411abe7c35ca5c9c3eebacc883d"
+      },
+      "created_at": "2026-10-15T03:26:22.534496+00:00",
+      "updated_at": "2026-10-15T03:26:22.534496+00:00"
     }
   ]
 }

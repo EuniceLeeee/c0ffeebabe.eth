@@ -1,0 +1,612 @@
+{
+  "schema": "curve-plain-recipient-implementation-v1",
+  "baseline": "fae96aeadebeef86d4ea1ec91af7ac0baf1afc17",
+  "claim": "implementation and local regressions; historical acceptance deferred to the unified round",
+  "family": "curve-plain",
+  "scope": [
+    "ERC20 int128 five-argument exchange receiver",
+    "ERC20 uint256 six-argument exchange receiver, use_eth=false",
+    "existing int128/uint256 exchange_received receiver paths",
+    "native input receiver path after optional same-source behavior proof",
+    "native output to executor followed by existing common measured wrap and WETH delivery"
+  ],
+  "unchanged": [
+    "Default/quoted mode preference and ABI",
+    "Native default 0/1 input rounding policy",
+    "Protocol-independent central production code",
+    "Original Ready/checkpoints and peer modifications"
+  ],
+  "unsupportedOrConditional": [
+    "No quote-output or deferred-input declaration; Curve input-first callbacks are not output-first deferred settlement",
+    "Caller-only ERC20/native-input variants keep default execution and return null for unsupported direct requests",
+    "Direct settlement requires exact positive debit; A-1 retained input is not accepted as direct success",
+    "Native-output raw recipient is the executor; the common boundary delivers graph WETH to the original recipient"
+  ],
+  "checks": {
+    "workingProductionBuild": {
+      "name": "build",
+      "exitCode": 0,
+      "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "completedAt": "2026-10-15T03:11:41.785422+00:00"
+    },
+    "ownedProductionBuild": {
+      "name": "owned-build",
+      "exitCode": 0,
+      "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    "familyGroups": 18,
+    "identityExecutionRegression": "passed, now part of the family script",
+    "nativeTests": 15,
+    "realLocalEvmTests": 7,
+    "historicalCliSafetyTests": 20,
+    "commonNativeBoundaryTests": 4,
+    "allFamilyTests": 301,
+    "strictRuntimeTests": 174,
+    "previousErc20ProgramsByteIdentical": 72,
+    "realLocalEvmScope": "Synthetic tokens/pools executing actual BotVM with production Family programs and current common native mapping/boundary. Not historical execution or sealed issuer end-to-end acceptance."
+  },
+  "ownedSources": [
+    {
+      "path": "listener/package.json",
+      "before": "9e9759f5d53b632448b4b9660a0f41ed87c1d0205b2c7e910981a250feed7519",
+      "after": "e2289f0381123a7e72ccd981a437da0e1168de4a79df10490fc8f0e604f6c24e"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+      "before": "f2d01a805f9a47e10900f52696ec89784365aeb7c567c68a3c7f338b13a735e2",
+      "after": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/discovery.ts",
+      "before": "00523a16063fe2e0aa8e2215b49bb8c332e946d2fe1129f90ce43c0a48f3e614",
+      "after": "d1dc63f6da4c1b53d653bc573398f31a9eacc20fcc3f2a33eb2589e49bcc628a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+      "before": "df03913c60df766bd8e4c665fc506b4aac2db9fd0ee1fc972ca2182d4e690695",
+      "after": "35771544ec5276e38f6050076ef937a0155b997f436ccedd0cc49337d8d50fd8"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+      "before": "e75201a70f15497e5feb423d04e9ea3c6e350bdceaa22a7c888e92ab784668b4",
+      "after": "62490e83fec328b0e9420e84cfea78b256d2c2d3568af362162288596e0a252b"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/instance.ts",
+      "before": "da365034326e82a78e2e02a2871129dd7c934265ebdf93c6fbc933a0b6dda5ce",
+      "after": "d5e237eb1e2dd588c79ee2f5e6a142fe58c190e1ca0c03eeb84b5007aa03f210"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/recipient.ts",
+      "before": null,
+      "after": "73780154dcc3828a8ec231a355f64b7319b33f14616d6999ba43498d1707ce7c"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
+      "before": "f770fd40376e1a5ad2406816edaaf4b8e6e57e1349289c63d7a8e198fa4acff1",
+      "after": "f19cf1164c368af5334151fc600203a9e18aacd32a717330402268a30db460d0"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+      "before": "d69f5754c242006a31d7f5317f82ab4c681b92a8a243d9826d8b5f89b39818a5",
+      "after": "6dd23b3e514dd4b07578ea417fccae75cb84cb40ac1d95bd6990159a1f4f01fc"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/recipient-runtime-evm.ts",
+      "before": null,
+      "after": "0c124729c2ee9b302c3213fe4f02c0ac959d510fe89cee7659635fe9ef331111"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/types.ts",
+      "before": "1e379b7fd4ebcb0a04b7d89b840f4ecabb499a4992e6f4edbf86908404d205f0",
+      "after": "33ea121d733695ce6ea85691f78119689319c14b527bc80f288ebb9292ffd904"
+    },
+    {
+      "path": "test/CurvePlainRecipient.t.sol",
+      "before": null,
+      "after": "349f8b1aa5d607d2afe3dbd5fe17388a6574b4f3f47223930f1b0a8f76ae138b"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual.ts",
+      "before": "aa5f78e4c478c4cb60124fe6da1d4d7baaa654fd7cb5883605c77861cc8b7b34",
+      "after": "f41c9b5877562e3b0fbcf86663ea91c74fdb8543858a0ad50681ac35ab13898c"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/historical-runtime-dual-safety.test.ts",
+      "before": "2a6b8a68148d33783ab2cc54b26fe1a1f001514d7e4bc8b76813d63fab831496",
+      "after": "9918d2f1faf1ad05096118f3017ab3d7c932bd5d7875e9e079ec8bd1b6b48761"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+      "before": "ac16f40a03cc658fa0d350d1299f736a20f771e414922954299da40a747d9714",
+      "after": "5cccac5c3b91b76a9aa0e3964ae65848ca08ce549c66fe9485888f54ac2b4a98"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/identity-execution.ts",
+      "before": "78d731fcd6a187456fc835548265be3d4c129494943273f257d6a1a882220521",
+      "after": "c6ceeed60b5f73ca3f4f64cd85cf06c8ed61e116a3a9597e69f2041bda00eb55"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+      "before": "84efb06865b40000ddb56681b568f1a3a266489b2f36f08f16d8f6d7fbb835d8",
+      "after": "66ce2aafa83c5729a8407f41dca0402d23dad0323a72830ae68f00c31fdb4237"
+    }
+  ],
+  "sourceFingerprints": {
+    "commonSource": [
+      {
+        "path": "listener/src/adapters/registry.ts",
+        "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/compiler.ts",
+        "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-credit-runtime.ts",
+        "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+        "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+        "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+        "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+      },
+      {
+        "path": "listener/src/searcher/adapter-funding-runtime.ts",
+        "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+      },
+      {
+        "path": "listener/src/searcher/adapter-work-intent.ts",
+        "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+      },
+      {
+        "path": "listener/src/searcher/amount-quote-continuity.ts",
+        "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+      },
+      {
+        "path": "listener/src/searcher/blockscan-route-identity.ts",
+        "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+      },
+      {
+        "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+        "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+      },
+      {
+        "path": "listener/src/searcher/exact-prefix-plan.ts",
+        "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+      },
+      {
+        "path": "listener/src/searcher/exact-trial-state.ts",
+        "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+      },
+      {
+        "path": "listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0"
+      },
+      {
+        "path": "listener/src/searcher/identity-asset-metadata.ts",
+        "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+      },
+      {
+        "path": "listener/src/searcher/runtime-evidence.ts",
+        "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+      },
+      {
+        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+      },
+      {
+        "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+        "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+        "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+        "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-bounds.ts",
+        "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-propagation.ts",
+        "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-rejection.ts",
+        "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-builder.ts",
+        "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+        "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+      },
+      {
+        "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+        "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+      },
+      {
+        "path": "listener/src/searcher/strategy-taxonomy.ts",
+        "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+      },
+      {
+        "path": "listener/src/searcher/strict-production-runtime-session.ts",
+        "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+        "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+      },
+      {
+        "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+        "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+        "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+        "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-instance-identity.ts",
+        "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      },
+      {
+        "path": "listener/src/shared/state/state-backend.ts",
+        "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+      },
+      {
+        "path": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      },
+      {
+        "path": "src/BotVMEncoder.sol",
+        "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+      },
+      {
+        "path": "src/BotVMScriptBuilder.sol",
+        "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+      },
+      {
+        "path": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+      },
+      {
+        "path": "src/FlashArb.sol",
+        "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+      },
+      {
+        "path": "src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      },
+      {
+        "path": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+      },
+      {
+        "path": "src/interfaces/IFluidVault.sol",
+        "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+      },
+      {
+        "path": "src/interfaces/IMorpho.sol",
+        "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+      },
+      {
+        "path": "src/interfaces/ISwap.sol",
+        "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+      }
+    ],
+    "source": [
+      {
+        "path": "listener/src/adapters/curve.ts",
+        "sha256": "83720d256a907bcd60830c0ec7d57e9c0f76d432396c53676bbb8bd0c2ba92bf"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/production-families/curve-plain.production.ts",
+        "sha256": "90091784214285a129782dd72460ae4e96e255952798f82f186d4961c366f2b8"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/action.ts",
+        "sha256": "b9874d95d2e433ea4961a29cf383482b97969062e3a04e2429f7a9d03d963d16"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+        "sha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+        "sha256": "35771544ec5276e38f6050076ef937a0155b997f436ccedd0cc49337d8d50fd8"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "sha256": "62490e83fec328b0e9420e84cfea78b256d2c2d3568af362162288596e0a252b"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/instance.ts",
+        "sha256": "d5e237eb1e2dd588c79ee2f5e6a142fe58c190e1ca0c03eeb84b5007aa03f210"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/manifest.ts",
+        "sha256": "efe96706e883d0f1f32df367ed6c39210c5887b6bc13c1450e3751498445049a"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/native-transfer-quote.ts",
+        "sha256": "f5f5bceaf6d59c3fdfb8c32f4365b0f363f804754a5e095a2a2f28631ef9d793"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+        "sha256": "5cccac5c3b91b76a9aa0e3964ae65848ca08ce549c66fe9485888f54ac2b4a98"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/recipient.ts",
+        "sha256": "73780154dcc3828a8ec231a355f64b7319b33f14616d6999ba43498d1707ce7c"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
+        "sha256": "f19cf1164c368af5334151fc600203a9e18aacd32a717330402268a30db460d0"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      }
+    ]
+  },
+  "catalog": {
+    "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+    "workingSha256": "cc424c8a3e1ebbcc680f4e46b83a678bd89338e7f88d7cefc77e06fb6bd6e564",
+    "ownedSha256": "0de0df4a76baa927d45d0c1c14a6a6e708cd18b0894428cd65d1b1f3634c36c7",
+    "peerOnlyDifferences": [
+      "custom-swap:uniswap-v1:capture",
+      "custom-swap:uniswap-v1:discovery",
+      "custom-swap:uniswap-v1:exact",
+      "custom-swap:uniswap-v1:execution",
+      "custom-swap:uniswap-v1:identity",
+      "custom-swap:uniswap-v1:instance",
+      "custom-swap:uniswap-v1:pricing",
+      "custom-swap:uniswap-v1:routes",
+      "custom-swap:uniswap-v1:victim"
+    ]
+  },
+  "evidenceFiles": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/checks13.json",
+      "sha256": "124d9f6a22200ae3d647d4607dd00dc420dd83968952a0e4e8bbd4f0b0875857"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/checks14.json",
+      "sha256": "c80fc701731b432b80fac9d4f8dfbe83e78332f52364a6db21202b47c658340f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/checks15.json",
+      "sha256": "d83a0eebf2899c2869c524ff04f93735ed8c5c14566ea1b7674290ec3410b9b9"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/checks16.json",
+      "sha256": "261325b82aecd5316fed942b4bf489a8165808494c074dffcd978ee9f793933c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/evm/result.json",
+      "sha256": "efefc142e6574ce2512de5bac9d140aeb2ab6348212a0a9afc14f77848e67e99"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/evm/programs.json",
+      "sha256": "be35d2f8f30f3521c9790aa4a2b0bd4ffd08cc83e5ce4432288a876caaa52e1e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/evm/forge.stdout.log",
+      "sha256": "baec20a505244089fc43c2d46baaa4744f69974d5ef2705bdc4c132249e46646"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-recipient-20261015.4_896o2d/checks16/selection13.json",
+      "sha256": "ab8b666918ebdc137f1417c4f678d2042037ee2823525f56d22656eb2b72f660"
+    }
+  ],
+  "toolReconciliation": {
+    "capabilities": [
+      "curve"
+    ],
+    "selectedToolIds": [
+      "listener:searcher:curve-plain-family",
+      "listener:searcher:curve-plain-recipient-evm"
+    ],
+    "manifestCloud": "/opt/mev-cloud/family-runtime-20261007/logs/curve-recipient-20261015.4_896o2d/selection13.json",
+    "manifestSha256": "ab8b666918ebdc137f1417c4f678d2042037ee2823525f56d22656eb2b72f660",
+    "result": "Current indexed Family/EVM checks agree with manual code and raw execution evidence; no historical tool execution claimed for this implementation round."
+  },
+  "retainedFailure": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/curve-recipient-20261015.4_896o2d/check14-native.log",
+    "sha256": "dade0d928ec99965b734bb1a19ea55c6973cd39a0830783e808f11125fd608bc",
+    "result": "14/15; added declared-revert fixture lacked required observed-effect arrays; fixture corrected and expected optional-request count updated. Production validation was not weakened. check15 native 15/15 passed."
+  },
+  "priorSingleBlockReady": {
+    "summary": {
+      "tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+      "block": 26152335,
+      "blockHash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3",
+      "graphHash": "9e7f35abf44d5f0481e2b6168862472b5c76f6fbd5501322bef790748661d65f",
+      "totalEdges": 22,
+      "targetEdges": [
+        {
+          "instanceKey": "0x390f3595bca2df7d23783dfd126427cceb997bf4",
+          "executionVariantKey": "9956fd91e58284c04bff3a396b0bb2acc73d489166cbb8dd60ab1d2c6a111982",
+          "adapterId": "curve-exchange-plain",
+          "target": "0x390f3595bCa2Df7d23783dFd126427CCeb997BF4",
+          "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "tokenOut": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "slotKind": "swap",
+          "edgeKind": "swap",
+          "leavesStandingPosition": false,
+          "score": 0,
+          "canonicalEdgeId": "curve-plain\u001f0x390f3595bca2df7d23783dfd126427cceb997bf4\u001f0x390f3595bca2df7d23783dfd126427cceb997bf4\u001f0xdac17f958d2ee523a2206206994597c13d831ec7>0xf939e0a03fb07f59a73314e73794be0e57ac1b4e\u001f9956fd91e58284c04bff3a396b0bb2acc73d489166cbb8dd60ab1d2c6a111982"
+        },
+        {
+          "instanceKey": "0x390f3595bca2df7d23783dfd126427cceb997bf4",
+          "executionVariantKey": "5cfbf42aa1bb0867419c1622b567d2eed4676daba9e3bfd7f438fce57c094db3",
+          "adapterId": "curve-exchange-plain",
+          "target": "0x390f3595bCa2Df7d23783dFd126427CCeb997BF4",
+          "tokenIn": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "slotKind": "swap",
+          "edgeKind": "swap",
+          "leavesStandingPosition": false,
+          "score": 0,
+          "canonicalEdgeId": "curve-plain\u001f0x390f3595bca2df7d23783dfd126427cceb997bf4\u001f0x390f3595bca2df7d23783dfd126427cceb997bf4\u001f0xf939e0a03fb07f59a73314e73794be0e57ac1b4e>0xdac17f958d2ee523a2206206994597c13d831ec7\u001f5cfbf42aa1bb0867419c1622b567d2eed4676daba9e3bfd7f438fce57c094db3"
+        }
+      ],
+      "instances": [
+        "235bb3c66b1f6fc1e79deea19c887e3bd6f57ff3e1ba477cdd7d793825b0a5d3",
+        "2ca9b6a4c652b8b88db5660f067b0592a3002934f42f071168a46e035a5e1790",
+        "2e53fa19efa87d6547de5296ad8d61dd7a5312d545116f103bae4857fbb209ad",
+        "4a3ae1ed7007aaf5e44d45886a820b6937a046a18e32bd5baea7c4ba94ee12f2",
+        "6abce8ed2aa5fd08b6e890eb7a7502d883d2b4086416b7dcaecd184950c32224",
+        "958f9197161ab2beec30fe0780d1001410ab82f0124553c1f2e74c3678024654",
+        "995826e6b04f8c32206fed9e2a16539fcbe1ad56a0a63019c44e31e114352ecc",
+        "c5ac02bfdde620e1317d766bbd799aca4141e93746cb9d380766c611808acf6a",
+        "d3770d81abde31b62c4aa9745de99c8d5ad703dca057bc601bbd4a0d52a33300",
+        "e06661b259b4394ac3217091669eee190a5cb3b9df518266372f721c5f68833b",
+        "e2a1732c8e5b83b3ef7cfb3699d0bd8b30c3f57799482432a72641737f13f6f6"
+      ],
+      "familyIds": [
+        "curve-plain",
+        "univ3-standard"
+      ],
+      "broadcast": false,
+      "claim": "natural single-block strict/Graph; not opportunity or representative performance acceptance"
+    },
+    "reuse": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-loop-20261011.UxhkBO/ready.json",
+      "sha256": "4c742a3c366e2d0dce8b06061524e6d2af4efacadc08cc113d07afa42fb0a385",
+      "parentCheckpointFingerprint": "d519a8e2ae357cc9b368f036bb9dc7bf4c62af1fe03f3c80f1520794a135924c",
+      "familyIds": [
+        "curve-plain",
+        "univ3-standard"
+      ]
+    },
+    "actualOperation": "Selective production revalidation of an existing single-block Ready copy, followed by production prices; not a new natural discovery claim. Two receiver-capable ERC20 pools have both directions admitted on the intermediate owned05 source. Native final source requires later authenticated revalidation.",
+    "intermediateSourcesSha256": "60c3b15195384871c20e56dfd68fd864ee8a28c5b87b9c4241838ee205161384",
+    "readySha256": "63bfc98a3821a72cf7763e273da379d62f27cf35534288f7c2bbb832962e6667",
+    "pricesSha256": "0ecbe860929234bc23221114c320b83bd515c4709c3cc853caf0af01be97ea5a"
+  },
+  "notRunOrNotAccepted": [
+    "Final-source historical recipient/default/quoted/runtime execution matrix",
+    "Final-source same-block natural amount valuation and independent receipts",
+    "Formal route-pinned Adapter Replay and family_local/conformance gates",
+    "Original opportunity replay",
+    "4A local and 4B representative performance acceptance"
+  ],
+  "safety": {
+    "broadcast": false,
+    "signing": false,
+    "deployment": false,
+    "liveStarted": false,
+    "centralProtocolBranchesAdded": false,
+    "goalComplete": false
+  },
+  "sourceCommit": "ddc4dafdfd759411abe7c35ca5c9c3eebacc883d",
+  "independentReview": {
+    "path": "docs/research/reports/curve-plain-recipient-review-20261015.json",
+    "sha256": "aad440dd14d4a25a0f647c3a049ac84f34af8aa2d5fbc2d96be2df26459f19cb",
+    "implementationReady": true,
+    "blockingFindings": []
+  },
+  "recordedAt": "2026-10-15T03:26:22.534496+00:00"
+}
