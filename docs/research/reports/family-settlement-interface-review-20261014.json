@@ -437,6 +437,10 @@
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
               "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+            },
+            {
+              "path": "docs/research/reports/balancer-v1-retained-current-compatibility-20261016.json",
+              "sha256": "c99d93220665768e732f346f42c3d2b4e00c28ab5632f307b29c095875ad9d3e"
             }
           ]
         }
@@ -446,7 +450,7 @@
       "source": [
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -510,9 +514,26 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
-        "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
-      }
+        "path": "docs/research/reports/current-interface-balancer-v1-20261016.json",
+        "sha256": "a8fa9b36b425e4b03826f02099dcc25bb38993397e81b9307115a212f8925980"
+      },
+      "currentScopedEvidence": {
+        "compatibility": {
+          "path": "docs/research/reports/balancer-v1-retained-current-compatibility-20261016.json",
+          "sha256": "c99d93220665768e732f346f42c3d2b4e00c28ab5632f307b29c095875ad9d3e"
+        },
+        "ordinaryEvidence": {
+          "path": "docs/research/reports/balancer-v1-retained-current-behavior-20261016.json",
+          "sha256": "01bb12a6ecd100319877134e10dfde1321ff7df5c4bf123cf83904fda6afd508"
+        },
+        "newEvm": 0
+      },
+      "additionalPricingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v1-family/pricing.ts",
+          "sha256": "4ba09da7e8f0c3925e099d2ffb4c864561ef8d0311a5d8c9251b448797e8bd40"
+        }
+      ]
     },
     {
       "familyId": "balancer-v2",
@@ -532,11 +553,15 @@
             {
               "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
               "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+            },
+            {
+              "path": "docs/research/reports/balancer-v2-retained-current-compatibility-20261016.json",
+              "sha256": "d9e59441b29fe8396667305a02c68b2c98e9d9f597e07b88a0148741b8c9fb94"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/current-native-boundary-reuse-c6af07b95b9ca690-20261015.json",
-            "sha256": "f9e1246d646547e2f2190a2547e14c288282999b9c8b50898f2d61997efb91b9"
+            "path": "docs/research/reports/balancer-v2-retained-current-behavior-20261016.json",
+            "sha256": "e872825cb9bd94c96f0b2b6dcfff744d2d262181adc168dd827d9f655f154605"
           }
         }
       ],
@@ -545,7 +570,7 @@
       "source": [
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -609,9 +634,26 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
-        "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
-      }
+        "path": "docs/research/reports/current-interface-balancer-v2-20261016.json",
+        "sha256": "1a20a810bf36dcdb6a107e42d1aac35ec2edabfb9d34f85c6d176ca624cedd1f"
+      },
+      "currentScopedEvidence": {
+        "compatibility": {
+          "path": "docs/research/reports/balancer-v2-retained-current-compatibility-20261016.json",
+          "sha256": "d9e59441b29fe8396667305a02c68b2c98e9d9f597e07b88a0148741b8c9fb94"
+        },
+        "ordinaryEvidence": {
+          "path": "docs/research/reports/balancer-v2-retained-current-behavior-20261016.json",
+          "sha256": "e872825cb9bd94c96f0b2b6dcfff744d2d262181adc168dd827d9f655f154605"
+        },
+        "newEvm": 0
+      },
+      "additionalPricingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v2-family/pricing.ts",
+          "sha256": "ddc86a538aeae98f75c9e310b0efc55195a06b61cef901af8da80cd15fe4d39e"
+        }
+      ]
     },
     {
       "familyId": "balancer-v3",
@@ -2671,6 +2713,10 @@
             {
               "path": "docs/research/reports/fluid-insufficient-input-actual-20261015.json",
               "sha256": "e8a05e329fe1f748ac5437080139f6e4db0e7164f1f23a08af51f68503c693bc"
+            },
+            {
+              "path": "docs/research/reports/fluid-clock-refresh-current-compatibility-20261016.json",
+              "sha256": "081c0ba87eb388e2c7833bd527f512e8a389c03edd798c3ce31594ffb7dc4bbf"
             }
           ],
           "partialExecutionEvidence": {
@@ -2678,8 +2724,8 @@
             "sha256": "406f6185ab386e5875f17760a22a125be8711f86f645763335f42e071152f6dd"
           },
           "executionEvidence": {
-            "path": "docs/research/reports/fluid-current-settlement-correctness-20261015.json",
-            "sha256": "fbd8bed5d53bc9e5c2fc712820f5e122424b844ce4ac743fb0b3b3b7ffd3ae38"
+            "path": "docs/research/reports/fluid-current-settlement-refresh-20261016.json",
+            "sha256": "0f7947f3cd81da13b97a98758bc58f21ef11577520f5b25f31dd26527f7cc279"
           },
           "scope": "Three actual pools, six tested directions, quoted/default/direct-self/direct-external. Input-first callback only; no caller deferred funding. Runtime construction Exact/quoted/RPC=0, no fallback. Current four insufficient-USDT-input strict outcomes stay resource-limited; independent Anvil proves token INVALID and all contract storage/native rollback. These are distinct evidence kinds. Old/current executor bytecode differs: exact old artifact metadata and immutable runtime match, only appended min opcode in RuntimeAmountVM; old instructions unchanged. Old positive runs are authenticated reuse, not current reruns. All48 old positives have exact input debit and zero residue, valid under current direct native0/1 boundary. Quote and request amounts unchanged. Old external native balance not independently observed; no expanded assertion. Other actual instances, natural price and original opportunity scope remain separately recorded; no generic all-deployment, Adapter Replay, performance or live claim."
         }
@@ -2769,8 +2815,8 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/current-interface-fluid-dex-20261015.json",
-        "sha256": "b0ea8dda9514fbc46275e3187bf3b4ba2afa2f629706949452e0c72d0644555a"
+        "path": "docs/research/reports/current-interface-fluid-dex-refresh-20261016.json",
+        "sha256": "978afc72386f1bfa6aa7d5d73f5619b0e425cc0ae4cc95f44f1c35f70277e6fb"
       },
       "coverageScope": "Three naturally admitted same-block pools, six directions; strict negative/deployment inventory limitations retained.",
       "acceptanceAddendum": {
@@ -2793,9 +2839,22 @@
         "disposition": "Recipient wiring/native output delivery and current source identity fixed for sampled pools; strict negative matrix remains incomplete. Earlier fixture-only absence of provenance was not current descriptor evidence."
       },
       "currentScopedEvidence": {
-        "path": "docs/research/reports/fluid-current-settlement-correctness-20261015.json",
-        "sha256": "fbd8bed5d53bc9e5c2fc712820f5e122424b844ce4ac743fb0b3b3b7ffd3ae38"
-      }
+        "compatibility": {
+          "path": "docs/research/reports/fluid-clock-refresh-current-compatibility-20261016.json",
+          "sha256": "081c0ba87eb388e2c7833bd527f512e8a389c03edd798c3ce31594ffb7dc4bbf"
+        },
+        "behavior": {
+          "path": "docs/research/reports/fluid-current-settlement-refresh-20261016.json",
+          "sha256": "0f7947f3cd81da13b97a98758bc58f21ef11577520f5b25f31dd26527f7cc279"
+        },
+        "newHistoricalEvm": 0
+      },
+      "additionalPricingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/fluid-dex-family/pricing.ts",
+          "sha256": "54e434ac45146cc7ef78e5494632c8bdf869bf876c4595d2cb76e1e167d882ed"
+        }
+      ]
     },
     {
       "familyId": "kyberswap-elastic",
@@ -2941,11 +3000,15 @@
             {
               "path": "docs/research/reports/mooniswap-recipient-evidence-review-20261014.json",
               "sha256": "47bd4125fcb37ed13d2e59bed42960a3aa2fca474da918c4e39d5a138cd950c6"
+            },
+            {
+              "path": "docs/research/reports/mooniswap-retained-current-compatibility-20261016.json",
+              "sha256": "cdcd33195a6d01b4f7c7c2dbe61d0925de51d7bc9149f65ad47e7bad0311c9f0"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/current-native-boundary-reuse-3b1c888fc54adef2-20261015.json",
-            "sha256": "d81f4d8a5654e9b19675dcceccf461170c7529900f661fac9afeac714c747d90"
+            "path": "docs/research/reports/mooniswap-retained-current-behavior-20261016.json",
+            "sha256": "0b62348b11599c0762a26b73002b53d0902be69833ccc3a8fe64615a9e885816"
           }
         }
       ],
@@ -2954,7 +3017,7 @@
       "source": [
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -3014,8 +3077,8 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
-        "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+        "path": "docs/research/reports/current-interface-mooniswap-20261016.json",
+        "sha256": "60df11322f7358fc2bdb9826ff1fb29746bda7eb3bb5f49def75f4ff26a6b31a"
       },
       "coverageScope": "Existing verified-erc20-runtime implementation profile; additional deployment inventory remains partial.",
       "acceptanceAddendum": {
@@ -3056,7 +3119,24 @@
             "sourceUrl": "https://eth.blockscout.com/api/v2/smart-contracts/0x57fbb3704609da720546898fcfbad910fcf49e25"
           }
         ]
-      }
+      },
+      "currentScopedEvidence": {
+        "compatibility": {
+          "path": "docs/research/reports/mooniswap-retained-current-compatibility-20261016.json",
+          "sha256": "cdcd33195a6d01b4f7c7c2dbe61d0925de51d7bc9149f65ad47e7bad0311c9f0"
+        },
+        "ordinaryEvidence": {
+          "path": "docs/research/reports/mooniswap-retained-current-behavior-20261016.json",
+          "sha256": "0b62348b11599c0762a26b73002b53d0902be69833ccc3a8fe64615a9e885816"
+        },
+        "newEvm": 0
+      },
+      "additionalPricingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/mooniswap-family/pricing.ts",
+          "sha256": "6c24f3faaf87d668fca45131994e2c29e3617f623400f7e9bc1ace00ebbfd758"
+        }
+      ]
     },
     {
       "familyId": "protocol:astra-multitoken",
@@ -3812,11 +3892,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d 25887366 deposit/redeem, 0x55c1b6e461a6334b567baf0feb5d728715446f05 25887363 deposit/redeem, 0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf 25887366 deposit/redeem, 0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f 25887356 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
           "actualTargets": [
@@ -3912,11 +3996,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0xe05fadf242331808f504661bea65972594869826 25887369 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
           "actualTargets": [
@@ -3960,11 +4048,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0x812b2c6ab3f4471c0e43d4bb61098a9211017427 25887369 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
           "actualTargets": [
@@ -4008,11 +4100,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0xc5d6a7b61d18afa11435a889557b068bb9f29930 25887370 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
           "actualTargets": [
@@ -4056,11 +4152,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0xa3931d71877c0e7a3148cb7eb4463524fec27fbd 25898023 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
           "actualTargets": [
@@ -4104,11 +4204,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0x2c24b57e2ccd1f273045af6a5f632504c432374f 25887369 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim. Current admitted local deposit/redeem; depositAndBridge is outside scope.",
           "actualTargets": [
@@ -4152,11 +4256,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0xd166337499e176bbc38a1fbd113ab144e5bd2df7 25462190 deposit. Source/interface/implementation and dependencies bound independently. No additional variant claim. Only admitted deposit; lock/cooldown/other-token payout is not generic synchronous redeem.",
           "actualTargets": [
@@ -4199,11 +4307,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe 25898023 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
           "actualTargets": [
@@ -4247,11 +4359,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066 25462190 deposit. Source/interface/implementation and dependencies bound independently. No additional variant claim. Only admitted deposit; lock/cooldown/other-token payout is not generic synchronous redeem.",
           "actualTargets": [
@@ -4294,11 +4410,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003 25462190 deposit, 0xc58d044404d8b14e953c115e67823784dea53d8f 26130609 deposit. Source/interface/implementation and dependencies bound independently. No additional variant claim. Only admitted deposit; lock/cooldown/other-token payout is not generic synchronous redeem.",
           "actualTargets": [
@@ -4371,11 +4491,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0x9bd52f2805c6af014132874124686e7b248c2cbb 25887369 deposit/redeem, 0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2 25887356 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
           "actualTargets": [
@@ -4436,11 +4560,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0x2411802d8bea09be0af8fd8d08314a63e706b29c 26030897 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
           "actualTargets": [
@@ -4484,11 +4612,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-independent-index-20261015.json",
               "sha256": "1a04b7dc662f6a4e00f6ac564f0af51d74e9653e182a3479b70a06c7f2ba938d"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-standard-current-behavior-20261015.json",
-            "sha256": "a1b04cf5135efcb112a0e42c93566661fc44d3677f381cf94d941a95c64c41d0"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
           },
           "scope": "Actual same-N targets/directions only: 0x90551c1795392094fe6d29b758eccd233cfaa260 26030897 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim. ERC20-WETH entry only. Redeem internal Withdraw receiver is vault, followed by ordered WETH Deposit and final Transfer; vault native balance not directly observed, protocol native semantics/event join recorded separately.",
           "actualTargets": [
@@ -4544,11 +4676,15 @@
             {
               "path": "docs/research/reports/erc4626-standard-special-compatibility-20261015.json",
               "sha256": "3b7043cc4bc6446c6efebce7f38aea82a8d593c10fbd0591ffaa427cf1154c72"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-frax-custodian-usdc-0.2.8-after-standard-compatible-20261015.json",
-            "sha256": "469654c382057e701e9a9064529aa4a6dce211f7144bc1204cb45093a25f8030"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-frax-custodian-usdc-0.2.8-after-standard-compatible-20261016.json",
+            "sha256": "b9fd080b4829b224ad7bb727476d8dd643d9cc57eb348c46d30744c628fb469b"
           },
           "scope": "One synchronous external-frxUSD Custodian; deposit/redeem, default and direct self/external. 32 historical positives, 80 declared fault reverts plus6zero/dust; omitted historical effects are not independent storageDiff, rollback verified in separate current BotVM synthetic safety suite. Exact/runtime construction0, no fallback. Borrowed amountIn only; no natural valuation, original opportunity or performance claim."
         },
@@ -4577,12 +4713,16 @@
             {
               "path": "docs/research/reports/erc4626-standard-special-compatibility-20261015.json",
               "sha256": "3b7043cc4bc6446c6efebce7f38aea82a8d593c10fbd0591ffaa427cf1154c72"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "scope": "Actual iUSD/staked-iUSD Gateway stake/unstake, self/external direct at N25944594 and N25944595. Other ERC4626 variants unchanged.",
           "executionEvidence": {
-            "path": "docs/research/reports/erc4626-infinifi-gateway-after-standard-compatible-20261015.json",
-            "sha256": "5f106089f0e27deb0b8f516810c92bf9eace03cdc65f3748ffd9491ef7459a77"
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-infinifi-gateway-after-standard-compatible-20261016.json",
+            "sha256": "f08bb1738ae0c5101c223016c399cb80f07d1666244c8ab1e230cdab4276276a"
           }
         }
       ],
@@ -4690,12 +4830,22 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/current-interface-protocol-erc4626-after-standard-20261015.json",
-        "sha256": "f018f2f178e6065c0619a520b1d7c60cbf651cfa2dc3b20e1e787a5cbe2c1595"
+        "path": "docs/research/reports/current-interface-protocol-erc4626-refresh-20261016.json",
+        "sha256": "5dfb739c822cfff300d0ae653c844cecdd641b5d67e4c470bf310fc31ee86d12"
       },
       "currentScopedEvidence": {
         "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
         "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+      },
+      "currentRefreshSource": [
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/pricing.ts",
+          "sha256": "07883fe844719b3e9411b2ac717d4a846dae9a583da6cd179213e0d3d6bf4d4e"
+        }
+      ],
+      "refreshCompatibility": {
+        "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+        "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
       }
     },
     {
@@ -4723,12 +4873,16 @@
             {
               "path": "docs/research/reports/silo-recipient-independent-20261015.json",
               "sha256": "f45f40ac96546e7a851e49373df0f85a1125cdbcd88d68355cf041d6507a5233"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "scope": "Selected synchronous sUSDe payout, owner=executor, default/quoted/direct-self/direct-external at saved historical state",
           "executionEvidence": {
-            "path": "docs/research/reports/silo-recipient-current-behavior-20261015.json",
-            "sha256": "236ffddc81c0df7722c53f9ebd43b172c686a4d8f1ebee99cca7add3160b27d8"
+            "path": "docs/research/reports/erc4626-silo-refresh-silo-recipient-current-behavior-20261016.json",
+            "sha256": "42ce269d6ae3af91bffbcd6758e1deb4451e73c09f4c13117ec8811d59989b97"
           }
         },
         {
@@ -4752,12 +4906,16 @@
             {
               "path": "docs/research/reports/silo-recipient-independent-20261015.json",
               "sha256": "f45f40ac96546e7a851e49373df0f85a1125cdbcd88d68355cf041d6507a5233"
+            },
+            {
+              "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+              "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
             }
           ],
           "scope": "Selected synchronous sUSDe payout, owner=executor, default/quoted/direct-self/direct-external at saved historical state",
           "executionEvidence": {
-            "path": "docs/research/reports/silo-recipient-current-behavior-20261015.json",
-            "sha256": "236ffddc81c0df7722c53f9ebd43b172c686a4d8f1ebee99cca7add3160b27d8"
+            "path": "docs/research/reports/erc4626-silo-refresh-silo-recipient-current-behavior-20261016.json",
+            "sha256": "42ce269d6ae3af91bffbcd6758e1deb4451e73c09f4c13117ec8811d59989b97"
           }
         }
       ],
@@ -4833,12 +4991,22 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/current-interface-protocol-erc4626-silo-redeem-20261015.json",
-        "sha256": "312ed34b65c2f7d292ab5d897073d3557445b48acb8fb48455e3ecc12b089477"
+        "path": "docs/research/reports/current-interface-protocol-erc4626-silo-redeem-refresh-20261016.json",
+        "sha256": "621ccd2ebc5bb5110cda65a9d9eec73e59c130da32f88434c298e064bd62aa41"
       },
       "currentScopedEvidence": {
         "path": "docs/research/reports/silo-recipient-actual-correctness-20261015.json",
         "sha256": "9d0e4d6b034b7cf6ab2e04cf3c488e41b72c95fa4aa2f796267b3b8bbcc15284"
+      },
+      "currentRefreshSource": [
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/pricing.ts",
+          "sha256": "190282366a89a3676ae6fbfbbf45595dd1fd2b6d10d2b091125867e70b467e5c"
+        }
+      ],
+      "refreshCompatibility": {
+        "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+        "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
       }
     },
     {
@@ -5675,11 +5843,19 @@
             {
               "path": "docs/research/reports/psv-self-recipient-evidence-review-20261014.json",
               "sha256": "0b3178b28e15e77a1e5deabd8333a6c67617c4dbc576d45315e5672ee8e98458"
+            },
+            {
+              "path": "docs/research/reports/psv-current-runtime-compatibility-20261016.json",
+              "sha256": "d4da5a107fb8fcf39bfb73047698c6b899980b07b1af9410de3d6858405861cf"
+            },
+            {
+              "path": "docs/research/reports/psv-current-runtime-independent-20261016.json",
+              "sha256": "4671fa642fdc39acfffa1596a8a5151b60015f0f12da5d65933a374ff5e93fc3"
             }
           ],
           "executionEvidence": {
-            "path": "docs/research/reports/current-native-boundary-reuse-084266cd89ffa8a9-20261015.json",
-            "sha256": "58f569c62ad70b6aaba6f80b371fe71437e7ac5ef5656b0938252a991f29d3c6"
+            "path": "docs/research/reports/psv-retained-current-behavior-20261016.json",
+            "sha256": "054f665b888e823d1dbdf46340bd0f94b8be3916786096a93bde0ec7782e80cd"
           },
           "notes": [
             "Recipient-bound quote/direct verified in both directions for executor, ordinary receiver and treasury. No deferred callback; input-first ERC20 payment.",
@@ -5695,7 +5871,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "e2641bab8aa07236de41fa57e1c21306b4ab7960378eaaf557aa321cab74f56d"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -5779,8 +5955,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
-        "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+        "path": "docs/research/reports/current-interface-protocol-psv-retained-20261016.json",
+        "sha256": "b0051c584c376b8ff7e8ef0503a226b213c98fcb2096256be33718f7dd231282"
+      },
+      "currentCompatibility": {
+        "path": "docs/research/reports/psv-current-runtime-compatibility-20261016.json",
+        "sha256": "d4da5a107fb8fcf39bfb73047698c6b899980b07b1af9410de3d6858405861cf"
       }
     },
     {

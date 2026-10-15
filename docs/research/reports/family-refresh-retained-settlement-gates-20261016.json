@@ -1,0 +1,365 @@
+{
+  "original": [
+    {
+      "familyId": "protocol:erc4626",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:36:29.110672+00:00",
+      "finished": "2026-10-15T17:37:19.509238+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-protocol-erc4626.log",
+      "logSha256": "b8c8c35f10316edf88d60c484a2b267a2e4277f85897f3d7eb10bee60fca8bea",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "ca70b3ba2e42c1a26d51065d65fccdebffb2f1d60884a02a9cdafe42fa6be37e",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "protocol:erc4626",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "protocol:erc4626-silo-redeem",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:37:19.509510+00:00",
+      "finished": "2026-10-15T17:38:09.776505+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-protocol-erc4626-silo-redeem.log",
+      "logSha256": "3c2577be86896233996a1dbf14d9101ad2269a2f86f25d17b32b4c5fbd399697",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "7ef1ebd0bb4fe05b80f06f477e18917949b86cdd441458b6d54955b87e0ee9e2",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "protocol:erc4626-silo-redeem",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "protocol:psv",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:38:09.776831+00:00",
+      "finished": "2026-10-15T17:39:00.093236+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-protocol-psv.log",
+      "logSha256": "b2ad1d7f77d4e207f8ad9ca688f251dc36602421d219f6bc880c5fd01a5168b7",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "007f0f282b33cd495b1edc8409f32b4b124170b525a8149499a045bfa3e2c8c6",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "protocol:psv",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "balancer-v1",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 1,
+      "started": "2026-10-15T17:39:00.093673+00:00",
+      "finished": "2026-10-15T17:39:51.008384+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-balancer-v1.log",
+      "logSha256": "e90c99b1d40b691aa065c7184df73ddd65b6c61962bf0bd47c7552eeece274a8",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "252eca6b1108889cae7a0655e8209db5e5d1486d9311d6565982dccec4bfa026",
+      "result": null
+    },
+    {
+      "familyId": "balancer-v2",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 1,
+      "started": "2026-10-15T17:39:51.008752+00:00",
+      "finished": "2026-10-15T17:40:41.553316+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-balancer-v2.log",
+      "logSha256": "408e04a37450a49f7bf2944b24f94d3cfbdcd6fe31f280de18747276bcf2b3e1",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "bbd20f8842d4bb0a141347c661b04759b0b1fff38d9977a2082f319ca4885434",
+      "result": null
+    },
+    {
+      "familyId": "mooniswap",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 1,
+      "started": "2026-10-15T17:40:41.553685+00:00",
+      "finished": "2026-10-15T17:41:32.560095+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-mooniswap.log",
+      "logSha256": "ce7ed6229807427e9226add1d46ae4ae0f6a140734b1efeb5dcccdb5fff9ba92",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "cf8c0b11f07257387bda26bf32b47ea7ab19f6041a7812a06a367595947c9673",
+      "result": null
+    },
+    {
+      "familyId": "fluid-dex",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 1,
+      "started": "2026-10-15T17:41:32.560466+00:00",
+      "finished": "2026-10-15T17:42:22.804048+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-fluid-dex.log",
+      "logSha256": "510cab768b4db1c737c3290e4559ff2d4253742826d118470b9db22d91afa70d",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "fd1faad7fe0e5bbbbc301e1e2d0bb41420248a8f0de3f168ae46b06b14ef95c0",
+      "result": null
+    }
+  ],
+  "corrected": [
+    {
+      "familyId": "balancer-v1",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:49:45.179546+00:00",
+      "finished": "2026-10-15T17:50:35.667245+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-gate-balancer-v1.log",
+      "logSha256": "ee714b8ab5f8a367f0d7f4d92c74dd4c1b7e5320586ba3132bafb0a0ce4ecee5",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-selection.json",
+      "selectionSha256": "d7b0df0263ae49f486bb7076fb84d8df7321d033fa49c8d1d475af399fc3d741",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "balancer-v1",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "balancer-v2",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:50:35.667517+00:00",
+      "finished": "2026-10-15T17:51:25.864021+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-gate-balancer-v2.log",
+      "logSha256": "62cadaa236555005d129f1e500cb5af1e8732f61043a337814cda370e384df06",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-selection.json",
+      "selectionSha256": "267a44660a7ee4f376108b5dfea7a5a6fc409a37cf93d64dad3902fe19a26be8",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "balancer-v2",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "mooniswap",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:51:25.864349+00:00",
+      "finished": "2026-10-15T17:52:16.583141+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-gate-mooniswap.log",
+      "logSha256": "19b3f7359354d6cd0c97a92c129f895d684894b837cb70a56065fa3e75bb4eb2",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-selection.json",
+      "selectionSha256": "05e312dbb411a9769641f91b5821d3b1a814c542c63ac047580db07ddc9a2024",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "mooniswap",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "fluid-dex",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:52:16.583479+00:00",
+      "finished": "2026-10-15T17:53:07.052874+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-gate-fluid-dex.log",
+      "logSha256": "f42d3c36d32fb513a73841ec42845a970b9208b5114e2008614a747540453819",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-selection.json",
+      "selectionSha256": "d33d9b11d964bcd6413a9cf015f628540f60d8fca7dd4499566fb7f8aa496db4",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "fluid-dex",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    }
+  ],
+  "accepted": [
+    {
+      "familyId": "protocol:erc4626",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:36:29.110672+00:00",
+      "finished": "2026-10-15T17:37:19.509238+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-protocol-erc4626.log",
+      "logSha256": "b8c8c35f10316edf88d60c484a2b267a2e4277f85897f3d7eb10bee60fca8bea",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "ca70b3ba2e42c1a26d51065d65fccdebffb2f1d60884a02a9cdafe42fa6be37e",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "protocol:erc4626",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "protocol:erc4626-silo-redeem",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:37:19.509510+00:00",
+      "finished": "2026-10-15T17:38:09.776505+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-protocol-erc4626-silo-redeem.log",
+      "logSha256": "3c2577be86896233996a1dbf14d9101ad2269a2f86f25d17b32b4c5fbd399697",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "7ef1ebd0bb4fe05b80f06f477e18917949b86cdd441458b6d54955b87e0ee9e2",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "protocol:erc4626-silo-redeem",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "protocol:psv",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:38:09.776831+00:00",
+      "finished": "2026-10-15T17:39:00.093236+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-gate-protocol-psv.log",
+      "logSha256": "b2ad1d7f77d4e207f8ad9ca688f251dc36602421d219f6bc880c5fd01a5168b7",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh133-selection.json",
+      "selectionSha256": "007f0f282b33cd495b1edc8409f32b4b124170b525a8149499a045bfa3e2c8c6",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "protocol:psv",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "balancer-v1",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:49:45.179546+00:00",
+      "finished": "2026-10-15T17:50:35.667245+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-gate-balancer-v1.log",
+      "logSha256": "ee714b8ab5f8a367f0d7f4d92c74dd4c1b7e5320586ba3132bafb0a0ce4ecee5",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-selection.json",
+      "selectionSha256": "d7b0df0263ae49f486bb7076fb84d8df7321d033fa49c8d1d475af399fc3d741",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "balancer-v1",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "balancer-v2",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:50:35.667517+00:00",
+      "finished": "2026-10-15T17:51:25.864021+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-gate-balancer-v2.log",
+      "logSha256": "62cadaa236555005d129f1e500cb5af1e8732f61043a337814cda370e384df06",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-selection.json",
+      "selectionSha256": "267a44660a7ee4f376108b5dfea7a5a6fc409a37cf93d64dad3902fe19a26be8",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "balancer-v2",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "mooniswap",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:51:25.864349+00:00",
+      "finished": "2026-10-15T17:52:16.583141+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-gate-mooniswap.log",
+      "logSha256": "19b3f7359354d6cd0c97a92c129f895d684894b837cb70a56065fa3e75bb4eb2",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-selection.json",
+      "selectionSha256": "05e312dbb411a9769641f91b5821d3b1a814c542c63ac047580db07ddc9a2024",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "mooniswap",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    },
+    {
+      "familyId": "fluid-dex",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 0,
+      "started": "2026-10-15T17:52:16.583479+00:00",
+      "finished": "2026-10-15T17:53:07.052874+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-gate-fluid-dex.log",
+      "logSha256": "f42d3c36d32fb513a73841ec42845a970b9208b5114e2008614a747540453819",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh134-selection.json",
+      "selectionSha256": "d33d9b11d964bcd6413a9cf015f628540f60d8fca7dd4499566fb7f8aa496db4",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "fluid-dex",
+            "passed": true,
+            "failures": []
+          }
+        ]
+      }
+    }
+  ],
+  "correction": "Four certificates had pricing source in runtime closure; exact closure restored, pricing kept as separate pin. Original four failures retained. Gate and production semantics unchanged."
+}

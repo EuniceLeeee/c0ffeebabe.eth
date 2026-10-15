@@ -1,0 +1,77 @@
+{
+  "kind": "non-author-current-compatibility-review",
+  "result": "pass-scoped",
+  "reviewer": "v4_accept26",
+  "candidates": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/balancer-v1-retained-current-behavior-20261016.json",
+      "sha256": "04b8d043c13dd5c005cf30cb43f73474d31df9ec4faf45659e1c56a9d1e48748"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/balancer-v1-retained-current-compatibility-20261016.json",
+      "sha256": "5de1626fe992cbeb6b27d8b06fef0a2a16f91da39abaf90a9b85ed4dec61e35a"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/balancer-v2-retained-current-behavior-20261016.json",
+      "sha256": "f4e62681387127908dd914783c2ec9b198999e1736ad30cec06edba4ffa5a57e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/balancer-v2-retained-current-compatibility-20261016.json",
+      "sha256": "4d95c43efda66f3164227acb7463fb40f63dd1742556ec71c2e9bdabf51f9c47"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/current-interface-balancer-v1-20261016.json",
+      "sha256": "1f6527fa84a48b892a0adbbe82a454d8439137c5f471d4375d9a44fef4cc373e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/current-interface-balancer-v2-20261016.json",
+      "sha256": "3485fbcdb42699c4e8b00d707f75d2e40fa091c5e2e19c69dbb7ae32739d41d0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/current-interface-fluid-dex-refresh-20261016.json",
+      "sha256": "411004a2dacfc871c508f2c88977c60c5f2920453c72c4d6b6e5004194c4ebbd"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/current-interface-mooniswap-20261016.json",
+      "sha256": "7c10567a32a68ffb8f21021d3105dfcb32ebdf404c3aa9f9b39b22a797c5fc18"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/fluid-clock-refresh-current-compatibility-20261016.json",
+      "sha256": "a44b3ddb6254440f80a9cc5fdad36a2d9b41bf30cac56b96810d4c92502690b4"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/fluid-current-settlement-refresh-20261016.json",
+      "sha256": "bc39f2460b6ffc6fc39948bf257f7cba8fbf09bc0e20d9f5d90312d25566dcfe"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/mooniswap-retained-current-behavior-20261016.json",
+      "sha256": "493aeea032ac75ea94682c58d995b1add6cdc23b8b1e0f582853320761b40e29"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b-delivery/candidate/docs/research/reports/mooniswap-retained-current-compatibility-20261016.json",
+      "sha256": "915a2eef8caf127122b20a1f7cea81589b04b7d3a37d3d84853ddaf0595fa0fe"
+    }
+  ],
+  "independentComputation": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b132-independent-decoding.json",
+    "sha256": "a76c207bd4a9776672a2cbe87a85f039c2aabda5d8c772f4fd76fd4bf9e515ed"
+  },
+  "sourcePinsChecked": 897,
+  "findings": [
+    "Recomputed owner-patched old B1 8811/B2 df4a/Moon7abb and currentdbeb; each exact runtime hash matches saved evidence and all16 metadata source entries match pinned git bytes.",
+    "Decoded all8 B1/190B2/48Moon complete actual request scripts independently. B1/B2 ordinary0e only; Moon also00 CALL/0a allowance. No closed flow, callback installation or value call. B1 uses math sub only; B2 sub/shr; Moon add/sub. All are unaffected opcode branches.",
+    "B1 diff ordinary frame readOnly=false/depth0 is neutral; new diagnostics may change failure bytes but cannot produce success. B2/Moon BotVM unchanged; min/mode2 additions unused. Moon nested readonly only contains existing static mode.",
+    "Read current emitter reconstruction scripts and compared all published per-row equality receipts against original raw file hashes/counts. This review did not rerun EVM or quotes.",
+    "Fluid only each-block policy changed. Independently reviewed original sameN3-code binding and candidate earlier; actual baseline128 perBlockRefresh red and canonical129green/130regressions now retained. Existing48positive/48negative classifications not promoted.",
+    "Current source/common pins match actual base except explicitly current Fluid pricing54e; no stale hash overwritten."
+  ],
+  "limits": [
+    "Evidence reuse scope only; no new current admission/historical execution/valuation/opportunity/performance claim.",
+    "Moon original a95 artifact JSON missing; reconstructed339 has exact old7abb runtime, not same artifact SHA.",
+    "B1 existing8positive/0negative remains; no nonexistent fault results invented.",
+    "Full historical raw balance findings are retained from original independently reviewed reports; this review targets emission/runtime/source compatibility."
+  ],
+  "scratchDiagnostics": [
+    "Initial independent decoder compound-index expression consumed wrong position; corrected to explicit length. Moon outer allowance opcode initially unhandled and then decoded per actual source. These were local manual-review setup failures, not production or canonical-tool failures."
+  ]
+}

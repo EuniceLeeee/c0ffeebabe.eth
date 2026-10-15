@@ -1,0 +1,530 @@
+{
+  "schema": "family-refresh-independent-final-review-v1",
+  "reviewer": "interface_protocols_b",
+  "createdAt": "2026-10-15T17:42:08.633326+00:00",
+  "result": "pass-scoped",
+  "reviewFinal": true,
+  "implementationReady": true,
+  "blockingFindings": [],
+  "scope": "Independent read-only source, canonical red/green, compatibility and ERC4626/Silo inventory audit. Three scheduling policies plus two new production-lifecycle tests and one expectation update; no RPC/build/test/EVM was run by this reviewer.",
+  "baseHead": "3147b98771ea1fd97dc747324773e8447305d3fc",
+  "finalSource": [
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/pricing.ts",
+      "before": "21f582fe22bb41f8fd392d594f438d894101da7f8ae335af4eb9b0e275774ad8",
+      "after": "07883fe844719b3e9411b2ac717d4a846dae9a583da6cd179213e0d3d6bf4d4e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/test/custodian-contract.ts",
+      "before": "ce8619b4c9d41a8c61a9da726113ed93403e8bff03aabc620862e6a822db18fd",
+      "after": "6f542890914b9e8d253b87754af6a825282f04117be1a308b189b3e9d7830ada"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/pricing.ts",
+      "before": "3c518217c43f249a8b7018e9bf071d41739fc1e94490bac984a805bbf950f57a",
+      "after": "190282366a89a3676ae6fbfbbf45595dd1fd2b6d10d2b091125867e70b467e5c"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/fluid-dex-family/pricing.ts",
+      "before": "fcb2bbb930d647e27b04ca7868c53beffd42792bbb674f73bbf52ed99dcb6e97",
+      "after": "54e434ac45146cc7ef78e5494632c8bdf869bf876c4595d2cb76e1e167d882ed"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/test/standard-refresh.ts",
+      "before": "ef700c077753a1c1eb84b53d55c4eea58833ecdb08974c62eee5c0934cfd6126",
+      "after": "63fdcadf00b31bce92615b39718e4f44bd7817aa5c6f22b393061c5f82e099ed"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/fluid-dex-family/test/refresh.ts",
+      "before": null,
+      "after": "97a640229ddc2e80eff581aedbcc0672b0d677bb499e00a15460755d2dd34fae"
+    }
+  ],
+  "finalPins": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/export131/refresh130-final-pins.json",
+    "sha256": "341ada80eb89257b3753394962d55ff8eb7aafe0990e8ec719ee65d0b2100d2c"
+  },
+  "sourceConclusion": [
+    "Independent exact Git diff confirms all three production edits are each-block policy declarations/comments only. ABI, identity, quote request/formula, runtime byte generation, settlement guards, receiver and amount/tolerance semantics unchanged.",
+    "The standard ERC4626/Silo missing refresh is grounded in selected deployed oracle/time and external CDO strategy/accounting dependencies; Fluid external Liquidity/clock source joins are separately retained and source reviewed. Fresh scheduling tests exercise actual production Family registration, lifecycle, root, coordinator, Exact and effective publication with explicitly synthetic transport responses.",
+    "The actual scanner uses current effective rows, never raw bootstrap fallback for failed/unquoted rows. Keeping raw bootstrap mids and their original provenance while refreshing effective quotes is the existing live contract; this certificate does not claim every raw value is recomputed."
+  ],
+  "canonical": {
+    "receipt": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/canonical-checks130.json",
+      "sha256": "f0c7a9501f2e7c5455f71cfb9b73aabfc9a998655debeea57e1e7ab6dc73c4a7"
+    },
+    "validBefore": [
+      {
+        "phase": "before",
+        "tool": "listener:test:erc4626-family:standard-refresh",
+        "exitCode": 1,
+        "started": "2026-10-15T17:20:17.813823+00:00",
+        "finished": "2026-10-15T17:20:19.704199+00:00",
+        "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh126-selection.json",
+        "selectionSha256": "487289fafea10d6186d40eba4649b85968c0bcf53c3983a3e6e64abb58110a8a",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh126-before-erc4626-silo.log",
+        "logSha256": "17969fff604444874c37d91eebe094fab27f7b95b5037caf599730df4974c6d3"
+      },
+      {
+        "phase": "before",
+        "tool": "listener:searcher:fluid-refresh",
+        "exitCode": 1,
+        "started": "2026-10-15T17:22:56.280933+00:00",
+        "finished": "2026-10-15T17:22:58.132135+00:00",
+        "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh128-selection.json",
+        "selectionSha256": "c966449dc35d0078b372b7820dd82f993fb959a50f2ca90a32720ca72e7eff19",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh128-before-fluid.log",
+        "logSha256": "cb2af62bf281ca46ad0dc2b18828a7b4359cd48e2be1368d919a390b1a2e6351"
+      }
+    ],
+    "after": [
+      {
+        "name": "generate",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh129-generate.log",
+        "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+        "completeEmbeddedLogRehashed": true
+      },
+      {
+        "name": "index",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh129-index.log",
+        "logSha256": "ae29ea1c9e1b66d6ca1e7ee5778981e7ca6521c3e315687a9eece2400671994d",
+        "completeEmbeddedLogRehashed": false
+      },
+      {
+        "name": "erc4626-silo",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh129-erc4626-silo.log",
+        "logSha256": "5a23515e58f7a313623c1ace9a3aa2e0080a339b01074cfab931c2a0ffe5369f",
+        "completeEmbeddedLogRehashed": true
+      },
+      {
+        "name": "fluid",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh129-fluid.log",
+        "logSha256": "4647cf2f5fefda4b0493f4afabe87cdb347994311feaad9b911fab1b055cf0f7",
+        "completeEmbeddedLogRehashed": true
+      },
+      {
+        "name": "index",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-index.log",
+        "logSha256": "0eea5c24ff41fcaf0685e5a76ed16723cc05ab2844135b208e26d3442d049099",
+        "completeEmbeddedLogRehashed": false
+      },
+      {
+        "name": "custodian",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-custodian.log",
+        "logSha256": "b71b31a522a5684ee39ac2b37efe07ebd7e429357a39727036314eab36e95ad5",
+        "completeEmbeddedLogRehashed": false
+      },
+      {
+        "name": "infinifi",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-infinifi.log",
+        "logSha256": "0a445baa56bf63b8ec5b11bec0210d59739bef144c972e09fddbb4a6e95c12e3",
+        "completeEmbeddedLogRehashed": true
+      },
+      {
+        "name": "silo",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-silo.log",
+        "logSha256": "57975adbecf627fdc46e165fb899f49806f9015cccef5a948d67f1f0ba435787",
+        "completeEmbeddedLogRehashed": true
+      },
+      {
+        "name": "fluid-contract",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-fluid-contract.log",
+        "logSha256": "e51d50f8229745afca6f2b6736cc68576053973f1e5c6c6896528c7c31f71ecf",
+        "completeEmbeddedLogRehashed": true
+      },
+      {
+        "name": "dual",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-dual.log",
+        "logSha256": "cd74e8e0e7b15e63ddc79fbfc69d349211134c5006b72d701154591b4171a48f",
+        "completeEmbeddedLogRehashed": false
+      },
+      {
+        "name": "direct",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-direct.log",
+        "logSha256": "83a37ac6c6c986ba9faae6427b909ac4222ae51fb3806f7d68e0a83369215998",
+        "completeEmbeddedLogRehashed": true
+      },
+      {
+        "name": "build",
+        "exitCode": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-build.log",
+        "logSha256": "0ae388bdf1b2f8162f029a3a0e57a115944deae544a79e9a32c18b96758aadec",
+        "completeEmbeddedLogRehashed": true
+      }
+    ],
+    "executionManifests": [
+      {
+        "manifest": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/export131/refresh129-selection.json",
+          "sha256": "0992cc57263bec530b8a76334cae437dd9185d3a54e98f763b9381390454f2fb"
+        },
+        "capabilityQuery": [
+          "family",
+          "settlement",
+          "fluid",
+          "build"
+        ],
+        "executions": [
+          {
+            "schema_version": 1,
+            "tool_id": "listener:test:erc4626-family:standard-refresh",
+            "descriptor_sha256": "4c909b78409e90459dff19d39540be42538d65bbf7a45a0c3cc6f280608a9aa3",
+            "started_at": "2026-10-15T17:24:55.275Z",
+            "finished_at": "2026-10-15T17:24:57.032Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "71b583f2b4c9493453603d69782a6de376eb9b4377cbdcbcd8f397000087ce8f",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "test:erc4626-family:standard-refresh",
+              "--"
+            ],
+            "stdout_sha256": "37d3d994d2986953477a8f70932bbb1dd152fb27121169215bd13569373a498b",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 471,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:fluid-refresh",
+            "descriptor_sha256": "344c773e8e0d794902be27fd6976cd30650f6dd0705d53fa7c886321fd02d1c6",
+            "started_at": "2026-10-15T17:24:57.389Z",
+            "finished_at": "2026-10-15T17:24:58.932Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "2fbdf0a2a02e4fda1cb0a651e305e450ee670bde3b889b7a6604bc68de9fc541",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:fluid-refresh",
+              "--"
+            ],
+            "stdout_sha256": "a64619fc98fc242337454ae633e16fe1d61897505a2bcab8cb91e41228178429",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 327,
+            "stderr_bytes": 0
+          }
+        ]
+      },
+      {
+        "manifest": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/export131/refresh130-selection.json",
+          "sha256": "8d0e620b6595c35092f07a2be70c6cacf0dc178c0ecc28e9e64339d97e463cb8"
+        },
+        "capabilityQuery": [
+          "family",
+          "settlement",
+          "fluid",
+          "build",
+          "contract",
+          "recipient"
+        ],
+        "executions": [
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:frax-custodian-contract",
+            "descriptor_sha256": "ad7833304bf96f41fecace60b3ab68b2362b654092bff334dd86022239d5f42f",
+            "started_at": "2026-10-15T17:26:46.884Z",
+            "finished_at": "2026-10-15T17:26:49.021Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "58112e9b1a2556f2c721f66a193ab0d95e0e2a1263794f844b32a26e32941a22",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:frax-custodian-contract",
+              "--"
+            ],
+            "stdout_sha256": "0c1d5431a80b3b73d6856a486ecdcd2bf9523a3f12ba0fff00ba5007e03d2136",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 3347,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:infinifi-contract",
+            "descriptor_sha256": "627aa13238579f3518f7a9700c4056c1706dcb77688c6b72bbf06a7c66e1bb2d",
+            "started_at": "2026-10-15T17:26:49.372Z",
+            "finished_at": "2026-10-15T17:26:52.675Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "d4f9fc00e0f6575c9c3b1f16da01160093b745ae2b82a403756b5a3d05d772b0",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:infinifi-contract",
+              "--"
+            ],
+            "stdout_sha256": "917866decbd546463d5e95b3488bc76fc8428f2a23baff7cca7734f96519478c",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 1921,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:erc4626-silo-recipient-safety",
+            "descriptor_sha256": "395ff3a7b0555b20ecc94fc70052d8c29111c005409199baca9508773d7a8d8a",
+            "started_at": "2026-10-15T17:26:53.034Z",
+            "finished_at": "2026-10-15T17:26:54.767Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "ba4d8fc25daca2b7f667b9acfafceb189282e0d9b8af2c942a00112ffdd36779",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:erc4626-silo-recipient-safety",
+              "--"
+            ],
+            "stdout_sha256": "d3186139a6e42c190c06e8307addac1f85d31e5acd0c80d7237e1102d18106d5",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 1754,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:fluid-dex-family-plugin",
+            "descriptor_sha256": "a7fc77e72c8e94cc3b5ede517512c09aacdaf813362ad4d00d33ad105f3464f9",
+            "started_at": "2026-10-15T17:26:55.127Z",
+            "finished_at": "2026-10-15T17:26:55.656Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "315d39bba4a99268959e338b2a90334a7f7b1a35bb0ee1afa09aec7ff5d51a58",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:fluid-dex-family-plugin",
+              "--"
+            ],
+            "stdout_sha256": "3d1adc08d1a349fb96ab0d1d57273a6376369329519da92e3ce33fc20ed3b6bb",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 150,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:family-dual-execution",
+            "descriptor_sha256": "18a05f45ebf5c24dd895c571415f2842a221754f4b5a8f560fa79336b4f51a6d",
+            "started_at": "2026-10-15T17:26:56.020Z",
+            "finished_at": "2026-10-15T17:27:03.902Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "87c64f0c555bd8d1673f2810e50ff252c46e517a3815f0746d0960878f14f2d9",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:family-dual-execution",
+              "--"
+            ],
+            "stdout_sha256": "247fb06e71094179bc6d8daaf254c74b30b2e43297c22fe6baa02d4ef9665fa2",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 59015,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:searcher:family-direct-recipient",
+            "descriptor_sha256": "79fcfdaa2e3a6b1ebf0842047865bae32786a30588ba7d1aa1d564ac875fa861",
+            "started_at": "2026-10-15T17:27:04.262Z",
+            "finished_at": "2026-10-15T17:27:05.238Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "600eda789cfb5dd76a35ecadf8e2b12d8a54662ea86b6bdabade5bcdaad23d54",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "searcher:family-direct-recipient",
+              "--"
+            ],
+            "stdout_sha256": "a265aa2542998224dcecdb2bf8d23b5164209346976d74d5eed9a2d60c1d3f46",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 1955,
+            "stderr_bytes": 0
+          },
+          {
+            "schema_version": 1,
+            "tool_id": "listener:build:live",
+            "descriptor_sha256": "7a172d7206fd17e543d3dea89cdb576e4fc489cd77dbec69177467684608567f",
+            "started_at": "2026-10-15T17:27:05.592Z",
+            "finished_at": "2026-10-15T17:27:13.827Z",
+            "exit_code": 0,
+            "cwd": "listener",
+            "argv_sha256": "2b3866765a4330a9d49110b5801cf7bbf537910c4aa8792f005648a233e5a18f",
+            "argv_redacted": [
+              "npm",
+              "run",
+              "build:live",
+              "--"
+            ],
+            "stdout_sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+            "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "stdout_bytes": 71,
+            "stderr_bytes": 0
+          }
+        ]
+      }
+    ],
+    "counts": {
+      "newRefreshCases": 3,
+      "custodianContract": 32,
+      "infinifiContract": 14,
+      "siloSafety": 19,
+      "allFamilyDual": 307,
+      "directRecipient": 17,
+      "buildExitCode": 0
+    },
+    "finding": "Two corrected ERC4626/Silo old-code tests fail at missing perBlockRefresh state keys after admission and own-key checks; Fluid old-code test fails at the same scheduling boundary. The same final tests pass after policy-only changes. Green cases additionally check quiet value changes, two failed heads removing output/quotedAt, recovery, unchanged-output refresh, bounded quote counts and unrelated on-touch carry.",
+    "logVerification": "The complete embedded logs of both valid red runs and eight green/generation/build steps were rehashed to their recorded raw log SHA. Four larger index/custodian/dual logs are represented by their actual canonical execution receipts and retained log hashes/tails; this reviewer does not claim those unavailable full raw files were rehashed."
+  },
+  "candidateVersionMapping": {
+    "originalSourceReview": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/independent-source-review-final.json",
+      "sha256": "48f057e35a931ae419fe91f0262f8a5aafcb749c7048bb703d39f7e5d785c1dc"
+    },
+    "interpretation": "Historical candidate-version source review only. Its candidateHandoff SHA58c36... is not asserted to equal the now-mutated handoff.json. No prior review was edited.",
+    "testRepair": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/repair126.json",
+      "sha256": "ebf3986fa5281e808944e277cd9daa2c77a1e61f3a353a2772cd20b789f73d64"
+    },
+    "independentRepairReview": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/independent-test-repair126.json",
+      "sha256": "aac427f99a774752e05d5faa2dadaba72ee9defef69c562687c5c4b693f38bbe"
+    },
+    "immutableInstallPayload": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/baseline126.py",
+      "sha256": "6305e432d2dbb42114edb54c05ad27d6b23c8a1fb1b9c295375e3ff067cb683f"
+    },
+    "productionInstallPayload": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/apply129.py",
+      "sha256": "8f8de7faf071e6b7eb85a1e4471f8055e10a3197fba4d60abcce83b2f79e02b9"
+    },
+    "mapping": "Parsed install payloads independently: new standard-refresh test ef700c...→63fdcadf...; Fluid test97a640...; decoded bytes match retained final candidate files. Current three production files and custodian assertion match final export131 pins. Those exact fields replace reliance on any mutable handoff path."
+  },
+  "failureRetention": [
+    {
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/baseline125.log",
+        "sha256": "611c9d855c98e431a03e6dbb6644bb8e0d7bd1f3e3dc88e56c100bba3bf5ec8f"
+      },
+      "meaning": "Initial fixture defects before tested scheduling boundary; not the valid production red."
+    },
+    {
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/baseline126.log",
+        "sha256": "c8f317cc90ce8e742fc9543ce8671e33c03b014d18908a8a9edeeafe36d4b312"
+      },
+      "meaning": "Valid two-target red retained; later tool-selection assertion stopped Fluid before execution."
+    },
+    {
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/baseline127.log",
+        "sha256": "e0d9d3195371114369f8765b5def811d8f14635e9ccee87f725914291e6d6b51"
+      },
+      "meaning": "Preparation assertion; no test execution claim."
+    },
+    {
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/baseline128.log",
+        "sha256": "f13b15a9a15dad9c037dd1fd876f35c3d5d3d3d8c7543dd68d73192d0ca5d79c"
+      },
+      "meaning": "Valid Fluid red with unchanged final test hash."
+    },
+    {
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/apply129.log",
+        "sha256": "05fbda7ac3c8584f30e155c6f2c979fa56a9cc79eb8ecc3951bd1aa5661fb1b7"
+      },
+      "meaning": "Both refresh tools pass; later missing related-tool selection stops follow-on checks, then resumed by130 without reapplying production."
+    }
+  ],
+  "documentationReview": {
+    "delivery": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/delivery131/handoff.json",
+      "sha256": "89364d8d785fba03db6191a07bdac3a317fb660bfe6a16b02936606ea3824f71"
+    },
+    "compatibility": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/delivery131/erc4626-silo-refresh-current-compatibility-20261016.json",
+      "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
+    },
+    "canonical": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/delivery131/erc4626-silo-refresh-canonical-20261016.json",
+      "sha256": "a719996069f1e5da6a8d166fe912793fff86a20b04d3dd5fc974187bc407f1c7"
+    },
+    "inventoryProposal": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/delivery131/inventory-proposal.json",
+      "sha256": "8cca72666982759c2b82123a6cba33c746a05359b42c7553e94858d6c092e828"
+    },
+    "referenceChecks": {
+      "sameByteReferences": 726,
+      "currentPricingPins": 8,
+      "mismatches": 0,
+      "oldCandidateReviewNestedMutableHandoffExcludedAndBridgedExplicitly": true
+    },
+    "inventory": [
+      {
+        "familyId": "protocol:erc4626",
+        "variantIdsPreserved": [
+          "standard/Morpho VaultV2 v1",
+          "standard/Morpho VaultV2 v2",
+          "standard/MetaMorphoV1_1",
+          "standard/SavingsUsdd",
+          "standard/Sky SUsds",
+          "standard/GenericVaultBridgeToken",
+          "standard/StakedUSDat",
+          "standard/UsdcVault",
+          "standard/Strata standard tranche (new exit-mode version)",
+          "standard/Strata USDe tranche pair",
+          "standard/Euler EVault beacon instances",
+          "standard/Fluid fToken ERC20 underlying",
+          "standard/Fluid fTokenNativeUnderlying ERC20-WETH entry",
+          "frax-custodian-usdc-0.2.8",
+          "infinifi-gateway"
+        ],
+        "onlyVariantFieldsChanged": [
+          "evidence",
+          "executionEvidence"
+        ]
+      },
+      {
+        "familyId": "protocol:erc4626-silo-redeem",
+        "variantIdsPreserved": [
+          "Strata Tranche multi-token redeem 0xc58d044404d8b14e953c115e67823784dea53d8f",
+          "Strata Tranche multi-token redeem 0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003"
+        ],
+        "onlyVariantFieldsChanged": [
+          "evidence",
+          "executionEvidence"
+        ]
+      }
+    ],
+    "commonPinsUnchanged": true,
+    "conclusion": "Current compatibility views retain original reports/source/VM hashes and historical counters, cite new policy pins plus actual scheduling regression, and do not relabel old executions as new. All17 ERC4626/Silo variant IDs and interface/callback/recipient/execution scope/target/count fields are preserved. Only evidence references change; no removed unknowns or widened support."
+  },
+  "otherIndependentEvidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/fluid-refresh/v4-independent-source-review126.json",
+      "sha256": "dddd273aa446af9f6f527422340738e7f62f7e74529bd471d85b822224a0dc06"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/fluid-refresh/sameN-code-source-join.json",
+      "sha256": "cb22245337fef439a489ef5ec64cae661a837afa161f7c623670ecd9d09338ec"
+    }
+  ],
+  "limitations": [
+    "This is deterministic production-lifecycle scheduling verification with synthetic transport, not a new historical protocol/EVM execution or performance measurement.",
+    "Existing same-N execution and rollback limits remain unchanged; no raw historical effects are synthesized.",
+    "This scoped report does not establish completion for unrelated Families or any new Curve gap; mechanical gate/commit and broader completion reports remain parent-owned."
+  ]
+}

@@ -1,0 +1,598 @@
+{
+  "kind": "PSV-retained-actual-current-compatibility-v1",
+  "status": "pass-scoped-reconstruction-and-program-compatibility; independent review pending",
+  "sourceTip": "3147b98771ea1fd97dc747324773e8447305d3fc",
+  "originalSourceCommit": "4a71243757c691cc25ddfdb343fafa481516f14c",
+  "ordinaryAndSettlementEvidence": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/psv-recipient-correctness-20261014.json",
+    "sha256": "589cd6976f04a04a4b1b0e8855ae58b1dc13fb92827f04377717d3384e0b1d87"
+  },
+  "counts": {
+    "retainedActualPositive": 40,
+    "retainedDeclaredRejection": 20,
+    "actualSavedRequestsReencoded": 60,
+    "currentFamilyProgramsMatched": 40,
+    "newEvm": 0
+  },
+  "raw": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results10/historical-dual10.json",
+      "sha256": "986c9093548fbcf6371d177579b92526bca9e1b13a339ba638dc73f9101ff680"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/psv-recipient-20261014.uoyr7mvw/results14/historical-self14.json",
+      "sha256": "271d085d4b8867d22fbaa1a20d3d442a67f3a2926deda83fb5c8d5a588d81d61"
+    }
+  ],
+  "originalArtifact": {
+    "sha256": "a95d791dc8ffb170bc1ee6d6fd00e0993d6445cf03a9b6320bc14ea185b7a87a",
+    "fileRecovered": false,
+    "search": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/psv-compat/artifact-search126.jsonl",
+      "sha256": "917180bc26e3d515ca591fd94c5725445e1e35c43427e49ef99e35167b692e1c"
+    },
+    "note": "Original artifact JSON was not located. Its hash is preserved. Reconstructed JSON has a different SHA; only exact runtime hash is certified."
+  },
+  "reconstruction": {
+    "artifact": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/psv-compat/reconstructed-old-runtime/out/BotVM.sol/BotVM.json",
+      "sha256": "3397871c930dfdd4ac4643da0cf3ac4142dc9172839ebbfb81d3e622f04339d1"
+    },
+    "runtime": {
+      "keccak256": "0x7abb7c759c70c829a2ee4e8712108458fd148ac9e8f6d396caaa9539c9ecb346",
+      "bytes": 17922
+    },
+    "owner": "0x1000000000000000000000000000000000000001",
+    "expectedOldActualRuntimeHash": "0x7abb7c759c70c829a2ee4e8712108458fd148ac9e8f6d396caaa9539c9ecb346",
+    "actualRuntimeByteHashEqual": true,
+    "compilerAndMetadata": {
+      "kind": "reconstructed-old",
+      "compiler": {
+        "version": "0.8.24+commit.e11b9ed9"
+      },
+      "settings": {
+        "remappings": [
+          "forge-std/=lib/forge-std/src/"
+        ],
+        "optimizer": {
+          "enabled": true,
+          "runs": 200
+        },
+        "metadata": {
+          "bytecodeHash": "ipfs"
+        },
+        "compilationTarget": {
+          "src/BotVM.sol": "BotVM"
+        },
+        "evmVersion": "cancun",
+        "libraries": {},
+        "viaIR": true
+      },
+      "sources": [
+        {
+          "path": "src/BotVM.sol",
+          "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "metadataKeccak": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+        },
+        {
+          "path": "src/Constants.sol",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "metadataKeccak": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+        },
+        {
+          "path": "src/RuntimeAmountVM.sol",
+          "sha256": "7baa21cb5b98eaec8082eab5892790ba8f69212357798723f7955ade921e7bbf",
+          "metadataKeccak": "0xada4aa4d1a6fa231741a7ed7b6ddf15b7a71b6d7f8c916a8a6e6b2fb3d26394d"
+        },
+        {
+          "path": "src/interfaces/IERC20.sol",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "metadataKeccak": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+        }
+      ]
+    },
+    "log": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/psv-compat/reconstruct126.log",
+      "sha256": "857d52fadf533f3be0311177c8771235bde02776c7c22de3d29e23ea6336a9e5"
+    },
+    "buildType": "isolated four-source compilation, no EVM/no deployment/no broadcast"
+  },
+  "currentArtifact": {
+    "artifact": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/frax77/source90/out/BotVM.sol/BotVM.json",
+      "sha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+    },
+    "runtime": {
+      "keccak256": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "bytes": 18345
+    },
+    "compilerAndMetadata": {
+      "kind": "current",
+      "compiler": {
+        "version": "0.8.24+commit.e11b9ed9"
+      },
+      "settings": {
+        "remappings": [
+          "forge-std/=lib/forge-std/src/"
+        ],
+        "optimizer": {
+          "enabled": true,
+          "runs": 200
+        },
+        "metadata": {
+          "bytecodeHash": "ipfs"
+        },
+        "compilationTarget": {
+          "src/BotVM.sol": "BotVM"
+        },
+        "evmVersion": "cancun",
+        "libraries": {},
+        "viaIR": true
+      },
+      "sources": [
+        {
+          "path": "src/BotVM.sol",
+          "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+          "metadataKeccak": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+        },
+        {
+          "path": "src/Constants.sol",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "metadataKeccak": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+        },
+        {
+          "path": "src/RuntimeAmountVM.sol",
+          "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01",
+          "metadataKeccak": "0xf139ad9c54d2b073a8dfff0c39e5742d4c270e92daa957817be88f4a80355565"
+        },
+        {
+          "path": "src/interfaces/IERC20.sol",
+          "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+          "metadataKeccak": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+        }
+      ]
+    }
+  },
+  "emission": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/psv-compat/reemit126.json",
+    "sha256": "02d6abcb1dd0eec42006d534314473be1d9c5cfea9cddceceeaa8860ca606384"
+  },
+  "sourceUnchanged": [
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/action.ts",
+      "sha256": "b1ec04e1846f903b163b9edff8a8a3c9cc82a0e4998b51d930b25fff6c6aa3f1"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/capture.ts",
+      "sha256": "c83ffd552f019c7136d8aa84ef152fd84e07ad45c8a7cee1feb4be1ec2ddb166"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/codec.ts",
+      "sha256": "52d66b57cd3e01187597fe1e5e805226e4567b3c4097c4fc7fa072a4638265d5"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/discovery.ts",
+      "sha256": "dc16d2447d6fe773fa6d9523cd934042f58349a536023bce2709ddaab53edafe"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/exact.ts",
+      "sha256": "139736a41ab0bebe8381b0c6594b2d8762ea530039d96599139be63a23bd8cb1"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/execution.ts",
+      "sha256": "3acba817b47f1306bca7632b8a8dd22b941ccca3ead497b37726443e11abbaa7"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/identity.ts",
+      "sha256": "07b6197aad6856cef8cad775edc7f0f29995cbae979f37218ca04aa496a019d2"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/instance.ts",
+      "sha256": "facf62e75de73e598debfce2f93f9b412e4ca12b812a528163d2132d7446141e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/manifest.ts",
+      "sha256": "3c866910bd9dacc7db5b6752cf752838a12e44b259a16a6ddd4659d104573ab5"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/pricing.ts",
+      "sha256": "e24e49bd9a125dd2dadb7fc7194aee08bd48abdbea432d250e2892fb53130180"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/protocol.ts",
+      "sha256": "5b046234cc73a7919ab3ea01cef56dfb14254765b814b1d20366cccf0ac0f92e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/routes.ts",
+      "sha256": "2d23283a19ad13d9b05c69ce973a70c173f3b4f38e4552fdd6952fc8861e8808"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/runtime-quote.ts",
+      "sha256": "944d755180a706c49f9e422adf5c444776dadedb525d404000bb5a112c1f80ed"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/runtime-shape.ts",
+      "sha256": "597798c351886edb22f942a0809d6ce150ac3b23dbdd0f10a6381f15b7a1b478"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/state.ts",
+      "sha256": "b79fe8f32dbe8115bba9257b55bc292e618ac7d57e90a63a72b19bb8875bab77"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/types.ts",
+      "sha256": "0e0392e3fc4cb4687546396d86a86d86e32689ce0703734d9fbe3734d438f5e6"
+    },
+    {
+      "path": "listener/src/compiler.ts",
+      "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    }
+  ],
+  "currentSource": [
+    {
+      "path": "listener/src/adapters/protocol-legs.ts",
+      "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/production-families/psv.production.ts",
+      "sha256": "11eac9d5f3daf2b779d6aad8164cb51a79534ed60950dbd79ddb8fcb531d0a65"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/action.ts",
+      "sha256": "b1ec04e1846f903b163b9edff8a8a3c9cc82a0e4998b51d930b25fff6c6aa3f1"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/codec.ts",
+      "sha256": "52d66b57cd3e01187597fe1e5e805226e4567b3c4097c4fc7fa072a4638265d5"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/execution.ts",
+      "sha256": "3acba817b47f1306bca7632b8a8dd22b941ccca3ead497b37726443e11abbaa7"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/identity.ts",
+      "sha256": "07b6197aad6856cef8cad775edc7f0f29995cbae979f37218ca04aa496a019d2"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/instance.ts",
+      "sha256": "facf62e75de73e598debfce2f93f9b412e4ca12b812a528163d2132d7446141e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/manifest.ts",
+      "sha256": "3c866910bd9dacc7db5b6752cf752838a12e44b259a16a6ddd4659d104573ab5"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/routes.ts",
+      "sha256": "2d23283a19ad13d9b05c69ce973a70c173f3b4f38e4552fdd6952fc8861e8808"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/runtime-quote.ts",
+      "sha256": "944d755180a706c49f9e422adf5c444776dadedb525d404000bb5a112c1f80ed"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/runtime-shape.ts",
+      "sha256": "597798c351886edb22f942a0809d6ce150ac3b23dbdd0f10a6381f15b7a1b478"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/psv-family/state.ts",
+      "sha256": "b79fe8f32dbe8115bba9257b55bc292e618ac7d57e90a63a72b19bb8875bab77"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+      "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    }
+  ],
+  "commonSource": [
+    {
+      "path": "listener/src/adapters/registry.ts",
+      "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/compiler.ts",
+      "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-credit-runtime.ts",
+      "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+      "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+      "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+      "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+    },
+    {
+      "path": "listener/src/searcher/adapter-funding-runtime.ts",
+      "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+    },
+    {
+      "path": "listener/src/searcher/adapter-work-intent.ts",
+      "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+    },
+    {
+      "path": "listener/src/searcher/amount-quote-continuity.ts",
+      "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-route-identity.ts",
+      "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+    },
+    {
+      "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+      "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+    },
+    {
+      "path": "listener/src/searcher/exact-prefix-plan.ts",
+      "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+    },
+    {
+      "path": "listener/src/searcher/exact-trial-state.ts",
+      "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
+    },
+    {
+      "path": "listener/src/searcher/identity-asset-metadata.ts",
+      "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+    },
+    {
+      "path": "listener/src/searcher/runtime-evidence.ts",
+      "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+    },
+    {
+      "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+      "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+      "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-bounds.ts",
+      "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-rejection.ts",
+      "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-builder.ts",
+      "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+      "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+    },
+    {
+      "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+      "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+    },
+    {
+      "path": "listener/src/searcher/strategy-taxonomy.ts",
+      "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+    },
+    {
+      "path": "listener/src/searcher/strict-production-runtime-session.ts",
+      "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+      "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-program.ts",
+      "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+    },
+    {
+      "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+      "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/constants/addresses.ts",
+      "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/BotVMEncoder.sol",
+      "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+    },
+    {
+      "path": "src/BotVMScriptBuilder.sol",
+      "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/FlashArb.sol",
+      "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    },
+    {
+      "path": "src/interfaces/IFluidVault.sol",
+      "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+    },
+    {
+      "path": "src/interfaces/IMorpho.sol",
+      "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+    },
+    {
+      "path": "src/interfaces/ISwap.sol",
+      "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+    }
+  ],
+  "diffs": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/psv-compat/runtime-amount-program.ts.diff",
+      "sha256": "b07ac01842498000b730a711a5bc0705820c12ae23e38ebf73fd4a5d72a01bef"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/psv-compat/RuntimeAmountVM.sol.diff",
+      "sha256": "f1c7e82007741898a57803e750cb615fe7ffb1cee6aae3b4657eb40ef2e3523b"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/psv-compat/BotVM.sol.diff",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "reasoning": [
+    "All60 actual requests including original negative scripts are reconstructed byte-for-byte by the current RuntimeAmountProgram, preserving full trial inputs, exact minimums and appended allowance checks; all40 associated Family programs independently rebuilt against original verified sameN descriptor.",
+    "Current and old BotVM.sol are identical. Both actual runtime source bindings are established: old isolated compile matches original observed owner-patched runtime hash exactly including metadata bytes; current actual artifact metadata binds current four Solidity sources.",
+    "Used VM opcodes0/1/2/3/5/6/8, math0/1/2/7 and callmodes0/1 retain identical arithmetic, equality, native reads, return loads, child-frame register isolation, readonly restrictions, callback state preservation and old error branches. Neither added math8(min) nor mode2 expected-revert is used.",
+    "All saved scripts enter opcode0x0e. New settlement maximumInputMask branch in high-level flow encoding is unused. Old and current ordinary runtimeProgramScript byte format is identical.",
+    "PSV routes have no executionAssets native mapping; new shared mapRuntimeAssetSettlementRequest returns original request and applyRuntimeAssetBoundary returns original leg. Native deferred/direct wrapping edits are unreachable for these ERC20-only routes.",
+    "The complete PSV Family non-test source set is identical; quoted compiler/encoder/runtime-execution and amount-rounding byte-identical. Current code retains recipient-sensitive preview, full input, positive output, fee/treasury/capacity and inventory guards.",
+    "This is retained real40/20 correctness with explicit current-source compatibility, not60 fresh current EVM runs; no erased original artifact/source hash."
+  ],
+  "limits": [
+    "No additional native or callback modes inferred. PSV remains opted-in rather than enabled by default.",
+    "Historical fee0/caps0 scope retained; nonzero synthetic verified-contract tests remain synthetic.",
+    "No opportunity, current natural valuation refresh, or phase4 performance claim."
+  ]
+}

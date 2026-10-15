@@ -1,0 +1,85 @@
+{
+  "reviewer": "root non-author of delivery134 repair",
+  "at": "2026-10-15T17:51:54.050497+00:00",
+  "verdict": "pass-scoped-document-correction",
+  "checks": [
+    "13 before/after documents exact hashes",
+    "Only pricing pin moved from runtime source to additionalPricingSource; no removed pricing evidence",
+    "All runtime source pins retained exactly",
+    "Only four Family rows changed; all other rows and common metadata unchanged",
+    "Variant IDs, statuses, scope, execution and gaps unchanged",
+    "All changed cross-document references match new exact document hashes"
+  ],
+  "documents": [
+    {
+      "path": "docs/research/reports/current-interface-fluid-dex-refresh-20261016.json",
+      "before": "411004a2dacfc871c508f2c88977c60c5f2920453c72c4d6b6e5004194c4ebbd",
+      "after": "978afc72386f1bfa6aa7d5d73f5619b0e425cc0ae4cc95f44f1c35f70277e6fb"
+    },
+    {
+      "path": "docs/research/reports/current-interface-mooniswap-20261016.json",
+      "before": "7c10567a32a68ffb8f21021d3105dfcb32ebdf404c3aa9f9b39b22a797c5fc18",
+      "after": "60df11322f7358fc2bdb9826ff1fb29746bda7eb3bb5f49def75f4ff26a6b31a"
+    },
+    {
+      "path": "docs/research/reports/balancer-v1-retained-current-compatibility-20261016.json",
+      "before": "5de1626fe992cbeb6b27d8b06fef0a2a16f91da39abaf90a9b85ed4dec61e35a",
+      "after": "c99d93220665768e732f346f42c3d2b4e00c28ab5632f307b29c095875ad9d3e"
+    },
+    {
+      "path": "docs/research/reports/balancer-v1-retained-current-behavior-20261016.json",
+      "before": "04b8d043c13dd5c005cf30cb43f73474d31df9ec4faf45659e1c56a9d1e48748",
+      "after": "01bb12a6ecd100319877134e10dfde1321ff7df5c4bf123cf83904fda6afd508"
+    },
+    {
+      "path": "docs/research/reports/current-interface-balancer-v2-20261016.json",
+      "before": "3485fbcdb42699c4e8b00d707f75d2e40fa091c5e2e19c69dbb7ae32739d41d0",
+      "after": "1a20a810bf36dcdb6a107e42d1aac35ec2edabfb9d34f85c6d176ca624cedd1f"
+    },
+    {
+      "path": "docs/research/reports/current-interface-balancer-v1-20261016.json",
+      "before": "1f6527fa84a48b892a0adbbe82a454d8439137c5f471d4375d9a44fef4cc373e",
+      "after": "a8fa9b36b425e4b03826f02099dcc25bb38993397e81b9307115a212f8925980"
+    },
+    {
+      "path": "docs/research/reports/fluid-clock-refresh-current-compatibility-20261016.json",
+      "before": "a44b3ddb6254440f80a9cc5fdad36a2d9b41bf30cac56b96810d4c92502690b4",
+      "after": "081c0ba87eb388e2c7833bd527f512e8a389c03edd798c3ce31594ffb7dc4bbf"
+    },
+    {
+      "path": "docs/research/reports/balancer-v2-retained-current-behavior-20261016.json",
+      "before": "f4e62681387127908dd914783c2ec9b198999e1736ad30cec06edba4ffa5a57e",
+      "after": "e872825cb9bd94c96f0b2b6dcfff744d2d262181adc168dd827d9f655f154605"
+    },
+    {
+      "path": "docs/research/reports/mooniswap-retained-current-compatibility-20261016.json",
+      "before": "915a2eef8caf127122b20a1f7cea81589b04b7d3a37d3d84853ddaf0595fa0fe",
+      "after": "cdcd33195a6d01b4f7c7c2dbe61d0925de51d7bc9149f65ad47e7bad0311c9f0"
+    },
+    {
+      "path": "docs/research/reports/balancer-v2-retained-current-compatibility-20261016.json",
+      "before": "4d95c43efda66f3164227acb7463fb40f63dd1742556ec71c2e9bdabf51f9c47",
+      "after": "d9e59441b29fe8396667305a02c68b2c98e9d9f597e07b88a0148741b8c9fb94"
+    },
+    {
+      "path": "docs/research/reports/fluid-current-settlement-refresh-20261016.json",
+      "before": "bc39f2460b6ffc6fc39948bf257f7cba8fbf09bc0e20d9f5d90312d25566dcfe",
+      "after": "0f7947f3cd81da13b97a98758bc58f21ef11577520f5b25f31dd26527f7cc279"
+    },
+    {
+      "path": "docs/research/reports/mooniswap-retained-current-behavior-20261016.json",
+      "before": "493aeea032ac75ea94682c58d995b1add6cdc23b8b1e0f582853320761b40e29",
+      "after": "0b62348b11599c0762a26b73002b53d0902be69833ccc3a8fe64615a9e885816"
+    },
+    {
+      "path": "docs/research/reports/family-settlement-interface-review-20261014.json",
+      "before": "6e0cdd5629749e5c0bded73172b28a135dd2a80ee3aa2c159fe5320098177efe",
+      "after": "921c24a6aea6f11e592cb20466b840a88f9ed082176c1697927a23bf6047e956"
+    }
+  ],
+  "limits": [
+    "Canonical four corrected gate results pending when this review written",
+    "Original refresh133 four failed receipts retained",
+    "No new historical EVM and no altered production/gate code"
+  ]
+}

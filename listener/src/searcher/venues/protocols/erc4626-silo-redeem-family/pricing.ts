@@ -34,6 +34,9 @@ export interface Erc4626SiloRedeemPricingStaticEvidence {
 }
 
 export const erc4626SiloRedeemPricing = {
+  // Tranche NAV can change through remote accounting/strategy state without
+  // a tranche or payout-token log. Use the existing effective refresh lane.
+  refreshPolicy: "each-block",
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) =>
     erc4626SiloStaticProjection(descriptor),

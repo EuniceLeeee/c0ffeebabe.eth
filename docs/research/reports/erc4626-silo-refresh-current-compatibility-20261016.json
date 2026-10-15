@@ -1,0 +1,95 @@
+{
+  "kind": "family-refresh-current-execution-compatibility",
+  "result": "pass-scoped",
+  "baseHead": "3147b98771ea1fd97dc747324773e8447305d3fc",
+  "sourceDiff": [
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/pricing.ts",
+      "before": "21f582fe22bb41f8fd392d594f438d894101da7f8ae335af4eb9b0e275774ad8",
+      "after": "07883fe844719b3e9411b2ac717d4a846dae9a583da6cd179213e0d3d6bf4d4e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/pricing.ts",
+      "before": "3c518217c43f249a8b7018e9bf071d41739fc1e94490bac984a805bbf950f57a",
+      "after": "190282366a89a3676ae6fbfbbf45595dd1fd2b6d10d2b091125867e70b467e5c"
+    }
+  ],
+  "currentPricingSource": [
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/pricing.ts",
+      "sha256": "07883fe844719b3e9411b2ac717d4a846dae9a583da6cd179213e0d3d6bf4d4e"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/pricing.ts",
+      "sha256": "190282366a89a3676ae6fbfbbf45595dd1fd2b6d10d2b091125867e70b467e5c"
+    }
+  ],
+  "unchangedHistoricalReports": [
+    {
+      "path": "docs/research/reports/erc4626-standard-actual-correctness-20261015.json",
+      "sha256": "e9f1a17be9a884932c994fa6372318f48f4fe51cd70fb0f388f497f98e406079"
+    },
+    {
+      "path": "docs/research/reports/frax-custodian-current-correctness-20261015.json",
+      "sha256": "435fbf0da933f8357acfabe14f863fba444f3f958ad706158a213bfe45179f94"
+    },
+    {
+      "path": "docs/research/reports/infinifi-recipient-correctness-20261015.json",
+      "sha256": "bb8f89f630459f07a17de91fa5f8e2689a2e9912ac1cd7621dfc4814ca761784"
+    },
+    {
+      "path": "docs/research/reports/silo-recipient-actual-correctness-20261015.json",
+      "sha256": "9d0e4d6b034b7cf6ab2e04cf3c488e41b72c95fa4aa2f796267b3b8bbcc15284"
+    }
+  ],
+  "basis": [
+    "Production edits add per-block effective refresh only. No ABI, quote arithmetic, root caller, receiver, runtime byte generation, input debit/receipt, tolerance or capability mode changes.",
+    "ERC4626 standard/Frax/InfiniFi exact and execution functions unchanged; Frax/InfiniFi were each-block before and after; their admitted descriptors and actual tested paths unaffected.",
+    "Silo same-state previewRedeem→previewWithdraw formula and runtime execution unchanged; its scheduling now invalidates quiet source-local effective rows.",
+    "Saved actual execution reports keep original source/VM/hash. New compatibility view references them and binds new source pins + fresh scheduling regression. Do not overwrite original report hash or represent prior execution as rerun.",
+    "Raw bootstrap mids deliberately retain startup provenance; only effective rows refresh under current source. Failures remove output/quotedAt and cannot fallback to raw for execution; unrelated on-touch state remains carried."
+  ],
+  "actualRefreshVerification": {
+    "canonical": {
+      "path": "docs/research/reports/erc4626-silo-refresh-canonical-20261016.json",
+      "sha256": "a719996069f1e5da6a8d166fe912793fff86a20b04d3dd5fc974187bc407f1c7"
+    },
+    "independentSourceReviews": [
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-independent-source-review-final-20261016.json",
+        "sha256": "48f057e35a931ae419fe91f0262f8a5aafcb749c7048bb703d39f7e5d785c1dc"
+      },
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-independent-test-repair126-20261016.json",
+        "sha256": "aac427f99a774752e05d5faa2dadaba72ee9defef69c562687c5c4b693f38bbe"
+      }
+    ],
+    "coverage": [
+      "current production registration and coordinator effective quote path",
+      "quiet head amount change without relevant vault activity",
+      "failed quote removes effective price and quotedAt",
+      "second failed head stays unavailable; no raw bootstrap fallback",
+      "recovery publishes fresh quotedAt",
+      "same-output fresh head still performs each-block refresh",
+      "unrelated on-touch background retains cached quote and avoids repeated raw/reserve reads"
+    ],
+    "raw": "bootstrap mids retain their startup provenance by current design; effective rows are the refreshed source-local layer",
+    "counts": "2 affected ERC4626/Silo cases pass; supplemental Fluid 1; custodian32/infinifi14/silo19 and fluid plugin contracts plus global dual307/direct17 and current build pass; canonical receipts are authoritative"
+  },
+  "failureRetention": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/baseline125.log",
+      "sha256": "611c9d855c98e431a03e6dbb6644bb8e0d7bd1f3e3dc88e56c100bba3bf5ec8f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/baseline126.log",
+      "sha256": "c8f317cc90ce8e742fc9543ce8671e33c03b014d18908a8a9edeeafe36d4b312"
+    }
+  ],
+  "limits": [
+    "Existing historical numbers and bytecode evidence retained unchanged; no additional historical EVM execution claimed.",
+    "No admission, formula, ABI, callback, receiver, amount, tolerance or runtime-code emission change.",
+    "Frax and InfiniFi were each-block before and after; only standard path policy changes inside their shared module.",
+    "Performance 4A/4B, natural valuation and original opportunities remain separate/unverified where previously unverified."
+  ]
+}

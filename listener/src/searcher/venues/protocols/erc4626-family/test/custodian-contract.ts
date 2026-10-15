@@ -236,7 +236,7 @@ test("current pricing refreshes Custodian each block and fails closed on upgrade
   const { descriptor: d, route } = setup();
   const descriptor = { instanceKey: d.instanceKey, vault: d.vault, routes: [route], custodian: d.custodian, oneAsset: 10n ** 6n, oneShare: 10n ** 18n };
   assert.equal(erc4626Pricing.refreshPolicyForInstance!({ descriptor, routes: [route] }), "each-block");
-  assert.equal(erc4626Pricing.refreshPolicyForInstance!({ descriptor: { ...descriptor, custodian: undefined }, routes: [route] }), "on-touch");
+  assert.equal(erc4626Pricing.refreshPolicyForInstance!({ descriptor: { ...descriptor, custodian: undefined }, routes: [route] }), "each-block");
   const requests = erc4626Pricing.current.buildRequests({ descriptor, routes: [route], source } as never);
   const results = replies(requests);
   const decode = (initialResults: readonly AdapterRequestResult[]) => erc4626Pricing.current.decodeSnapshot({ descriptor, initialResults, dependentEvidence: [] });

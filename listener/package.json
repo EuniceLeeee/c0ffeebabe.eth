@@ -462,7 +462,9 @@
     "test:erc4626-family:standard-recipient-observations": "tsx --test src/searcher/venues/protocols/erc4626-family/test/standard-recipient-observations.test.ts",
     "test:token-conversion-family:xwin-quote-read-transport": "tsx --test src/searcher/venues/protocols/token-conversion-family/test/xwin-quote-read-transport.test.ts",
     "searcher:xwin-current-ready": "tsx src/searcher/venues/protocols/token-conversion-family/test/xwin-current-ready.ts",
-    "searcher:xwin-current-input-contract": "tsx --test src/searcher/venues/protocols/token-conversion-family/test/xwin-current-input.test.ts"
+    "searcher:xwin-current-input-contract": "tsx --test src/searcher/venues/protocols/token-conversion-family/test/xwin-current-input.test.ts",
+    "test:erc4626-family:standard-refresh": "tsx src/searcher/venues/protocols/erc4626-family/test/standard-refresh.ts",
+    "searcher:fluid-refresh": "tsx src/searcher/venues/swaps/fluid-dex-family/test/refresh.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

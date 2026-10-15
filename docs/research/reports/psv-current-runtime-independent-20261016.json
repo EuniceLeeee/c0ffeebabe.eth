@@ -1,0 +1,33 @@
+{
+  "kind": "non-author-retained-PSV-runtime-compatibility-review",
+  "result": "pass-scoped",
+  "certificate": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/psv-compat/current-compatibility127.json",
+    "sha256": "d4da5a107fb8fcf39bfb73047698c6b899980b07b1af9410de3d6858405861cf"
+  },
+  "independentRuntimeBinding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/old-current-vm-bindings.json",
+    "sha256": "339b81f7786b5d2ce596d9447d26ed4017bafc459891f712ff409d088ed316e7",
+    "rows": [
+      "Moon",
+      "current"
+    ],
+    "reason": "same actual PSV old7abb owner1001 and currentdbeb; both artifacts independently patched, 8 metadata-source hashes independently read via git and verified"
+  },
+  "sourceDiffReviewed": [
+    "BotVM byte-identical",
+    "VM append math8/min and explicit callmode2; PSV recorded modes0/1 and math<=7 unchanged",
+    "ordinary program not native mapping/deferred maximum flow"
+  ],
+  "programEvidence": {
+    "rows": 60,
+    "familyPrograms": 40,
+    "actualOriginalRawHashVerified": true,
+    "allCompleteReencodingsEqual": true
+  },
+  "limits": [
+    "No new EVM or claim original a95 artifact file recovered",
+    "Reconstruction artifact339787 remains distinct from original missing a95; exact patched runtime establishes byte identity",
+    "Scope ordinary+recipient stated PSV current source closure, not performance/natural opportunity"
+  ]
+}

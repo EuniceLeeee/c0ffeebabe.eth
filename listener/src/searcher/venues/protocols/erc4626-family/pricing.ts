@@ -34,9 +34,10 @@ export const erc4626Pricing: PricingSemantics<
   Erc4626PricingDraft,
   { readonly oneAsset: bigint; readonly oneShare: bigint }
 > = {
-  // Fees have no setter event; proxy and external permissions may change
-  // without a vault trade. Only this variant opts out of on-touch reuse.
-  refreshPolicyForInstance: ({ descriptor }) => descriptor.custodian === undefined && descriptor.infinifi === undefined ? "on-touch" : "each-block",
+  // ERC4626 previews may depend on elapsed time, remote oracles or strategies
+  // without a vault log. Refresh through the shared per-block effective lane;
+  // the coordinator retains bootstrap raw mids and unrelated on-touch rows.
+  refreshPolicyForInstance: () => "each-block",
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) =>
     erc4626StaticProjection(descriptor),

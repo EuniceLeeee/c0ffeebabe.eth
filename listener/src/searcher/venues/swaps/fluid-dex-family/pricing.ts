@@ -20,6 +20,10 @@ import type {
 const CURRENT_QUOTE_ID = "current-fluid-dex-quote";
 
 export const fluidDexPricing = {
+  // Actual swapIn quotes accrue Liquidity exchange prices and shift center
+  // prices with the block clock, even without a pool log. External Liquidity
+  // state can also change independently; reprice at every canonical source.
+  refreshPolicy: "each-block",
   stateKey: (route) => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({
     pool: descriptor.pool,

@@ -5682,7 +5682,7 @@
         "familyId": "fluid-dex",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "689ce59d7ca866f4b51dec20ed2fa2f4167abe594bc5281530a29b29331a21ad",
+        "contentHash": "47ac7e1622beb51d26f1577410602b6cf56a733dd911cf0524c65a95172eb124",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -8442,7 +8442,7 @@
         "familyId": "protocol:erc4626",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "789ff45a6f23c14af6f114e0cf3e1a67a2af2a7423904dd574fad008c8a99951",
+        "contentHash": "524adc727608c14aa5776eef59ac8f2b12812b10e8945615cf65d62dfe935c46",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -8777,7 +8777,7 @@
         "familyId": "protocol:erc4626-silo-redeem",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "9763a676ef9c4c2b5f62c01eec561d847f9d75dcd16e67054cb99b80978403ea",
+        "contentHash": "17ae45ac973acf1eba23c29bb8fd10140bd47fdb2dcf6e8a1ac4c9c743eaae01",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -16573,5 +16573,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "3ce8132cba8fe0557ad64747a871448ce9efac22f4de157ed8cf2fde4d0fe867"
+  "artifactHash": "6a0f69eeb3100d258c428eb3fa030fc0b17f12bfeb347f263c51e6411cfea9c7"
 }

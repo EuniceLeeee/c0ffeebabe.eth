@@ -1,0 +1,151 @@
+{
+  "kind": "canonical-red-green-reconciliation",
+  "before": {
+    "phase": "before",
+    "tool": "listener:test:erc4626-family:standard-refresh",
+    "exitCode": 1,
+    "started": "2026-10-15T17:20:17.813823+00:00",
+    "finished": "2026-10-15T17:20:19.704199+00:00",
+    "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh126-selection.json",
+    "selectionSha256": "487289fafea10d6186d40eba4649b85968c0bcf53c3983a3e6e64abb58110a8a",
+    "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh126-before-erc4626-silo.log",
+    "logSha256": "17969fff604444874c37d91eebe094fab27f7b95b5037caf599730df4974c6d3"
+  },
+  "beforeFinding": "Both actual production Family slots admitted; expected perBlockRefresh state key missing. This is the valid old-code red, distinct from baseline125 fixture failure.",
+  "after": [
+    {
+      "name": "generate",
+      "exitCode": 0,
+      "started": "2026-10-15T17:24:08.924085+00:00",
+      "finished": "2026-10-15T17:24:54.576954+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh129-generate.log",
+      "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+    },
+    {
+      "name": "index",
+      "exitCode": 0,
+      "started": "2026-10-15T17:24:54.577282+00:00",
+      "finished": "2026-10-15T17:24:54.934266+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh129-index.log",
+      "logSha256": "ae29ea1c9e1b66d6ca1e7ee5778981e7ca6521c3e315687a9eece2400671994d"
+    },
+    {
+      "name": "erc4626-silo",
+      "exitCode": 0,
+      "started": "2026-10-15T17:24:54.935009+00:00",
+      "finished": "2026-10-15T17:24:57.046082+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh129-erc4626-silo.log",
+      "logSha256": "5a23515e58f7a313623c1ace9a3aa2e0080a339b01074cfab931c2a0ffe5369f"
+    },
+    {
+      "name": "fluid",
+      "exitCode": 0,
+      "started": "2026-10-15T17:24:57.046567+00:00",
+      "finished": "2026-10-15T17:24:58.947108+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh129-fluid.log",
+      "logSha256": "4647cf2f5fefda4b0493f4afabe87cdb347994311feaad9b911fab1b055cf0f7"
+    },
+    {
+      "name": "index",
+      "exitCode": 0,
+      "started": "2026-10-15T17:26:46.182237+00:00",
+      "finished": "2026-10-15T17:26:46.541018+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-index.log",
+      "logSha256": "0eea5c24ff41fcaf0685e5a76ed16723cc05ab2844135b208e26d3442d049099"
+    },
+    {
+      "name": "custodian",
+      "exitCode": 0,
+      "started": "2026-10-15T17:26:46.541899+00:00",
+      "finished": "2026-10-15T17:26:49.037186+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-custodian.log",
+      "logSha256": "b71b31a522a5684ee39ac2b37efe07ebd7e429357a39727036314eab36e95ad5"
+    },
+    {
+      "name": "infinifi",
+      "exitCode": 0,
+      "started": "2026-10-15T17:26:49.037543+00:00",
+      "finished": "2026-10-15T17:26:52.690882+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-infinifi.log",
+      "logSha256": "0a445baa56bf63b8ec5b11bec0210d59739bef144c972e09fddbb4a6e95c12e3"
+    },
+    {
+      "name": "silo",
+      "exitCode": 0,
+      "started": "2026-10-15T17:26:52.691243+00:00",
+      "finished": "2026-10-15T17:26:54.782563+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-silo.log",
+      "logSha256": "57975adbecf627fdc46e165fb899f49806f9015cccef5a948d67f1f0ba435787"
+    },
+    {
+      "name": "fluid-contract",
+      "exitCode": 0,
+      "started": "2026-10-15T17:26:54.782951+00:00",
+      "finished": "2026-10-15T17:26:55.672306+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-fluid-contract.log",
+      "logSha256": "e51d50f8229745afca6f2b6736cc68576053973f1e5c6c6896528c7c31f71ecf"
+    },
+    {
+      "name": "dual",
+      "exitCode": 0,
+      "started": "2026-10-15T17:26:55.672731+00:00",
+      "finished": "2026-10-15T17:27:03.919391+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-dual.log",
+      "logSha256": "cd74e8e0e7b15e63ddc79fbfc69d349211134c5006b72d701154591b4171a48f"
+    },
+    {
+      "name": "direct",
+      "exitCode": 0,
+      "started": "2026-10-15T17:27:03.919912+00:00",
+      "finished": "2026-10-15T17:27:05.253468+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-direct.log",
+      "logSha256": "83a37ac6c6c986ba9faae6427b909ac4222ae51fb3806f7d68e0a83369215998"
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "started": "2026-10-15T17:27:05.253899+00:00",
+      "finished": "2026-10-15T17:27:13.841676+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/refresh130-build.log",
+      "logSha256": "0ae388bdf1b2f8162f029a3a0e57a115944deae544a79e9a32c18b96758aadec"
+    }
+  ],
+  "selection": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/export131/refresh129-selection.json",
+      "sha256": "0992cc57263bec530b8a76334cae437dd9185d3a54e98f763b9381390454f2fb"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/export131/refresh130-selection.json",
+      "sha256": "8d0e620b6595c35092f07a2be70c6cacf0dc178c0ecc28e9e64339d97e463cb8"
+    }
+  ],
+  "actualFinalPins": {
+    "head": "3147b98771ea1fd97dc747324773e8447305d3fc",
+    "files": [
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/pricing.ts",
+        "sha256": "07883fe844719b3e9411b2ac717d4a846dae9a583da6cd179213e0d3d6bf4d4e"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/test/custodian-contract.ts",
+        "sha256": "6f542890914b9e8d253b87754af6a825282f04117be1a308b189b3e9d7830ada"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/pricing.ts",
+        "sha256": "190282366a89a3676ae6fbfbbf45595dd1fd2b6d10d2b091125867e70b467e5c"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/fluid-dex-family/pricing.ts",
+        "sha256": "54e434ac45146cc7ef78e5494632c8bdf869bf876c4595d2cb76e1e167d882ed"
+      }
+    ],
+    "catalogSha256": "58c5ffb539138741f0860275b2a2349c6bdad7d19a6205f4e3a5663a736bcb4f",
+    "packageSha256": "f99c3b6baa2c26bc1745fceeae4579adea5105c8b6f0f1cbd08496ad18cf92c9",
+    "selectionSha256": "8d0e620b6595c35092f07a2be70c6cacf0dc178c0ecc28e9e64339d97e463cb8"
+  },
+  "limitations": [
+    "Production lifecycle/coordinator offline deterministic regression, not new historical execution or performance.",
+    "Baseline126 then stopped selecting Fluid script; the two target reds are complete and retained."
+  ]
+}

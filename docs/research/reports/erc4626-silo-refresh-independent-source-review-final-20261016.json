@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "interface_protocols_b, non-author",
+  "reviewType": "read-only source and existing evidence; no execution",
+  "fixedTip": "3147b98771ea1fd97dc747324773e8447305d3fc",
+  "result": "confirmed-standard-and-silo-refresh-gaps; final-four-file-source-review-pass; execution-pending",
+  "blockingAtTip": true,
+  "rootCause": "Standard ERC4626 is on-touch, while the deployed StakedUSDat preview path depends on timestamp-linear vesting and an external oracle. A block with no vault touch can change the quote. Existing same-N execution cannot establish refresh correctness.",
+  "evidence": {
+    "candidateHandoff": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/handoff.json",
+      "sha256": "58c36ae32e50faabd9c83ad6ecc3f82bca8d9f78d66b36cd7fd74c3e55bd6d85"
+    },
+    "actualVerifiedImplementation": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/interface-review97/StakedUSDat.sol",
+      "sha256": "2dabe54020a1ed25a61f165a2a81bbfda9b2c2702194a8a9f2c61a45d18f17bc"
+    },
+    "sourcify": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/interface-review97/staked-current-sourcify.json",
+      "sha256": "b9adc04b01ad001cf616f3414a9b335101ba5367b2e515c48be715e38ddb4254"
+    },
+    "sourcifyMatch": {
+      "address": "0x2005E0CA201a37694125fF267ae57872bEA0a0Ce",
+      "runtimeMatch": "exact_match",
+      "creationMatch": "exact_match",
+      "extractedSourceMatches": [
+        {
+          "source": "src/StakedUSDat.sol",
+          "exactExtractedContent": true
+        }
+      ]
+    },
+    "sourceLines": [
+      "erc4626-family/pricing.ts:37-39 standard on-touch",
+      "erc4626-family/pricing.ts:133-173 preview requests and quote decoding",
+      "erc4626-family/pricing.ts:193-211 dependency/mutation scope",
+      "strict-production-runtime-session.ts:302-308 each-block publication",
+      "StakedUSDat.sol:226-247 totalAssets / timestamp / STRC_ORACLE"
+    ],
+    "siloBindings": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/verified-interface-bindings10.json",
+      "sha256": "0f4485ed813a433e44a9d1213ea4c94667ea1f6dc0dc39adeacbd3a63f56972e"
+    }
+  },
+  "candidateChecks": [
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/pricing.ts",
+      "before": "21f582fe22bb41f8fd392d594f438d894101da7f8ae335af4eb9b0e275774ad8",
+      "after": "07883fe844719b3e9411b2ac717d4a846dae9a583da6cd179213e0d3d6bf4d4e",
+      "afterVerified": true,
+      "beforeVerified": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/test/custodian-contract.ts",
+      "before": "ce8619b4c9d41a8c61a9da726113ed93403e8bff03aabc620862e6a822db18fd",
+      "after": "6f542890914b9e8d253b87754af6a825282f04117be1a308b189b3e9d7830ada",
+      "afterVerified": true,
+      "beforeVerified": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/test/standard-refresh.ts",
+      "before": null,
+      "after": "ef700c077753a1c1eb84b53d55c4eea58833ecdb08974c62eee5c0934cfd6126",
+      "afterVerified": true,
+      "beforeVerified": true
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/pricing.ts",
+      "before": "3c518217c43f249a8b7018e9bf071d41739fc1e94490bac984a805bbf950f57a",
+      "after": "190282366a89a3676ae6fbfbbf45595dd1fd2b6d10d2b091125867e70b467e5c",
+      "afterVerified": true,
+      "beforeVerified": true
+    }
+  ],
+  "candidateConclusion": "No source-review blocker. All standard ERC4626 instances each-block is the minimal conservative Family scheduling fix; InfiniFi and Custodian remain each-block. Adding only oracle dependencies cannot address timestamp changes. No identity, execution bytecode, quote formula or central protocol branch change.",
+  "regressionReview": {
+    "productionFlow": "Uses real Family lifecycle, production runtime root, coordinator, Exact issue and effective publication with offline transport.",
+    "covered": [
+      "quiet block changes refresh both standard directions",
+      "two consecutive quote failures remove usable prices and do not reuse stale values",
+      "recovery republishes source-bound quote",
+      "unchanged quote still receives current source identity",
+      "unrelated V2 on-touch entries are carried",
+      "raw bootstrap snapshot not relabelled as current",
+      "bounded 2 direction reads / 4 attempts on failure",
+      "Silo one-direction two-round preview chain, failure and recovery, same unrelated on-touch control"
+    ],
+    "scope": "Synthetic transport; neither historical execution nor performance proof. Not executed by reviewer.",
+    "source": "ef700c077753a1c1eb84b53d55c4eea58833ecdb08974c62eee5c0934cfd6126"
+  },
+  "remainingBeforeClose": [
+    "Execute exact new regression on old policy (must fail) and final policy (must pass) via canonical runner; build relevant final sources",
+    "Retain original historical execution/source hashes and separately bind new scheduling-source compatibility"
+  ],
+  "noOtherFilesEdited": true,
+  "supersedesSourceCandidateOnly": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/independent-source-review.json",
+    "sha256": "690bb61325da74e2ed3ec3559d88ae3396b8e69d21cd348abaa5abed4d4aec62"
+  },
+  "siloFinding": {
+    "currentPolicy": "implicit on-touch",
+    "actualDependency": "Verified Tranche.totalAssets:41-42 -> CDO.totalAssets:96-100 -> strategy.totalAssets and accounting.totalAssets; vault/payout mutation scope omits those remote state changes.",
+    "fix": "Family refreshPolicy each-block; existing full dependent previewRedeem -> previewWithdraw chain executes via production Exact."
+  },
+  "rawBootstrapFinding": {
+    "conclusion": "Expected existing production design. Each-block refresh means current effective quote and source, not re-reading immutable raw bootstrap mids.",
+    "sourceEvidence": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/tip/listener/src/searcher/strict-current-runtime-coordinator.ts",
+        "sha256": "5836e3e2f872bf11ef4e980b1911520095a9aab04be83e6f93cc5daa2c2c4db3",
+        "sourceLines": "430-469, 659-705",
+        "gitTip": "3147b98771ea1fd97dc747324773e8447305d3fc"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/tip/listener/src/searcher/blockscan-effective-mid.ts",
+        "sha256": "7f63c38c9db55ef7a51a60b70416798f2a43c5854d100349caa30a77bc0b2190",
+        "sourceLines": "87-118",
+        "gitTip": "3147b98771ea1fd97dc747324773e8447305d3fc"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/tip/listener/src/searcher/strict-production-runtime-session.ts",
+        "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19",
+        "sourceLines": "302-308",
+        "gitTip": "3147b98771ea1fd97dc747324773e8447305d3fc"
+      }
+    ],
+    "consumer": "effectiveEnumerationMids validates current source and only publishes quoted rows; no raw fallback.",
+    "noPerformanceClaim": true
+  },
+  "blockingFindingsInCandidate": []
+}
