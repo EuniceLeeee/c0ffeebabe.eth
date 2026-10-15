@@ -1,0 +1,836 @@
+{
+  "schemaVersion": 1,
+  "status": "implemented-local-regressions-reviewed; unified historical acceptance pending",
+  "familyId": "protocol:erc4626-silo-redeem",
+  "action": "silo-redeem",
+  "base": "7951cc66884a111aa6ef4fc19170a581afc893ab",
+  "actualWorkspace": "/opt/mev-cloud/family-runtime-20261007",
+  "changes": [
+    "Explicit direct receiver keeps owner=executor; default program bytes unchanged.",
+    "Positive exact shares debit and totalSupply burn; actual recipient receipt equals positive redeem return.",
+    "Actor old output, receiver old input and actor native balances preserved.",
+    "Default probe exposes directOutput capability; quote/deferred modes reject. No protocol branch in central code."
+  ],
+  "validation": {
+    "actualBuild": "passed",
+    "ownedOnlyBuild": "passed",
+    "directContractModel": "4/4 passed; includes self/external amounts 1,91,10^18 and negative matrix",
+    "nomination": "passed",
+    "allFamily": "301/301 passed",
+    "scope": "Production Family builder interpreted by synthetic call/balance models, not historical/EVM rollback acceptance."
+  },
+  "remaining": [
+    "Current identity proves self payout only; new external receiver historical implementation/CDO/strategy binding and actual receipt remain to verify.",
+    "Full production issuer direct integration and EVM rollback.",
+    "Formal Adapter Replay, opportunities and phase4 performance."
+  ],
+  "evidenceRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo-evidence21",
+  "cloudEvidenceRoot": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/silo20",
+  "owned": [
+    {
+      "path": "listener/package.json",
+      "before": "4bf548c36d692e77579a6a41e9e035d6ef82ee240b2244a1d7a32725f0ade2f2",
+      "after": "0277446c34286626f8fa3e3e6bb0b412f0a989eb297c231fff3bfd24ef3c8d0b"
+    },
+    {
+      "path": "listener/src/searcher/test/erc4626-silo-direct-recipient.ts",
+      "before": null,
+      "after": "1d0f20f5a1487b72672ae589aa475d6296e75f40cb233beda1896d7412453f81"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/execution.ts",
+      "before": "01c3eb49804829e5929d1423b83e03ccce1092f1f04de1a7712e331cf481576e",
+      "after": "c8814839d981899a93db0d238eeb7e8fa45ea12156816550eaaaed0bdead9fe8"
+    }
+  ],
+  "source": {
+    "commonSource": [
+      {
+        "path": "listener/src/adapters/registry.ts",
+        "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/compiler.ts",
+        "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-credit-runtime.ts",
+        "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+        "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+        "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+        "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+      },
+      {
+        "path": "listener/src/searcher/adapter-funding-runtime.ts",
+        "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+      },
+      {
+        "path": "listener/src/searcher/adapter-work-intent.ts",
+        "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+      },
+      {
+        "path": "listener/src/searcher/amount-quote-continuity.ts",
+        "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+      },
+      {
+        "path": "listener/src/searcher/blockscan-route-identity.ts",
+        "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+      },
+      {
+        "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+        "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+      },
+      {
+        "path": "listener/src/searcher/exact-prefix-plan.ts",
+        "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+      },
+      {
+        "path": "listener/src/searcher/exact-trial-state.ts",
+        "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+      },
+      {
+        "path": "listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "532960d478860f53242d497d62c39e2df95a1c2cf2d6c1408ded5b4e44a456b0"
+      },
+      {
+        "path": "listener/src/searcher/identity-asset-metadata.ts",
+        "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+      },
+      {
+        "path": "listener/src/searcher/runtime-evidence.ts",
+        "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+      },
+      {
+        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261"
+      },
+      {
+        "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+        "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+        "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+        "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-bounds.ts",
+        "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-propagation.ts",
+        "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-rejection.ts",
+        "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-builder.ts",
+        "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+        "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+      },
+      {
+        "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+        "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+      },
+      {
+        "path": "listener/src/searcher/strategy-taxonomy.ts",
+        "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+      },
+      {
+        "path": "listener/src/searcher/strict-production-runtime-session.ts",
+        "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+        "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "34b545c41cf72f738da01aa38b9fcbb02b27268119c0e1e7cd67ce516761bb09"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+      },
+      {
+        "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+        "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+        "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+        "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-instance-identity.ts",
+        "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      },
+      {
+        "path": "listener/src/shared/state/state-backend.ts",
+        "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+      },
+      {
+        "path": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      },
+      {
+        "path": "src/BotVMEncoder.sol",
+        "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+      },
+      {
+        "path": "src/BotVMScriptBuilder.sol",
+        "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+      },
+      {
+        "path": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+      },
+      {
+        "path": "src/FlashArb.sol",
+        "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+      },
+      {
+        "path": "src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      },
+      {
+        "path": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+      },
+      {
+        "path": "src/interfaces/IFluidVault.sol",
+        "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+      },
+      {
+        "path": "src/interfaces/IMorpho.sol",
+        "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+      },
+      {
+        "path": "src/interfaces/ISwap.sol",
+        "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+      }
+    ],
+    "source": [
+      {
+        "path": "listener/src/adapters/protocol-legs.ts",
+        "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/production-families/erc4626-silo-redeem.production.ts",
+        "sha256": "e92b2510d31dfd75d59bfdc7397d405468fd5d3644938c850d99c7edaeccb423"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/action.ts",
+        "sha256": "70050fe9d0de83cb609d71d66657c5fa969d239cf88572b1e3994d6db597554b"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/execution.ts",
+        "sha256": "c8814839d981899a93db0d238eeb7e8fa45ea12156816550eaaaed0bdead9fe8"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/identity.ts",
+        "sha256": "dde3d5435c127bf13f597452d3ddb2797098b5464b2570fedc797d37786992eb"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/manifest.ts",
+        "sha256": "f9a1d760e525244f7dc669cee1c014cc35c501b2c1a24a0a185bb38ea0f37035"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/routes.ts",
+        "sha256": "470bc302552796cd9eb45ad641b15eb26cf53b56bb1eed9602a9d48963b9e1f0"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/shared.ts",
+        "sha256": "e148409982ac52b716862cd5f9439ddca4112206a456af6325df8def65c70395"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+        "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      }
+    ]
+  },
+  "catalog": {
+    "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+    "workingSha256": "1a3de12caa1e08e3a8559b2f6bf83b6c48a9773428e4bb98d9b956b8e0ad27fe",
+    "ownedSha256": "0cbcb62c9aa65ca0f7053ac210d853463782ec0c3c4cd636adf22486a9d41582",
+    "peerOnlyDifferences": [
+      "custom-swap:uniswap-v1:capture",
+      "custom-swap:uniswap-v1:discovery",
+      "custom-swap:uniswap-v1:exact",
+      "custom-swap:uniswap-v1:execution",
+      "custom-swap:uniswap-v1:identity",
+      "custom-swap:uniswap-v1:instance",
+      "custom-swap:uniswap-v1:pricing",
+      "custom-swap:uniswap-v1:routes",
+      "custom-swap:uniswap-v1:victim"
+    ]
+  },
+  "checks": [
+    {
+      "name": "generate",
+      "exitCode": 0,
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+      "at": "2026-10-15T04:30:11.248014+00:00"
+    },
+    {
+      "name": "index",
+      "exitCode": 2,
+      "sha256": "e9ac361645aa457ead71975a4a17b29076ce72e314ee1a6093666fbda184d68d",
+      "at": "2026-10-15T04:30:11.531673+00:00"
+    },
+    {
+      "name": "index",
+      "exitCode": 0,
+      "logSha256": "f45c5f18456ed9c8940918fe7de1dbf980eabdf22bef7005779661f0883e97e9",
+      "at": "2026-10-15T04:31:48.507678+00:00"
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "at": "2026-10-15T04:31:56.615331+00:00"
+    },
+    {
+      "name": "contract",
+      "exitCode": 0,
+      "logSha256": "0c56f3be1956d347b3a45f64e69c6873bed439f0cdb9976eab493718d5d7e329",
+      "startedAt": "2026-10-15T04:32:45.143617+00:00",
+      "completedAt": "2026-10-15T04:32:46.050003+00:00"
+    },
+    {
+      "name": "nomination",
+      "exitCode": 0,
+      "logSha256": "c32ae1325f3c0ac10e02b193a322c84985250b7579514b8266aabb20fd276ddc",
+      "startedAt": "2026-10-15T04:32:46.050201+00:00",
+      "completedAt": "2026-10-15T04:32:46.847691+00:00"
+    },
+    {
+      "name": "all-family",
+      "exitCode": 0,
+      "logSha256": "f90dfd0e8799ad40b73833c76d71678a87c01b2575a4795b6492d9eb4a341886",
+      "startedAt": "2026-10-15T04:32:46.847914+00:00",
+      "completedAt": "2026-10-15T04:32:54.590435+00:00"
+    },
+    {
+      "name": "catalog",
+      "exitCode": 0,
+      "logSha256": "068e84c34d647810dac782d15430c2526cb4cd23a5813b2893cfbb584c00bab9"
+    },
+    {
+      "name": "owned-build",
+      "exitCode": 0,
+      "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    }
+  ],
+  "toolReconciliation": {
+    "query": [
+      "silo"
+    ],
+    "selected": [
+      "listener:searcher:erc4626-silo-direct-recipient",
+      "listener:searcher:erc4626-silo-nomination"
+    ],
+    "manifestSha256": "5905d270de85aafa13bec494efa32617d2b26d54cf876f8b6bcf3e84a4d25c52"
+  },
+  "reviews": [
+    {
+      "path": "silo-review01.json",
+      "sha256": "aaa2a81419ee4a91f7f388124e22323b85ccb4ff2eda4a3d4a6ac54f6b2f7aeb",
+      "review": {
+        "schemaVersion": 1,
+        "reviewPass": 1,
+        "reviewer": "non-author /root/interface_protocols_b",
+        "scope": {
+          "familyId": "protocol:erc4626-silo-redeem",
+          "stage": "cached-deployed-interface-and-candidate-static-review",
+          "candidateRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo-candidate",
+          "reviewerExecutedTestsBuildRpc": false,
+          "reviewerEditedProduction": false
+        },
+        "staticImplementationReady": true,
+        "blockingFindings": [],
+        "conclusion": "The guarded explicit receiver implementation is ready for parent-owned offline checks after the capability metadata correction. Existing self-payout identity is not an external-recipient historical pass.",
+        "candidatePins": [
+          {
+            "path": "listener/package.json",
+            "sha256": "0277446c34286626f8fa3e3e6bb0b412f0a989eb297c231fff3bfd24ef3c8d0b",
+            "baselineSha256": "4bf548c36d692e77579a6a41e9e035d6ef82ee240b2244a1d7a32725f0ade2f2"
+          },
+          {
+            "path": "listener/src/searcher/test/erc4626-silo-direct-recipient.ts",
+            "sha256": "1d0f20f5a1487b72672ae589aa475d6296e75f40cb233beda1896d7412453f81",
+            "baselineSha256": null
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/execution.ts",
+            "sha256": "c8814839d981899a93db0d238eeb7e8fa45ea12156816550eaaaed0bdead9fe8",
+            "baselineSha256": "01c3eb49804829e5929d1423b83e03ccce1092f1f04de1a7712e331cf481576e"
+          }
+        ],
+        "resolvedFindings": [
+          {
+            "id": "SILO-DIRECT-CAPABILITY",
+            "severity": "P2",
+            "original": "Initial candidate returned directOutput=true only after an explicit request; its default leg exposed no capability for common preselection.",
+            "impact": "Capability probing would still miss implemented direct output. quoteOutput remains independently unavailable.",
+            "resolution": "Default return now adds settlement.directOutput=true without changing its program. Test asserts both old program bytes and the default capability.",
+            "status": "Fixed and statically reread within this same pass; tests not rerun by reviewer."
+          }
+        ],
+        "interface": {
+          "signature": "redeem(address token,uint256 shares,address receiver,address owner)",
+          "selector": "0xfea53be1",
+          "mutability": "nonpayable",
+          "deployedPairs": [
+            {
+              "proxy": "0xc58d044404d8b14e953c115e67823784dea53d8f",
+              "explorerImplementation": "0xe91869f96806b480dd61d57e17919068d35ac09c",
+              "constructionImplementation": "0xdc3190a059a1dcf4c17ec1cb9cc8c4eacd0bc297"
+            },
+            {
+              "proxy": "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
+              "explorerImplementation": "0xe894055ca1c73648927e225f3ca38ed48e30210b",
+              "constructionImplementation": "0x90f806df8a024c1474425f8c4fca4f3301dcbcdb"
+            }
+          ],
+          "payer": "owner tranche shares. Caller distinct from owner needs allowance; candidate keeps caller=owner=executor, so no approval is needed.",
+          "recipient": "receiver is forwarded independently through Tranche -> CDO -> strategy. It is not the owner field.",
+          "sharesSupply": "Both reviewed Tranche generations burn exactly sharesGross from owner before withdrawal. New generation exit fees change net assets and accrue via CDO accounting; the inspected path does not mint fee tranche shares. Exact actor debit and totalSupply reduction by r0 are appropriate.",
+          "order": "CDO accounting update -> owner capacity/preview/token conversion -> optional owner allowance -> burn shares -> fee accounting in newer version -> CDO/strategy withdrawal -> minimum remaining shares check.",
+          "callback": "Tranche/CDO only make internal protocol/strategy calls; no caller continuation or deferred debt settlement interface is present. Final configured strategy implementation is not bound in these cached materials, so complete end-to-end callback absence is still partial.",
+          "quoteReceiver": "Reviewed Tranche conversion/fee math does not use receiver. Owner controls maxRedeem/balance capacity; owner remains executor. Strategy-specific recipient/caller behavior still needs actual binding/execution.",
+          "defaultPolicy": "Keep original quoted/preview chain and default calldata. Do not replace payout share units by underlying base-assets, alter fee/rounding/cap checks, or preapprove shares unnecessarily."
+        },
+        "identityBoundary": {
+          "currentAdmission": "Code nonempty for tranche+payout, shared asset relation, positive sample and preview chain, then self-owner/self-receiver active proof of actual share debit, totalSupply burn and payout. Route pins bind vault/payout/underlying and operation.",
+          "sufficientFor": "Retaining the already admitted route and attempting guarded explicit direct output under the existing sealed issuer/final simulation.",
+          "notSufficientFor": "Declaring all admitted instances externally recipient-proven or historically code-bound. No new external receiver probe is introduced, and descriptor does not contain Tranche implementation/CDO/strategy bindings.",
+          "cachedHistory": "N26130609 c58d and N25462190 3d7d anchors remain usable default proof. Cached audit explicitly marks historical implementation/CDO/strategy identities unverified; explorer-current or constructor implementation is not a same-N slot read.",
+          "admissionPolicy": "No new nomination/admission source or address allowlist. If future preselection needs independently proven per-instance support, add optional same-source external receiver behavior proof without rejecting legacy default admission on missing optional evidence."
+        },
+        "staticChecks": [
+          "Explicit direct requires positive r0, sufficient starting shares, exact actual owner debit r0, positive returned amount and equal fresh receiver payout.",
+          "TotalSupply decrease must equal r0. Actor native balance must restore. External mode also preserves actor old payout and receiver old tranche shares; normalized self alias uses the shared receipt/debit guards.",
+          "Owner stays executor; only receiver changes. No approvals, callback registration, value transfer, external quote or fixed expected output is added. Snapshots and scratch registers do not overlap.",
+          "Request echo and directOutput match common issuer requirements. quote-output/deferred-input return null. Default program remains the original single call; only capability metadata changes.",
+          "Model invokes actual Family builder with external amount/Exact getters trapped on the actual input. Positive self/external 1/91/10^18 cases and 13 external rejection faults are present. assert.throws wraps the interpreter only, not successful-run postconditions."
+        ],
+        "testStatus": "Not executed or claimed passed in this pass. Synthetic descriptor/call/balance model is neither actual deployed-protocol EVM nor rollback evidence.",
+        "remainingAcceptance": [
+          "Parent build and targeted offline regression evidence.",
+          "Unified current-source production issuer + distinct-receiver same-state receipts, both real Tranche instances/profiles as applicable, including exact share burn, supply, payout and old inventory.",
+          "Historical proxy implementation and configured CDO/strategy bindings plus actual payout behavior; current/constructor cached code cannot substitute.",
+          "Real EVM negative atomic rollback; formal Adapter Replay and representative performance remain unverified.",
+          "No quoteOutput means current automatic callback-root selection still takes funded fallback; direct support alone is not a successful deferred-route claim."
+        ],
+        "evidenceRoot": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-a",
+        "cachedImplementationRefs": [
+          {
+            "path": "sources/0xe91869f96806b480dd61d57e17919068d35ac09c/000-Tranche.sol",
+            "sha256": "a92482e689b0bdecb99829002e071dac2d4348fcfa188899ba843e2f5e1ed97c",
+            "url": "https://eth.blockscout.com/api/v2/smart-contracts/0xe91869f96806b480dd61d57e17919068d35ac09c"
+          },
+          {
+            "path": "sources/0xdc3190a059a1dcf4c17ec1cb9cc8c4eacd0bc297/000-Tranche.sol",
+            "sha256": "0378f4eda8f08b1b779b4d133a5a2f472198647835ff8e1b798b635407e434a9",
+            "url": "https://eth.blockscout.com/api/v2/smart-contracts/0xdc3190a059a1dcf4c17ec1cb9cc8c4eacd0bc297"
+          },
+          {
+            "path": "sources/0xe894055ca1c73648927e225f3ca38ed48e30210b/000-Tranche.sol",
+            "sha256": "a92482e689b0bdecb99829002e071dac2d4348fcfa188899ba843e2f5e1ed97c",
+            "url": "https://eth.blockscout.com/api/v2/smart-contracts/0xe894055ca1c73648927e225f3ca38ed48e30210b"
+          },
+          {
+            "path": "sources/0x90f806df8a024c1474425f8c4fca4f3301dcbcdb/000-Tranche.sol",
+            "sha256": "0378f4eda8f08b1b779b4d133a5a2f472198647835ff8e1b798b635407e434a9",
+            "url": "https://eth.blockscout.com/api/v2/smart-contracts/0x90f806df8a024c1474425f8c4fca4f3301dcbcdb"
+          },
+          {
+            "path": "sources/0xb3d4f2c2123f8c3ca85ae7a6d48aa2ef049c79ba/000-StrataCDO.sol",
+            "sha256": "d83c2aaab90668b3f5c3881aeeb158b7f30c3e1ad2f2a6d7b121f3b61423b5f5",
+            "url": "https://eth.blockscout.com/api/v2/smart-contracts/0xb3d4f2c2123f8c3ca85ae7a6d48aa2ef049c79ba"
+          }
+        ],
+        "auditRef": {
+          "path": "protocols-a-interface-audit.json",
+          "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+        },
+        "sourceSnapshotPins": [
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/identity.ts",
+            "sha256": "dde3d5435c127bf13f597452d3ddb2797098b5464b2570fedc797d37786992eb"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/shared.ts",
+            "sha256": "e148409982ac52b716862cd5f9439ddca4112206a456af6325df8def65c70395"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/instance.ts",
+            "sha256": "531a116e61d1af57ea55b32a482b7d29426d31f730982aa6fd6b0b7d0f6fe9f1"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/exact.ts",
+            "sha256": "000919252c5834ea036bb128549cd3a5c5ebedd8297f444b7de73076951703b3"
+          }
+        ]
+      }
+    },
+    {
+      "path": "silo-review02.json",
+      "sha256": "35a4afbea6a38c388325f9d8318301fae23c7923e2bebd6a68c62a36f66f9a21",
+      "review": {
+        "schemaVersion": 1,
+        "reviewPass": 2,
+        "reviewer": "non-author /root/interface_protocols_b",
+        "scope": {
+          "familyId": "protocol:erc4626-silo-redeem",
+          "stage": "implementation-and-offline-regression",
+          "baselineHead": "7951cc66884a111aa6ef4fc19170a581afc893ab"
+        },
+        "implementationReady": true,
+        "blockingFindings": [],
+        "conclusion": "Scoped guarded direct-recipient implementation and reviewed offline checks are complete; no implementation submission blocker. Unified real historical/full adaptation acceptance is pending.",
+        "reviewMethod": "Only local saved source, exact Git-object hashes, execution receipts and logs inspected; no tests, builds, generators or RPC executed by reviewer.",
+        "sourceVerification": {
+          "ownedFiles": [
+            {
+              "path": "listener/package.json",
+              "before": "4bf548c36d692e77579a6a41e9e035d6ef82ee240b2244a1d7a32725f0ade2f2",
+              "after": "0277446c34286626f8fa3e3e6bb0b412f0a989eb297c231fff3bfd24ef3c8d0b"
+            },
+            {
+              "path": "listener/src/searcher/test/erc4626-silo-direct-recipient.ts",
+              "before": null,
+              "after": "1d0f20f5a1487b72672ae589aa475d6296e75f40cb233beda1896d7412453f81"
+            },
+            {
+              "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/execution.ts",
+              "before": "01c3eb49804829e5929d1423b83e03ccce1092f1f04de1a7712e331cf481576e",
+              "after": "c8814839d981899a93db0d238eeb7e8fa45ea12156816550eaaaed0bdead9fe8"
+            }
+          ],
+          "candidateEqualsCorrectedPass1": true,
+          "baselineMatchesExactGitHead": true,
+          "commonPinsMatched": 57,
+          "familyPinsMatched": 17,
+          "detail": "All 74 closure entries independently matched candidate or exact baseline Git bytes. New test absence at baseline verified."
+        },
+        "savedResults": {
+          "canonicalDirectContract": "4/4, no failed/skipped; self/external receipts, rejection guards, default bytes plus capability metadata",
+          "canonicalNomination": "PASS",
+          "allFamily": "301/301, no failed/skipped on actual dirty working baseline",
+          "workingProductionBuild": "PASS",
+          "ownedOnlyCatalogBuild": "PASS",
+          "logHashesVerified": 9,
+          "capabilityQuery": [
+            "silo"
+          ],
+          "toolRuns": [
+            {
+              "toolId": "listener:searcher:erc4626-silo-direct-recipient",
+              "exitCode": 0,
+              "descriptorSha256": "087b2ee54cde4f55db7f4d49c64f83c64c6aa0823a4110564c490bd4e3508192",
+              "stdoutSha256": "9407b3fd91730b998e187c2255d60b803e203eda9fa3c13c8b0eb0a9cc73ae8b",
+              "stdoutBytes": 604,
+              "stdoutMatchedRawLog": true,
+              "stderrBytes": 0
+            },
+            {
+              "toolId": "listener:searcher:erc4626-silo-nomination",
+              "exitCode": 0,
+              "descriptorSha256": "c024496bc0d67d68ff5525cf3f4eabf3113d13382b3cd8711351c2ab7dc9d7ec",
+              "stdoutSha256": "6e7b28a3b93eb159754f379a3d483432a3ccd382d5f04d0df35413628541d9d8",
+              "stdoutBytes": 150,
+              "stdoutMatchedRawLog": true,
+              "stderrBytes": 0
+            }
+          ],
+          "qualification": "Direct contract evidence is the actual Family builder interpreted by a synthetic balance/call model; not deployed Tranche or BotVM EVM execution. Owned-only validation covers catalog/build, not a separate owned-only all-family run."
+        },
+        "resolvedFindings": [
+          {
+            "id": "SILO-DIRECT-CAPABILITY",
+            "status": "Resolved in pass1; final candidate and passing default-byte/capability assertion retain the correction."
+          }
+        ],
+        "preservedFailure": {
+          "path": "check20-index.log",
+          "exitCode": 2,
+          "cause": "Requested capability erc4626-silo was not covered by the current generated index. Corrected query silo selected two canonical tools. This was query preparation failure before tests, not a production implementation/test failure.",
+          "finalEvidence": "checks20b.json / selection20b.json; both selected tools executed successfully.",
+          "originalFailureRetained": true
+        },
+        "catalog": {
+          "method": "Canonical generator on immutable HEAD plus hash-checked owned source. Ignored generator input artifact only; actual workspace and peer files are unchanged.",
+          "workingSha256": "1a3de12caa1e08e3a8559b2f6bf83b6c48a9773428e4bb98d9b956b8e0ad27fe",
+          "ownedSha256": "0cbcb62c9aa65ca0f7053ac210d853463782ec0c3c4cd636adf22486a9d41582",
+          "peerOnlyDifferences": [
+            "custom-swap:uniswap-v1:capture",
+            "custom-swap:uniswap-v1:discovery",
+            "custom-swap:uniswap-v1:exact",
+            "custom-swap:uniswap-v1:execution",
+            "custom-swap:uniswap-v1:identity",
+            "custom-swap:uniswap-v1:instance",
+            "custom-swap:uniswap-v1:pricing",
+            "custom-swap:uniswap-v1:routes",
+            "custom-swap:uniswap-v1:victim"
+          ]
+        },
+        "remainingAcceptance": [
+          "Existing identity probes self owner/receiver only. Same-state distinct receiver execution, full issuer use and actual EVM atomic rollback remain pending.",
+          "Historical Tranche implementation/CDO/strategy relations and payout code bindings remain partial; constructor/explorer-current implementation cannot substitute for same-N identity.",
+          "Formal Adapter Replay, opportunity and representative performance are unverified. No new end-to-end historical capability pass is claimed.",
+          "quote-output/deferred-input remain unavailable; automatic callback composition retains funded fallback."
+        ],
+        "evidenceRoot": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo-evidence21",
+        "evidenceRefs": [
+          {
+            "path": "base20.json",
+            "sha256": "1aec1167adc2d6fa38cc2ffbaefb93ba02e6244778d1a4a4cb96bdaa7742528d"
+          },
+          {
+            "path": "catalog-receipt21.json",
+            "sha256": "e118e9473859aae393ee24d90bb79a32d4539594e4630dd4d9efcbcd36ee2410"
+          },
+          {
+            "path": "check20-generate.log",
+            "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+          },
+          {
+            "path": "check20-index.log",
+            "sha256": "e9ac361645aa457ead71975a4a17b29076ce72e314ee1a6093666fbda184d68d"
+          },
+          {
+            "path": "check20b-build.log",
+            "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+          },
+          {
+            "path": "check20b-index.log",
+            "sha256": "f45c5f18456ed9c8940918fe7de1dbf980eabdf22bef7005779661f0883e97e9"
+          },
+          {
+            "path": "check21-all-family.log",
+            "sha256": "f90dfd0e8799ad40b73833c76d71678a87c01b2575a4795b6492d9eb4a341886"
+          },
+          {
+            "path": "check21-catalog.log",
+            "sha256": "068e84c34d647810dac782d15430c2526cb4cd23a5813b2893cfbb584c00bab9"
+          },
+          {
+            "path": "check21-contract.log",
+            "sha256": "0c56f3be1956d347b3a45f64e69c6873bed439f0cdb9976eab493718d5d7e329"
+          },
+          {
+            "path": "check21-nomination.log",
+            "sha256": "c32ae1325f3c0ac10e02b193a322c84985250b7579514b8266aabb20fd276ddc"
+          },
+          {
+            "path": "check21-owned-build.log",
+            "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+          },
+          {
+            "path": "checks20.json",
+            "sha256": "9a374c11d9b1a10160b190614c2564a951e81151e8a772e73762f03054079b3b"
+          },
+          {
+            "path": "checks20b.json",
+            "sha256": "46df8e30d4fc9e163c9bdc10d469df427ddab7d197c7a63c1bdb43f1809453ea"
+          },
+          {
+            "path": "checks21.json",
+            "sha256": "2bc32a5efed77c82ba055cba0a010a057885cb3d0decb6e2004fb47878c9d8bd"
+          },
+          {
+            "path": "current-source21.json",
+            "sha256": "1a76dba2f3512bd10e1a0f1e3b16b2f7a608eee59fc974a0408cd83384d819e3"
+          },
+          {
+            "path": "owned20.json",
+            "sha256": "afb02ad263a43d408ff7ada6085fc8fbde2e3cc60ad2edf16b927cd9bed64d58"
+          },
+          {
+            "path": "selection20b.json",
+            "sha256": "5905d270de85aafa13bec494efa32617d2b26d54cf876f8b6bcf3e84a4d25c52"
+          }
+        ],
+        "priorReview": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo-review01.json",
+          "sha256": "aaa2a81419ee4a91f7f388124e22323b85ccb4ff2eda4a3d4a6ac54f6b2f7aeb"
+        }
+      }
+    }
+  ],
+  "evidenceFiles": [
+    {
+      "path": "base20.json",
+      "sha256": "1aec1167adc2d6fa38cc2ffbaefb93ba02e6244778d1a4a4cb96bdaa7742528d"
+    },
+    {
+      "path": "catalog-receipt21.json",
+      "sha256": "e118e9473859aae393ee24d90bb79a32d4539594e4630dd4d9efcbcd36ee2410"
+    },
+    {
+      "path": "check20-generate.log",
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+    },
+    {
+      "path": "check20-index.log",
+      "sha256": "e9ac361645aa457ead71975a4a17b29076ce72e314ee1a6093666fbda184d68d"
+    },
+    {
+      "path": "check20b-build.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "check20b-index.log",
+      "sha256": "f45c5f18456ed9c8940918fe7de1dbf980eabdf22bef7005779661f0883e97e9"
+    },
+    {
+      "path": "check21-all-family.log",
+      "sha256": "f90dfd0e8799ad40b73833c76d71678a87c01b2575a4795b6492d9eb4a341886"
+    },
+    {
+      "path": "check21-catalog.log",
+      "sha256": "068e84c34d647810dac782d15430c2526cb4cd23a5813b2893cfbb584c00bab9"
+    },
+    {
+      "path": "check21-contract.log",
+      "sha256": "0c56f3be1956d347b3a45f64e69c6873bed439f0cdb9976eab493718d5d7e329"
+    },
+    {
+      "path": "check21-nomination.log",
+      "sha256": "c32ae1325f3c0ac10e02b193a322c84985250b7579514b8266aabb20fd276ddc"
+    },
+    {
+      "path": "check21-owned-build.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    },
+    {
+      "path": "checks20.json",
+      "sha256": "9a374c11d9b1a10160b190614c2564a951e81151e8a772e73762f03054079b3b"
+    },
+    {
+      "path": "checks20b.json",
+      "sha256": "46df8e30d4fc9e163c9bdc10d469df427ddab7d197c7a63c1bdb43f1809453ea"
+    },
+    {
+      "path": "checks21.json",
+      "sha256": "2bc32a5efed77c82ba055cba0a010a057885cb3d0decb6e2004fb47878c9d8bd"
+    },
+    {
+      "path": "current-source21.json",
+      "sha256": "1a76dba2f3512bd10e1a0f1e3b16b2f7a608eee59fc974a0408cd83384d819e3"
+    },
+    {
+      "path": "owned20.json",
+      "sha256": "afb02ad263a43d408ff7ada6085fc8fbde2e3cc60ad2edf16b927cd9bed64d58"
+    },
+    {
+      "path": "selection20b.json",
+      "sha256": "5905d270de85aafa13bec494efa32617d2b26d54cf876f8b6bcf3e84a4d25c52"
+    }
+  ],
+  "preservedFailures": [
+    {
+      "artifact": "check20-index.log",
+      "cause": "Initial query used erc4626-silo, which is not an indexed capability; current index splits script names into tokens. Corrected query silo; no test failure and no repeated apply/generation."
+    }
+  ],
+  "completedAt": "2026-10-15T04:36:20.057539+00:00"
+}

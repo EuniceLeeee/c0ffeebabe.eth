@@ -7990,7 +7990,7 @@
         "familyId": "protocol:erc4626-silo-redeem",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "bd5afbf11606d016dd4b3dde1a5758af441cb1c648222ce4a3f95da919912d6e",
+        "contentHash": "e0e59d301baba6f57fd187f9c983caf674b6c2855b28dd478c3a54cd710c18c8",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -15885,5 +15885,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "1ed5d375236b7a82effd2f7fcfe3486ded88c5526abcc7f4a39b0e69c3318e49"
+  "artifactHash": "de81fdb55512083e4a7294d5a86c85329fa71c02d66d0d9508cde5b19477c620"
 }
