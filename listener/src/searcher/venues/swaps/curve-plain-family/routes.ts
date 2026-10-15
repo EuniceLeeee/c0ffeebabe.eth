@@ -27,7 +27,8 @@ export const curvePlainRoutes = {
       ...(nativeAssets(descriptor, direction) === undefined ? {} : { executionAssets: nativeAssets(descriptor, direction) }),
       bindingRef: { bindingKey: `${lower(descriptor.pool)}:${direction.i}:${direction.j}`, fingerprint },
       runtimeRequirements: descriptor.runtimeRequirements, pool: descriptor.pool,
-      i: direction.i, j: direction.j, executionMode: direction.executionMode, quoteAbi: descriptor.binding.quoteAbi,
+      i: direction.i, j: direction.j, executionMode: direction.executionMode,
+      ...(direction.recipientMode === undefined ? {} : { recipientMode: direction.recipientMode }), quoteAbi: descriptor.binding.quoteAbi,
     })));
   },
   projectGraph({ descriptor, route }) {
@@ -39,6 +40,9 @@ export const curvePlainRoutes = {
 export function assertRoute(descriptor: CurvePlainDescriptor, route: CurvePlainRoute): void {
   const direction = descriptor.directions.find(d => d.i === route.i && d.j === route.j && d.executionMode === route.executionMode);
   if (!validIndex(route.i) || !validIndex(route.j) || route.i === route.j || !direction ||
+    route.recipientMode !== direction.recipientMode ||
+    (route.recipientMode !== undefined && route.recipientMode !==
+      `${isNativeMode(route.executionMode) ? "native-" : ""}exchange${descriptor.binding.quoteAbi === "uint256" ? "-uint" : ""}-receiver`) ||
     route.quoteAbi !== descriptor.binding.quoteAbi || route.familyId !== descriptor.familyId || route.lineageId !== descriptor.lineageId ||
     route.instanceKey !== descriptor.instanceKey || !same(route.pool, descriptor.pool) ||
     !same(route.tokenIn, direction.tokenIn) || !same(route.tokenOut, direction.tokenOut) ||

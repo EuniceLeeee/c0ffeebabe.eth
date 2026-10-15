@@ -8,8 +8,9 @@ export function staticBinding(descriptor: CurvePlainDescriptor) {
     pool: descriptor.pool,
     binding: { ...descriptor.binding, coins: [...descriptor.binding.coins], decimals: [...descriptor.binding.decimals],
       handlers: [...descriptor.binding.handlers] },
-    directions: descriptor.directions.map(({ i, j, tokenIn, tokenOut, executionMode }) =>
-      ({ i, j, tokenIn, tokenOut, executionMode, quoteAbi: descriptor.binding.quoteAbi })),
+    directions: descriptor.directions.map(({ i, j, tokenIn, tokenOut, executionMode, recipientMode }) =>
+      ({ i, j, tokenIn, tokenOut, executionMode, ...(recipientMode === undefined ? {} : { recipientMode }),
+        quoteAbi: descriptor.binding.quoteAbi })),
   };
 }
 export const curvePlainInstance = {

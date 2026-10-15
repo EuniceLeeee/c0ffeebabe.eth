@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import type { DiscoverySemantics, UnifiedObservation } from "../../adapter-family-plugin.js";
 import { createTxEvidenceNomination } from "../../tx-evidence-nomination.js";
-import { EXECUTION, MODES, executionFunction, lower, selector, validIndex } from "./codec.js";
+import { EXECUTION, DISCOVERY_MODES, executionFunction, lower, selector, validIndex } from "./codec.js";
 import { reverseBindCurvePlain } from "./nomination.js";
 import type { CurvePlainCandidate } from "./types.js";
 
@@ -13,7 +13,7 @@ export const UINT_LOG_ID = "curve-plain-uint256-swap";
 export const UINT_NG_LOG_ID = "curve-plain-uint256-ng-swap";
 export const SURFACE_ID = "curve-plain-direct-coins";
 export const SURFACE = "curve-plain-direct-coins-v1";
-const callPatterns = MODES.map(mode => ({
+const callPatterns = DISCOVERY_MODES.map(mode => ({
   id: `curve-plain-${mode}`, selector: selector(mode),
   signature: EXECUTION[mode].getFunction(executionFunction(mode))!.format("sighash"),
   candidateAddress: { from: "call-target" as const },
@@ -66,7 +66,7 @@ export const curvePlainDiscovery = {
         if (decoded === null) return null;
         ({ pool, i, j } = decoded);
       } else if (observation.kind === "call") {
-        const mode = MODES.find(value => matchedPatternId === `curve-plain-${value}` &&
+        const mode = DISCOVERY_MODES.find(value => matchedPatternId === `curve-plain-${value}` &&
           observation.data.slice(0, 10).toLowerCase() === selector(value));
         if (mode === undefined) return null;
         const fn = executionFunction(mode);

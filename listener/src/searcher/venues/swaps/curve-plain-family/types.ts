@@ -2,6 +2,9 @@ import type { CompiledInstanceDescriptor, FamilyCandidate, FamilyRouteDescriptor
 import type { CanonicalSource } from "../../adapter-request-program.js";
 
 export type CurvePlainMode = "received" | "received-no-receiver" | "exchange" | "received-uint" | "exchange-uint" | "native-exchange" | "native-exchange-uint";
+// Optional behavior-proved recipient entry point; the default stays unchanged.
+export type CurvePlainRecipientMode = "exchange-receiver" | "exchange-uint-receiver" | "native-exchange-receiver" | "native-exchange-uint-receiver";
+export type CurvePlainExecutionMode = CurvePlainMode | CurvePlainRecipientMode;
 export type CurveIndexAbi = "int128" | "uint256";
 export interface CurvePlainCandidate extends FamilyCandidate {
   readonly candidateKind: "curve-plain-pool";
@@ -18,6 +21,7 @@ export interface CurvePlainDirection {
   readonly amountOut: bigint;
   readonly transferQuote?: CurveNativeTransferQuote;
   readonly executionMode: CurvePlainMode;
+  readonly recipientMode?: CurvePlainRecipientMode;
 }
 export interface CurvePlainBinding {
   readonly quoteAbi: CurveIndexAbi;
@@ -46,6 +50,7 @@ export interface CurvePlainRoute extends FamilyRouteDescriptor {
   readonly i: number;
   readonly j: number;
   readonly executionMode: CurvePlainMode;
+  readonly recipientMode?: CurvePlainRecipientMode;
   readonly quoteAbi: CurveIndexAbi;
 }
 export interface CurvePlainPricingDescriptor {

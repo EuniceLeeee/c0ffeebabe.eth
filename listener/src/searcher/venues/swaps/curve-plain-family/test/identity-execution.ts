@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import type { AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
-import { EXECUTION, META, POOL, selector } from "../codec.js";
+import { EXECUTION, META, POOL, DISCOVERY_MODES, executionFunction, hasReceiver, selector } from "../codec.js";
 import { curvePlainIdentity, PROBE_RECEIVER } from "../identity.js";
 import { ADDR } from "../../../../../shared/constants/addresses.js";
 import { erc20ProbeCalls } from "./identity-probe.js";
@@ -49,7 +49,7 @@ for (let step = 0; step < 3; step++) {
 }
 const step = { candidate, step: 3, evidence };
 const requests = variant.buildRequests(step);
-assert.equal(requests.length, 6);
+assert.equal(requests.length, 8);
 assert(requests.every(request => request.required === false), "alternatives must reach the decoder even when unavailable");
 const successful = requests.map(request => {
   assert.equal(request.kind, "effect-delta-simulation");
@@ -57,15 +57,14 @@ const successful = requests.map(request => {
   const [setup, swap] = erc20ProbeCalls(request);
   assert.equal(request.call.to.toLowerCase(), executor);
   assert.equal(swap.to, pool);
-  const mode = swap.data.startsWith(selector("received")) ? "received" :
-    swap.data.startsWith(selector("exchange")) ? "exchange" : "received-no-receiver";
-  const args = EXECUTION[mode].decodeFunctionData(mode === "exchange" ? "exchange" : "exchange_received", swap.data);
+  const mode = DISCOVERY_MODES.find(mode => swap.data.startsWith(selector(mode))); assert(mode);
+  const args = EXECUTION[mode].decodeFunctionData(executionFunction(mode), swap.data);
   const [i, j, dx, minDy] = [Number(args[0]), Number(args[1]), BigInt(args[2]), BigInt(args[3])];
   assert.equal(setup.to, coins[i]);
   assert.equal(minDy, 999n, "minimum remains exactly the source-pinned quote");
   return { ...returned(request.id, word(minDy)), effects: { tokenDeltas: [
     { token: coins[i], account: executor, delta: -dx }, { token: coins[i], account: pool, delta: dx },
-    { token: coins[j], account: mode === "received" ? PROBE_RECEIVER : executor, delta: minDy },
+    { token: coins[j], account: hasReceiver(mode) ? PROBE_RECEIVER : executor, delta: minDy },
     { token: coins[j], account: pool, delta: -minDy },
   ] } };
 });

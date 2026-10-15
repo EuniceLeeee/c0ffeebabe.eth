@@ -5,7 +5,7 @@ import { plugin } from "../../../production-families/curve-plain.production.js";
 import { definedFamilyPluginContractSummary } from "../../../adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
 import { declareRequestProgram } from "../../../adapter-request-program.js";
-import { CURVE_METAREGISTRY, ERC20, EXECUTION, MAX_UINT, META, MODES, POOL, SIGNED_GETTERS, address, addressArray,
+import { CURVE_METAREGISTRY, ERC20, EXECUTION, MAX_UINT, META, MODES, DISCOVERY_MODES, POOL, SIGNED_GETTERS, address, addressArray,
   executionData, executionFunction, pullsInput, getterPool, hasReceiver, lower, probeAmount, quotePool, selector, uint, UINT_POOL } from "../codec.js";
 import { LOG_ID, SURFACE, SURFACE_ID, SWAP_TOPIC, UINT_LOG_ID, UINT_SWAP_TOPIC, UINT_NG_LOG_ID, UINT_NG_SWAP_TOPIC, decodeSwapLog } from "../discovery.js";
 import { PROBE_RECEIVER } from "../identity.js";
@@ -15,7 +15,7 @@ import { reverseBindCurvePlain } from "../nomination.js";
 import { actionId } from "../routes.js";
 import type { CaptureNominationProvider } from "../../../adapter-family-plugin.js";
 import type { ReceiptSwapObservationContext } from "../../../swap-observation.js";
-import type { CurveIndexAbi, CurvePlainCandidate, CurvePlainDescriptor, CurvePlainIdentity, CurvePlainMode } from "../types.js";
+import type { CurveIndexAbi, CurvePlainCandidate, CurvePlainDescriptor, CurvePlainIdentity, CurvePlainMode, CurvePlainExecutionMode } from "../types.js";
 
 // Contract fixtures use real public identities, but all unlabelled results below
 // are synthetic. Optional cached RPC checks are read evidence, never a fork replay.
@@ -41,7 +41,7 @@ interface FixtureOptions {
   readonly quoteAbi?: CurveIndexAbi;
   readonly scalarTail?: string;
 }
-function fixture(anchor: Anchor, allowedModes: readonly CurvePlainMode[] = ["received"], options: FixtureOptions = {}) {
+function fixture(anchor: Anchor, allowedModes: readonly CurvePlainExecutionMode[] = ["received"], options: FixtureOptions = {}) {
   const balances = anchor.decimals.map(d => 10n ** BigInt(d) * 1_000_000n);
   const dy = (i: number, j: number, dx: bigint) => {
     // Nonlinear quote with fees and integer rounding. Never a cached unit-price multiplier.
@@ -61,7 +61,7 @@ function fixture(anchor: Anchor, allowedModes: readonly CurvePlainMode[] = ["rec
       const [setup, swap] = erc20ProbeCalls(request);
       assert.equal(lower(request.call.to), lower(EXECUTOR));
       assert.equal(swap.to, anchor.pool);
-      const mode = MODES.find(m => swap.data.slice(0, 10) === selector(m))!;
+      const mode = DISCOVERY_MODES.find(m => swap.data.slice(0, 10) === selector(m))!;
       if (!allowedModes.includes(mode)) return revert(request.id);
       assert.equal(request.call.caller.kind, "executor");
       const args = EXECUTION[mode].decodeFunctionData(executionFunction(mode), swap.data);
@@ -72,7 +72,7 @@ function fixture(anchor: Anchor, allowedModes: readonly CurvePlainMode[] = ["rec
       const setupArgs = ERC20.decodeFunctionData(pullsInput(mode) ? "approve" : "transfer", setup.data);
       assert.equal(lower(String(setupArgs[0])), anchor.pool);
       assert.equal(setupArgs[1], dx);
-      const receiver = hasReceiver(mode) ? String(args[4]) : EXECUTOR;
+      const receiver = hasReceiver(mode) ? String(args[args.length - 1]) : EXECUTOR;
       return { ...success(request.id, word(amountOut)), effects: { tokenDeltas: [
         { token: anchor.coins[i], account: EXECUTOR, delta: -dx },
         { token: anchor.coins[i], account: anchor.pool, delta: dx },
@@ -149,6 +149,52 @@ check("all three anchored identities, both direct directions, and all execution 
   }
   const arbitrary = { ...ANCHORS[0], pool: "0x1111111111111111111111111111111111111111" };
   assert.equal(identity(arbitrary).facts.directions.length, 2, "no hardcoded instance admission list");
+});
+check("optional recipient entrypoints preserve defaults and bind only independently proved ERC20 capabilities", () => {
+  for (const [mode, recipientMode, abi] of [["exchange", "exchange-receiver", "int128"],
+    ["exchange-uint", "exchange-uint-receiver", "uint256"]] as const) {
+    const anchor = ANCHORS[0], f = fixture(anchor, [mode, recipientMode], { quoteAbi: abi });
+    const d = descriptor(identity(anchor, f.answer, abi));
+    for (const route of plugin.routes.project({ descriptor: d })) {
+      assert.equal(route.executionMode, mode); assert.equal(route.recipientMode, recipientMode);
+      const input = { descriptor: d, route, executor: EXECUTOR, runtimeEvidence: [] };
+      const ordinary = plugin.execution.buildRuntimeLeg!(input); assert(ordinary?.settlement?.directOutput);
+      const direct = plugin.execution.buildRuntimeLeg!({ ...input, settlement: { kind: "direct-output", recipient: PROBE_RECEIVER } });
+      assert(direct); assert.deepEqual(direct.settlementRequest, { kind: "direct-output", recipient: PROBE_RECEIVER });
+      assert.equal(plugin.execution.buildRuntimeLeg!({ ...input, settlement: { kind: "quote-output" } }), null);
+      assert.equal(plugin.execution.buildRuntimeLeg!({ ...input, settlement: {
+        kind: "deferred-input", paymentAmount: 1n, paymentProgram: "0x010001" + "00".repeat(32) } }), null);
+      assert.throws(() => plugin.execution.buildRuntimeLeg!({ ...input, route: { ...route, recipientMode: undefined } }), /descriptor/);
+      const old = descriptor(identity(anchor, fixture(anchor, [mode], { quoteAbi: abi }).answer, abi));
+      const oldRoute = plugin.routes.project({ descriptor: old }).find(r => r.i === route.i)!;
+      assert.equal(oldRoute.recipientMode, undefined); assert.notEqual(oldRoute.bindingRef.fingerprint, route.bindingRef.fingerprint);
+      assert.equal(plugin.execution.buildRuntimeLeg!({ ...input, descriptor: old, route: oldRoute })!.program, ordinary.program);
+      assert.equal(plugin.execution.buildRuntimeLeg!({ ...input, descriptor: old, route: oldRoute,
+        settlement: { kind: "direct-output", recipient: PROBE_RECEIVER } }), null);
+      assert.throws(() => plugin.execution.buildRuntimeLeg!({ ...input, descriptor: old }), /descriptor/);
+      const data = executionData(recipientMode, route.i, route.j, 19n, 1n, PROBE_RECEIVER);
+      const decoded = EXECUTION[recipientMode].decodeFunctionData("exchange", data);
+      if (abi === "uint256") assert.equal(decoded[4], false, "ERC20 recipient path never enables native payment");
+      const observed = plugin.discovery.decodeCandidate!({ observation: { kind: "call", source: SOURCE,
+        target: anchor.pool, data }, matchedPatternId: `curve-plain-${recipientMode}` });
+      assert.equal(observed?.hintedI, route.i); assert.equal(observed?.hintedJ, route.j);
+    }
+    const missing = identity(anchor, req => req.id.endsWith(`:${recipientMode}`)
+      ? { id: req.id, ok: false, source: SOURCE, failure: "deadline" } : f.answer(req), abi);
+    assert(missing.facts.directions.every(r => r.executionMode === mode && r.recipientMode === undefined),
+      "unknown optional proof preserves the complete default, without declaring unsupported");
+    const wrongReceiver = identity(anchor, req => {
+      const r = f.answer(req); if (!req.id.endsWith(`:${recipientMode}`) || !r.ok) return r;
+      return { ...r, effects: { ...r.effects, tokenDeltas: r.effects!.tokenDeltas!.map(d =>
+        d.account === PROBE_RECEIVER ? { ...d, account: EXECUTOR } : d) } };
+    }, abi);
+    assert(wrongReceiver.facts.directions.every(r => r.recipientMode === undefined));
+  }
+  for (const mode of ["received", "received-uint"] as const) {
+    const abi = mode === "received" ? "int128" : "uint256", extra = mode === "received" ? "exchange-receiver" : "exchange-uint-receiver";
+    const d = descriptor(identity(ANCHORS[0], fixture(ANCHORS[0], [mode, extra]).answer, abi));
+    assert(d.directions.every(r => r.executionMode === mode && r.recipientMode === undefined), "existing received preference is stable");
+  }
 });
 check("signed/unsigned coin, balance and quote ABIs bind independently through padded identity, pricing and Exact", () => {
   const anchor = ANCHORS[0];

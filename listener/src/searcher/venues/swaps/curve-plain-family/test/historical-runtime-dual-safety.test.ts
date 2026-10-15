@@ -384,3 +384,26 @@ test("same-calldata no-input control also protects all recipient inventory", () 
     post: { [RECIPIENT]: { balance: "0x12" } } } }), /non-sender/);
   assert.throws(() => assertNoInputRollback({ ...input, trace: {} }), /did not revert atomically/);
 });
+
+test("explicit plain recipient pulls clear approval without changing quoted/default policies", () => {
+  for (const [action, mode] of [["curve-exchange-plain", "exchange"], ["curve-exchange-uint", "exchange-uint"]]) {
+    assert.equal(curveHistoricalAllowancePolicy(action, mode, 19n, 0n, true), "temporary-cleared");
+    for (const grant of [1n, ethers.MaxUint256, ethers.MaxUint256 - 19n])
+      assert.throws(() => curveHistoricalAllowancePolicy(action, mode, 19n, grant, true));
+    assert.equal(curveHistoricalAllowancePolicy(action, mode, 19n, ethers.MaxUint256), "standing-grant");
+    assert.throws(() => curveHistoricalAllowancePolicy(action, mode, 19n, 0n));
+  }
+  assert.equal(curveHistoricalAllowancePolicy("curve-exchange-underlying", "exchange-underlying", 19n, ethers.MaxUint256, true), "standing-grant");
+  assert.equal(curveHistoricalAllowancePolicy("curve-exchange", "received", 19n, 0n, true), "no-grant");
+});
+
+
+test("native quoted/default/direct actions require cleared allowance", () => {
+  for (const [action, mode] of [["curve-native-exchange", "native-exchange"], ["curve-native-exchange-uint", "native-exchange-uint"]]) {
+    for (const direct of [false, true]) {
+      assert.equal(curveHistoricalAllowancePolicy(action, mode, 19n, 0n, direct), "temporary-cleared");
+      for (const grant of [1n, ethers.MaxUint256, ethers.MaxUint256 - 19n])
+        assert.throws(() => curveHistoricalAllowancePolicy(action, mode, 19n, grant, direct));
+    }
+  }
+});

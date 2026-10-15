@@ -13,6 +13,7 @@ import { CURVE_PLAIN_FAMILY_ID, CURVE_PLAIN_LINEAGE } from "../manifest.js";
 import { instanceKey } from "../../../adapter-family-identifiers.js";
 import { ERC20, EXECUTION, META, POOL, routeToken, isNativeCoin } from "../codec.js";
 import { nativeExchangeProgram } from "../native.js";
+import { PROBE_RECEIVER } from "../identity.js";
 import { nativeStEthRateRequests, projectNativeTransferQuote, usesNativeStEthTransfer } from "../native-transfer-quote.js";
 import { curveRefreshAddresses } from "../refresh-scope.js";
 import type { CurvePlainDescriptor } from "../types.js";
@@ -234,7 +235,8 @@ test("native dual construction uses production Family routes, source quotes and 
 });
 
 function nativeIdentity(corrupt?: "authority" | "output" | "output2" | "extra-output1" | "input" | "input2" | "overdebit" | "native" | "unknown",
-  answers?: Map<string, AdapterRequestResult>, executionRoundingRawUnits = 0n, outputToken = token) {
+  answers?: Map<string, AdapterRequestResult>, executionRoundingRawUnits = 0n, outputToken = token,
+  receiver?: "valid" | "wrong-recipient" | "native-refund" | "unknown") {
   const identityCoins = [native, outputToken];
   const variant = plugin.identity.variants[0], candidate = { candidateKind: "curve-plain-pool" as const, pool, hintedI: null, hintedJ: null };
   let evidence: any;
@@ -253,6 +255,21 @@ function nativeIdentity(corrupt?: "authority" | "output" | "output2" | "extra-ou
     const results: AdapterRequestResult[] = requests.map(r => {
       if (r.id === "probe-executor") return { ...ok(r.id, word(0n)), effects: {
         tokenDeltas: [{ token: ADDR.WETH, account: actor, delta: 0n }], nativeDeltas: [{ account: actor, delta: corrupt === "authority" ? 1n : 0n }] } };
+      if (r.kind === "effect-delta-simulation" && r.id.endsWith("-receiver")) {
+        const q = evidence.quotes.find((q: any) => r.id.startsWith(`execution:${q.i}:${q.j}:`)); assert(q);
+        assert.equal(q.i, 0); assert.equal(r.executionAssetBoundary, undefined);
+        assert.equal(r.overrideIntent.nativeBalanceWei, q.amountIn);
+        assert.equal(r.overrideIntent.tokenBalances, undefined);
+        if (!receiver) return { ...ok(r.id, "0x"), completion: "reverted-as-declared",
+          effects: { tokenDeltas: [], nativeDeltas: [], logs: [] } };
+        if (receiver === "unknown") return { id: r.id, ok: false, source, failure: "deadline" };
+        return { ...ok(r.id, "0x"), effects: { tokenDeltas: [
+          { token: q.tokenIn, account: actor, delta: 0n },
+          { token: q.tokenOut, account: actor, delta: receiver === "wrong-recipient" ? q.amountOut : 0n },
+          { token: q.tokenIn, account: PROBE_RECEIVER, delta: 0n },
+          { token: q.tokenOut, account: PROBE_RECEIVER, delta: receiver === "wrong-recipient" ? 0n : q.amountOut },
+        ], nativeDeltas: [{ account: actor, delta: -q.amountIn + (receiver === "native-refund" ? 1n : 0n) }] } };
+      }
       if (r.kind === "effect-delta-simulation") {
         assert.equal(r.call.executionMode, "executor-program"); assert.equal(r.call.to.toLowerCase(), actor);
         if (corrupt === "unknown") return { id: r.id, ok: false, source, failure: "deadline" };
@@ -459,7 +476,7 @@ test("native identity runs through the production catalog and default four-round
     JSON.stringify(result.outcomes.map(o => ({ stage: o.stage, status: o.status, reason: o.reasonCode }))));
   assert(!result.outcomes.some(o => o.reasonCode?.includes("identity-step-budget-exhausted")));
   assert(rounds[1].includes("probe-executor"), "authority read shares the existing structure round");
-  assert.equal(rounds[3].filter(id => id.startsWith("execution:")).length, 2);
+  assert.equal(rounds[3].filter(id => id.startsWith("execution:")).length, 3);
   assert.equal(rounds.slice(0, 4).flat().filter(id => id === "probe-executor").length, 1);
   // No publication/pricing/on-chain assertion: this is the real identity scheduler
   // and catalog with synthetic transport results, not historical execution.
@@ -488,5 +505,28 @@ test("production sim selector builds both native directions without Exact, quote
     assert.equal(exact, 0); assert.equal(quoted, 0); assert.equal(rpc, 0); assert(simulated >= 4);
     assert(events.some(e => e.type === "sim_amount_construction"));
     assert(events.filter(e => e.type === "sim_amount_construction").every(e => e.mode === "runtime-actual"));
+  }
+});
+
+
+test("native receiver capability is per direction and behavior proved without changing default admission", () => {
+  for (const receiver of [undefined, "valid", "wrong-recipient", "native-refund", "unknown"] as const) {
+    const result = nativeIdentity(undefined, undefined, 0n, token, receiver);
+    assert.equal(result.status, "verified"); if (result.status !== "verified") throw Error("missing identity");
+    const directions = result.identity.facts.directions;
+    assert.equal(directions.find(d => d.i === 0)!.recipientMode, receiver === "valid" ? "native-exchange-receiver" : undefined);
+    assert.equal(directions.find(d => d.i === 1)!.recipientMode, undefined);
+    const descriptor = plugin.instance.finalizeDescriptor({ identity: result.identity,
+      draft: plugin.instance.compileDraft(result.identity), sharedBindings: [] });
+    for (const route of plugin.routes.project({ descriptor })) {
+      const input = { descriptor, route, executor: actor, runtimeEvidence: [] };
+      const regular = plugin.execution.buildRuntimeLeg!(input); assert(regular);
+      const applicable = route.i === 1 || receiver === "valid";
+      assert.equal(regular.settlement?.directOutput === true, applicable);
+      const direct = plugin.execution.buildRuntimeLeg!({ ...input, settlement: { kind: "direct-output", recipient: actor } });
+      assert.equal(direct !== null, applicable);
+      assert.equal(plugin.execution.buildRuntimeLeg!({ ...input,
+        settlement: { kind: "quote-output", recipient: actor } }), null);
+    }
   }
 });

@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../../../shared/constants/addresses.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
-import type { CurveIndexAbi, CurvePlainMode } from "./types.js";
+import type { CurveIndexAbi, CurvePlainMode, CurvePlainExecutionMode, CurvePlainRecipientMode } from "./types.js";
 
 // Infrastructure proof source, never a pool admission list.
 export const CURVE_METAREGISTRY = ethers.getAddress("0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC");
@@ -46,6 +46,10 @@ export const EXECUTION = Object.freeze({
   exchange: new ethers.Interface(["function exchange(int128,int128,uint256,uint256) returns (uint256)"]),
   "received-uint": new ethers.Interface(["function exchange_received(uint256,uint256,uint256,uint256,address) returns (uint256)"]),
   "exchange-uint": new ethers.Interface(["function exchange(uint256,uint256,uint256,uint256) returns (uint256)"]),
+  "exchange-receiver": new ethers.Interface(["function exchange(int128,int128,uint256,uint256,address) returns (uint256)"]),
+  "exchange-uint-receiver": new ethers.Interface(["function exchange(uint256,uint256,uint256,uint256,bool,address) returns (uint256)"]),
+  "native-exchange-receiver": new ethers.Interface(["function exchange(int128,int128,uint256,uint256,address) payable returns (uint256)"]),
+  "native-exchange-uint-receiver": new ethers.Interface(["function exchange(uint256,uint256,uint256,uint256,bool,address) payable returns (uint256)"]),
   "native-exchange": new ethers.Interface(["function exchange(int128,int128,uint256,uint256) payable"]),
   "native-exchange-uint": new ethers.Interface(["function exchange(uint256,uint256,uint256,uint256) payable"]),
 });
@@ -54,23 +58,29 @@ export const UINT_MODES = Object.freeze(["received-uint", "exchange-uint"] as co
 // Native and ERC20 exchanges share selectors. Discovery declares each ABI
 // once; the source-bound coin identity selects native execution afterwards.
 export const MODES: readonly CurvePlainMode[] = Object.freeze([...INT_MODES, ...UINT_MODES]);
-export const isNativeMode = (mode: CurvePlainMode): boolean => mode === "native-exchange" || mode === "native-exchange-uint";
+export const RECIPIENT_MODES: readonly CurvePlainRecipientMode[] = Object.freeze(["exchange-receiver", "exchange-uint-receiver"]);
+export const DISCOVERY_MODES: readonly CurvePlainExecutionMode[] = Object.freeze([...MODES, ...RECIPIENT_MODES]);
+export const isNativeMode = (mode: CurvePlainExecutionMode): boolean => mode === "native-exchange" || mode === "native-exchange-uint" ||
+  mode === "native-exchange-receiver" || mode === "native-exchange-uint-receiver";
 export const isNativeCoin = (coin: string): boolean => lower(coin) === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
 export const routeToken = (coin: string): string => isNativeCoin(coin) ? ADDR.WETH : coin;
-export const pullsInput = (mode: CurvePlainMode): boolean => mode === "exchange" || mode === "exchange-uint" || isNativeMode(mode);
-export const executionFunction = (mode: CurvePlainMode): "exchange" | "exchange_received" =>
+export const pullsInput = (mode: CurvePlainExecutionMode): boolean => mode === "exchange" || mode === "exchange-uint" || mode === "exchange-receiver" || mode === "exchange-uint-receiver" || isNativeMode(mode);
+export const executionFunction = (mode: CurvePlainExecutionMode): "exchange" | "exchange_received" =>
   pullsInput(mode) ? "exchange" : "exchange_received";
-export const hasReceiver = (mode: CurvePlainMode): boolean => mode === "received" || mode === "received-uint";
+export const hasReceiver = (mode: CurvePlainExecutionMode): boolean => mode === "received" || mode === "received-uint" ||
+  mode === "native-exchange-receiver" || mode === "native-exchange-uint-receiver" || RECIPIENT_MODES.includes(mode as CurvePlainRecipientMode);
 export const MAX_UINT = (1n << 256n) - 1n;
 export const lower = (value: string): string => ethers.getAddress(value).toLowerCase();
 export const same = (a: string, b: string): boolean => lower(a) === lower(b);
 export const validIndex = (i: number): boolean => Number.isInteger(i) && i >= 0 && i < 8;
-export function selector(mode: CurvePlainMode): `0x${string}` {
+export function selector(mode: CurvePlainExecutionMode): `0x${string}` {
   return EXECUTION[mode].getFunction(executionFunction(mode))!.selector as `0x${string}`;
 }
-export function executionData(mode: CurvePlainMode, i: number, j: number, dx: bigint, minDy: bigint, receiver: string): string {
+export function executionData(mode: CurvePlainExecutionMode, i: number, j: number, dx: bigint, minDy: bigint, receiver: string): string {
   return EXECUTION[mode].encodeFunctionData(executionFunction(mode),
-    hasReceiver(mode) ? [i, j, dx, minDy, receiver] : [i, j, dx, minDy]);
+    mode === "exchange-uint-receiver" || mode === "native-exchange-uint-receiver"
+      ? [i, j, dx, minDy, mode === "native-exchange-uint-receiver", receiver] :
+      hasReceiver(mode) ? [i, j, dx, minDy, receiver] : [i, j, dx, minDy]);
 }
 export function call(id: string, to: string, data: string): AdapterRequest {
   return { id, kind: "eth-call", to, data, completion: "return-or-revert-data" };

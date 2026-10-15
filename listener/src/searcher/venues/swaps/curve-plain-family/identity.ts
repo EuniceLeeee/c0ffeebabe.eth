@@ -8,17 +8,17 @@ import { hashCanonical } from "../../canonical-value.js";
 import { CURVE_METAREGISTRY, META, POOL, ERC20, GETTER_ABIS, INT_MODES, UINT_MODES, pullsInput, address, addressArray, assertSource,
   call, executionData, getterPool, getterReadId, hasReceiver, lower, probeAmount, quotePool, result, resultSource, returned, same, uint,
   isNativeCoin, isNativeMode, routeToken } from "./codec.js";
-import { nativeExecutionProbe } from "./native.js";
+import { nativeExecutionProbe, nativeRecipientProbe } from "./native.js";
 import { hasNativeStEthTransfer, nativeStEthRateRequests, projectNativeTransferQuote } from "./native-transfer-quote.js";
 import { executionInputMatches, executionOutputMatches } from "../../../../shared/executor/amount-rounding.js";
 import { CURVE_PLAIN_FAMILY_ID, CURVE_PLAIN_LINEAGE } from "./manifest.js";
-import type { CurveIndexAbi, CurvePlainBinding, CurvePlainCandidate, CurvePlainDirection, CurvePlainIdentity, CurvePlainMode } from "./types.js";
+import type { CurveIndexAbi, CurvePlainBinding, CurvePlainCandidate, CurvePlainDirection, CurvePlainIdentity, CurvePlainMode, CurvePlainExecutionMode, CurvePlainRecipientMode } from "./types.js";
 
 // Only the receiver for an isolated behavior probe. Caller authority remains the
 // framework's executor, and this address never admits a pool or routes real funds.
 export const PROBE_RECEIVER = "0x0000000000000000000000000000000000000001";
 const caller = Object.freeze({ kind: "executor" as const });
-type QuoteDirection = Omit<CurvePlainDirection, "executionMode">;
+type QuoteDirection = Omit<CurvePlainDirection, "executionMode" | "recipientMode">;
 interface Evidence {
   readonly phase: "registry" | "structure" | "quotes" | "execution";
   readonly source: CanonicalSource;
@@ -37,6 +37,8 @@ interface Evidence {
 
 function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainCandidate, CurvePlainIdentity>["variants"][number] {
   const modes: readonly CurvePlainMode[] = quoteAbi === "int128" ? INT_MODES : UINT_MODES;
+  const recipientMode: CurvePlainRecipientMode = quoteAbi === "int128" ? "exchange-receiver" : "exchange-uint-receiver";
+  const nativeRecipientMode: CurvePlainRecipientMode = quoteAbi === "int128" ? "native-exchange-receiver" : "native-exchange-uint-receiver";
   return {
     id: `registry-direct-coin-behavior-${quoteAbi}`, kind: "registry-member", lineageId: CURVE_PLAIN_LINEAGE,
     applies: candidate => candidate.candidateKind === "curve-plain-pool",
@@ -82,8 +84,10 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
       if (prior.phase === "quotes") return prior.quotes.flatMap(quote =>
         (isNativeCoin(prior.binding.coins[quote.i]) || isNativeCoin(prior.binding.coins[quote.j]))
           ? [nativeExecutionProbe(prior.pool, quote, quoteAbi === "int128" ? "native-exchange" : "native-exchange-uint",
-            prior.executor!, prior.binding.coins, executionRoundingRawUnits)]
-          : modes.map(mode => executionProbe(prior.pool, quote, mode, prior.executor!)));
+            prior.executor!, prior.binding.coins, executionRoundingRawUnits),
+            ...(isNativeCoin(prior.binding.coins[quote.i]) ? [nativeRecipientProbe(prior.pool, quote,
+              nativeRecipientMode, prior.executor!, PROBE_RECEIVER, executionRoundingRawUnits)] : [])]
+          : [...modes, recipientMode].map(mode => executionProbe(prior.pool, quote, mode, prior.executor!)));
       return [];
     },
     decode({ step, results }) {
@@ -159,7 +163,14 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
         const supported = quoteModes.filter(mode => isNativeMode(mode)
           ? provesNativeExecution(results, quote, mode, prior.executor!, step.executionRoundingRawUnits ?? 0n)
           : provesExecution(results, prior.pool, quote, mode));
-        if (supported.length) directions.push({ ...quote, executionMode: supported[0] });
+        if (supported.length) {
+          const native = isNativeMode(supported[0]);
+          const optionalReceiver = native ? isNativeCoin(prior.binding.coins[quote.i]) &&
+            provesNativeRecipient(results, quote, nativeRecipientMode, prior.executor!, step.executionRoundingRawUnits ?? 0n) :
+            !hasReceiver(supported[0]) && provesExecution(results, prior.pool, quote, recipientMode);
+          directions.push({ ...quote, executionMode: supported[0],
+            ...(optionalReceiver ? { recipientMode: native ? nativeRecipientMode : recipientMode } : {}) });
+        }
         // Another direction's success cannot turn unknown execution evidence
         // for this positive quote into proof that the direction is unsupported.
         else if (results.some(read => !read.ok && quoteModes.some(mode =>
@@ -260,7 +271,7 @@ function pairs(length: number): readonly [number, number][] {
   return Array.from({ length }, (_, i) => Array.from({ length }, (_, j) => [i, j] as [number, number]))
     .flat().filter(([i, j]) => i !== j);
 }
-function executionProbe(pool: string, quote: QuoteDirection, mode: CurvePlainMode, actor: string): AdapterRequest {
+function executionProbe(pool: string, quote: QuoteDirection, mode: CurvePlainExecutionMode, actor: string): AdapterRequest {
   // Execute preparation and exchange atomically under the trusted executor.
   // A token's deterministic preparation revert is then a failed complete mode,
   // not unknown preCall evidence that hides another direction's valid proof.
@@ -283,7 +294,7 @@ function executionProbe(pool: string, quote: QuoteDirection, mode: CurvePlainMod
     observe: ["return-data", "revert-data", "token-delta", "logs"],
   };
 }
-function provesExecution(results: readonly AdapterRequestResult[], pool: string, quote: QuoteDirection, mode: CurvePlainMode): boolean {
+function provesExecution(results: readonly AdapterRequestResult[], pool: string, quote: QuoteDirection, mode: CurvePlainExecutionMode): boolean {
   const id = `execution:${quote.i}:${quote.j}:${mode}`;
   const matches = results.filter(read => read.id === id);
   if (matches.length !== 1) throw new Error(`curve-plain missing/duplicate result ${id}`);
@@ -309,9 +320,9 @@ function provesExecution(results: readonly AdapterRequestResult[], pool: string,
 // A zero pool WETH delta is valid only with the independently observed wrapping
 // effects from THIS simulation. Executor debits/receipts stay exact above.
 function poolEffect(delta: { token: string; delta: bigint }, expected: bigint,
-  mode: CurvePlainMode, pool: string, read: Extract<AdapterRequestResult, { ok: true }>): boolean {
+  mode: CurvePlainExecutionMode, pool: string, read: Extract<AdapterRequestResult, { ok: true }>): boolean {
   if (delta.delta === expected) return true;
-  if (mode !== "exchange-uint" || !same(delta.token, ADDR.WETH) || delta.delta !== 0n) return false;
+  if (!["exchange-uint", "exchange-uint-receiver"].includes(mode) || !same(delta.token, ADDR.WETH) || delta.delta !== 0n) return false;
   const deposit = ethers.id("Deposit(address,uint256)"), withdrawal = ethers.id("Withdrawal(address,uint256)");
   let wrapped = 0n;
   for (const log of read.effects?.logs ?? []) {
@@ -321,4 +332,19 @@ function poolEffect(delta: { token: string; delta: bigint }, expected: bigint,
     if (log.topics[0] === withdrawal) wrapped -= uint(log.data);
   }
   return wrapped === -expected;
+}
+
+function provesNativeRecipient(results: readonly AdapterRequestResult[], quote: QuoteDirection,
+  mode: CurvePlainRecipientMode, actor: string, toleranceRawUnits: bigint): boolean {
+  const matches = results.filter(read => read.id === `execution:${quote.i}:${quote.j}:${mode}`);
+  if (matches.length !== 1) throw new Error("curve-plain missing/duplicate native recipient result");
+  const read = matches[0];
+  if (!read.ok || read.completion !== "returned" || read.data !== "0x") return false;
+  const rows = read.effects?.tokenDeltas, native = read.effects?.nativeDeltas;
+  if (rows?.length !== 4 || native?.length !== 1 || !same(native[0].account, actor) || native[0].delta !== -quote.amountIn) return false;
+  return [actor, PROBE_RECEIVER].every(account => [quote.tokenIn, quote.tokenOut].every(token => {
+    const cells = rows.filter(row => same(row.account, account) && same(row.token, token));
+    return cells.length === 1 && (same(account, PROBE_RECEIVER) && same(token, quote.tokenOut)
+      ? executionOutputMatches(cells[0].delta, quote.amountOut, toleranceRawUnits) : cells[0].delta === 0n);
+  }));
 }

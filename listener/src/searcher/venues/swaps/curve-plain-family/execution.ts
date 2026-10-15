@@ -3,7 +3,8 @@ import { runtimeLeg, runtimeExecutor, RUNTIME_ERC20 } from "../../runtime-execut
 import { executionData, hasReceiver } from "./codec.js";
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { MAX_UINT, pullsInput, isNativeCoin, isNativeMode } from "./codec.js";
-import { nativeExchangeProgram } from "./native.js";
+import { recipientExchangeProgram } from "./recipient.js";
+import { nativeExchangeProgram, nativeRecipientProgram } from "./native.js";
 import { actionId, assertRoute } from "./routes.js";
 import type { CurvePlainDescriptor, CurvePlainExactEvidence, CurvePlainRoute } from "./types.js";
 
@@ -12,10 +13,22 @@ export const curvePlainExecution = {
     const { descriptor: d, route: r, executor } = input;
     assertRoute(d, r); runtimeExecutor(executor, d.pool);
     const request = input.settlement;
-    if (request && (request.kind !== "direct-output" || !hasReceiver(r.executionMode))) return null;
-    const recipient = request ? runtimeExecutor(request.recipient, d.pool, r.tokenIn, r.tokenOut) : executor;
-    if (isNativeMode(r.executionMode)) return runtimeLeg(actionId(r.executionMode), nativeExchangeProgram(
-      d.pool, r.tokenIn, r.tokenOut, r.i, r.j, r.executionMode, executor, isNativeCoin(d.binding.coins[r.i])));
+    const native = isNativeMode(r.executionMode), nativeIn = isNativeCoin(d.binding.coins[r.i]);
+    // Native output is wrapped and delivered by the existing common boundary;
+    // its raw receiver must remain the executor even for caller-only pools.
+    const directMode = native && !nativeIn ? r.executionMode : hasReceiver(r.executionMode) ? r.executionMode : r.recipientMode;
+    if (request) {
+      if (request.kind !== "direct-output" || directMode === undefined) return null;
+      const recipient = runtimeExecutor(request.recipient, d.pool, r.tokenIn, r.tokenOut);
+      const program = native ? nativeRecipientProgram(d.pool, r.tokenIn, r.tokenOut, r.i, r.j,
+        directMode, executor, recipient, nativeIn) : recipientExchangeProgram(d.pool, r.tokenIn, r.tokenOut,
+        r.i, r.j, directMode, executor, recipient);
+      return { ...runtimeLeg(actionId(r.executionMode), program), settlement: { directOutput: true as const }, settlementRequest: request };
+    }
+    const recipient = executor;
+    if (native) return { ...runtimeLeg(actionId(r.executionMode), nativeExchangeProgram(
+      d.pool, r.tokenIn, r.tokenOut, r.i, r.j, r.executionMode, executor, nativeIn)),
+      ...(directMode === undefined ? {} : { settlement: { directOutput: true as const } }) };
     const p = new RuntimeAmountProgram(), pulls = pullsInput(r.executionMode);
     if (pulls) p.allowance(r.tokenIn, d.pool, 0, MAX_UINT);
     else {
@@ -27,8 +40,7 @@ export const curvePlainExecution = {
     }
     p.call(d.pool, executionData(r.executionMode, r.i, r.j, 0n, 1n, recipient),
       { patches: [{ offset: 68, reg: pulls ? 0 : 3 }] });
-    return { ...runtimeLeg(actionId(r.executionMode), p), ...(hasReceiver(r.executionMode) ? { settlement: { directOutput: true as const } } : {}),
-      ...(request ? { settlementRequest: request } : {}) };
+    return { ...runtimeLeg(actionId(r.executionMode), p), ...(directMode === undefined ? {} : { settlement: { directOutput: true as const } }) };
   },
   runtimeProjection: ({ hop }) => ({ allowanceSpender: ["curve-exchange-plain", "curve-exchange-uint"].includes(hop.adapterId) ? hop.target : null,
     prewarmQuoteCalls: [] }),

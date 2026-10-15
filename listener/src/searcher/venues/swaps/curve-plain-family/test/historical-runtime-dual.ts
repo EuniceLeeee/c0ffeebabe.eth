@@ -239,9 +239,11 @@ function observed(diff: any, address: string, slot: string, initial: bigint, req
 
 /** Check the admitted action's actual approval contract. Legacy pull adapters
  * keep MAX grants; wrapper/native programs grant only this input and clear it. */
-export function curveHistoricalAllowancePolicy(adapterId: string, mode: string, amountIn: bigint, allowance: bigint) {
+export function curveHistoricalAllowancePolicy(adapterId: string, mode: string, amountIn: bigint, allowance: bigint, direct = false) {
   assert(amountIn > 0n && amountIn <= MAX_UINT, "allowance input bounds");
-  const temporary = adapterId === "curve-exchange-underlying-lending" ||
+  const temporary = (direct && ["curve-exchange-plain", "curve-exchange-uint"].includes(adapterId)) ||
+    ["curve-native-exchange", "curve-native-exchange-uint"].includes(adapterId) ||
+    adapterId === "curve-exchange-underlying-lending" ||
     adapterId === "curve-exchange-underlying-uint-native";
   const pulls = adapterId === "curve-exchange-underlying" || pullsInput(mode as any);
   assert(temporary || !pulls ? allowance === 0n : allowance === MAX_UINT || allowance === MAX_UINT - amountIn,
@@ -870,7 +872,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
               result.finalAllowances = await readAllowances(post);
               const mode = "executionMode" in definition ? String(definition.executionMode) : "exchange-underlying";
               result.allowancePolicy = curveHistoricalAllowancePolicy((direct ? recipientLeg! : leg).actionAdapterId, mode,
-                amountIn, result.finalAllowances[0][0]);
+                amountIn, result.finalAllowances[0][0], direct);
 
               stage = `${encoding}-no-input-control`;
               // Preserve enough OLD output for either observed or quoted output,
