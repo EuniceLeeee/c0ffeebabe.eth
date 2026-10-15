@@ -8269,7 +8269,7 @@
         "familyId": "protocol:erc4626",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "484a625f67dd08a141dd2f349f5b0e81a17c0e0fcf466992d0ab22068fec8a9f",
+        "contentHash": "36b9f68d9eec0c702367e95df256934ef9f6118518c15c0536b168dd1eb0e335",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -8309,7 +8309,7 @@
         "familyId": "protocol:erc4626",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "67c32ea606120946b79bc3b2427816b2474ebc3cff1cc789ef070253d697d00c",
+        "contentHash": "88dc6e8186453f0ffffc7cba59a7b0b619ddd5b39432cb3204686eaf6bc4e936",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -12416,7 +12416,7 @@
         "familyId": "protocol:set-redemption",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "c5b394df4cfd1815d499d3aaba7c1bd9bcba4c1533ce2af4916efc3cb68d2282",
+        "contentHash": "ff9890a8f7550162cb8b193717d182c8f00ba55ee920ad31d0107c53df529b60",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -12431,6 +12431,7 @@
           "src/searcher/venues/family-owned-action.ts",
           "src/searcher/venues/protocols/set-redemption-family/action.ts",
           "src/searcher/venues/protocols/set-redemption-family/codec.ts",
+          "src/searcher/venues/protocols/set-redemption-family/direct.ts",
           "src/searcher/venues/protocols/set-redemption-family/instance.ts",
           "src/searcher/venues/protocols/set-redemption-family/issuance.ts",
           "src/searcher/venues/protocols/set-redemption-family/legacy.ts",
@@ -16572,5 +16573,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "b72d0cc3e3d2dfbef440d95a435b9bb89c5ab6bae8460329fb08857e7f65165d"
+  "artifactHash": "4bd4076d4fc7875b911e69fd745f9fcb08e38e4546622da47f678051bde8cf95"
 }

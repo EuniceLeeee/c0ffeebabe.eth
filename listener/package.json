@@ -430,7 +430,17 @@
     "searcher:erc4626-silo-recipient-evm": "node --import tsx src/searcher/venues/protocols/erc4626-silo-redeem-family/test/recipient-evm.ts",
     "searcher:algebra-settlement-contract": "tsx src/searcher/venues/swaps/algebra-integral-family/test/settlement-contract.ts",
     "searcher:algebra-settlement-ready": "tsx src/searcher/venues/swaps/algebra-integral-family/test/settlement-ready.ts",
-    "searcher:algebra-settlement-historical": "tsx src/searcher/venues/swaps/algebra-integral-family/test/settlement-historical.ts"
+    "searcher:algebra-settlement-historical": "tsx src/searcher/venues/swaps/algebra-integral-family/test/settlement-historical.ts",
+    "searcher:frax-custodian-recipient-contract": "tsx src/searcher/venues/protocols/erc4626-family/test/custodian-recipient-contract.ts",
+    "searcher:frax-custodian-recipient-evm": "tsx src/searcher/venues/protocols/erc4626-family/test/custodian-recipient-evm.ts",
+    "searcher:frax-custodian-recipient-ready": "tsx src/searcher/venues/protocols/erc4626-family/test/custodian-recipient-ready.ts",
+    "searcher:frax-custodian-recipient-historical": "tsx src/searcher/venues/protocols/erc4626-family/test/custodian-recipient-historical.ts",
+    "test:set-redemption-family:recipient-ready": "tsx src/searcher/venues/protocols/set-redemption-family/test/recipient-ready.ts",
+    "test:set-redemption-family:recipient-historical": "tsx src/searcher/venues/protocols/set-redemption-family/test/recipient-historical.ts",
+    "test:set-redemption-family:recipient-contract": "tsx src/searcher/venues/protocols/set-redemption-family/test/recipient-contract.ts",
+    "test:fluid-dex-family:unfunded-ready": "tsx src/searcher/venues/swaps/fluid-dex-family/test/unfunded-ready.ts",
+    "test:fluid-dex-family:unfunded-historical": "tsx src/searcher/venues/swaps/fluid-dex-family/test/unfunded-historical.ts",
+    "test:fluid-dex-family:unfunded-contract": "tsx src/searcher/venues/swaps/fluid-dex-family/test/unfunded-contract.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

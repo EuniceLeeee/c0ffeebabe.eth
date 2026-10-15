@@ -1,0 +1,123 @@
+{
+  "kind": "independent-prior-Fluid-raw-and-common-source-compatibility",
+  "result": "pass-scoped-reuse-no-new-positive-run",
+  "counts": {
+    "oldPositive": 48,
+    "rawTokenDeltaChecks": 384,
+    "exactInputZeroResidue": 48,
+    "oldDeclaredRejections": 44
+  },
+  "matrices": [
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/evidence-old86/dual19-weETH-native.json",
+        "sha256": "446aa58421b4a67e5915c2d6d8938ac3d20c9bebf5632cd5444a29110e85ad35"
+      },
+      "source": {
+        "number": 26152607,
+        "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+        "generation": 26152607
+      },
+      "tx": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+      "pool": "0x86f874212335Af27C41cDb855C2255543d1499cE",
+      "counts": {
+        "oldPositive": 16,
+        "rawTokenDeltaChecks": 128,
+        "exactInputZeroResidue": 16,
+        "oldDeclaredRejections": 16
+      },
+      "originalAggregateStatus": "pass"
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/evidence-old86/dual19-USDC-native.json",
+        "sha256": "a30af47e5b5d942994b34f7956c9e5e65172ec17074a813550e0c32b3fcba2be"
+      },
+      "source": {
+        "number": 26152607,
+        "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+        "generation": 26152607
+      },
+      "tx": "0x03657fd88cd9c7ff4de4b98e0abdfb845908c62a43f4e713125ac9b0aca1f85f",
+      "pool": "0x836951EB21F3Df98273517B7249dCEFF270d34bf",
+      "counts": {
+        "oldPositive": 16,
+        "rawTokenDeltaChecks": 128,
+        "exactInputZeroResidue": 16,
+        "oldDeclaredRejections": 16
+      },
+      "originalAggregateStatus": "pass"
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/evidence-old86/dual19-USDC-USDT.json",
+        "sha256": "576bc542bb10281ef9802083c4412afebfa657d2f2a53dae59117002a0d44fdd"
+      },
+      "source": {
+        "number": 26152607,
+        "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+        "generation": 26152607
+      },
+      "tx": "0x8d869f76d35a3c4fd7543586bbb91e639933dc5cd716171f1959a533cd3a2a10",
+      "pool": "0x667701e51B4D1Ca244F17C78F7aB8744B4C99F9B",
+      "counts": {
+        "oldPositive": 9,
+        "rawTokenDeltaChecks": 72,
+        "exactInputZeroResidue": 9,
+        "oldDeclaredRejections": 8
+      },
+      "originalAggregateStatus": "failed"
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/evidence-old86/dual21-USDC-USDT-remaining.json",
+        "sha256": "67677fcd59cbe815b16facd58d6fe4687b476474988c3ad86f2fa28e23fb497f"
+      },
+      "source": {
+        "number": 26152607,
+        "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+        "generation": 26152607
+      },
+      "tx": "0x8d869f76d35a3c4fd7543586bbb91e639933dc5cd716171f1959a533cd3a2a10",
+      "pool": "0x667701e51B4D1Ca244F17C78F7aB8744B4C99F9B",
+      "counts": {
+        "oldDeclaredRejections": 4,
+        "oldPositive": 7,
+        "rawTokenDeltaChecks": 56,
+        "exactInputZeroResidue": 7
+      },
+      "originalAggregateStatus": "incomplete"
+    }
+  ],
+  "sourceSemanticReview": {
+    "certificate": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/vm-compatibility85.json",
+    "sha256": "0a00ce849db933669a933707324c6f8720c88a44948b3d1ca599f1c24683df80",
+    "changed": [
+      "listener/src/adapters/runtime-amount-program.ts",
+      "src/RuntimeAmountVM.sol"
+    ],
+    "unchangedSolidityDependencies": 9,
+    "runtimeOnlyNewMinOpcode8": true,
+    "builderChanges": "append min without renumbering; maximumInputMask widening limited to settlementProgram absent from old single-leg Fluid scope"
+  },
+  "oldArtifactBinding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/artifact-binding86.json",
+    "sha256": "78afc08fd7f06a706d51cdac71a5bb24c078b3f70e9d93e6d36c6177cd20076e"
+  },
+  "commonNativeCompatibility": {
+    "path": "docs/research/reports/native-direct-rounding-current-20261015.json",
+    "basis": "all48 old successful actual input debit exact A, residue0 fits unchanged explicit0 and current default1; ERC20 branch unchanged; actual output and old native preserved"
+  },
+  "limits": [
+    "Old successful and declared-revert counts are original evidence reread, not current VM rerun.",
+    "External native balance was not independently observed in old runs; no new claim.",
+    "Old4 no-input strict resource-limited retained and separately supplemented by currentVM independent fork.",
+    "No full storage rollback inferred from old declared-revert alone; current four negative raw traces and shared synthetic safety separate."
+  ],
+  "independentArtifactCheck": {
+    "compiledSourceKeccakChecks": 4,
+    "patchedRuntimeKeccak256": "0xe6d8a6429fd76f2110ac7a73c3792dc72a8b6660b9217739bfced9152c157b7e",
+    "matchedArtifactCapturedSha256": "54e05272c587f192eb238c2475d42689e62b7c0b8d7072932e45e51e0cc8abb8",
+    "noRecompile": true
+  }
+}

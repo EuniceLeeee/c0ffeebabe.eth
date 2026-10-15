@@ -1,0 +1,13 @@
+{
+  "kind": "tooling-defect-correction",
+  "issue": "Set interpreter fixture omitted nativeBalance provider now required by production native conservation check.",
+  "before": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/shared88-family-direct-recipient.log",
+    "sha256Prefix": "992886a5"
+  },
+  "review": {
+    "path": "docs/research/reports/set-native-fixture-independent-20261015.json",
+    "sha256": "c45f1792be03e7e4cb5881e32f251e319442c50202da2a55aace5fad17319332"
+  },
+  "after": "Canonical shared89 family-direct-recipient PASS; exact owned93 build/dual/direct/runtime-settlement PASS. Original failure retained; fixed only model provider, production native guard preserved. DODO fixture correction belongs to later DODO code batch."
+}

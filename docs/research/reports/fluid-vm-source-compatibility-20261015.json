@@ -1,0 +1,120 @@
+{
+  "result": "compatible-old-used-VM-instruction-semantics-not-identical-runtime",
+  "old": {
+    "sourceCommit": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+    "executorCodeHash": "0xe6d8a6429fd76f2110ac7a73c3792dc72a8b6660b9217739bfced9152c157b7e",
+    "executorArtifactSha256": "54e05272c587f192eb238c2475d42689e62b7c0b8d7072932e45e51e0cc8abb8"
+  },
+  "current": {
+    "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "executorArtifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7"
+  },
+  "sourceComparison": [
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "a35a3210ea97e59e5a57dcaeba28004dfc5be4b84b8825f68ecfdcaf9340f4dc",
+      "oldSha256": "a35a3210ea97e59e5a57dcaeba28004dfc5be4b84b8825f68ecfdcaf9340f4dc",
+      "currentSha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+      "oldSha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0",
+      "currentSha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "oldSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "currentSha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/BotVMEncoder.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8",
+      "oldSha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8",
+      "currentSha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+    },
+    {
+      "path": "src/BotVMScriptBuilder.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec",
+      "oldSha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec",
+      "currentSha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+    },
+    {
+      "path": "src/Constants.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+      "oldSha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+      "currentSha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/FlashArb.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8",
+      "oldSha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8",
+      "currentSha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "6f628154f9641367ada5015c0776115981a7c3f8bc5609685d5bd89723c67655",
+      "oldSha256": "6f628154f9641367ada5015c0776115981a7c3f8bc5609685d5bd89723c67655",
+      "currentSha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+      "oldSha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+      "currentSha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    },
+    {
+      "path": "src/interfaces/IFluidVault.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91",
+      "oldSha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91",
+      "currentSha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+    },
+    {
+      "path": "src/interfaces/IMorpho.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01",
+      "oldSha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01",
+      "currentSha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+    },
+    {
+      "path": "src/interfaces/ISwap.sol",
+      "oldRef": "f5a4f2011e7b07c1cbbe8e6b2f118962b8914c4f",
+      "recordedOldSha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866",
+      "oldSha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866",
+      "currentSha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+    }
+  ],
+  "findings": [
+    "All 12 original recorded source hashes matched git object at sourceCommit before comparison.",
+    "BotVM and eight other Solidity dependencies are byte-identical. RuntimeAmountVM sole source delta adds math kind 8=min after existing kinds 0..7.",
+    "Original Fluid code compiled by old builder has no min emitter; successful old VM receipts cannot have used unsupported kind8. All existing arithmetic/call/read-only/depth/state behavior source branches remain identical.",
+    "Current builder adds min to end of unchanged opcode map; new maximumInputMask acceptance affects only settlementProgram branch. Prior Fluid single-leg receipts are ordinary exact-input scripts, not that branch.",
+    "Four original/current unfunded issuer calldatas match byte-for-byte and current VM independently rejects correctly. This is new VM execution for four negatives only, not a rerun of prior positives."
+  ],
+  "limitations": [
+    "VM runtime and artifact hashes differ; no same-version claim.",
+    "This certificate covers relevant VM and builder semantics only; current common native boundary source compatibility is separate.",
+    "No performance equivalence claimed from source equivalence; original 48 positives/44 rejections remain original executions."
+  ],
+  "diffs": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/vm85/src_RuntimeAmountVM.sol.diff",
+      "sha256": "dbd04bdf67af9e5fa5d61dfef8b6dd8f63a68bd6e894b927fff14b2df17acb7a"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/vm85/listener_src_adapters_runtime-amount-program.ts.diff",
+      "sha256": "0ce43a519f4bd9d0b3f285a4ee4950d3898280b4c39672e0c4df214bf6fa3873"
+    }
+  ]
+}

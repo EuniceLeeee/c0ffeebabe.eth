@@ -1,0 +1,436 @@
+{
+  "kind": "fresh-non-author-Set-raw-review",
+  "result": "pass-selected-actual-Legacy-unary-receivers",
+  "counts": {
+    "rawBalanceChecks": 288,
+    "positive": 44,
+    "negative": 176,
+    "postSuccessRollback": 88,
+    "feeMintChecks": 12
+  },
+  "reports": [
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set85/evidence85/base-issue-recipient85.json",
+        "sha256": "0276f2b38af6265d25cf035b9bf83c57134b95a10076522c296eed6e36c7c0ce"
+      },
+      "source": {
+        "number": 26132613,
+        "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+        "generation": 26132613
+      },
+      "tx": "0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062",
+      "counts": {
+        "rawBalanceChecks": 48,
+        "positive": 8,
+        "negative": 32,
+        "postSuccessRollback": 16
+      },
+      "amounts": [
+        {
+          "input": "400",
+          "output": "1000000000000",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "400",
+          "output": "1000000000000",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "400",
+          "output": "1000000000000",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "400",
+          "output": "1000000000000",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "400000",
+          "output": "1000000000000000",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "400000",
+          "output": "1000000000000000",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "400000",
+          "output": "1000000000000000",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "400000",
+          "output": "1000000000000000",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "0"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set85/evidence85/base-redeem-recipient85.json",
+        "sha256": "4fa8e3326e4c94ded6332bff68d0c6ee03539ba375ab9751530f9475da92b9db"
+      },
+      "source": {
+        "number": 26132613,
+        "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+        "generation": 26132613
+      },
+      "tx": "0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062",
+      "counts": {
+        "rawBalanceChecks": 48,
+        "positive": 8,
+        "negative": 32,
+        "postSuccessRollback": 16
+      },
+      "amounts": [
+        {
+          "input": "1000000000000",
+          "output": "400",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000",
+          "output": "400",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000",
+          "output": "400",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000",
+          "output": "400",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000000",
+          "output": "400000",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000000",
+          "output": "400000",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000000",
+          "output": "400000",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000000",
+          "output": "400000",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "0"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set85/evidence85/fee-issue-recipient85.json",
+        "sha256": "be6da0328b838c372e58fc3f24df5f65999678c849e7979ec321b2763e52a7a7"
+      },
+      "source": {
+        "number": 24642392,
+        "hash": "0x126076a2502344fdd6ef52c762b2088048c491d8d05d24b925fa0751843ffe00",
+        "generation": 24642392
+      },
+      "tx": "0xc5956283fa171e3e1d1e1f0ed6599deaafa7f69a7b706bf932fe2e4a0a4affea",
+      "counts": {
+        "rawBalanceChecks": 96,
+        "feeMintChecks": 12,
+        "positive": 12,
+        "negative": 48,
+        "postSuccessRollback": 24
+      },
+      "amounts": [
+        {
+          "input": "24746281",
+          "output": "99500000",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "500000"
+        },
+        {
+          "input": "24746281",
+          "output": "99500000",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "500000"
+        },
+        {
+          "input": "24746281",
+          "output": "99500000",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "500000"
+        },
+        {
+          "input": "24746281",
+          "output": "99500000",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "500000"
+        },
+        {
+          "input": "24746281000",
+          "output": "99500000000",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "500000000"
+        },
+        {
+          "input": "24746281000",
+          "output": "99500000000",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "500000000"
+        },
+        {
+          "input": "24746281000",
+          "output": "99500000000",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "500000000"
+        },
+        {
+          "input": "24746281000",
+          "output": "99500000000",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "500000000"
+        },
+        {
+          "input": "123731405000000000",
+          "output": "497500000000000000",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "2500000000000000"
+        },
+        {
+          "input": "123731405000000000",
+          "output": "497500000000000000",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "2500000000000000"
+        },
+        {
+          "input": "123731405000000000",
+          "output": "497500000000000000",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "2500000000000000"
+        },
+        {
+          "input": "123731405000000000",
+          "output": "497500000000000000",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "2500000000000000"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set85/evidence85/rebalancing-issue-recipient85.json",
+        "sha256": "d14f8836a71625f2dc6c8d6e4cc959b79e46cc7bcc5eeea0b60d337289958bb5"
+      },
+      "source": {
+        "number": 26132613,
+        "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+        "generation": 26132613
+      },
+      "tx": "0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062",
+      "counts": {
+        "rawBalanceChecks": 48,
+        "positive": 8,
+        "negative": 32,
+        "postSuccessRollback": 16
+      },
+      "amounts": [
+        {
+          "input": "238105",
+          "output": "100000000",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "238105",
+          "output": "100000000",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "238105",
+          "output": "100000000",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "238105",
+          "output": "100000000",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "238105000",
+          "output": "100000000000",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "238105000",
+          "output": "100000000000",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "238105000",
+          "output": "100000000000",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "238105000",
+          "output": "100000000000",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "0"
+        }
+      ]
+    },
+    {
+      "raw": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/set85/evidence85/rebalancing-redeem-recipient85.json",
+        "sha256": "d097a1de96bf08cce50ece2885619b259b01983c4849dafd34138386d4ceb445"
+      },
+      "source": {
+        "number": 26132613,
+        "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+        "generation": 26132613
+      },
+      "tx": "0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062",
+      "counts": {
+        "rawBalanceChecks": 48,
+        "positive": 8,
+        "negative": 32,
+        "postSuccessRollback": 16
+      },
+      "amounts": [
+        {
+          "input": "100000000",
+          "output": "238105",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "100000000",
+          "output": "238105",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "100000000",
+          "output": "238105",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "100000000",
+          "output": "238105",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000000000",
+          "output": "2381050000000000",
+          "mode": "direct-self",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000000000",
+          "output": "2381050000000000",
+          "mode": "direct-self",
+          "inventory": true,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000000000",
+          "output": "2381050000000000",
+          "mode": "direct-external",
+          "inventory": false,
+          "feeMint": "0"
+        },
+        {
+          "input": "1000000000000000000",
+          "output": "2381050000000000",
+          "mode": "direct-external",
+          "inventory": true,
+          "feeMint": "0"
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Actual Legacy set-token/rebalancing unary issue/redeem plus0.5%entry fee only.",
+    "Shared helper also covers Basic unary source branch, but no new Basic actual instance claimed. Existing multicomponent default unchanged.",
+    "Amounts borrowed only from old actual legal-unit/fee samples; no current natural-price/opportunity/performance claim.",
+    "Original runner85 stopped before Ready because an unindexed standalone runtime test was assumed; two successful canonical contracts reused, only unrun stages resumed."
+  ],
+  "sourceBinding": {
+    "path": "logs/family-implementation-20261015.0exjskqq/frax77/source90/production-source.json",
+    "sha256": "79e57ce20c4c34f18b93958dff1a3f24dad07b3b2539f8413fc6cfca912fa818",
+    "files": 1244,
+    "recomputedTreeSha256": "39bb9cc067399a3f0b71f9542a86de9f927c864aef10799a5f3627e6caf20717",
+    "algorithm": "actual historical-dual.sourcePin: recursive JS localeCompare, exclude names test/templates, all file extensions",
+    "scope": "Same all-production-source algorithm; test and templates excluded. Not a full Git dirty-state hash."
+  }
+}

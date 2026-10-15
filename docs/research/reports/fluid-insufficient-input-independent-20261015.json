@@ -1,0 +1,85 @@
+{
+  "kind": "fresh-independent-raw-trace-review",
+  "result": "pass-scoped-independent-rejection-proof",
+  "source": {
+    "number": 26152607,
+    "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+    "generation": 26152607
+  },
+  "tx": "0x8d869f76d35a3c4fd7543586bbb91e639933dc5cd716171f1959a533cd3a2a10",
+  "pool": "0x667701e51B4D1Ca244F17C78F7aB8744B4C99F9B",
+  "raw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/evidence84/unfunded84.json",
+    "sha256": "20b0bd8f3e8c7521cdda89b45d51719987c5264bc95c55c5db3bea98a9512f1f"
+  },
+  "oldRaw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/actual/logs/fluid-recipient-20261014.vihrisnu/dual22-USDT-unfunded.json",
+    "sha256": "2cd18950fb43217b686c50cf521b7a7367db78bb0ee9d3353ec57bcbd7ce6b91"
+  },
+  "checks": [
+    {
+      "caseId": "token1-to-token0/production-effective/quoted/no-input",
+      "fullInput": "4968418",
+      "poolCaller": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+      "failedToken": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "actualTokenError": "invalid opcode: INVALID",
+      "storageRollback": true,
+      "nativeRollbackExceptOwnerGasNonce": true,
+      "oldCurrentRequestByteIdentical": true,
+      "strictClassificationUnchanged": "resource-limited"
+    },
+    {
+      "caseId": "token1-to-token0/production-effective/runtime/no-input",
+      "fullInput": "4968418",
+      "poolCaller": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+      "failedToken": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "actualTokenError": "invalid opcode: INVALID",
+      "storageRollback": true,
+      "nativeRollbackExceptOwnerGasNonce": true,
+      "oldCurrentRequestByteIdentical": true,
+      "strictClassificationUnchanged": "resource-limited"
+    },
+    {
+      "caseId": "token1-to-token0/production-effective/direct-self/no-input",
+      "fullInput": "4968418",
+      "poolCaller": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+      "failedToken": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "actualTokenError": "invalid opcode: INVALID",
+      "storageRollback": true,
+      "nativeRollbackExceptOwnerGasNonce": true,
+      "oldCurrentRequestByteIdentical": true,
+      "strictClassificationUnchanged": "resource-limited"
+    },
+    {
+      "caseId": "token1-to-token0/production-effective/direct-external/no-input",
+      "fullInput": "4968418",
+      "poolCaller": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+      "failedToken": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "actualTokenError": "invalid opcode: INVALID",
+      "storageRollback": true,
+      "nativeRollbackExceptOwnerGasNonce": true,
+      "oldCurrentRequestByteIdentical": true,
+      "strictClassificationUnchanged": "resource-limited"
+    }
+  ],
+  "counts": {
+    "newIndependentRejections": 4,
+    "newStrictDeclaredRejections": 0,
+    "newPositiveExecutions": 0
+  },
+  "executorChange": {
+    "currentHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "priorHash": "0xe6d8a6429fd76f2110ac7a73c3792dc72a8b6660b9217739bfced9152c157b7e",
+    "sameVmClaim": false,
+    "priorPositiveCompatibility": "pending separate source/artifact review"
+  },
+  "limits": [
+    "Strict resource-limited evidence remains unchanged, not declared-revert.",
+    "Independent fork uses owner execute wrapper around byte-identical production issuer subscript.",
+    "No original opportunity or performance claim; prior positive compatibility certification separate."
+  ],
+  "canonical": {
+    "selectionSha256": "2610d110a02f6c53a003a08a2d1a8455a4a6ef8979768d539d61bf885fda3b41",
+    "checksSha256": "85b181f2f14da9d68d3e0906faf5f9cfc5e4315fc39ecf31942cad6dc06b1669"
+  }
+}

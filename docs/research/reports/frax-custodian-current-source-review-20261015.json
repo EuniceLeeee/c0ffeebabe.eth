@@ -1,0 +1,23 @@
+{
+  "result": "pass-source-review-only",
+  "reviewer": "v4_accept26 non-author",
+  "sources": [
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
+      "sha256": "2e7bcb43dee7f332e2cedce6e4a4bf9301013f11d2d92601e04a8ba2fd25f0e1"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+      "sha256": "ad052a5817001600ed9883c3162577d7980b2258f42d46e3f2018b356f48e062"
+    }
+  ],
+  "findings": [],
+  "verified": [
+    "direct flag only; default omitted flag keeps original emitted bytes",
+    "positive amount via A-1 checked arithmetic",
+    "r9 native/r10 external recipient old input/r11 actor old output snapshots remain live through calls; r10 reused for minimum only after closing checks",
+    "full debit, real receipt equals preview and return, supply delta, approval clear retained",
+    "no deferred callback added"
+  ],
+  "execution": "not run by this reviewer; historical receiver matrix remains required"
+}

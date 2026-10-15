@@ -2594,7 +2594,7 @@
     },
     {
       "familyId": "fluid-dex",
-      "coverage": "partial",
+      "coverage": "complete",
       "variants": [
         {
           "id": "fluid-dex",
@@ -2603,30 +2603,39 @@
           "callback": "input-first",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "3池6方向48正执行、44声明revert、12未预付quote已验；4项USDT无输入strict仍resource-limited，底层main Revert不能冒充该门通过。",
-            "其他历史状态、jrUSDe实例及未覆盖部署仍未验；原有成功证据继续有效。",
-            "swapInWithCallback仍先收输入再输出，不声明deferred-input；native deferred没有扩大。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
-              "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
-              "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+              "path": "docs/research/reports/fluid-insufficient-input-independent-20261015.json",
+              "sha256": "69e4897882d666f8596cbe514f71cbaaa72670f2d4d2ca2f5139a20608c599bd"
             },
             {
-              "path": "docs/research/reports/fluid-recipient-correctness-20261015.json",
-              "sha256": "406f6185ab386e5875f17760a22a125be8711f86f645763335f42e071152f6dd"
+              "path": "docs/research/reports/fluid-prior-execution-current-reuse-20261015.json",
+              "sha256": "c0a945e1c1bbbf1284a8804696e1d2c1e60235f0e59980b59b735972b89cefaf"
             },
             {
-              "path": "docs/research/reports/fluid-settlement-evidence-review-20261015.json",
-              "sha256": "3e76f147e6f4cdaa5930c18a388ac584b8d445857686c9614ed25ed1f12f3957"
+              "path": "docs/research/reports/fluid-vm-source-compatibility-20261015.json",
+              "sha256": "0a00ce849db933669a933707324c6f8720c88a44948b3d1ca599f1c24683df80"
+            },
+            {
+              "path": "docs/research/reports/fluid-old-artifact-binding-20261015.json",
+              "sha256": "78afc08fd7f06a706d51cdac71a5bb24c078b3f70e9d93e6d36c6177cd20076e"
+            },
+            {
+              "path": "docs/research/reports/fluid-insufficient-input-actual-20261015.json",
+              "sha256": "e8a05e329fe1f748ac5437080139f6e4db0e7164f1f23a08af51f68503c693bc"
             }
           ],
           "partialExecutionEvidence": {
             "path": "docs/research/reports/fluid-recipient-correctness-20261015.json",
             "sha256": "406f6185ab386e5875f17760a22a125be8711f86f645763335f42e071152f6dd"
-          }
+          },
+          "executionEvidence": {
+            "path": "docs/research/reports/fluid-current-settlement-correctness-20261015.json",
+            "sha256": "fbd8bed5d53bc9e5c2fc712820f5e122424b844ce4ac743fb0b3b3b7ffd3ae38"
+          },
+          "scope": "Three actual pools, six tested directions, quoted/default/direct-self/direct-external. Input-first callback only; no caller deferred funding. Runtime construction Exact/quoted/RPC=0, no fallback. Current four insufficient-USDT-input strict outcomes stay resource-limited; independent Anvil proves token INVALID and all contract storage/native rollback. These are distinct evidence kinds. Old/current executor bytecode differs: exact old artifact metadata and immutable runtime match, only appended min opcode in RuntimeAmountVM; old instructions unchanged. Old positive runs are authenticated reuse, not current reruns. All48 old positives have exact input debit and zero residue, valid under current direct native0/1 boundary. Quote and request amounts unchanged. Old external native balance not independently observed; no expanded assertion. Other actual instances, natural price and original opportunity scope remain separately recorded; no generic all-deployment, Adapter Replay, performance or live claim."
         }
       ],
       "sourceReport": "root-eight-review-v2.json",
@@ -2638,7 +2647,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "a35a3210ea97e59e5a57dcaeba28004dfc5be4b84b8825f68ecfdcaf9340f4dc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -2714,8 +2723,8 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
-        "sha256": "6c9ce32e60312d3aa3c4d352771017c8839c586d54c054bec95752254accea73"
+        "path": "docs/research/reports/current-interface-fluid-dex-20261015.json",
+        "sha256": "b0ea8dda9514fbc46275e3187bf3b4ba2afa2f629706949452e0c72d0644555a"
       },
       "coverageScope": "Three naturally admitted same-block pools, six directions; strict negative/deployment inventory limitations retained.",
       "acceptanceAddendum": {
@@ -2736,6 +2745,10 @@
           "native 转换与任何未知 runtime 的指定收款边界仍需分别证明。"
         ],
         "disposition": "Recipient wiring/native output delivery and current source identity fixed for sampled pools; strict negative matrix remains incomplete. Earlier fixture-only absence of provenance was not current descriptor evidence."
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/fluid-current-settlement-correctness-20261015.json",
+        "sha256": "fbd8bed5d53bc9e5c2fc712820f5e122424b844ce4ac743fb0b3b3b7ffd3ae38"
       }
     },
     {
@@ -3897,18 +3910,35 @@
           "callback": "none",
           "recipient": "yes",
           "wiring": "verified",
-          "execution": "unverified",
-          "gaps": [
-            "历史 source/runtime/report identity 已匹配；验收范围限报告绑定状态。",
-            "owner 必须等于 caller，外部 frxUSD receiver 可独立。",
-            "独立 receiver 当前接线回执待 join；旧默认 16 份回执不因此失效。"
-          ],
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
               "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172"
+            },
+            {
+              "path": "docs/research/reports/frax-custodian-current-correctness-20261015.json",
+              "sha256": "435fbf0da933f8357acfabe14f863fba444f3f958ad706158a213bfe45179f94"
+            },
+            {
+              "path": "docs/research/reports/frax-custodian-current-source-review-20261015.json",
+              "sha256": "f7b00a68ba54d7417426eea761ab6a29410d217c066ab763451408ebce4c602f"
+            },
+            {
+              "path": "docs/research/reports/frax-custodian-direct-independent-20261015.json",
+              "sha256": "630cab77a966ede7feb19234fc70cfa2cc12b53266c81be654ddcdb4b386cabb"
+            },
+            {
+              "path": "docs/research/reports/frax-custodian-default-independent-20261015.json",
+              "sha256": "1c5138105a7e7360ee20f3438b324af6d2ead22383664a05a2979a61852f50b0"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/frax-custodian-current-behavior-20261015.json",
+            "sha256": "0ffb60a045dc5e5c76ef863b724e588103368f2cf106d17e38fe3ee0f5c64da8"
+          },
+          "scope": "One synchronous external-frxUSD Custodian; deposit/redeem, default and direct self/external. 32 historical positives, 80 declared fault reverts plus6zero/dust; omitted historical effects are not independent storageDiff, rollback verified in separate current BotVM synthetic safety suite. Exact/runtime construction0, no fallback. Borrowed amountIn only; no natural valuation, original opportunity or performance claim."
         },
         {
           "id": "infinifi-gateway",
@@ -3935,8 +3965,8 @@
           ],
           "scope": "Actual iUSD/staked-iUSD Gateway stake/unstake, self/external direct at N25944594 and N25944595. Other ERC4626 variants unchanged.",
           "executionEvidence": {
-            "path": "docs/research/reports/current-native-boundary-reuse-940d13f18e6d6a70-20261015.json",
-            "sha256": "b82943912e3d7bd6dfdf085d39cc666a8845377e071ac28d0861272bf5329dd5"
+            "path": "docs/research/reports/infinifi-frax-dispatch-compatible-reuse-20261015.json",
+            "sha256": "946e9507d0390030e8051af24a968a4a99fc325dd780bf974cd7209bf78a4bed"
           }
         }
       ],
@@ -3992,7 +4022,7 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
-          "sha256": "41d02a0a7fc54130b689be5068aae38a9cf41296117737bf3254eb37ff340f87"
+          "sha256": "2e7bcb43dee7f332e2cedce6e4a4bf9301013f11d2d92601e04a8ba2fd25f0e1"
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-identity.ts",
@@ -4004,7 +4034,7 @@
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
-          "sha256": "3af9e90c12046f093ed1d10cb1af23e54f12348d33baf05ab124260bb722ecba"
+          "sha256": "ad052a5817001600ed9883c3162577d7980b2258f42d46e3f2018b356f48e062"
         },
         {
           "path": "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
@@ -4044,8 +4074,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/infinifi-recipient-interface-review-20261015.json",
-        "sha256": "844b9997bb04cd9918018c3c34484fac5a0a788ac5b5af2ccc356133e1c33257"
+        "path": "docs/research/reports/current-interface-protocol-erc4626-20261015.json",
+        "sha256": "58f7f9d77de102b1bf30cb623971b76a23c2d9ce738b3eeea8baf9018d43495c"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/frax-custodian-current-correctness-20261015.json",
+        "sha256": "435fbf0da933f8357acfabe14f863fba444f3f958ad706158a213bfe45179f94"
       }
     },
     {
@@ -5381,7 +5415,7 @@
     },
     {
       "familyId": "protocol:set-redemption",
-      "coverage": "complete",
+      "coverage": "partial",
       "variants": [
         {
           "id": "legacy Core SetToken and RebalancingSetToken V3 redeem",
@@ -5389,18 +5423,32 @@
           "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "当前 directOutput 限单一成分 descriptor，篮子变体尚无完整多资产接线。",
-            "缺当前源码下本变体指定收款方的扣款、到账、旧库存与回滚执行证据。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/set-legacy-recipient-correctness-20261015.json",
+              "sha256": "bfc0eee174a2725290f3aa2349d7294e4f909856a256e8f756fcafb834bd01de"
+            },
+            {
+              "path": "docs/research/reports/set-legacy-recipient-independent-20261015.json",
+              "sha256": "7a69e807b0d195b190a2c3dc9a340518926ebdcfa2b1ab2df985c396ad9f391c"
+            },
+            {
+              "path": "docs/research/reports/set-legacy-recipient-provenance-20261015.json",
+              "sha256": "25ac335c259795604fd31cc0de9a01cf19d6b1e93b72518cedce3cddb440ee64"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/set-legacy-current-behavior-20261015.json",
+            "sha256": "fa1e38ac1839599a85ca3b9ee54ffdced49db0e278bb909f617116aa0e2fec50"
+          },
+          "scope": "Legacy unary Core SetToken/RebalancingV3 issue/redeem; actual0.5%fee example; self/external recipient.44 actual positive176faultrejections including88 successful-call ancestor rollbacks. Default/quoted bytes preserved; old default results retain original pins, not new current EVM certification. Basic unary receiver, multicomponent receiver, natural valuation, opportunity and performance not upgraded."
         },
         {
           "id": "legacy Core issuance",
@@ -5408,18 +5456,32 @@
           "identity": "verified",
           "callback": "none",
           "recipient": "yes",
-          "wiring": "gap",
-          "execution": "unverified",
-          "gaps": [
-            "当前 directOutput 限单一成分 descriptor，篮子变体尚无完整多资产接线。",
-            "缺当前源码下本变体指定收款方的扣款、到账、旧库存与回滚执行证据。"
-          ],
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
           "evidence": [
             {
               "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
               "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+            },
+            {
+              "path": "docs/research/reports/set-legacy-recipient-correctness-20261015.json",
+              "sha256": "bfc0eee174a2725290f3aa2349d7294e4f909856a256e8f756fcafb834bd01de"
+            },
+            {
+              "path": "docs/research/reports/set-legacy-recipient-independent-20261015.json",
+              "sha256": "7a69e807b0d195b190a2c3dc9a340518926ebdcfa2b1ab2df985c396ad9f391c"
+            },
+            {
+              "path": "docs/research/reports/set-legacy-recipient-provenance-20261015.json",
+              "sha256": "25ac335c259795604fd31cc0de9a01cf19d6b1e93b72518cedce3cddb440ee64"
             }
-          ]
+          ],
+          "executionEvidence": {
+            "path": "docs/research/reports/set-legacy-current-behavior-20261015.json",
+            "sha256": "fa1e38ac1839599a85ca3b9ee54ffdced49db0e278bb909f617116aa0e2fec50"
+          },
+          "scope": "Legacy unary Core SetToken/RebalancingV3 issue/redeem; actual0.5%fee example; self/external recipient.44 actual positive176faultrejections including88 successful-call ancestor rollbacks. Default/quoted bytes preserved; old default results retain original pins, not new current EVM certification. Basic unary receiver, multicomponent receiver, natural valuation, opportunity and performance not upgraded."
         },
         {
           "id": "BasicIssuanceModule redemption",
@@ -5468,7 +5530,7 @@
         },
         {
           "path": "listener/src/adapters/runtime-amount-program.ts",
-          "sha256": "9be1a041da11192b318ce86dd8b84b974345b09196850e83f3d641ae823069cc"
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
         },
         {
           "path": "listener/src/encoder.ts",
@@ -5503,8 +5565,12 @@
           "sha256": "2e02a05fd3869c8f8403846cb8f774eeaf0c6a54aee1c32c24de100d0811b36d"
         },
         {
+          "path": "listener/src/searcher/venues/protocols/set-redemption-family/direct.ts",
+          "sha256": "32573a6f1902655190a11f87b518fb7c14d79172c74edb04c00022cbf525d6c8"
+        },
+        {
           "path": "listener/src/searcher/venues/protocols/set-redemption-family/execution.ts",
-          "sha256": "90841793a459aa5eee05a6e367818decc8f35ac69611860bf6d6c3439feda697"
+          "sha256": "d332b4e415fe4cb37bdbcce3de18183cd06dfa73e7eeb533e49981ed63e072a6"
         },
         {
           "path": "listener/src/searcher/venues/protocols/set-redemption-family/identity.ts",
@@ -5544,8 +5610,12 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
-        "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3"
+        "path": "docs/research/reports/current-interface-protocol-set-redemption-20261015.json",
+        "sha256": "a22226bca1f1d193c22e311619e91a0a358c0b7902cbb40c7f3468ae7447ab7c"
+      },
+      "currentScopedEvidence": {
+        "path": "docs/research/reports/set-legacy-recipient-correctness-20261015.json",
+        "sha256": "bfc0eee174a2725290f3aa2349d7294e4f909856a256e8f756fcafb834bd01de"
       }
     },
     {
@@ -7542,10 +7612,9 @@
     ]
   },
   "currentScopedUpdate": {
-    "scope": "Kyber, Algebra, Curve plain actual receiver variants, Curve underlying classic, Silo synchronous actual2 deployments; common native1raw boundary.",
-    "priorInventorySha256": "66067c11da6d37ec8b8eabaa4b4fc5fa83b1b301b9576d8e29c1c5abb4219042",
-    "previousCommonHashesPreserved": true,
+    "scope": "Frax synchronous Custodian, Legacy Set Core unary four directions and fee sample, Fluid three existing pools authenticated reuse plus four independent insufficient-input controls.",
+    "priorInventorySha256": "a7e09c74fe33291dabc1cfd6bb972fa5fb6b9c9b53b5427307e91c7ef8c2eeeb",
     "allOtherVariantStatesPreserved": true,
-    "unverifiedExtraVariantsAreNotMandatoryWithoutActualScope": true
+    "allFamiliesPassed": false
   }
 }

@@ -1,0 +1,166 @@
+{
+  "result": "pass-independent-raw-strict-effects-and-event-review",
+  "file": "logs/family-implementation-20261015.0exjskqq/frax77/evidence82/custodian-recipient82.json",
+  "sha256": "9d46affb1676078bf19b7c99c8edf54c144e74bca563820c903a3e3672928fe8",
+  "source": {
+    "number": 26017168,
+    "hash": "0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350"
+  },
+  "counts": {
+    "positive": 16,
+    "negative": 64,
+    "zeroDust": 6,
+    "rawBalanceEntries": 96,
+    "supplyEntries": 32,
+    "depositWithdrawEvents": 16,
+    "transferEvents": 32,
+    "approvalClearEvents": 16
+  },
+  "details": [
+    {
+      "direction": "deposit",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "label": "spliced-production-input-at-N",
+      "amountIn": "5135191",
+      "amountOut": "5135191000000000000",
+      "oldOutputControls": [
+        "0",
+        "103"
+      ]
+    },
+    {
+      "direction": "deposit",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "label": "twice-spliced-production-input-at-N",
+      "amountIn": "10270382",
+      "amountOut": "10270382000000000000",
+      "oldOutputControls": [
+        "0",
+        "103"
+      ]
+    },
+    {
+      "direction": "deposit",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "label": "spliced-production-input-at-N",
+      "amountIn": "5135191",
+      "amountOut": "5135191000000000000",
+      "oldOutputControls": [
+        "0",
+        "103"
+      ]
+    },
+    {
+      "direction": "deposit",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "label": "twice-spliced-production-input-at-N",
+      "amountIn": "10270382",
+      "amountOut": "10270382000000000000",
+      "oldOutputControls": [
+        "0",
+        "103"
+      ]
+    },
+    {
+      "direction": "redeem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "label": "spliced-production-input-at-N",
+      "amountIn": "5135328596662424906",
+      "amountOut": "5135328",
+      "oldOutputControls": [
+        "0",
+        "103"
+      ]
+    },
+    {
+      "direction": "redeem",
+      "recipient": "0x1000000000000000000000000000000000000002",
+      "label": "historical-input-at-N",
+      "amountIn": "215200560000000000000",
+      "amountOut": "215200560",
+      "oldOutputControls": [
+        "0",
+        "103"
+      ]
+    },
+    {
+      "direction": "redeem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "label": "spliced-production-input-at-N",
+      "amountIn": "5135328596662424906",
+      "amountOut": "5135328",
+      "oldOutputControls": [
+        "0",
+        "103"
+      ]
+    },
+    {
+      "direction": "redeem",
+      "recipient": "0x1000000000000000000000000000000000000001",
+      "label": "historical-input-at-N",
+      "amountIn": "215200560000000000000",
+      "amountOut": "215200560",
+      "oldOutputControls": [
+        "0",
+        "103"
+      ]
+    }
+  ],
+  "identity": {
+    "vault": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+    "implementation": "0x0A2D27A86a2eA07bcc34e457c65AECA7631c0f10",
+    "bindings": [
+      {
+        "role": "vault",
+        "address": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+        "codeHash": "0x436b61dbc56c2644bc35c107977606841b02e12d62a305c3233c95e8b9cb1c8b",
+        "bytes": 1488
+      },
+      {
+        "role": "implementation",
+        "address": "0x0A2D27A86a2eA07bcc34e457c65AECA7631c0f10",
+        "codeHash": "0x51c008b264124ad667f58a8595b86745a657419baac327c1d1f335bc95b953a7",
+        "bytes": 10662
+      },
+      {
+        "role": "share",
+        "address": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+        "codeHash": "0x0e5148763950930aed9716ed6e3c45af3fe4a9a2a94e4222a4a3cba2b4ec69de",
+        "bytes": 1488
+      },
+      {
+        "role": "asset",
+        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "codeHash": "0xd80d4b7c890cb9d6a4893e6b52bc34b56b25335cb13716e0d1d31383e6b41505",
+        "bytes": 2186
+      }
+    ]
+  },
+  "sourceBinding": {
+    "sourceTreeSha256": "39bb9cc067399a3f0b71f9542a86de9f927c864aef10799a5f3627e6caf20717",
+    "currentExport": "logs/family-implementation-20261015.0exjskqq/frax77/source90/production-source.json",
+    "files": 1244,
+    "exportSha256": "79e57ce20c4c34f18b93958dff1a3f24dad07b3b2539f8413fc6cfca912fa818"
+  },
+  "syntheticEvm": {
+    "tests": 4,
+    "positive": 4,
+    "faultRollback": 44,
+    "rawProtocolSentinels": 22,
+    "zeroDust": 6,
+    "sourceBeforeAfterStable": true,
+    "programsSha256": "b8cc2c98503616ec4179aed76d204c0d2be44ec9b9d9b997b11d8b185b522a7c"
+  },
+  "limitations": [
+    "Historical negative outcomes are trusted StrictRevm MainRevert with effects omitted; no independent raw storageDiff proof claimed.",
+    "Top executor return is empty; internal preview/return/receipt equality is enforced by reviewed production program and actual BotVM, not separately traced internal return data.",
+    "Input donor remains carried/cross-block where marked; no natural target valuation, original-TX opportunity, performance or deployment claim.",
+    "Unrelated default paths are reused separately, not rerun here."
+  ],
+  "runtimeConstruction": {
+    "rpc": 0,
+    "exact": 0,
+    "quotedFallback": false,
+    "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+  }
+}

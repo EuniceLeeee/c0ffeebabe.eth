@@ -1,0 +1,26 @@
+{
+  "scope": "Fresh non-author source review; no tests run by reviewer",
+  "verdict": "no source blocker; canonical execution pending",
+  "files": [
+    {
+      "scope": "Set fixture",
+      "before": "set85/shared88-original.ts",
+      "beforeSha256": "e862173f5532572229283785ea32c17f470300dd55c5d8e24dffa58f3c6418b9",
+      "after": "shared89-candidate/listener/src/searcher/test/family-direct-recipient.ts",
+      "afterSha256": "130b5ed5fd16760d2040f6ed345902d9c864e3ab289c7e57147ea8f14c4baa7e"
+    },
+    {
+      "scope": "DODO fixture",
+      "before": "dodo86/shared-base04/listener/src/searcher/test/family-direct-recipient-swaps.ts",
+      "beforeSha256": "8329edef7bdb23064b8ff4f403a0eccd709aea59433eaf06cf5df6570b870dd0",
+      "after": "dodo86/shared-candidate04/listener/src/searcher/test/family-direct-recipient-swaps.ts",
+      "afterSha256": "43a5e6d2819f5f6cf723e8c9053641dc68d5c9d16d269b5e242c120c4f99aa56"
+    }
+  ],
+  "findings": [
+    "Set original interpreter call omitted nativeBalance while production explicit-direct wrapper now reads native before/after. Existing model nativeBalance returns stable 17; passing provider preserves native guard.",
+    "DODO original fixture transferred actual expectedOutput (74) but returned unrelated 999999. New production return-equals-receipt gate correctly rejected it. Candidate returns actual expectedOutput for ordinary behavior and expectedOutput+1 for dedicated bad-return fault.",
+    "DODO bad-return fault changes only protocol return, so independent post-state assertions remain otherwise passing; its required exception tests production return binding.",
+    "Changes are test-only; no production guard relaxed; original shared88 failures retained."
+  ]
+}

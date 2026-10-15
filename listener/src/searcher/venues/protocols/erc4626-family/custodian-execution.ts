@@ -16,7 +16,7 @@ export function assertCustodianExecutionSource(source: CanonicalSource | undefin
 
 /** Amount comes solely from r0; no chain-external quote or trial amount. */
 export function custodianProgram(d: { vault: string; share: string; asset: string },
-  executor: string, direction: "deposit" | "redeem", minimumOut = 1n, recipient = executor): RuntimeAmountProgram {
+  executor: string, direction: "deposit" | "redeem", minimumOut = 1n, recipient = executor, direct = false): RuntimeAmountProgram {
   const vault = custodianAddress(d.vault), share = custodianAddress(d.share), asset = custodianAddress(d.asset);
   if (new Set([vault, share, asset].map(x => x.toLowerCase())).size !== 3) throw new Error("Custodian external token binding");
   runtimeExecutor(executor, vault, share, asset); runtimeExecutor(recipient, vault, share, asset);
@@ -32,6 +32,15 @@ export function custodianProgram(d: { vault: string; share: string; asset: strin
   tokenRead(share, "minters", [vault], 12).equal(12, 15);
   tokenRead(share, "isPaused", [], 12).equal(12, 14);
   for (const actor of new Set([executor, vault, recipient])) tokenRead(share, "isFrozen", [actor], 12).equal(12, 14);
+  // Only explicit direct settlement adds these inventory guards. Default
+  // programs retain their existing bytes and the common per-hop lifecycle.
+  if (direct) {
+    p.math("sub", 12, 0, 15).nativeBalance(9);
+    if (recipient.toLowerCase() !== executor.toLowerCase()) {
+      tokenRead(tokenOut, "balanceOf", [executor], 11);
+      tokenRead(tokenIn, "balanceOf", [recipient], 10);
+    }
+  }
   tokenRead(tokenIn, "balanceOf", [executor], 1).math("sub", 12, 1, 0);
   tokenRead(tokenOut, "balanceOf", [recipient], 2);
   tokenRead(share, "totalSupply", [], 3);
@@ -53,6 +62,13 @@ export function custodianProgram(d: { vault: string; share: string; asset: strin
   // Measure the external asset independently. Neither a return word nor old
   // executor inventory can make up missing output; partial input is rejected.
   tokenRead(tokenOut, "balanceOf", [recipient], 8).math("sub", 8, 8, 2).equal(8, 7);
+  if (direct) {
+    p.nativeBalance(12).equal(12, 9);
+    if (recipient.toLowerCase() !== executor.toLowerCase()) {
+      tokenRead(tokenOut, "balanceOf", [executor], 12).equal(12, 11);
+      tokenRead(tokenIn, "balanceOf", [recipient], 12).equal(12, 10);
+    }
+  }
   p.constant(10, minimumOut > 0n ? minimumOut : 1n).math("sub", 12, 8, 10);
   return p;
 }

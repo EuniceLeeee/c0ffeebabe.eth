@@ -1,0 +1,72 @@
+{
+  "result": "completed-current-Legacy-direct-correctness",
+  "scope": [
+    "Legacy Base Set unary issue/redeem; RebalancingV3 unary issue/redeem; real 0.5% entry-fee issue",
+    "Current production issuer direct self/external receiver, complete requested amount and two output-inventory baselines"
+  ],
+  "evidence": [
+    {
+      "path": "logs/family-implementation-20261015.0exjskqq/set85/handoff85.json",
+      "sha256": "56564c4374a5e9a23092cdce94225355f926fbf85a721d28531fe3c40abe30bf"
+    },
+    {
+      "path": "logs/family-implementation-20261015.0exjskqq/set85/v1-harness-review85.json",
+      "sha256": "0b8740a7273f3c80dd43396b96b9d48d4191ba13c3b6e92543170b5510c52f50"
+    },
+    {
+      "path": "logs/family-implementation-20261015.0exjskqq/set85/root-independent91.json",
+      "sha256": "7a69e807b0d195b190a2c3dc9a340518926ebdcfa2b1ab2df985c396ad9f391c"
+    },
+    {
+      "path": "logs/family-implementation-20261015.0exjskqq/set85/delivery85/set-legacy-recipient-correctness-20261015.json",
+      "sha256": "bfc0eee174a2725290f3aa2349d7294e4f909856a256e8f756fcafb834bd01de"
+    },
+    {
+      "path": "logs/family-implementation-20261015.0exjskqq/set85/delivery85/set-legacy-recipient-behavior-20261015.json",
+      "sha256": "23bff17b5d97bcca5fb983c3a5e1ff34cb79aef81f4b51eaddd494ae63af5147"
+    }
+  ],
+  "actual": {
+    "positive": 44,
+    "reject": 176,
+    "postSuccessfulCoreAtomicRollback": 88,
+    "rawBalanceSlots": 288,
+    "feeMints": 12
+  },
+  "defaultCompatibility": {
+    "basis": "execution.ts only wraps the existing program when an explicit direct request is supplied. With request undefined the previous program is returned directly; no prior default or quoted bytes are edited. Current recipient-contract explicitly compares default emitted program with its previous builder output. Existing legacy-contract10 and new recipient-contract2 passed canonical run85.",
+    "claim": "Default implementation compatibility; old historical successes remain under their original source and VM pins. This batch does not independently authenticate every old default artifact or claim new default historical execution.",
+    "legacyCapabilitiesPreserved": [
+      "Basic unary helper path",
+      "multi-component default",
+      "unit and fee calculations",
+      "Vault-credit accounting",
+      "temporary issue approval cleanup"
+    ],
+    "noNewClaims": [
+      "Basic unary historical receiver",
+      "multi-component external receiver",
+      "deferredInput",
+      "quoteOutput"
+    ]
+  },
+  "canonical": {
+    "initial": "evidence85/checks85.json",
+    "resumeOnlyUnrun": "evidence85/checks85b.json",
+    "selection": "evidence85/selection85.json"
+  },
+  "limitations": [
+    "Original IMPL donation/actualizeFee opportunity not replayed",
+    "Natural valuation gaps retained",
+    "No phase4 local or representative performance"
+  ],
+  "sourceBinding": {
+    "path": "logs/family-implementation-20261015.0exjskqq/frax77/source90/production-source.json",
+    "sha256": "79e57ce20c4c34f18b93958dff1a3f24dad07b3b2539f8413fc6cfca912fa818",
+    "files": 1244,
+    "recomputedTreeSha256": "39bb9cc067399a3f0b71f9542a86de9f927c864aef10799a5f3627e6caf20717",
+    "algorithm": "actual historical-dual.sourcePin: recursive JS localeCompare, exclude names test/templates, all file extensions",
+    "scope": "Same all-production-source algorithm; test and templates excluded. Not a full Git dirty-state hash."
+  },
+  "failurePreserved": "Initial run85 passed both contracts then stopped on runner assumption of a nonexistent standalone indexed runtime.ts. No fork or Ready had started; resume executed only missing Ready/historical stages. Shared88 missing native fixture was test-only repaired and canonical shared89 passed."
+}

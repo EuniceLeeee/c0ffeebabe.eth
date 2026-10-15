@@ -1,0 +1,41 @@
+{
+  "verdict": "pass-exact-old-artifact-metadata-and-runtime-binding",
+  "artifactPath": "/opt/mev-cloud/family-runtime-20261007/logs/yearn-callback-20261015.vvkur8vw/BotVM-before-history22.json",
+  "artifactSha256": "54e05272c587f192eb238c2475d42689e62b7c0b8d7072932e45e51e0cc8abb8",
+  "compiler": {
+    "version": "0.8.24+commit.e11b9ed9"
+  },
+  "compilationTarget": {
+    "src/BotVM.sol": "BotVM"
+  },
+  "compiledSources": [
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d",
+      "keccak256": "0xf8124acd64075c46df75e82832bada92281bf2efc514cba30b6bc6167af1484f"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+      "keccak256": "0xcabcc554b9a55505baebe466aac5aafa6e791f51ff010bc60cf5f27358b72751"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "6f628154f9641367ada5015c0776115981a7c3f8bc5609685d5bd89723c67655",
+      "keccak256": "0x0fa8183a077b5c2acae06cacd00a89239c473338ddf63b05923b7d878205db2b"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513",
+      "keccak256": "0x533f978c730ee28d10a28d6ce637cc0faa6b090008f44041a7b980837d3f4e3d"
+    }
+  ],
+  "oldRuntimeCodeHash": "0xe6d8a6429fd76f2110ac7a73c3792dc72a8b6660b9217739bfced9152c157b7e",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "oldEvidence": {
+    "path": "logs/fluid-recipient-20261014.vihrisnu/dual22-USDT-unfunded.json",
+    "sha256": "2cd18950fb43217b686c50cf521b7a7367db78bb0ee9d3353ec57bcbd7ce6b91"
+  },
+  "scope": "Existing artifact exact byte hash found read-only; all four metadata compilation sources match preserved old source bytes. Independent owner immutable patch yields exact old report runtime. Ten-source broad inventory includes six files not compiled in this BotVM artifact; they are not falsely claimed as artifact imports. New artifact remains different, semantic source compatibility in vm-compatibility85 is a separate claim.",
+  "execution": "No EVM rerun; no build; no artifact rewriting"
+}

@@ -6,6 +6,7 @@ import { address, MODULE, SET, TOKEN, uint, WAD } from "./codec.js";
 import { ACTION } from "./manifest.js";
 import { actionId, assertRoute } from "./routes.js";
 import { CORE, LEGACY_SET } from "./legacy.js";
+import { setDirectProgram } from "./direct.js";
 import { legacyIssueRuntime } from "./issuance.js";
 import type { Descriptor, Evidence, Route } from "./types.js";
 const SUBSCRIPT = new Interface(["function execSubscript(bytes)"]);
@@ -54,11 +55,13 @@ export const execution = {
       ...(request ? { settlementRequest: request } : {}) } : {};
     if (r.issue) {
       runtimeExecutor(actor, d.legacy!.factory, d.legacy!.vault, d.legacy!.issuance!.transferProxy);
-      return { ...runtimeLeg(actionId(d, r), legacyIssueRuntime(d, actor, undefined, recipient)), ...settle };
+      const program = legacyIssueRuntime(d, actor, undefined, recipient);
+      return { ...runtimeLeg(actionId(d, r), request ? setDirectProgram(program, r.tokenIn, r.tokenOut, actor, recipient) : program), ...settle };
     }
     if (d.legacy) {
       runtimeExecutor(actor, d.legacy.factory, d.legacy.vault);
-      return { ...runtimeLeg(actionId(d), legacyRuntime(d, actor, undefined, recipient)), ...settle };
+      const program = legacyRuntime(d, actor, undefined, recipient);
+      return { ...runtimeLeg(actionId(d), request ? setDirectProgram(program, r.tokenIn, r.tokenOut, actor, recipient) : program), ...settle };
     }
     // Each invocation has <=125 instructions and r4..r11 for eight receipts.
     // Parent thresholds stay live across the existing executor-only self call;
@@ -106,7 +109,7 @@ export const execution = {
     // They never become the next hop's input: runtime-amount-flow measures the
     // actual receipt independently. Old inventory cannot cover an underpayment.
     if (!nested) throw new Error("set-redemption empty runtime basket");
-    return { ...runtimeLeg(ACTION, nested), ...settle };
+    return { ...runtimeLeg(ACTION, request ? setDirectProgram(nested, r.tokenIn, r.tokenOut, actor, recipient) : nested), ...settle };
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(i) {

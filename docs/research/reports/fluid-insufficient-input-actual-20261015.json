@@ -1,0 +1,135 @@
+{
+  "schema": "family-correctness-supplement-v1",
+  "familyId": "swap:fluid-dex",
+  "result": "four-insufficient-input-controls-proven-by-independent-fork",
+  "source": {
+    "number": 26152607,
+    "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+    "generation": 26152607
+  },
+  "tx": "0x8d869f76d35a3c4fd7543586bbb91e639933dc5cd716171f1959a533cd3a2a10",
+  "pool": "0x667701e51B4D1Ca244F17C78F7aB8744B4C99F9B",
+  "sourceTreeSha256": "86bbabeb1092dfe6241955e7f2ce3fde702ed7edc142f1a95d3a046fce10d08c",
+  "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+  "executorArtifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+  "rows": [
+    {
+      "caseId": "token1-to-token0/production-effective/quoted/no-input",
+      "encoding": "quoted",
+      "currentStrictClassification": "resource-limited",
+      "originalClassification": "unverified",
+      "sameCalldataAsOriginal": true,
+      "originalCalldataSha256": "afea627c0ce17eeb6eac7257a6c1823453d705f60331dbde32aeee8d2b2dd0c0",
+      "currentCalldataSha256": "afea627c0ce17eeb6eac7257a6c1823453d705f60331dbde32aeee8d2b2dd0c0",
+      "amountIn": "4968418",
+      "transferFrom": {
+        "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "caller": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+        "error": "invalid opcode: INVALID",
+        "input": "0x23b872dd000000000000000000000000100000000000000000000000000000000000000200000000000000000000000052aa899454998be5b000ad077a46bbe360f4e49700000000000000000000000000000000000000000000000000000000004bcfe2"
+      },
+      "independentFork": "correct-insufficient-input-rejection-with-rollback",
+      "storageRollback": true,
+      "wrapperScope": "owner execute wrapper uses identical current issuer subscript; pool sender executor and tx.origin owner; independent Anvil call, not strict transport reclassification"
+    },
+    {
+      "caseId": "token1-to-token0/production-effective/runtime/no-input",
+      "encoding": "runtime",
+      "currentStrictClassification": "resource-limited",
+      "originalClassification": "unverified",
+      "sameCalldataAsOriginal": true,
+      "originalCalldataSha256": "144bd6e6bd110d4cda018524837616092786e7395ec79df681c87bfc6f4e271a",
+      "currentCalldataSha256": "144bd6e6bd110d4cda018524837616092786e7395ec79df681c87bfc6f4e271a",
+      "amountIn": "4968418",
+      "transferFrom": {
+        "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "caller": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+        "error": "invalid opcode: INVALID",
+        "input": "0x23b872dd000000000000000000000000100000000000000000000000000000000000000200000000000000000000000052aa899454998be5b000ad077a46bbe360f4e49700000000000000000000000000000000000000000000000000000000004bcfe2"
+      },
+      "independentFork": "correct-insufficient-input-rejection-with-rollback",
+      "storageRollback": true,
+      "wrapperScope": "owner execute wrapper uses identical current issuer subscript; pool sender executor and tx.origin owner; independent Anvil call, not strict transport reclassification"
+    },
+    {
+      "caseId": "token1-to-token0/production-effective/direct-self/no-input",
+      "encoding": "direct-self",
+      "currentStrictClassification": "resource-limited",
+      "originalClassification": "unverified",
+      "sameCalldataAsOriginal": true,
+      "originalCalldataSha256": "0beae82b7aa62f1e28a9a9b718a0e697317f2521df8918d78623ece32827853e",
+      "currentCalldataSha256": "0beae82b7aa62f1e28a9a9b718a0e697317f2521df8918d78623ece32827853e",
+      "amountIn": "4968418",
+      "transferFrom": {
+        "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "caller": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+        "error": "invalid opcode: INVALID",
+        "input": "0x23b872dd000000000000000000000000100000000000000000000000000000000000000200000000000000000000000052aa899454998be5b000ad077a46bbe360f4e49700000000000000000000000000000000000000000000000000000000004bcfe2"
+      },
+      "independentFork": "correct-insufficient-input-rejection-with-rollback",
+      "storageRollback": true,
+      "wrapperScope": "owner execute wrapper uses identical current issuer subscript; pool sender executor and tx.origin owner; independent Anvil call, not strict transport reclassification"
+    },
+    {
+      "caseId": "token1-to-token0/production-effective/direct-external/no-input",
+      "encoding": "direct-external",
+      "currentStrictClassification": "resource-limited",
+      "originalClassification": "unverified",
+      "sameCalldataAsOriginal": true,
+      "originalCalldataSha256": "6cf3129d86dd2279f800724719f28fd3d37cfa3991df0ee784d7b9d4f07340e2",
+      "currentCalldataSha256": "6cf3129d86dd2279f800724719f28fd3d37cfa3991df0ee784d7b9d4f07340e2",
+      "amountIn": "4968418",
+      "transferFrom": {
+        "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "caller": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+        "error": "invalid opcode: INVALID",
+        "input": "0x23b872dd000000000000000000000000100000000000000000000000000000000000000200000000000000000000000052aa899454998be5b000ad077a46bbe360f4e49700000000000000000000000000000000000000000000000000000000004bcfe2"
+      },
+      "independentFork": "correct-insufficient-input-rejection-with-rollback",
+      "storageRollback": true,
+      "wrapperScope": "owner execute wrapper uses identical current issuer subscript; pool sender executor and tx.origin owner; independent Anvil call, not strict transport reclassification"
+    }
+  ],
+  "counts": {
+    "newPositiveExecutions": 0,
+    "newIndependentCorrectRejections": 4,
+    "newStrictDeclaredRejections": 0,
+    "priorPositiveExecutionsReused": 48,
+    "priorOtherRejectionsReused": 44
+  },
+  "scope": [
+    "only four originally incomplete USDT unfunded controls",
+    "identical original/current production issuer scripts; current production selective Ready and freshly computed quote",
+    "USDT rejects full transferFrom with zero payer input via actual INVALID; no protocol code/storage override",
+    "all contract storage rollback and executor/protocol native preservation; owner transaction gas/nonce excluded",
+    "original strict resource-limited remains unchanged; no false conversion to reverted-as-declared",
+    "prior 48 positives/44 rejections not rerun; final reused-source compatibility certification belongs to scoped parent gate",
+    "not opportunity/natural valuation/performance"
+  ],
+  "newEvidence": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/evidence84/unfunded84.json",
+    "sha256": "20b0bd8f3e8c7521cdda89b45d51719987c5264bc95c55c5db3bea98a9512f1f"
+  },
+  "originalEvidence": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/actual/logs/fluid-recipient-20261014.vihrisnu/dual22-USDT-unfunded.json",
+    "sha256": "2cd18950fb43217b686c50cf521b7a7367db78bb0ee9d3353ec57bcbd7ce6b91"
+  },
+  "canonical": {
+    "selection84.json": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/evidence84/selection84.json",
+      "sha256": "2610d110a02f6c53a003a08a2d1a8455a4a6ef8979768d539d61bf885fda3b41"
+    },
+    "checks84.json": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/evidence84/checks84.json",
+      "sha256": "85b181f2f14da9d68d3e0906faf5f9cfc5e4315fc39ecf31942cad6dc06b1669"
+    },
+    "owned84.json": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/fluid84/evidence84/owned84.json",
+      "sha256": "a7b3f54aab263d9a468f0615a7242c0bb395c8cedbcc7b123ae7e33438c7f3a5"
+    }
+  },
+  "drained": true,
+  "forkDrained": true,
+  "port18965": 111,
+  "independentReview": "pending root raw review; v1 fresh source review passed"
+}

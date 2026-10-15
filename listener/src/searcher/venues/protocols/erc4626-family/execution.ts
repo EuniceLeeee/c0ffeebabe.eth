@@ -59,7 +59,7 @@ export const erc4626Execution: ExecutionSemantics<
       assertCustodianExecutionSource(input.source);
       runtimeExecutor(executor, d.custodian.proxyAdmin);
       if (input.runtimeEvidence.length) throw new Error("Custodian pending runtime evidence unsupported");
-      return { ...runtimeLeg(r.adapterId, custodianProgram(d, executor, r.direction, 1n, recipient)), ...settle };
+      return { ...runtimeLeg(r.adapterId, custodianProgram(d, executor, r.direction, 1n, recipient, request !== undefined)), ...settle };
     }
     if (request) return { ...runtimeLeg(r.adapterId, standardRecipientProgram(d, executor, r.direction, recipient)), ...settle };
     const p = new RuntimeAmountProgram();

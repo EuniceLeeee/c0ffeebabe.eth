@@ -1,0 +1,316 @@
+{
+  "schema": "set-legacy-direct-correctness/v1",
+  "status": "actual-pass-independent-raw-review-pending",
+  "scope": "Existing Base Set and RebalancingV3 unary Core issue/redeem; explicit direct-self and direct-external, plus nonzero 0.5% entry fee. No new Basic/multi-component/native/callback support.",
+  "implementation": "Explicit direct programs wrap existing Core amount/unit/fee/debit/receipt/Vault-credit/allowance program in separate VM register frame, adding positive input, exact debit, positive measured recipient receipt, native and both nonparticipating external token inventories.",
+  "ownedSource": [
+    {
+      "path": "listener/src/searcher/venues/protocols/set-redemption-family/direct.ts",
+      "before": null,
+      "after": "32573a6f1902655190a11f87b518fb7c14d79172c74edb04c00022cbf525d6c8"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/set-redemption-family/execution.ts",
+      "before": "90841793a459aa5eee05a6e367818decc8f35ac69611860bf6d6c3439feda697",
+      "after": "d332b4e415fe4cb37bdbcce3de18183cd06dfa73e7eeb533e49981ed63e072a6"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/set-redemption-family/test/recipient-ready.ts",
+      "before": null,
+      "after": "d32c7df649fa1aef40e27f3895b558f9faeac183121669a7238ab91c678d4f2c"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/set-redemption-family/test/recipient-historical.ts",
+      "before": null,
+      "after": "81b2d10f8cd69b0fa41f57c530fc0a28de36c6ed8015a42e368f20de5fb8cf59"
+    },
+    {
+      "path": "listener/src/searcher/venues/protocols/set-redemption-family/test/recipient-contract.ts",
+      "before": null,
+      "after": "4f01d7066f7cf8150a731351626f8f939ef0fba4a9fe2a009509d5390ccd9777"
+    }
+  ],
+  "runtimeSourceTreeSha256": "39bb9cc067399a3f0b71f9542a86de9f927c864aef10799a5f3627e6caf20717",
+  "tests": {
+    "newRecipientContract": {
+      "passed": 2,
+      "path": "logs/family-implementation-20261015.0exjskqq/set85/check85-contract.log"
+    },
+    "legacyContract": {
+      "passed": 10,
+      "path": "logs/family-implementation-20261015.0exjskqq/set85/check85-legacy-contract.log"
+    },
+    "productionBuild": "shared88 parent-owned actual build passed",
+    "sharedDual": "shared88 passed",
+    "sharedRecipient": "shared89 passed after existing Set fixture nativeBalance omission fixed"
+  },
+  "actual": {
+    "amounts": 11,
+    "positive": 44,
+    "negative": 176,
+    "modes": [
+      "direct-self",
+      "direct-external"
+    ],
+    "oldOutput": [
+      "0",
+      "1000000000000000000000000"
+    ],
+    "negativeMatrix": [
+      "zero requested input with old input inventory",
+      "input funding A-1",
+      "minimum actual output +1 after successful Core call",
+      "forced revert after successful Core call"
+    ],
+    "postSuccessRollback": 88,
+    "proof": "Each successful case has actual trace + raw prestate diff balance mappings, receipt/account comparisons, native invariants, supply and Vault credit; issue checks terminal TransferProxy allowance zero.",
+    "reports": [
+      {
+        "path": "logs/family-implementation-20261015.0exjskqq/set85/base-issue-recipient85.json",
+        "sha256": "0276f2b38af6265d25cf035b9bf83c57134b95a10076522c296eed6e36c7c0ce",
+        "source": {
+          "number": 26132613,
+          "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+          "generation": 26132613
+        },
+        "nominationTx": "0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062",
+        "descriptor": {
+          "set": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+          "kind": "set-token",
+          "controller": "0xf55186cc537e7067ea616f2aae007b4427a120c8"
+        },
+        "currentUnitFee": {
+          "naturalUnit": "1000000000000",
+          "componentUnit": "400",
+          "entryFee": "0",
+          "feeRecipient": "0x1000000000000000000000000000000000000001"
+        },
+        "amounts": [
+          {
+            "input": "400",
+            "quoteOutput": "1000000000000"
+          },
+          {
+            "input": "400000",
+            "quoteOutput": "1000000000000000"
+          }
+        ],
+        "positive": 8,
+        "negative": 32,
+        "runtimeConstruction": {
+          "exactCalls": 0,
+          "quotedCalls": 0,
+          "rpcCalls": 0,
+          "quotedFallback": false
+        },
+        "sourceStable": true,
+        "forkDrained": true
+      },
+      {
+        "path": "logs/family-implementation-20261015.0exjskqq/set85/base-redeem-recipient85.json",
+        "sha256": "4fa8e3326e4c94ded6332bff68d0c6ee03539ba375ab9751530f9475da92b9db",
+        "source": {
+          "number": 26132613,
+          "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+          "generation": 26132613
+        },
+        "nominationTx": "0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062",
+        "descriptor": {
+          "set": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+          "kind": "set-token",
+          "controller": "0xf55186cc537e7067ea616f2aae007b4427a120c8"
+        },
+        "currentUnitFee": {
+          "naturalUnit": "1000000000000",
+          "componentUnit": "400",
+          "entryFee": "0",
+          "feeRecipient": "0x1000000000000000000000000000000000000001"
+        },
+        "amounts": [
+          {
+            "input": "1000000000000",
+            "quoteOutput": "400"
+          },
+          {
+            "input": "1000000000000000",
+            "quoteOutput": "400000"
+          }
+        ],
+        "positive": 8,
+        "negative": 32,
+        "runtimeConstruction": {
+          "exactCalls": 0,
+          "quotedCalls": 0,
+          "rpcCalls": 0,
+          "quotedFallback": false
+        },
+        "sourceStable": true,
+        "forkDrained": true
+      },
+      {
+        "path": "logs/family-implementation-20261015.0exjskqq/set85/fee-issue-recipient85.json",
+        "sha256": "be6da0328b838c372e58fc3f24df5f65999678c849e7979ec321b2763e52a7a7",
+        "source": {
+          "number": 24642392,
+          "hash": "0x126076a2502344fdd6ef52c762b2088048c491d8d05d24b925fa0751843ffe00",
+          "generation": 24642392
+        },
+        "nominationTx": "0xc5956283fa171e3e1d1e1f0ed6599deaafa7f69a7b706bf932fe2e4a0a4affea",
+        "descriptor": {
+          "set": "0x542156d51d10db5accb99f9db7e7c91b74e80a2c",
+          "kind": "rebalancing-v3",
+          "controller": "0xf55186cc537e7067ea616f2aae007b4427a120c8"
+        },
+        "currentUnitFee": {
+          "naturalUnit": "100000000",
+          "componentUnit": "24746281",
+          "entryFee": "5000000000000000",
+          "feeRecipient": "0xcc506b3c2967022094C3B00276617883167BF32B"
+        },
+        "amounts": [
+          {
+            "input": "24746281",
+            "quoteOutput": "99500000"
+          },
+          {
+            "input": "24746281000",
+            "quoteOutput": "99500000000"
+          },
+          {
+            "input": "123731405000000000",
+            "quoteOutput": "497500000000000000"
+          }
+        ],
+        "positive": 12,
+        "negative": 48,
+        "runtimeConstruction": {
+          "exactCalls": 0,
+          "quotedCalls": 0,
+          "rpcCalls": 0,
+          "quotedFallback": false
+        },
+        "sourceStable": true,
+        "forkDrained": true
+      },
+      {
+        "path": "logs/family-implementation-20261015.0exjskqq/set85/rebalancing-issue-recipient85.json",
+        "sha256": "d14f8836a71625f2dc6c8d6e4cc959b79e46cc7bcc5eeea0b60d337289958bb5",
+        "source": {
+          "number": 26132613,
+          "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+          "generation": 26132613
+        },
+        "nominationTx": "0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062",
+        "descriptor": {
+          "set": "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e",
+          "kind": "rebalancing-v3",
+          "controller": "0xf55186cc537e7067ea616f2aae007b4427a120c8"
+        },
+        "currentUnitFee": {
+          "naturalUnit": "100000000",
+          "componentUnit": "238105",
+          "entryFee": "0",
+          "feeRecipient": "0x0b15edDD0fE54E93f169Bd1467155F04Fd8d2168"
+        },
+        "amounts": [
+          {
+            "input": "238105",
+            "quoteOutput": "100000000"
+          },
+          {
+            "input": "238105000",
+            "quoteOutput": "100000000000"
+          }
+        ],
+        "positive": 8,
+        "negative": 32,
+        "runtimeConstruction": {
+          "exactCalls": 0,
+          "quotedCalls": 0,
+          "rpcCalls": 0,
+          "quotedFallback": false
+        },
+        "sourceStable": true,
+        "forkDrained": true
+      },
+      {
+        "path": "logs/family-implementation-20261015.0exjskqq/set85/rebalancing-redeem-recipient85.json",
+        "sha256": "d097a1de96bf08cce50ece2885619b259b01983c4849dafd34138386d4ceb445",
+        "source": {
+          "number": 26132613,
+          "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146",
+          "generation": 26132613
+        },
+        "nominationTx": "0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062",
+        "descriptor": {
+          "set": "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e",
+          "kind": "rebalancing-v3",
+          "controller": "0xf55186cc537e7067ea616f2aae007b4427a120c8"
+        },
+        "currentUnitFee": {
+          "naturalUnit": "100000000",
+          "componentUnit": "238105",
+          "entryFee": "0",
+          "feeRecipient": "0x0b15edDD0fE54E93f169Bd1467155F04Fd8d2168"
+        },
+        "amounts": [
+          {
+            "input": "100000000",
+            "quoteOutput": "238105"
+          },
+          {
+            "input": "1000000000000000000",
+            "quoteOutput": "2381050000000000"
+          }
+        ],
+        "positive": 8,
+        "negative": 32,
+        "runtimeConstruction": {
+          "exactCalls": 0,
+          "quotedCalls": 0,
+          "rpcCalls": 0,
+          "quotedFallback": false
+        },
+        "sourceStable": true,
+        "forkDrained": true
+      }
+    ]
+  },
+  "priorEvidencePolicy": "Previous default/quoted successes retained under original pins; same literal original programs remain emitted when no settlement request, proven by current contract. This new historical run does not claim those old programs were rerun.",
+  "originalImplTx": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
+  "nominationScope": "Current Ready authenticates its real candidate nomination receipt at same N; nomination TX is 0x6f5ae48d4d90c51f5b0652e29aba6c348462fbffc7599a6ce9e2341938667062. No original opportunity equivalence claimed.",
+  "failurePreservation": {
+    "run85": "New recipient/legacy contracts passed; runner then asserted nonexistent standalone indexed runtime.ts and stopped before Ready/fork. Original retained.",
+    "resume85b": "Only two Ready selective revalidations and five not-yet-run historical outputs executed."
+  },
+  "limitations": [
+    "No full natural valuation for earlier three direction gaps.",
+    "No original donation/actualizeFee opportunity replay.",
+    "No new multi-component or Basic unary historical receiver assertion.",
+    "No local/representative stage performance; phase4 remains pending.",
+    "Callback/deferred/quote-output unsupported requests remain null."
+  ],
+  "independentReview": {
+    "source": "v1-harness-review85.json",
+    "raw": {
+      "file": "logs/family-implementation-20261015.0exjskqq/set85/root-independent91.json",
+      "sha256": "7a69e807b0d195b190a2c3dc9a340518926ebdcfa2b1ab2df985c396ad9f391c",
+      "result": "pass-selected-actual-Legacy-unary-receivers",
+      "counts": {
+        "rawBalanceChecks": 288,
+        "positive": 44,
+        "negative": 176,
+        "postSuccessRollback": 88,
+        "feeMintChecks": 12
+      }
+    }
+  },
+  "productionSourceBinding": {
+    "path": "logs/family-implementation-20261015.0exjskqq/frax77/source90/production-source.json",
+    "sha256": "79e57ce20c4c34f18b93958dff1a3f24dad07b3b2539f8413fc6cfca912fa818",
+    "files": 1244,
+    "recomputedTreeSha256": "39bb9cc067399a3f0b71f9542a86de9f927c864aef10799a5f3627e6caf20717",
+    "algorithm": "actual historical-dual.sourcePin: recursive JS localeCompare, exclude names test/templates, all file extensions",
+    "scope": "Same all-production-source algorithm; test and templates excluded. Not a full Git dirty-state hash."
+  }
+}

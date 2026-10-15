@@ -150,7 +150,7 @@ for (const legacy of [true, false]) test(`Set ${legacy ? "Core" : "Basic"} unary
   assert.equal(leg.settlement?.directOutput, true); assert.deepEqual(leg.settlementRequest, request);
   for (const fault of ["none", "wrong-recipient", "short-output", "under-debit"] as const) {
     const amount = 100n, out = 200n, m = model(d.set, d.components[0], amount);
-    const run = () => inspectRuntime(leg.program, amount, { call(call) {
+    const run = () => inspectRuntime(leg.program, amount, { nativeBalance: m.nativeBalance, call(call) {
       const read = m.read(call); if (read !== undefined) return read;
       const q = abi.parseTransaction({ data: call.data })!;
       if (q.name === "getComponents") return abi.encodeFunctionResult(q.fragment, [[d.components[0]]]);
