@@ -2346,6 +2346,42 @@
       },
       "created_at": "2026-10-15T16:44:48.737996+00:00",
       "updated_at": "2026-10-15T16:47:08.829113+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261016-ready-status-writer-lock",
+      "status": "manual_required",
+      "strategy_kind": "blockscan",
+      "edge_kinds": [],
+      "trigger": "tooling_defect",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "shared Ready infrastructure diagnostic; affects blockscan and backrun consumers, no competitor transaction or route claim",
+      "our_stage": "Ready status / checkpoint CAS",
+      "evidence": {
+        "actualAttempt": "resume240",
+        "actualExitCode": 1,
+        "actualFinishedAt": "2026-10-16T08:17:40.431498+00:00",
+        "actualStatusQuery": "canonical listener:searcher:universe-rebuild-status status248",
+        "actualFailure": "checkpoint CAS lock is held by writer 708568",
+        "lockPidAttribution": "not independently recorded; no exact process mapping asserted",
+        "writerDefaultWaitMs": 5000,
+        "baseBytes": 430735877,
+        "journalBytes": 88992592,
+        "protectedBaseSha256": "51871cfdba1e4fd2cc4486fd7195d4bc0b8f5a523322862f75753358e4a0ddaf",
+        "protectedJournalSha256": "6659724b24a5e5f649b748259a8d1afc681dc7ee7f427081f0f96968c84a8004",
+        "independentFindingSha256": "3ec65ff3f2fe45f5db7ff3949ecd992d1b981c1480c0d833a586179712bcdada",
+        "independentCandidateReviewSha256": "35f117d61013ee3f99bafc858227de1bd0902b4970926f2e95ba7528dbcc50df",
+        "scope": "tool correctness only; Ready recovery, Family integration and live performance not inferred"
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:universe-rebuild-status",
+        "issue": "status Store.load holds the production CAS lock throughout full base and journal parsing; a slow read can exhaust the original writer wait and terminate Ready",
+        "evidence": "resume240 terminal receipt and status248 timing, original shared-lock code, independent finding plus actual separate-OS-process 6-second reader vs default 5-second writer regression",
+        "codify_target": "UniverseRebuildCheckpointStore.loadReadOnlySnapshot and status CLI; coherent short-lock capture with original private-snapshot validation, append/compaction/tail/corruption concurrency regression",
+        "status": "open"
+      },
+      "created_at": "2026-10-16T09:04:07.247535+00:00",
+      "updated_at": "2026-10-16T09:04:07.247661+00:00"
     }
   ]
 }

@@ -1,0 +1,128 @@
+{
+  "kind": "canonical-Ready-status-shared-lock-tooling-defect",
+  "sourceHeadBefore": "8c678b0f79cf2d2bf11776cb9763df575fa61294",
+  "change": [
+    "status captures coherent base and complete journal prefix under a short original lock, then uses original validation outside that source lock",
+    "original writer CAS, checksums, atomic-pair assertions and lock wait remain unchanged",
+    "tooling_defect LearningCase trigger records non-comparable terminal infrastructure diagnostics without inventing a competitor transaction"
+  ],
+  "actualCloudChecks": [
+    {
+      "label": "snapshot-baseline256",
+      "exitCode": 1,
+      "expectedExitCode": 1,
+      "sha256": "b9133f74622f3a4d86814b9cdffca1ff7ec41c2506c49149ce23a52b86b15797"
+    },
+    {
+      "label": "learning-baseline256",
+      "exitCode": 1,
+      "expectedExitCode": 1,
+      "sha256": "6aab527bd8022493ac7f7157da26b0a3b68d30df4e4e7bd2eb1363917f78a96c"
+    },
+    {
+      "label": "index256",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "ffd2e31079b1bbba69d21aa3a8f468b619c0376f3ed92ffca134bf0eeeed28b0"
+    },
+    {
+      "label": "checkpoint-candidate256",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "d6c95e7361cd2832506a48fbcb049ce8c387f2d0b82e4ccf9ba19158c83f35cd"
+    },
+    {
+      "label": "runner-candidate256",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "d4296941be670611493240cb32d5fc2e2a21943cc5c9ad321fd321bde8d465a9"
+    },
+    {
+      "label": "status-real-candidate256",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "f4569e099db5cc5fd5c8b238e3ca5023af0a9562219aba3f6231c984c27933e7"
+    },
+    {
+      "label": "learning-candidate256",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "1ab36b8b1f1fd6a3a1b49de18dd41bc67752ed8b3b90b32683218389973f476e"
+    },
+    {
+      "label": "build-live256",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    }
+  ],
+  "canonicalManifestAfterSha256": "86a0edaa4f07ed8c9618371a483f02dd9fcbe183aaeb371adfd72a117d8470a8",
+  "sourceFiles": [
+    {
+      "path": "listener/src/searcher/test/universe-rebuild-checkpoint.ts",
+      "beforeSha256": "0c671e74610bf0e18868833e8d53b025db667a9568734d829357fae80446dee9",
+      "afterSha256": "380b0b136e482474a825c4ccc45e73931cb435681bf36c6b9be14e078832d1f0",
+      "headBeforeSha256": "0c671e74610bf0e18868833e8d53b025db667a9568734d829357fae80446dee9",
+      "headOwnedAfterSha256": "380b0b136e482474a825c4ccc45e73931cb435681bf36c6b9be14e078832d1f0"
+    },
+    {
+      "path": "listener/src/searcher/universe-rebuild-checkpoint.ts",
+      "beforeSha256": "21e545de626609e2bf464eee9c2db071ce55377636f1a21c4a1bdad42b005d98",
+      "afterSha256": "2b7e0b46b1da03af8684f6c30bdd9203814c1418b6167f19986936ea10458f42",
+      "headBeforeSha256": "6ed65dd60b5e4197d8dbf3bceb1a1c9dd08c01ecddda9bc0f3412ec50bcc8576",
+      "headOwnedAfterSha256": "3617d6679fde6fcd28965e9b90f7260373521e65e0c79dde59326b947484854f"
+    },
+    {
+      "path": "listener/src/searcher/universe-rebuild-status-cli.ts",
+      "beforeSha256": "eb01a74399f406aa0ad28cc59dffd1160b78414bd565f0df298a085a564a2620",
+      "afterSha256": "65062cc94373f45c4556596a78ec246d629fb27f49304993b540bc834da5380d",
+      "headBeforeSha256": "eb01a74399f406aa0ad28cc59dffd1160b78414bd565f0df298a085a564a2620",
+      "headOwnedAfterSha256": "65062cc94373f45c4556596a78ec246d629fb27f49304993b540bc834da5380d"
+    },
+    {
+      "path": "analysis/src/learning/learning-case.ts",
+      "beforeSha256": "0698d275431ee8773b6acac6f6b4324621ec8e7e2c985cf3901094a3a6464f1c",
+      "afterSha256": "50dffe05679e5ec1941f7cd17d08610a049b8d1110c8ef6b9dd5f64d106999a5",
+      "headOwnedAfterSha256": "50dffe05679e5ec1941f7cd17d08610a049b8d1110c8ef6b9dd5f64d106999a5",
+      "headBeforeSha256": "0698d275431ee8773b6acac6f6b4324621ec8e7e2c985cf3901094a3a6464f1c"
+    },
+    {
+      "path": "analysis/src/test/learning-case.ts",
+      "beforeSha256": "3e157199f6ae2f4d7ae0c0e6b3edb7bca8f4437eff98ed0bdc1803ecf0383b47",
+      "afterSha256": "4cf4561ab387781ad593b151c34d08ad604b43c4eac65bb8dfdf5ff0e5d7f9ff",
+      "headOwnedAfterSha256": "4cf4561ab387781ad593b151c34d08ad604b43c4eac65bb8dfdf5ff0e5d7f9ff",
+      "headBeforeSha256": "3e157199f6ae2f4d7ae0c0e6b3edb7bca8f4437eff98ed0bdc1803ecf0383b47"
+    }
+  ],
+  "independentFindingSha256": "3ec65ff3f2fe45f5db7ff3949ecd992d1b981c1480c0d833a586179712bcdada",
+  "independentCandidateReviewSha256": "35f117d61013ee3f99bafc858227de1bd0902b4970926f2e95ba7528dbcc50df",
+  "learningCaseId": "tooldef-20261016-ready-status-writer-lock",
+  "preservedFailure": {
+    "attempt": "resume240",
+    "exitCode": 1,
+    "finishedAt": "2026-10-16T08:17:40.431498+00:00",
+    "logSha256": "de6228ebfb69a47888bd41a1d9ee91e5f97e5069ec99e4fe864726b954e17bbd",
+    "reason": "original production writer timed out on the shared checkpoint CAS lock during canonical status query",
+    "exactLockPidAttribution": "not independently recorded"
+  },
+  "preservedPartial": {
+    "baseSha256": "51871cfdba1e4fd2cc4486fd7195d4bc0b8f5a523322862f75753358e4a0ddaf",
+    "journalSha256": "6659724b24a5e5f649b748259a8d1afc681dc7ee7f427081f0f96968c84a8004",
+    "revision": 1779,
+    "currentRunOutcomes": {
+      "verified": 6130,
+      "retryable": 4897,
+      "terminalRejected": 1176
+    },
+    "sameCutoff": 26202387,
+    "sameCandidateCount": 44711
+  },
+  "status": "tool fix verified by actual separate-process old-red/new-green regression, original suites, original-data canonical status and current live build",
+  "limits": [
+    "Concurrency flip uses disposable filesystem fixtures with original checkpoint implementation; actual Ready remains stopped",
+    "Actual status full-data read validates the unchanged original base/journal; it is not Ready recovery or latency acceptance",
+    "No per-Family correctness, restored Ready, opportunity,250-head live or representative performance pass inferred",
+    "Existing peer working bytes retained; only owned HEAD hunks staged; all original failures retained",
+    "No signing, key reads, broadcasting, deployment, strategy expansion or process controls"
+  ]
+}

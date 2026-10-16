@@ -38,7 +38,11 @@ function parseArgs(argv: readonly string[]): StatusArgs {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const store = new UniverseRebuildCheckpointStore({ path: args.checkpoint });
-  const envelope = await store.load();
+  const snapshot = await store.loadReadOnlySnapshot();
+  const envelope = snapshot.envelope;
+  const { envelope: _envelope, ...capture } = snapshot;
+  console.error("[universe-rebuild/status-snapshot] " + JSON.stringify({ ...capture,
+    revision: envelope?.revision ?? null, consistency: "coherent captured state; not a latest-state promise" }));
   if (envelope === null) {
     if (args.json) {
       console.log(JSON.stringify({ status: "absent", checkpoint: args.checkpoint }));

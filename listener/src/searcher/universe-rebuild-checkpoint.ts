@@ -2,14 +2,18 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import {
   mkdir,
+  mkdtemp,
+  link,
+  rm,
   open,
   readFile,
   rename,
   stat,
   unlink,
   writeFile,
+  type FileHandle,
 } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 
@@ -1257,6 +1261,100 @@ export class UniverseRebuildCheckpointStore {
         await unlink(this.#lockPath).catch(() => undefined);
       }
     });
+  }
+
+  /** A coherent, possibly stale diagnostic view; never holds the writer lock while parsing. */
+  async loadReadOnlySnapshot(): Promise<{
+    readonly envelope: StartupCheckpointEnvelope | null;
+    readonly capturedAt: string;
+    readonly sourcePath: string;
+    readonly sourceBaseSignature: string | null;
+    readonly sourceJournalSignature: string | null;
+    readonly journalCommittedBytes: number;
+  }> {
+    const stamp = (value: { dev: bigint; ino: bigint; size: bigint; mtimeNs: bigint; ctimeNs: bigint }): string =>
+      [value.dev, value.ino, value.size, value.mtimeNs, value.ctimeNs].join(":");
+    const pathStamp = async (path: string): Promise<string | null> => {
+      try { return stamp(await stat(path, { bigint: true })); }
+      catch (error) { if ((error as { code?: string }).code === "ENOENT") return null; throw error; }
+    };
+    try { await stat(dirname(this.#path)); }
+    catch (error) {
+      if ((error as { code?: string }).code !== "ENOENT") throw error;
+      return Object.freeze({ envelope: null, capturedAt: new Date().toISOString(), sourcePath: this.#path,
+        sourceBaseSignature: null, sourceJournalSignature: null, journalCommittedBytes: 0 });
+    }
+    // Same filesystem: an atomic-rename-only base can be pinned without copying it under the source lock.
+    const directory = await mkdtemp(join(dirname(this.#path), ".readonly-snapshot-"));
+    const snapshotPath = join(directory, "checkpoint.json");
+    const deadline = Date.now() + this.#lockWaitTimeoutMs;
+    let journal: FileHandle | null = null;
+    try {
+      while (Date.now() < deadline) {
+        try { journal = await open(this.#journalPath, "r"); }
+        catch (error) { if ((error as { code?: string }).code !== "ENOENT") throw error; }
+        const initial = journal === null ? null : await journal.stat({ bigint: true });
+        const journalSignature = initial === null ? null : stamp(initial);
+        let committedBytes = 0;
+        if (journal !== null && initial !== null) {
+          const buffer = Buffer.alloc(64 * 1024);
+          let end = Number(initial.size), changed = false;
+          if (!Number.isSafeInteger(end)) throw new Error("checkpoint snapshot journal exceeds safe file size");
+          while (end > 0) {
+            if (Date.now() >= deadline) throw new Error("checkpoint snapshot prefix preparation timed out");
+            const length = Math.min(buffer.length, end), start = end - length;
+            let bytes = 0;
+            while (bytes < length) {
+              const read = await journal.read(buffer, bytes, length - bytes, start + bytes);
+              if (read.bytesRead === 0) { changed = true; break; }
+              bytes += read.bytesRead;
+            }
+            if (changed) break;
+            const newline = buffer.subarray(0, length).lastIndexOf(0x0a);
+            if (newline >= 0) { committedBytes = start + newline + 1; break; }
+            end = start;
+          }
+          if (changed || stamp(await journal.stat({ bigint: true })) !== journalSignature) {
+            await journal.close(); journal = null; continue;
+          }
+        }
+        const pinned = await this.#withLock(async () => {
+          await this.#acquireLock();
+          try {
+            // Recheck the PATH as well as the pre-scanned FD: promotion can unlink/recreate the journal.
+            if (await pathStamp(this.#journalPath) !== journalSignature ||
+              (journal !== null && stamp(await journal.stat({ bigint: true })) !== journalSignature)) return null;
+            try { await link(this.#path, snapshotPath); }
+            catch (error) { if ((error as { code?: string }).code !== "ENOENT") throw error; }
+            return { capturedAt: new Date().toISOString(), sourceBaseSignature: await pathStamp(snapshotPath) };
+          } finally { await unlink(this.#lockPath).catch(() => undefined); }
+        });
+        if (pinned === null) { await journal?.close(); journal = null; continue; }
+        // Only this newline-terminated prefix was committed at capture; a writer may repair its later tail.
+        if (journal !== null) {
+          const copy = await open(snapshotPath + ".attestation-journal", "wx", 0o600);
+          try {
+            const buffer = Buffer.alloc(64 * 1024);
+            let offset = 0;
+            while (offset < committedBytes) {
+              const read = await journal.read(buffer, 0, Math.min(buffer.length, committedBytes - offset), offset);
+              if (read.bytesRead === 0) throw new Error("checkpoint snapshot committed prefix truncated");
+              await copy.writeFile(buffer.subarray(0, read.bytesRead));
+              offset += read.bytesRead;
+            }
+          } finally { await copy.close(); }
+          await journal.close(); journal = null;
+        }
+        const envelope = await new UniverseRebuildCheckpointStore({ path: snapshotPath, readChunkBytes: this.#readChunkBytes }).load();
+        return Object.freeze({ envelope, capturedAt: pinned.capturedAt, sourcePath: this.#path,
+          sourceBaseSignature: pinned.sourceBaseSignature, sourceJournalSignature: journalSignature,
+          journalCommittedBytes: committedBytes });
+      }
+      throw new Error("checkpoint snapshot could not pin a stable journal within its preparation budget");
+    } finally {
+      await journal?.close();
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 
   async #fileSignature(path: string): Promise<string | null> {
