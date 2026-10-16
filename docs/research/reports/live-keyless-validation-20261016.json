@@ -1,0 +1,53 @@
+{
+  "kind": "actual-working-source-keyless-entry",
+  "files": [
+    {
+      "path": "listener/src/searcher/execution/bundle-router.ts",
+      "beforeSha256": "b6da0b163f84ceb6b9c57a028f29e67d9cef635e661a62454f03a93bf871989b",
+      "afterSha256": "f3688fddb0d1455a6508bd84a81725e18f404f4cea8fd5788eb95d411b009464"
+    },
+    {
+      "path": "listener/src/searcher/live-runtime-identity.ts",
+      "beforeSha256": null,
+      "afterSha256": "cf0d1e7053f12007fb633cdfbe38567c7fba68de3c75c6db277f0b008cb2cd69"
+    },
+    {
+      "path": "listener/src/searcher/main.ts",
+      "beforeSha256": "ef78cf7e36734c4044245dc9547a3175ff95409cf84d59dc398717849a57c5fc",
+      "afterSha256": "19aec04304ca635980e938594811b3333b21dbff72702f6fa9daa7ef49e43df2"
+    },
+    {
+      "path": "listener/src/searcher/test/live-keyless-identity.ts",
+      "beforeSha256": null,
+      "afterSha256": "36c8704fe484a3afa2d3053421b0c11567bb6875701288a7f585c9b6076438ed"
+    }
+  ],
+  "checks": [
+    {
+      "name": "index",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/index151.log",
+      "sha256": "ec6da7a82e3877af44f2f8d47d6d47afe2ddce75a995adfd99d87525b19eaed5",
+      "tail": "\n> mev-analysis@0.1.0 tool-index\n> tsx src/cli/tool-index.ts --select keyless,build --out /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection151.json\n\n# recommended coverage set\nanalysis:build\ttest\tzero-cu\tanalysis,build,test,verification\tcd analysis && npm run build --\tanalysis package script: build\nlistener:searcher:live-keyless-identity\treplay\tfork\tidentity,keyless,listener,live,replay,searcher,verification\tcd listener && npm run searcher:live-keyless-identity --\tlistener package script: searcher:live-keyless-identity\n# related alternatives\nlistener:build\ttest\tzero-cu\tbuild,listener,test,verification\tcd listener && npm run build --\tlistener package script: build\nlistener:build:enumerator\tops\tzero-cu\tbuild,enumerator,listener,ops\tcd listener && npm run build:enumerator --\tlistener package script: build:enumerator\nlistener:build:live\tops\tfork\tbuild,listener,live,ops\tcd listener && npm run build:live --\tlistener package script: build:live\nlistener:searcher:psm-build\treplay\tzero-cu\tbuild,listener,psm,replay,searcher,verification\tcd listener && npm run searcher:psm-build --\tlistener package script: searcher:psm-build\n"
+    },
+    {
+      "name": "keyless",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/keyless151.log",
+      "sha256": "a749382a4544b44e078f38a21e9a7c2f9bd4f480815a722c7a36924c8f0cf818",
+      "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection151.json --tool listener:searcher:live-keyless-identity\n\n\n> mev-listener@0.1.0 searcher:live-keyless-identity\n> tsx --test src/searcher/test/live-keyless-identity.ts\n\n\u2714 explicit keyless mode reads no key or environment file and binds public execution identity (4.960691ms)\n\u2714 keyless flag fails closed on live/submit/malformed mode or invalid public owner (0.478448ms)\n\u2714 keyless cannot be enabled by dotenv; ordinary loading semantics and disabled-file mode remain (0.271998ms)\n\u2714 default production path still requires a real Wallet and owner binding (35.783936ms)\n\u2139 tests 4\n\u2139 suites 0\n\u2139 pass 4\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 653.605117\ntool-run receipt=listener:searcher:live-keyless-identity exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection151.json\n"
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/build151.log",
+      "sha256": "dee0d6ca4442dbd60e40dc82ec8d7782e24248f00aa62e8f8c7b46afbfbac946",
+      "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection151.json --tool listener:build:live\n\n\n> mev-listener@0.1.0 build:live\n> tsc -p tsconfig.live.json --noEmit\n\ntool-run receipt=listener:build:live exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection151.json\n"
+    }
+  ],
+  "semantics": "explicit keyless dry-run binds public VoidSigner; no dotenv/key read, no signature or submission; production requires Wallet",
+  "liveRun": false,
+  "readyRebuild": false,
+  "source": "actual dirty baseline, peer Ready hunk preserved",
+  "acceptance": "build and four contract tests passed; bounded250-head candidate and actual live pending"
+}

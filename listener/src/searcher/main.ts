@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
+import { loadLiveEnvironment, buildLiveExecutionWallet } from "./live-runtime-identity.js";
 import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, StateCallAbortedError, type StateBackend, type StateCallControl } from "../shared/state/state-backend.js";
@@ -319,7 +320,7 @@ interface LiveConfig {
   mevShareSseUrl: string;
   liveBackend: LiveBackendKind;
   botvmAddress: string;
-  wallet: ethers.Wallet;
+  wallet: ethers.Wallet | ethers.VoidSigner;
   minProfit: bigint;
   defaultGasUsed: number;
   inclusionWatchBlocks: number;
@@ -616,21 +617,7 @@ function replaceSet<T>(target: Set<T>, next: ReadonlySet<T>): void {
 }
 
 function loadEnv(): void {
-  if (process.env.SEARCHER_TEST_DISABLE_DOTENV === "1") return;
-  const envPath = resolve("..", ".env");
-  let text = "";
-  try {
-    text = readFileSync(envPath, "utf8");
-  } catch {
-    return;
-  }
-  for (const line of text.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
-    const [rawKey, ...rest] = trimmed.split("=");
-    const key = rawKey.replace(/^export\s+/, "");
-    if (!process.env[key]) process.env[key] = rest.join("=").replace(/^["']|["']$/g, "");
-  }
+  loadLiveEnvironment(process.env, () => readFileSync(resolve("..", ".env"), "utf8"));
 }
 
 function liveRpcUrl(): string {
@@ -880,19 +867,9 @@ export function resolveBlockScanAtomicPolicy(env: NodeJS.ProcessEnv = process.en
 function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const rpcUrl = liveRpcUrl();
 
-  const privateKey = process.env.PRIVATE_KEY ?? process.env.OWNER_PRIVATE_KEY;
-  if (!privateKey) throw new Error("PRIVATE_KEY or OWNER_PRIVATE_KEY required");
-
   const botvmAddress = process.env.BOTVM_ADDRESS;
   if (!botvmAddress) throw new Error("BOTVM_ADDRESS required");
-
-  const wallet = new ethers.Wallet(privateKey, provider);
-  const botvmOwner = process.env.BOTVM_OWNER;
-  if (botvmOwner && wallet.address.toLowerCase() !== botvmOwner.toLowerCase()) {
-    throw new Error(
-      `PRIVATE_KEY wallet ${wallet.address} does not match BOTVM_OWNER ${botvmOwner}`,
-    );
-  }
+  const wallet = buildLiveExecutionWallet(provider);
   const dryRun = process.env.SEARCHER_DRY_RUN === "1";
   const backrunSettings = resolveLiveBackrunSettings();
   const maxHops = backrunSettings.planner.maxHops;

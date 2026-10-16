@@ -1,0 +1,164 @@
+{
+  "schema": "live250-predeclared-acceptance-v1",
+  "status": "predeclared-not-executed",
+  "approvedByParent": true,
+  "scope": {
+    "preparation": "fresh production Ready over 14400 blocks, separately timed",
+    "window": "250 new observed live heads, one frozen process/runtime/config/Ready window",
+    "pipeline": "current production live dry-run; no historical benchmark scheduler",
+    "requiredFamilies": [
+      "balancer-v2",
+      "balancer-v3",
+      "curve-plain",
+      "curve-underlying"
+    ],
+    "additionalFamilies": "all applicable task families enabled in existing production background; assess only actual Ready instances/directions/variants with real work",
+    "noWork": "absent, unchanged-only or untriggered target work does not establish changed-state or sim performance"
+  },
+  "freeze": {
+    "headObservedBeforeCandidate": "3301e0a2abe30379f3b9863e99f1d3402ea54557",
+    "actualMainBeforeCandidateSha256": "ef78cf7e36734c4044245dc9547a3175ff95409cf84d59dc398717849a57c5fc",
+    "finalSourceAndDirtyFingerprint": null,
+    "finalConfigSha256": null,
+    "readyManifestSha256": null,
+    "graphWorkloadFingerprint": null,
+    "pidAndStartTime": null,
+    "resolvedBudgetSnapshot": null,
+    "resourceIdleAndOtherLiveStoppedEvidence": null,
+    "note": "all null fields require actual freeze before run; protected dirty source is not replaced by HEAD"
+  },
+  "budgets": {
+    "headToStatePublicationAndEnumerationMs": 4000,
+    "effectivePublication": "record head receipt to valid prices publication plus backend drain; separately report combined state+enumeration <=4000ms, including queue delay and without double-counting overlap",
+    "wholePassMs": 11000,
+    "wholePassDeadline": "all real production stages, final sim/EV and cleanup/drain must finish within head receipt +11000ms AND before the next actual observed head; next-head timestamps must be recorded",
+    "sim": "time production planner_solver/amount-selection boundary to drain; no independent 8000ms gate; must fit the remaining whole-pass deadline; target-family sim not invoked => unverified",
+    "configuredLargeGraphCancellationProtectionMs": 30000,
+    "largeGraphProtection": "retain actual source/config protection; reaching it, timeout or supersession is failure, not acceptance at 30 seconds",
+    "provenance": [
+      {
+        "path": "docs/research/reports/balancer-v2-latency-partial-20261009.json",
+        "field": "predeclaredBudget.combinedStateAndEnumerationMs",
+        "value": 4000,
+        "meaning": "old representative B2 state+enumeration acceptance budget; adopted for new window, no same-input fix claim"
+      },
+      {
+        "path": "listener/src/searcher/main.ts",
+        "symbol": "resolveBlockScanLiveStageSettings",
+        "field": "SEARCHER_BLOCKSCAN_PASS_BUDGET_MS",
+        "default": 11000
+      },
+      {
+        "path": "listener/src/searcher/main.ts",
+        "symbol": "resolveBlockScanLiveStageSettings",
+        "field": "SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS",
+        "default": 30000
+      },
+      {
+        "path": "listener/src/searcher/blockscan-runtime-loop.ts",
+        "meaning": "pass clock anchored to source-head receipt, includes scheduler queue; active work abort/drain persists"
+      }
+    ],
+    "notAcceptanceBudgets": {
+      "solveReserveMs": 8000,
+      "stateHotFamilyBudgetMs": 5000,
+      "runtimePublicationReserveMs": 1500,
+      "reason": "reserves/protection and stage scheduling controls are not fabricated independent performance promises"
+    }
+  },
+  "validity": {
+    "require": [
+      "real target work by family, instance, direction and variant",
+      "matching source block/hash/generation for quote and execution",
+      "fresh/carried/failed/disabled accounting with reasons",
+      "valid publication and expected workload completeness",
+      "runtime actual-input construction; chain-off Exact=0 and no quoted fallback for production sim",
+      "preserve final repayment/profit/native/old-inventory safety gates",
+      "no new code/config during frozen measured window"
+    ],
+    "preserveAll": [
+      "timeouts",
+      "429",
+      "failures",
+      "superseded",
+      "coalesced",
+      "interruptions",
+      "not-started work",
+      "telemetry gaps",
+      "restart or resource interference"
+    ],
+    "failedFast": "latency-only tool fast=true is never sufficient; join outcome, work and source coverage",
+    "window": "report all 250 observed heads and every processed/dropped/coalesced head; do not select a successful subsequence",
+    "statistics": "window distribution may be reported; does not establish long-term live P95"
+  },
+  "measurement": {
+    "productionLogs": [
+      "block_scan_timing",
+      "block_scan_result",
+      "strict-session-timing",
+      "effective-mid",
+      "effective-quote-timing",
+      "strict-eth-call-timing",
+      "quote-batch-dispatch",
+      "quote-batch-timing",
+      "sim_amount_construction",
+      "sim_amount_execution",
+      "solver-route-timing"
+    ],
+    "telemetry": [
+      "explicit event path",
+      "explicit route events path",
+      "explicit mid-history path",
+      "head receipt ledger and next-head arrival",
+      "PID/process start and runtime/source/config pins"
+    ],
+    "costFields": [
+      "logical calls and physical requests",
+      "batches and items",
+      "pending/live/in-flight counts",
+      "scheduler queue wait",
+      "HTTP response latency",
+      "drain",
+      "state/enumeration/exact_refine/planner_solver/final_sim/EV",
+      "plans/amount points/hop exact calls",
+      "fresh/carried/failed by family joined to Ready identities"
+    ],
+    "limits": [
+      "existing sim summary lacks per-leg debit/receipt and quoted output; reuse valid correctness evidence but do not claim newly measured agreement without receipt data",
+      "existing batch timing cannot fairly allocate shared response latency to each family",
+      "explicit dependency-round and per-family local processing counters not established",
+      "mid/route writer drops or gaps invalidate completeness claims",
+      "blockscan-window has aggregate coverage heuristics, not per-family completeness",
+      "blockscan-pass-latency fast predicate is timing-only and not a correctness gate"
+    ]
+  },
+  "oldBalancerV2Evidence": {
+    "path": "docs/research/reports/balancer-v2-latency-partial-20261009.json",
+    "edges": 28040,
+    "targetInstances": 94,
+    "targetEdges": 727,
+    "budgetMs": 4000,
+    "candidateHeavyMedianPricesOnlyMs": 4276.945360000012,
+    "baselineHeavyMedianMs": 13821.26598,
+    "completedCandidateRepetitions": "7/9",
+    "failed": "HTTP429 setup on block26146977 repetition2; repetition3 not started",
+    "unverified": "enumeration, sim and 407 disabled target directions classification remain in old evidence",
+    "disposition": "retain failure unchanged; new Ready/live coverage is a separate workload/window result"
+  },
+  "safety": {
+    "mode": "keyless dry-run pending independent review/build; no private key reads or signing/broadcast/deployment",
+    "otherProcesses": "do not stop peer Ready/live; measurement waits for evidenced resource availability"
+  },
+  "reconciliation": {
+    "manualAnalysisFirst": true,
+    "initialQuery": "live,latency,blockscan",
+    "initialQueryDisposition": "refined to latency,blockscan; build:live not run merely to satisfy overly broad keyword",
+    "currentBranchTools": [
+      "analysis:blockscan-pass-latency",
+      "analysis:blockscan-window"
+    ],
+    "savedInputProjectionSha256": "66d2426dae6b986d9d72b2ecb30ae5d686b7449b62550e54b20d0ed0b9615e65",
+    "savedInputPurpose": "schema/statistics capability only; saved old 17 timing samples are not new performance evidence",
+    "receipt": "reconcile147.json; pending completion at contract creation"
+  }
+}

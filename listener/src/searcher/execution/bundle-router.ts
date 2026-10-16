@@ -188,16 +188,14 @@ export class ProductionBundleRouter implements BundleRouter {
 
 export function createBundleRouter(input: {
   dryRun: boolean;
-  wallet: ethers.Wallet;
+  wallet: ethers.Wallet | ethers.VoidSigner;
   provider: ethers.JsonRpcProvider;
   botvmAddress: string;
   defaultGasUsed: number;
 }): BundleRouter {
-  return input.dryRun
-    ? new DryRunBundleRouter(input.botvmAddress, input.defaultGasUsed)
-    : new ProductionBundleRouter(
-      input.wallet,
-      input.provider,
-      input.botvmAddress,
-    );
+  if (input.dryRun) return new DryRunBundleRouter(input.botvmAddress, input.defaultGasUsed);
+  if (!(input.wallet instanceof ethers.Wallet)) {
+    throw new Error("production bundle router requires a signing Wallet");
+  }
+  return new ProductionBundleRouter(input.wallet, input.provider, input.botvmAddress);
 }
