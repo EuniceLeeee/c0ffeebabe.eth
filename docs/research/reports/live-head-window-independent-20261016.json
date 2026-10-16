@@ -1,0 +1,26 @@
+{
+  "kind": "independent-read-only-live-head-bound-review",
+  "reviewedAt": "2026-10-16T03:18:14.898179+00:00",
+  "files": {
+    "main.ts": "378f52ce4bca17828f4db567ef98f4273e044b5491035b9517fd6b75147b071d",
+    "blockscan-runtime-loop.ts": "1ff104c86493869ff4117a59c7d7a983177e65beca731b98c80367d4eb01dffb",
+    "live-head-window.ts": "1cfb3a1d7f013608cf45889aca3f0ee448e104c65bdcaba5b8259f542cb40adc",
+    "test/live-head-window.ts": "4f835543ad6421caaa581eb0cd8370959f97a8ef3cb6d71c32ac11fa3ed1ed66"
+  },
+  "blockingFindings": [],
+  "verifiedByCode": [
+    "The 250th admitted distinct height is scheduled before intakeAbort; intakeAbort is separate from blockScanRuntimeAbort, so ordinary close does not abort the tail pass.",
+    "Post-close heads never call blockscan schedule; main also suppresses noteHead once closed, preventing 251 from arming producer or polluting its source hint. Duplicate known heights may still emit reorg/duplicate evidence without consuming the count.",
+    "Public mempool callbacks check intake abort before queue admission and before publishing pending execution evidence. inFlight and evidenceWork counters cover previously started local firehose reads/evidence jobs and are joined before generator completion.",
+    "Disabled hint stream wakes directly on intake abort. Filtered/firehose sockets close on intake abort and their close handlers wake a currently empty intake queue.",
+    "Production scheduler remains the execution owner. Bounded lifecycle joins scheduler plus coarse pricing producers/successors, then observes next head only for timing before normal shutdown.",
+    "With no head bound, head observation still schedules through the existing latest-head scheduler, no new dispatch lane or success filtering."
+  ],
+  "limits": [
+    "Independent source review only; author tests and build results not rerun here.",
+    "A stalled/missing next real head leaves the observer waiting; an external owned-process watchdog may stop it and retain an interrupted result, never restart/extend the sample silently.",
+    "Filtered/firehose empty queue wake currently relies on WebSocket close event. This is valid for the real transport, but a direct abort wake would remove close-handshake latency; this is an improvement suggestion, not a proven deadlock.",
+    "Observed height gaps are retained as gap events and cannot count as successful work or full continuous coverage."
+  ],
+  "recommendation": "Proceed after author production-body generator/drain tests and build pass; freeze actual integrated hashes and inspect final 250-tail drain/251 observation evidence."
+}

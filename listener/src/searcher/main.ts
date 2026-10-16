@@ -33,6 +33,7 @@ import {
 import { readBlockTouchedStateKeys, type BlockTouchedProvider } from "./blockscan-touched-state.js";
 import { BlockScanActivityPrefetch } from "./blockscan-activity-prefetch.js";
 import { startBlockScanHeadFeed } from "./blockscan-head-feed.js";
+import { LiveHeadWindow, parseLiveMaxNewHeads } from "./live-head-window.js";
 import { isRpcThrottleError } from "./rpc-throttle-guard.js";
 import {
   initBlockScanEnumerationSolverTelemetry,
@@ -3067,13 +3068,35 @@ async function main(): Promise<void> {
   if (config.stateUpdaterEnabled && !enableBlockScan) {
     provider.on("block", (blockNumber: number) => runStateUpdate(blockNumber, "block"));
   }
+  const maxNewHeads = parseLiveMaxNewHeads(process.env.SEARCHER_LIVE_MAX_NEW_HEADS);
+  if (maxNewHeads > 0 && (!enableBlockScan || blindProductionAudit || !config.dryRun || config.enableMevShare)) {
+    throw new Error("bounded live requires dry-run block-scan with MEV-Share disabled");
+  }
+  const intakeAbort = new AbortController();
+  const seedHead = enableBlockScan && !blindProductionAudit ? await provider.getBlockNumber() : 0;
+  const headWindowLog = (event: Record<string, unknown>) =>
+    console.log(`[searcher/live-head-window] ${JSON.stringify(event)}`);
+  const headWindow = maxNewHeads > 0
+    ? new LiveHeadWindow(seedHead, maxNewHeads, headWindowLog, () => intakeAbort.abort())
+    : undefined;
+  const observeLiveHead = (number: number, source: "ws" | "http", hash?: string): void => {
+    const observedAtMs = Date.now();
+    const observedAtMonotonicMs = performance.now();
+    if (hash && !headWindow?.closed) blockScanActivityProvider.noteHead(number, hash);
+    const schedule = () => {
+      blockScanRuntimeLoop.schedule(number, {
+        sourceHeadSeenAtMs: observedAtMs, sourceHeadSeenAtMonotonicMs: observedAtMonotonicMs,
+      });
+    };
+    if (headWindow) headWindow.observe({ number, hash, source, observedAtMs, observedAtMonotonicMs }, schedule);
+    else schedule();
+  };
   const blockScanHeadFeed = enableBlockScan && !blindProductionAudit
     ? startBlockScanHeadFeed({
       url: config.wsUrl,
       signal: blockScanRuntimeAbort.signal,
       onHead(number, hash) {
-        blockScanActivityProvider.noteHead(number, hash);
-        blockScanRuntimeLoop.schedule(number);
+        observeLiveHead(number, "ws", hash);
       },
       onStatus(status) { console.log(`[searcher/blockscan-head-feed] ${status}`); },
     })
@@ -3083,12 +3106,12 @@ async function main(): Promise<void> {
     // latest-head scheduler; a hint cannot authorize a canonical source.
     provider.on(
       "block",
-      (blockNumber: number) => blockScanRuntimeLoop.schedule(blockNumber),
+      (blockNumber: number) => observeLiveHead(blockNumber, "http"),
     );
     // Close the listener-registration race and warm from the current canonical
     // head rather than the early startup discovery anchor. The runtime loop
     // owns discovery/CAS and retries fail-closed without taking down backrun.
-    blockScanRuntimeLoop.schedule(await provider.getBlockNumber());
+    blockScanRuntimeLoop.schedule(seedHead);
   }
 
   // Track the latest mined block from the WS newHeads stream so the per-hint hot
@@ -3108,6 +3131,7 @@ async function main(): Promise<void> {
     stopRuntimePromise = (async () => {
       console.log("\n[searcher/live] shutting down");
       shuttingDown = true;
+      intakeAbort.abort();
       if (!blockScanRuntimeAbort.signal.aborted) blockScanRuntimeAbort.abort(new Error("searcher shutdown"));
       blockScanHeadFeed?.close();
       logStageCounters(counters);
@@ -3155,12 +3179,13 @@ async function main(): Promise<void> {
       knownPoolAddrs,
       mempoolIntakeRefresh,
       (trigger) => {
-        blockScanRuntimeLoop.schedulePendingEvidence(trigger);
+        if (!intakeAbort.signal.aborted) blockScanRuntimeLoop.schedulePendingEvidence(trigger);
       },
+      intakeAbort.signal,
     );
   };
   const hintStream = sourceMode === "disabled"
-    ? disabledHints()
+    ? disabledHints(intakeAbort.signal)
     : sourceMode === "public-mempool"
       ? mempoolStream()
       : sourceMode === "mev-share"
@@ -3169,7 +3194,7 @@ async function main(): Promise<void> {
 
   try {
     for await (const hint of hintStream) {
-      if (shuttingDown || blockScanRuntimeAbort.signal.aborted) break;
+      if (shuttingDown || blockScanRuntimeAbort.signal.aborted || intakeAbort.signal.aborted) break;
       processedHints++;
       counters.hints++;
       if (busy) {
@@ -3179,7 +3204,7 @@ async function main(): Promise<void> {
       if (hint.hashes.length === 0) continue;
 
       for (const txHash of hint.hashes) {
-        if (shuttingDown || blockScanRuntimeAbort.signal.aborted) break;
+        if (shuttingDown || blockScanRuntimeAbort.signal.aborted || intakeAbort.signal.aborted) break;
         const key = txHash.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
@@ -3242,7 +3267,27 @@ async function main(): Promise<void> {
       if (config.maxHints > 0 && processedHints >= config.maxHints) break;
     }
   } finally {
-    await stopRuntime();
+    let drainFailed = false;
+    try {
+      if (headWindow?.closed && !blockScanRuntimeAbort.signal.aborted) {
+        headWindowLog({ event: "drain_started", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
+        await blockScanRuntimeLoop.waitForIdle();
+        headWindowLog({ event: "drained", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
+        // Observe the next real head for the final pass's next-head budget, without admitting it.
+        if (!blockScanRuntimeAbort.signal.aborted) await Promise.race([
+          headWindow.nextHead,
+          new Promise<void>((resolve) => blockScanRuntimeAbort.signal.addEventListener("abort", () => resolve(), { once: true })),
+        ]);
+      }
+    } catch (error) {
+      drainFailed = true;
+      headWindowLog({ event: "drain_failed", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
+      requestRuntimeStop.fail(error instanceof Error ? error : new Error("live window drain failed"));
+      throw error;
+    } finally {
+      await stopRuntime();
+      if (headWindow?.closed && !drainFailed) shutdown();
+    }
   }
 }
 
@@ -6154,6 +6199,7 @@ async function* mempoolHints(
   onPendingExecutionEvidence?: (
     trigger: BlockScanPendingEvidenceTrigger,
   ) => void,
+  intakeSignal?: AbortSignal,
 ): AsyncGenerator<HintEnvelope> {
   const routersPath = process.env.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH ?? undefined;
   const forceIncludeRouters = loadForceIncludeRouters(routersPath);
@@ -6194,12 +6240,13 @@ async function* mempoolHints(
       reportedEvidenceFailures,
       counters,
       onPendingExecutionEvidence,
+      intakeSignal,
     );
     return;
   }
 
   let lastIntakeKey = "";
-  for (;;) {
+  while (!intakeSignal?.aborted) {
     const intake = buildMempoolIntakeWithRouters(getPools(), forceIncludeRouters);
     const toAddress = [...intake.filteredTargets];
     const intakeKey = toAddress.map((address) => address.toLowerCase()).join(",");
@@ -6209,6 +6256,8 @@ async function* mempoolHints(
     }
 
     let ws: WebSocket | null = null;
+    const closeIntake = () => { try { ws?.close(); } catch { /* closed */ } };
+    intakeSignal?.addEventListener("abort", closeIntake, { once: true });
     let refreshRequested = false;
     const unsubscribeRefresh = refreshSignal?.subscribe(() => {
       refreshRequested = true;
@@ -6234,6 +6283,7 @@ async function* mempoolHints(
               reportedEvidenceFailures,
               counters,
               onPendingExecutionEvidence,
+              intakeSignal,
             );
             return;
           }
@@ -6246,6 +6296,7 @@ async function* mempoolHints(
         await sleep(1_000);
         continue;
       }
+      if (intakeSignal?.aborted) return;
       if (refreshRequested) continue;
 
       // Bounded queue: keep only the freshest victims; a stale pending tx is
@@ -6265,6 +6316,7 @@ async function* mempoolHints(
 
       ws.addEventListener("message", (event) => {
         void (async () => {
+          if (intakeSignal?.aborted) return;
           const msg = parseWsJson(event.data);
           const result = msg?.method === "eth_subscription"
             ? msg.params?.result
@@ -6298,7 +6350,7 @@ async function* mempoolHints(
       });
 
       for (;;) {
-        if (failed) break;
+        if (failed || intakeSignal?.aborted) break;
         if (queue.length === 0) {
           await new Promise<void>((res) => {
             wake = res;
@@ -6311,7 +6363,9 @@ async function* mempoolHints(
     } finally {
       try { ws?.close(); } catch { /* already closed */ }
       unsubscribeRefresh?.();
+      intakeSignal?.removeEventListener("abort", closeIntake);
     }
+    if (intakeSignal?.aborted) return;
     if (refreshRequested) {
       console.log("[searcher/live] mempool filtered targets refreshed; reconnecting");
       continue;
@@ -6372,6 +6426,7 @@ async function* localFirehoseMempoolHints(
   onPendingExecutionEvidence?: (
     trigger: BlockScanPendingEvidenceTrigger,
   ) => void,
+  intakeSignal?: AbortSignal,
 ): AsyncGenerator<HintEnvelope> {
   const maxInFlight = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_MAX_INFLIGHT ?? "64");
   const maxQueue = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_QUEUE_MAX ?? "64");
@@ -6422,8 +6477,10 @@ async function* localFirehoseMempoolHints(
       `evidenceReadMaxInFlight=${evidenceReadMaxInFlight}`,
   );
 
-  for (;;) {
+  while (!intakeSignal?.aborted) {
     let ws: WebSocket | null = null;
+    const closeIntake = () => { try { ws?.close(); } catch { /* closed */ } };
+    intakeSignal?.addEventListener("abort", closeIntake, { once: true });
     let pendingSubscriptionId = "";
     let headSubscriptionId = "";
     try {
@@ -6436,10 +6493,14 @@ async function* localFirehoseMempoolHints(
         `[searcher/live] mempool local firehose connect failed: ` +
           `${err instanceof Error ? err.message : String(err)}`,
       );
+      intakeSignal?.removeEventListener("abort", closeIntake);
+      if (intakeSignal?.aborted) return;
       console.log("[searcher/live] mempool_state=disconnected");
       await sleep(1_000);
       continue;
     }
+
+    if (intakeSignal?.aborted) { closeIntake(); intakeSignal.removeEventListener("abort", closeIntake); return; }
 
     // Canonical intake and evidence-promoted unknown targets never share an
     // eviction queue. Each evidence family gets its own bounded FIFO, drained
@@ -6453,6 +6514,7 @@ async function* localFirehoseMempoolHints(
     let wake: (() => void) | null = null;
     let failed = false;
     let inFlight = 0;
+    let evidenceWork = 0;
     const evidenceHeadSnapshot = new PendingEvidenceHeadSnapshot();
 
     const fail = () => {
@@ -6461,6 +6523,7 @@ async function* localFirehoseMempoolHints(
       wake?.();
     };
     const enqueueCanonical = (hint: HintEnvelope) => {
+      if (intakeSignal?.aborted) return;
       admissionQueue.enqueueCanonical(hint);
       wake?.();
     };
@@ -6468,6 +6531,7 @@ async function* localFirehoseMempoolHints(
       familyId: ExecutionFamilyId,
       hint: HintEnvelope,
     ) => {
+      if (intakeSignal?.aborted) return;
       admissionQueue.enqueueEvidence(familyId, hint);
       wake?.();
     };
@@ -6565,6 +6629,7 @@ async function* localFirehoseMempoolHints(
       }
       const evidenceReadyAtMs = Date.now();
       const evidenceReadyAtMonotonicMs = performance.now();
+      if (intakeSignal?.aborted) return validated;
       onPendingExecutionEvidence(Object.freeze({
         txHash: tx.hash,
         head: Object.freeze({
@@ -6591,7 +6656,8 @@ async function* localFirehoseMempoolHints(
         return PRODUCTION_STRICT_FAMILY_DECLARATIONS
           .isCurrentHeadEvidenceFamily(familyId);
       });
-      if (familyIds.length === 0) return;
+      if (familyIds.length === 0 || intakeSignal?.aborted) return;
+      evidenceWork++;
       void session.resolve(familyIds, "canonical")
         .then((evidence) =>
           publishCurrentHeadExecutionEvidence(tx, evidence, observation)
@@ -6606,13 +6672,14 @@ async function* localFirehoseMempoolHints(
           }
           // Route activation is independently bounded and cannot disrupt
           // victim intake.
-        });
+        }).finally(() => { evidenceWork--; });
     };
     const startUnknownEvidenceAdmission = (
       session: PendingEvidenceSession,
       baseHint: HintEnvelope,
     ): void => {
-      if (session.candidateFamilyIds.length === 0) return;
+      if (session.candidateFamilyIds.length === 0 || intakeSignal?.aborted) return;
+      evidenceWork++;
       void (async () => {
         const head = await session.head("unknown");
         let admitted = false;
@@ -6665,9 +6732,10 @@ async function* localFirehoseMempoolHints(
       })().catch(() => {
         // Speculative unknown-target admission has its own bounded scheduler;
         // failure cannot consume or disconnect canonical intake.
-      });
+      }).finally(() => { evidenceWork--; });
     };
     const processHash = (hash: string) => {
+      if (intakeSignal?.aborted) return;
       const observation = Object.freeze({
         observedAtMs: Date.now(),
         observedAtMonotonicMs: performance.now(),
@@ -6722,6 +6790,7 @@ async function* localFirehoseMempoolHints(
       })();
     };
     const processFullTransaction = (result: Record<string, unknown>) => {
+      if (intakeSignal?.aborted) return;
       const observation = Object.freeze({
         observedAtMs: Date.now(),
         observedAtMonotonicMs: performance.now(),
@@ -6771,6 +6840,7 @@ async function* localFirehoseMempoolHints(
     ws.addEventListener("error", fail);
     ws.addEventListener("close", fail);
     ws.addEventListener("message", (event) => {
+      if (intakeSignal?.aborted) return;
       const msg = parseWsJson(event.data);
       if (msg?.method !== "eth_subscription") return;
       const subscription = msg.params?.subscription;
@@ -6790,7 +6860,7 @@ async function* localFirehoseMempoolHints(
 
     try {
       for (;;) {
-        if (failed) break;
+        if (failed || intakeSignal?.aborted) break;
         const hint = admissionQueue.dequeue();
         if (!hint) {
           await new Promise<void>((res) => {
@@ -6803,7 +6873,14 @@ async function* localFirehoseMempoolHints(
       }
     } finally {
       try { ws.close(); } catch { /* already closed */ }
+      intakeSignal?.removeEventListener("abort", closeIntake);
+      if (intakeSignal?.aborted) {
+        console.log(`[searcher/live-head-window] ${JSON.stringify({ event: "mempool_drain_started", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now(), inFlight, evidenceWork })}`);
+        while (inFlight > 0 || evidenceWork > 0) await sleep(10);
+        console.log(`[searcher/live-head-window] ${JSON.stringify({ event: "mempool_drained", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now(), inFlight, evidenceWork })}`);
+      }
     }
+    if (intakeSignal?.aborted) return;
     console.log("[searcher/live] mempool local firehose reconnect");
     await sleep(1_000);
   }
@@ -7207,9 +7284,13 @@ async function* mevShareHints(url: string): AsyncGenerator<HintEnvelope> {
   }
 }
 
-async function* disabledHints(): AsyncGenerator<HintEnvelope> {
-  for (;;) {
-    await new Promise((resolve) => setTimeout(resolve, 60_000));
+async function* disabledHints(signal?: AbortSignal): AsyncGenerator<HintEnvelope> {
+  while (!signal?.aborted) {
+    await new Promise<void>((resolve) => {
+      const done = () => { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); };
+      const timer = setTimeout(done, 60_000);
+      signal?.addEventListener("abort", done, { once: true });
+    });
   }
 }
 

@@ -1023,7 +1023,15 @@ export class BlockScanRuntimeLoop {
 
   /** Join scheduled work without shutting down the production runtime. */
   async waitForIdle(): Promise<void> {
-    await this.scheduler.waitForIdle();
+    for (;;) {
+      await this.scheduler.waitForIdle();
+      const producer = this.coarsePricingActive;
+      if (producer) await producer;
+      // A producer's finally may dispatch its pending successor; joining just
+      // the scheduler would leave pricing/publication work running after drain.
+      await this.scheduler.waitForIdle();
+      if (!this.coarsePricingActive) return;
+    }
   }
 
   /**
