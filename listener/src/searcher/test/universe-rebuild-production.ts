@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { assertProbeReadPhysicalTimeout } from "./universe-rebuild-probe-read-timeout.js";
 import http from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -569,6 +570,7 @@ async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  await assertProbeReadPhysicalTimeout();
   assert.equal(resolveRebuildRevmTimeoutMs({}), 180_000);
   assert.equal(resolveRebuildRevmTimeoutMs({ SEARCHER_REVM_TIMEOUT_MS: "60000" }), 60_000);
   assert.equal(resolveRebuildRevmTimeoutMs({

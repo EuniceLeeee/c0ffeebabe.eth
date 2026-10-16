@@ -947,7 +947,9 @@ export function createProbeWiring(
   };
   // Ethers' short cache keys code by height, not canonical hash/generation.
   // Source-bound code reuse below owns caching instead, including reorg changes.
-  const provider = new RebuildReadProvider(read, rpcUrl, undefined, { cacheTimeout: -1 });
+  const provider = new RebuildReadProvider(read, rpcUrl, undefined, {
+    cacheTimeout: -1, requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
+  });
   const strictProviderFor = createSourceCodeProviders(
     providerAdapter(provider, assertOpen), assertOpen,
   );
