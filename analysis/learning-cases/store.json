@@ -2378,10 +2378,11 @@
         "issue": "status Store.load holds the production CAS lock throughout full base and journal parsing; a slow read can exhaust the original writer wait and terminate Ready",
         "evidence": "resume240 terminal receipt and status248 timing, original shared-lock code, independent finding plus actual separate-OS-process 6-second reader vs default 5-second writer regression",
         "codify_target": "UniverseRebuildCheckpointStore.loadReadOnlySnapshot and status CLI; coherent short-lock capture with original private-snapshot validation, append/compaction/tail/corruption concurrency regression",
-        "status": "open"
+        "status": "codified",
+        "codify_commit": "cfd81f100e7a1812b97763abfa6f0bdeea7719b8"
       },
       "created_at": "2026-10-16T09:04:07.247535+00:00",
-      "updated_at": "2026-10-16T09:04:07.247661+00:00"
+      "updated_at": "2026-10-16T09:07:13.982970+00:00"
     }
   ]
 }
