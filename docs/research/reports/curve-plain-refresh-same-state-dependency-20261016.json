@@ -1,0 +1,50 @@
+{
+  "kind": "curve-plain-observed-clock-and-external-view-dependency",
+  "raw": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/curve-plain64/evidence70/historical-uintfull70.json",
+    "sha256": "f5ac7d91c21648ce55cf560e2e8f6abd1b03e771d649befcd166e8c8ad8eccd9"
+  },
+  "verifiedSource": {
+    "path": "/Users/eunice/src/MEV/logs/aqua-adaptation-20261014.knac20lp/interface-audit-protocols-b/public-sources/addr-0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14.json",
+    "sha256": "20995e54e728ca212d9b03c42c75232174102c0144929cb73922034c82ccfb09"
+  },
+  "source": {
+    "number": 26152607,
+    "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+    "generation": 26152607
+  },
+  "pool": "0x4ebdf703948ddcea3b11f675b4d1fba9d2414a14",
+  "runtimeKeccak256": "0xf29fb95ca44fe2f979303e309cbaba61d44dd503fddeb111caae94e1b0857154",
+  "runtimeBytes": 21789,
+  "exactRuntimeBytesEqual": true,
+  "contract": "CurveTricryptoOptimizedWETH",
+  "sourceCodeSha256": "eb60845a73ae99a90198af31f56be80d7aed19e4dab89744d4f019bd58d104ce",
+  "proof": [
+    {
+      "lines": [
+        1261,
+        1282
+      ],
+      "function": "_A_gamma",
+      "dependency": "block.timestamp while future_A_gamma_time is active"
+    },
+    {
+      "lines": [
+        1667,
+        1677
+      ],
+      "function": "get_dy",
+      "dependency": "Factory(self.factory).views_implementation followed by external Views.get_dy"
+    }
+  ],
+  "actualModel": "full runtime / 3 coins; no exact storage-only two-coin proof",
+  "before": "default on-touch does not schedule an effective refresh on quiet blocks",
+  "repair": "exact existing storage-only model => on-touch with unchanged full-precision ramp guard; all unproven variants => each-block",
+  "notClaimed": [
+    "new historical execution",
+    "active ramp execution for existing guarded two-coin models",
+    "natural valuation",
+    "opportunity replay",
+    "performance"
+  ]
+}

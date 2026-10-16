@@ -968,6 +968,10 @@
             {
               "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
               "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-refresh-current-compatibility-20261016.json",
+              "sha256": "8d20158b5e28eb87f0237c4434e307cf73b50148a1c61e51f438632d9b1aff1f"
             }
           ],
           "scope": {
@@ -995,8 +999,8 @@
             "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
           },
           "executionEvidence": {
-            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
-            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+            "path": "docs/research/reports/curve-plain-refresh-current-behavior-20261016.json",
+            "sha256": "5a087241a0e50b507648dcf0005fd1289d188062c97858e02f0c3433656a7f5e"
           }
         },
         {
@@ -1032,6 +1036,10 @@
             {
               "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
               "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-refresh-current-compatibility-20261016.json",
+              "sha256": "8d20158b5e28eb87f0237c4434e307cf73b50148a1c61e51f438632d9b1aff1f"
             }
           ],
           "scope": {
@@ -1059,8 +1067,8 @@
             "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
           },
           "executionEvidence": {
-            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
-            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+            "path": "docs/research/reports/curve-plain-refresh-current-behavior-20261016.json",
+            "sha256": "5a087241a0e50b507648dcf0005fd1289d188062c97858e02f0c3433656a7f5e"
           }
         },
         {
@@ -1080,6 +1088,10 @@
             {
               "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
               "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-refresh-current-compatibility-20261016.json",
+              "sha256": "8d20158b5e28eb87f0237c4434e307cf73b50148a1c61e51f438632d9b1aff1f"
             }
           ],
           "scope": {
@@ -1107,8 +1119,8 @@
             "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
           },
           "executionEvidence": {
-            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
-            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+            "path": "docs/research/reports/curve-plain-refresh-current-behavior-20261016.json",
+            "sha256": "5a087241a0e50b507648dcf0005fd1289d188062c97858e02f0c3433656a7f5e"
           }
         },
         {
@@ -1128,6 +1140,10 @@
             {
               "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
               "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-refresh-current-compatibility-20261016.json",
+              "sha256": "8d20158b5e28eb87f0237c4434e307cf73b50148a1c61e51f438632d9b1aff1f"
             }
           ],
           "scope": {
@@ -1155,8 +1171,8 @@
             "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
           },
           "executionEvidence": {
-            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
-            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+            "path": "docs/research/reports/curve-plain-refresh-current-behavior-20261016.json",
+            "sha256": "5a087241a0e50b507648dcf0005fd1289d188062c97858e02f0c3433656a7f5e"
           }
         },
         {
@@ -1192,6 +1208,10 @@
             {
               "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
               "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
+            },
+            {
+              "path": "docs/research/reports/curve-plain-refresh-current-compatibility-20261016.json",
+              "sha256": "8d20158b5e28eb87f0237c4434e307cf73b50148a1c61e51f438632d9b1aff1f"
             }
           ],
           "scope": {
@@ -1219,8 +1239,8 @@
             "deferred": "No output-first/deferred-input declaration. Optimized implementations expose input-first exchange_extended; this round executes exchange receiver, not exchange_extended callback."
           },
           "executionEvidence": {
-            "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
-            "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+            "path": "docs/research/reports/curve-plain-refresh-current-behavior-20261016.json",
+            "sha256": "5a087241a0e50b507648dcf0005fd1289d188062c97858e02f0c3433656a7f5e"
           }
         },
         {
@@ -1385,12 +1405,26 @@
         }
       ],
       "review": {
-        "path": "docs/research/reports/current-interface-curve-plain-20261015.json",
-        "sha256": "ebb61e9bad1921d875a47ac93a8535af7f47e0dfa9669917f5224d80b4e39e5b"
+        "path": "docs/research/reports/current-interface-curve-plain-refresh-20261016.json",
+        "sha256": "aa1357af0e302672aa5637c223491f6b8315c792917e78e3edbaa6d61b63bc16"
       },
       "currentScopedEvidence": {
         "path": "docs/research/reports/curve-plain-recipient-correctness-20261015.json",
         "sha256": "df6d1ff26f4081d572be0bbbe58fe886f82b759160e2b902d43f606929166c97"
+      },
+      "currentSchedulingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/pricing.ts",
+          "sha256": "4ef0f6754e67efb0c30277ec76f3c54dab89c1c0816af90b1846e7ffbf057428"
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/refresh-scope.ts",
+          "sha256": "6b1dcd39f4b27d06bfcd74ef27dce8cc3c65493cb2afa33d622bd09d3979e94a"
+        }
+      ],
+      "refreshCompatibility": {
+        "path": "docs/research/reports/curve-plain-refresh-current-compatibility-20261016.json",
+        "sha256": "8d20158b5e28eb87f0237c4434e307cf73b50148a1c61e51f438632d9b1aff1f"
       }
     },
     {

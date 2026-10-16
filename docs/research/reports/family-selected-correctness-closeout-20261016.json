@@ -1,0 +1,125 @@
+{
+  "result": "selected implementation and necessary correctness evidence complete",
+  "scope": "Original IMPL task scopes only, not all installed Family variants or full integration/performance delivery",
+  "coverage": {
+    "implRows": 31,
+    "inScopeRows": 30,
+    "explicitOutOfScopeRows": 1,
+    "matrixEntries": 35,
+    "distinctCanonicalFamilyIds": 31,
+    "canonicalFamilyIds": [
+      "aqua-swapvm",
+      "balancer-v1",
+      "balancer-v2",
+      "balancer-v3",
+      "curve-plain",
+      "curve-underlying",
+      "custom-swap:dodo-v2",
+      "custom-swap:ekubo-router-v1",
+      "custom-swap:oneswap",
+      "custom-swap:precision-pool",
+      "custom-swap:uniswap-v1",
+      "fluid-dex",
+      "kyberswap-elastic",
+      "mooniswap",
+      "protocol:badger-sett-withdraw",
+      "protocol:compound-ctoken",
+      "protocol:curve-lp",
+      "protocol:erc4626",
+      "protocol:erc4626-silo-redeem",
+      "protocol:few-wrapped",
+      "protocol:psm",
+      "protocol:psv",
+      "protocol:set-redemption",
+      "protocol:token-conversion",
+      "protocol:token-migration",
+      "protocol:yearn-auction",
+      "protocol:yieldbasis-lt",
+      "swap:algebra-integral",
+      "univ4",
+      "univ4-fee-hook",
+      "vault-spot"
+    ],
+    "unmappedInScopeRows": [],
+    "unmappedMatrixEntries": [],
+    "newRequiredFamilyOmissionsFound": [],
+    "newMandatoryNoInstanceVariantsFound": [],
+    "note": "35 entries include separate Basic/Legacy, standard/Frax/InfiniFi and BTB/xWin scopes. This count is not the48-family machine inventory acceptance count."
+  },
+  "priorScopeEvidence": "docs/research/reports/family-selected-scope-incremental-20261016.json",
+  "resolvedFinalGap": {
+    "familyId": "curve-plain",
+    "change": "clock/external dependency quote refresh",
+    "correctness": "old actual production empty perBlock red -> candidate production refresh/related contracts/shared dual/build green; full-variant gate retains only original three unsampled modes plus incomplete coverage, actual selected scope accepted under explicit user scope",
+    "evidence": "docs/research/reports/curve-plain-refresh-current-compatibility-20261016.json",
+    "gate": "docs/research/reports/curve-plain-refresh-settlement-gate-20261016.json"
+  },
+  "currentSourcePolicy": "Actual cloud working baseline; peer V1/package/catalog dirty retained and not staged",
+  "preservedBoundaries": [
+    {
+      "familyId": "univ4-fee-hook",
+      "boundary": "fa439 has no initialized native instance through fixedN26195865; selectedUSDC/WETH tier passed, shared synthetic native tests are not historical native execution."
+    },
+    {
+      "familyId": "swap:algebra-integral",
+      "boundary": "Only six actual Cypher dynamic profiles in this acceptance; static profile and unselected input-first advance-payment remain unverified without creating a hypothetical target."
+    },
+    {
+      "familyId": "curve-plain",
+      "boundary": "Three no-instance receiver/mode declarations remain unknown; actual full/external quiet refresh above is a separate real gap and must close."
+    },
+    {
+      "familyId": "curve-underlying",
+      "boundary": "No invented precision/rate combinations beyond actual native/FRAX/classic instances."
+    },
+    {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "boundary": "Uninstanced extensions/TWAMM do not become required execution targets; actual Router internal callback is not caller continuation."
+    },
+    {
+      "familyId": "custom-swap:dodo-v2",
+      "boundary": "Actual twoGSP/four directions only; otherDVM/DSP/DPP and separateflashLoan not silently added."
+    },
+    {
+      "familyId": "protocol:set-redemption",
+      "boundary": "Actual four-componentBasic redemption and installedLegacy directions required and covered; uninstalledissue not mandatory; selected-component handoff is post-redeem transfer, not protocol external basket redemption."
+    },
+    {
+      "familyId": "protocol:erc4626",
+      "boundary": "Frax asynchronous RWA and instance-specific unadmitted directions are not invented; all18 actually selected standard targets remain covered inC."
+    },
+    {
+      "familyId": "protocol:compound-ctoken",
+      "boundary": "Actual share redemption only; cETH/redeemUnderlying are not installed selected actions."
+    },
+    {
+      "familyId": "mooniswap",
+      "boundary": "57fb is an additional actual instance with incomplete same-source provenance, not a no-instance claim. Preserve unverified and do not extend2c4 success to it."
+    },
+    {
+      "familyId": "fluid-dex",
+      "boundary": "Original jrUSDe opportunity remains original evidence. Three-pool recipient acceptance does not claim current external-recipient execution for that separate instance."
+    },
+    {
+      "familyId": "credit:fluid",
+      "boundary": "Original FluidCredit/wstUSR row is expressly outside current conserving-loop scope, not an omitted required swap family."
+    }
+  ],
+  "outOfScope": {
+    "familyId": "credit:fluid",
+    "tableRow": 27,
+    "reason": "Original FluidCredit/wstUSR inventory/credit outcome belongs to prior authorization; present task covers conserving DEX/protocol loops and expressly excludes borrowing/liquidation/locked inventory strategy expansion. Preserve original evidence, not an omitted swap adaptation."
+  },
+  "separateUnfinishedLayers": {
+    "actualCorrectness": "Current production wiring/reverse identity, selected actual modes/directions, amount quote+quoted+runtime actual receipt, Exact0/no fallback, applicable inventory/native/error/callback/dependency refresh and source-bound reviews. Current real Curve refresh gap remains blocking for this layer.",
+    "naturalIntegration": "Production entry/admission evidence is required where changed and retained. Fresh-from-zero Ready, default price chain, raw/effective natural coverage and valuation are separately recorded; reused Ready and input-only donors never become fresh natural success. Quiet-head effective refresh is required correctness; raw bootstrap retention is not falsely called full repricing.",
+    "opportunity": "Original prefix/call-prestate, enumeration/rank/amount selection/final sim/netEV remain tied to their exact prior state/configuration/version. Callback funding fixtures and end-block samples provide no new opportunity claim; prior negativeEV/denial preserved.",
+    "stage4A": "Original local/source-frozen timing work remains separately pending/unaccepted by these correctness matrices; no new measurement here.",
+    "stage4B": "Original representative-scale timing and workload/budget remain separately pending/failed as recorded; BalancerV2 four-second representative failure is retained. Stage4 serial-resource rule preserved.",
+    "formalMergeAndDeployment": "Actual working-source correctness includes protected peer dirtyV1 identity source; owned commit-only build is a different scope. No globalclean-commit/merge_ready, formalAdapterReplay/family_local, deployment, live, signing or broadcast conclusion."
+  },
+  "noNewHistoricalEvmForThisRefresh": true,
+  "performanceRun": false,
+  "deploymentOrLiveOrBroadcast": false,
+  "originalImplFinalWrite": "Parent updates original IMPL after successful push; this report is evidence, not a replacement main table"
+}

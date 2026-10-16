@@ -1,0 +1,35 @@
+{
+  "fullFamilyMachineGate": [
+    {
+      "familyId": "curve-plain",
+      "tool": "listener:searcher:family-settlement-review",
+      "exitCode": 1,
+      "started": "2026-10-16T02:39:06.508195+00:00",
+      "finished": "2026-10-16T02:40:05.075967+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/gate138-gate-curve-plain.log",
+      "logSha256": "4d54e8d07943b7f55ea8947659f050a7ca01b5ac2679a429adc77ccb2c1bc3d6",
+      "selection": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/gate138-selection.json",
+      "selectionSha256": "79ffc312dac78e5ece8d47805d11fba29c4499f9faa3f8f10fb8f98655883365",
+      "result": {
+        "scope": "settlement capability acceptance only",
+        "installed": 48,
+        "results": [
+          {
+            "familyId": "curve-plain",
+            "passed": false,
+            "failures": [
+              "variant coverage is incomplete",
+              "received-no-receiver declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; \u8be5\u7cbe\u786e\u58f0\u660e mode \u65e0\u72ec\u7acb\u5b9e\u9645 Ready \u90e8\u7f72\u6837\u672c\uff0cinterface/\u5b9e\u73b0\u8eab\u4efd\u4e0e\u6536\u6b3e\u65b9/\u56de\u8c03\u8bed\u4e49\u5c1a\u672a\u6838\u5b9e\u3002; \u76f8\u90bb\u6a21\u5f0f ABI \u6216 codec \u5206\u652f\u5b58\u5728\u4e0d\u80fd\u4ee3\u66ff\u672c\u6a21\u5f0f\u6267\u884c\u9a8c\u6536\u3002",
+              "received-uint declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; \u8be5\u7cbe\u786e\u58f0\u660e mode \u65e0\u72ec\u7acb\u5b9e\u9645 Ready \u90e8\u7f72\u6837\u672c\uff0cinterface/\u5b9e\u73b0\u8eab\u4efd\u4e0e\u6536\u6b3e\u65b9/\u56de\u8c03\u8bed\u4e49\u5c1a\u672a\u6838\u5b9e\u3002; \u76f8\u90bb\u6a21\u5f0f ABI \u6216 codec \u5206\u652f\u5b58\u5728\u4e0d\u80fd\u4ee3\u66ff\u672c\u6a21\u5f0f\u6267\u884c\u9a8c\u6536\u3002",
+              "native-exchange-uint declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; \u8be5\u7cbe\u786e\u58f0\u660e mode \u65e0\u72ec\u7acb\u5b9e\u9645 Ready \u90e8\u7f72\u6837\u672c\uff0cinterface/\u5b9e\u73b0\u8eab\u4efd\u4e0e\u6536\u6b3e\u65b9/\u56de\u8c03\u8bed\u4e49\u5c1a\u672a\u6838\u5b9e\u3002; \u76f8\u90bb\u6a21\u5f0f ABI \u6216 codec \u5206\u652f\u5b58\u5728\u4e0d\u80fd\u4ee3\u66ff\u672c\u6a21\u5f0f\u6267\u884c\u9a8c\u6536\u3002"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "fullFamilyPassed": false,
+  "selectedActualScopePassed": true,
+  "scopeInterpretation": "docs/research/reports/curve-plain-refresh-gate-scope-20261016.json",
+  "noNewCanonicalRun": true
+}

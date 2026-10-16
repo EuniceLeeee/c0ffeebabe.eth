@@ -6,10 +6,11 @@ import { POOL, call, getterPool, probeAmount, quotePool, resultSource, returned,
 import { staticBinding } from "./instance.js";
 import { actionId, assertRoute } from "./routes.js";
 import { usesNativeStEthTransfer, nativeStEthRateRequests, projectNativeTransferQuote } from "./native-transfer-quote.js";
-import { curveRefreshAddresses, curveRefreshGuardRequests, curveRefreshRequirements, validateCurveRefreshScope } from "./refresh-scope.js";
+import { curveRefreshPolicy, curveRefreshAddresses, curveRefreshGuardRequests, curveRefreshRequirements, validateCurveRefreshScope } from "./refresh-scope.js";
 import type { CurvePlainDescriptor, CurvePlainPricingDescriptor, CurvePlainPricingSnapshot, CurvePlainRoute } from "./types.js";
 
 export const curvePlainPricing = {
+  refreshPolicyForInstance: ({ descriptor }) => curveRefreshPolicy(descriptor.instance),
   stateKey: route => route.routeKey,
   staticBindingProjection: ({ descriptor, routes }) => ({ ...staticBinding(descriptor), routeKeys: routes.map(r => r.routeKey) }),
   snapshotCompatibilityProjection: ({ descriptor, routes }) => ({ ...staticBinding(descriptor), routeKeys: routes.map(r => r.routeKey) }),

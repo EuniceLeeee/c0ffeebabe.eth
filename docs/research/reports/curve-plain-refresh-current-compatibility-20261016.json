@@ -1,0 +1,72 @@
+{
+  "kind": "curve-plain-current-scheduling-execution-compatibility",
+  "result": "pass-scoped",
+  "oldBehavior": {
+    "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
+    "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+  },
+  "oldInterface": {
+    "path": "docs/research/reports/current-interface-curve-plain-20261015.json",
+    "sha256": "ebb61e9bad1921d875a47ac93a8535af7f47e0dfa9669917f5224d80b4e39e5b"
+  },
+  "evidence": [
+    {
+      "path": "docs/research/reports/curve-plain-refresh-source-review-20261016.json",
+      "sha256": "6ae89644a318130f83b799ed2199e5b5c5e73d8c32d6c7289be91355f0dd5ea8"
+    },
+    {
+      "path": "docs/research/reports/curve-plain-refresh-independent-20261016.json",
+      "sha256": "4841efd7a8595c25745ccc156cbc1dab0fce1fd71524d758ffe1eb9d0348132a"
+    },
+    {
+      "path": "docs/research/reports/curve-plain-refresh-same-state-dependency-20261016.json",
+      "sha256": "b239c21c518b5c0b55d518b903b923703ea717cbda9e50715685b156622eea5b"
+    },
+    {
+      "path": "docs/research/reports/curve-plain-refresh-source-impact-20261016.json",
+      "sha256": "95590ce978dc94f5f317f82f16e09bb53107a6d7fd61021b5256285eb2f57aa5"
+    },
+    {
+      "path": "docs/research/reports/curve-plain-refresh-canonical-20261016.json",
+      "sha256": "d6dcfd6e45e82edcba8b40cb8e931f63fe6fe99acae0c9c711446953d70b611c"
+    }
+  ],
+  "currentSchedulingSource": [
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/pricing.ts",
+      "sha256": "4ef0f6754e67efb0c30277ec76f3c54dab89c1c0816af90b1846e7ffbf057428"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/refresh-scope.ts",
+      "sha256": "6b1dcd39f4b27d06bfcd74ef27dce8cc3c65493cb2afa33d622bd09d3979e94a"
+    }
+  ],
+  "generatedChanges": [
+    {
+      "familyId": "curve-plain",
+      "capability": "exact",
+      "before": "43f33281abd95e00cd065ec63d80adb9f88cc1efad7a220ef07bbe497d0176d0",
+      "after": "cde759ec435d21926aec1cd23e3b4d01de5283605e90325266200de785319506"
+    },
+    {
+      "familyId": "curve-plain",
+      "capability": "pricing",
+      "before": "b1de2f4f90944a54410d06244ffa1cff5eb0549724e001fe7a1673a605a84d25",
+      "after": "fac4aa1b25d7219bd03dea5f4710faaf8b639f3df86df1e5ce5e9f13a9d25974"
+    }
+  ],
+  "statement": [
+    "The only new helper is a pure function of unchanged modelFor; original refresh-scope text is exactly recovered by removing the newly added policy function. All helpers called by Exact, including implementation/ramp checks, are unchanged.",
+    "pricing adds only refreshPolicyForInstance(descriptor.instance). Proven exact2coin fixed models remain on-touch; unproven/full/NG/external models are each-block. No instance whitelist or admission expansion.",
+    "Exact generated contentHash changes from whole-file semantic dependency, not quote requests/decode/amount logic. Execution/action/recipient/native emitter files and generated execution identity unchanged.",
+    "At a fixed historical state all original quote/quoted/runtime/recipient/native guards remain unchanged;112positive224rejections retain original evidence and original mixture of reused and newly executed rows.",
+    "Refresh regression covers production lifecycle/root/coordinator effective quote on quiet heads, failure withdrawal and continued failure, fresh recovery and same-output head, unrelated on-touch carry. Raw bootstrap mids deliberately retain startup provenance."
+  ],
+  "counting": "112 effective positive results, not112 newly rerun. native71 contributes12 successful rows, native81only4 new direct rows; uintfull70reobserved32 old successful traces.",
+  "limits": [
+    "No112 newEVM claim and no new zero-input/old-inventory fault claims beyond original reports.",
+    "Known fixed-model active-ramp rejection unchanged; no new actual active-ramp execution proof.",
+    "Extra no-instance/unselected variants remain as previously recorded.",
+    "Natural valuation, original opportunity and4A/4B performance remain separate and unverified where previously unverified."
+  ]
+}

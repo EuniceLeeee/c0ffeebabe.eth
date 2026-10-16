@@ -1,0 +1,310 @@
+{
+  "schema": "impl-scope-final-incremental-confirmation/v1",
+  "createdAt": "2026-10-16T02:34:48.322062+00:00",
+  "reviewer": "impl_scope_final",
+  "scope": "Read-only reuse of existing scope audit; verify unchanged input hashes and only Curve136/137 progress. No new RPC/EVM/benchmark or source/original table edits.",
+  "priorSummary": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/final-scope-summary136.json",
+    "sha256": "65681d54b8ab67b013feaaac8ad99e13828bca2fdde2823e428123dd1d50f8bb"
+  },
+  "currentImpl": {
+    "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "sha256": "042557b8355e6516984c81afb9f3e2258510c4e3cc0754cf559868429b7558a3"
+  },
+  "all31RowHashesStillExact": true,
+  "fourMatrixHashesStillExact": true,
+  "publicationTip": "099fc391cc783c07e75e4c91cbecd8437e466fd1",
+  "coverage": {
+    "implRows": 31,
+    "inScopeRows": 30,
+    "explicitOutOfScopeRows": 1,
+    "matrixEntries": 35,
+    "distinctCanonicalFamilyIds": 31,
+    "canonicalFamilyIds": [
+      "aqua-swapvm",
+      "balancer-v1",
+      "balancer-v2",
+      "balancer-v3",
+      "curve-plain",
+      "curve-underlying",
+      "custom-swap:dodo-v2",
+      "custom-swap:ekubo-router-v1",
+      "custom-swap:oneswap",
+      "custom-swap:precision-pool",
+      "custom-swap:uniswap-v1",
+      "fluid-dex",
+      "kyberswap-elastic",
+      "mooniswap",
+      "protocol:badger-sett-withdraw",
+      "protocol:compound-ctoken",
+      "protocol:curve-lp",
+      "protocol:erc4626",
+      "protocol:erc4626-silo-redeem",
+      "protocol:few-wrapped",
+      "protocol:psm",
+      "protocol:psv",
+      "protocol:set-redemption",
+      "protocol:token-conversion",
+      "protocol:token-migration",
+      "protocol:yearn-auction",
+      "protocol:yieldbasis-lt",
+      "swap:algebra-integral",
+      "univ4",
+      "univ4-fee-hook",
+      "vault-spot"
+    ],
+    "unmappedInScopeRows": [],
+    "unmappedMatrixEntries": [],
+    "newRequiredFamilyOmissionsFound": [],
+    "newMandatoryNoInstanceVariantsFound": [],
+    "note": "35 entries include separate Basic/Legacy, standard/Frax/InfiniFi and BTB/xWin scopes. This count is not the48-family machine inventory acceptance count."
+  },
+  "aliases": {
+    "few": "protocol:few-wrapped",
+    "vault-spot-family": "vault-spot",
+    "curve-lp": "protocol:curve-lp"
+  },
+  "tokenConversionVariants": "xWin and BTBBear remain distinct actual variants of protocol:token-conversion; neither is omitted or double counted as a canonical Family.",
+  "correctnessStatus": {
+    "otherSelectedFamilies": "30 canonical Family scopes have retained selected necessary correctness evidence under the prior summary publication overlay; not all possible instances/variants and not all48 installed families.",
+    "curve-plain": "Implementation and actual production-entry offline baseline-red/candidate-green complete; final source/evidence binding, independent final review, settlement evidence publication and commit remain unconfirmed in this snapshot.",
+    "activeGoalComplete": false,
+    "allNecessaryCorrectnessComplete": false
+  },
+  "curveProgress": {
+    "baseline": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/baseline136.log",
+      "sha256": "938c9ec3397fcb6b402953dadd996120fda7b5f22289e417120767c12ccf0d4d"
+    },
+    "baselineReceipts": [
+      {
+        "name": "index",
+        "exitCode": 0,
+        "started": "2026-10-15T17:55:46.267900+00:00",
+        "finished": "2026-10-15T17:55:46.630934+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/baseline136-index.log",
+        "logSha256": "ce45a3ab5a4addc67367cc53e9ec4f8aea8edb5b2ec937c32d6d2edf15badd55"
+      },
+      {
+        "name": "refresh-before",
+        "exitCode": 1,
+        "started": "2026-10-15T17:55:46.632071+00:00",
+        "finished": "2026-10-15T17:55:48.522470+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/baseline136-refresh-before.log",
+        "logSha256": "ccccd1f070f0585b4c339ecb8b6f5b363beeff889ea4a9a6595940a88ef76008"
+      }
+    ],
+    "candidate": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/apply137.log",
+      "sha256": "80159e1f782f687769493ffc7ec7c279d135fc787ad77bc76af93f9365ab9dc1"
+    },
+    "candidateReceipts": [
+      {
+        "name": "generate",
+        "exitCode": 0,
+        "started": "2026-10-15T17:56:59.133276+00:00",
+        "finished": "2026-10-15T17:57:44.556713+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-generate.log",
+        "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+      },
+      {
+        "name": "index",
+        "exitCode": 0,
+        "started": "2026-10-15T17:57:44.563722+00:00",
+        "finished": "2026-10-15T17:57:44.929156+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-index.log",
+        "logSha256": "affd9bfae69c6934d3ff6f449010178529923b4fd9046d9d1f8af7011bb25c36"
+      },
+      {
+        "name": "refresh",
+        "exitCode": 0,
+        "started": "2026-10-15T17:57:44.930296+00:00",
+        "finished": "2026-10-15T17:57:46.933617+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-refresh.log",
+        "logSha256": "fb0a2b46b76ea732cfd597e026f942ee18642f209051cd6e8ab3bbc73bf2280c"
+      },
+      {
+        "name": "family",
+        "exitCode": 0,
+        "started": "2026-10-15T17:57:46.933966+00:00",
+        "finished": "2026-10-15T17:57:48.845756+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-family.log",
+        "logSha256": "8fde81655390caa3552adb29a4729d5c7d4d556d87da913353c5cc69c58e022b"
+      },
+      {
+        "name": "native-contract",
+        "exitCode": 0,
+        "started": "2026-10-15T17:57:48.846114+00:00",
+        "finished": "2026-10-15T17:57:51.152479+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-native-contract.log",
+        "logSha256": "95145c94fc709faa21fe74101e247f73b847c42fece7912f9c087d16fcfdd6ec"
+      },
+      {
+        "name": "nomination",
+        "exitCode": 0,
+        "started": "2026-10-15T17:57:51.152870+00:00",
+        "finished": "2026-10-15T17:57:53.349540+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-nomination.log",
+        "logSha256": "9a97a4e7aa92433b07c1014e9adc83baa0a8e9424fd00ec4139b70acabdffb42"
+      },
+      {
+        "name": "dual",
+        "exitCode": 0,
+        "started": "2026-10-15T17:57:53.349931+00:00",
+        "finished": "2026-10-15T17:58:01.578655+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-dual.log",
+        "logSha256": "887760570f25960d040caf01b7d5def2144bb0dec29894877456986776b12a7e"
+      },
+      {
+        "name": "build",
+        "exitCode": 0,
+        "started": "2026-10-15T17:58:01.579107+00:00",
+        "finished": "2026-10-15T17:58:10.259796+00:00",
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-build.log",
+        "logSha256": "16f215c44972517a90fc93515d235e4d51888e1f5ef7018769dffac0b50f1907"
+      }
+    ],
+    "status": "All eight recorded generation/index/check/build commands exited0. This is necessary refresh correctness evidence, not new historical execution; retain112 old positive executions unchanged.",
+    "remaining": [
+      "final evidence/source binding",
+      "independent final review",
+      "required settlement documentation gate",
+      "scoped commit and push",
+      "minimal original-table update after publication"
+    ]
+  },
+  "layers": {
+    "actualCorrectness": "Current production wiring/reverse identity, selected actual modes/directions, amount quote+quoted+runtime actual receipt, Exact0/no fallback, applicable inventory/native/error/callback/dependency refresh and source-bound reviews. Current real Curve refresh gap remains blocking for this layer.",
+    "naturalIntegration": "Production entry/admission evidence is required where changed and retained. Fresh-from-zero Ready, default price chain, raw/effective natural coverage and valuation are separately recorded; reused Ready and input-only donors never become fresh natural success. Quiet-head effective refresh is required correctness; raw bootstrap retention is not falsely called full repricing.",
+    "opportunity": "Original prefix/call-prestate, enumeration/rank/amount selection/final sim/netEV remain tied to their exact prior state/configuration/version. Callback funding fixtures and end-block samples provide no new opportunity claim; prior negativeEV/denial preserved.",
+    "stage4A": "Original local/source-frozen timing work remains separately pending/unaccepted by these correctness matrices; no new measurement here.",
+    "stage4B": "Original representative-scale timing and workload/budget remain separately pending/failed as recorded; BalancerV2 four-second representative failure is retained. Stage4 serial-resource rule preserved.",
+    "formalMergeAndDeployment": "Actual working-source correctness includes protected peer dirtyV1 identity source; owned commit-only build is a different scope. No globalclean-commit/merge_ready, formalAdapterReplay/family_local, deployment, live, signing or broadcast conclusion."
+  },
+  "noInstanceOrUnselectedBoundaries": [
+    {
+      "familyId": "univ4-fee-hook",
+      "boundary": "fa439 has no initialized native instance through fixedN26195865; selectedUSDC/WETH tier passed, shared synthetic native tests are not historical native execution."
+    },
+    {
+      "familyId": "swap:algebra-integral",
+      "boundary": "Only six actual Cypher dynamic profiles in this acceptance; static profile and unselected input-first advance-payment remain unverified without creating a hypothetical target."
+    },
+    {
+      "familyId": "curve-plain",
+      "boundary": "Three no-instance receiver/mode declarations remain unknown; actual full/external quiet refresh above is a separate real gap and must close."
+    },
+    {
+      "familyId": "curve-underlying",
+      "boundary": "No invented precision/rate combinations beyond actual native/FRAX/classic instances."
+    },
+    {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "boundary": "Uninstanced extensions/TWAMM do not become required execution targets; actual Router internal callback is not caller continuation."
+    },
+    {
+      "familyId": "custom-swap:dodo-v2",
+      "boundary": "Actual twoGSP/four directions only; otherDVM/DSP/DPP and separateflashLoan not silently added."
+    },
+    {
+      "familyId": "protocol:set-redemption",
+      "boundary": "Actual four-componentBasic redemption and installedLegacy directions required and covered; uninstalledissue not mandatory; selected-component handoff is post-redeem transfer, not protocol external basket redemption."
+    },
+    {
+      "familyId": "protocol:erc4626",
+      "boundary": "Frax asynchronous RWA and instance-specific unadmitted directions are not invented; all18 actually selected standard targets remain covered inC."
+    },
+    {
+      "familyId": "protocol:compound-ctoken",
+      "boundary": "Actual share redemption only; cETH/redeemUnderlying are not installed selected actions."
+    },
+    {
+      "familyId": "mooniswap",
+      "boundary": "57fb is an additional actual instance with incomplete same-source provenance, not a no-instance claim. Preserve unverified and do not extend2c4 success to it."
+    },
+    {
+      "familyId": "fluid-dex",
+      "boundary": "Original jrUSDe opportunity remains original evidence. Three-pool recipient acceptance does not claim current external-recipient execution for that separate instance."
+    },
+    {
+      "familyId": "credit:fluid",
+      "boundary": "Original FluidCredit/wstUSR row is expressly outside current conserving-loop scope, not an omitted required swap family."
+    }
+  ],
+  "outOfScope": {
+    "familyId": "credit:fluid",
+    "tableRow": 27,
+    "reason": "Original FluidCredit/wstUSR inventory/credit outcome belongs to prior authorization; present task covers conserving DEX/protocol loops and expressly excludes borrowing/liquidation/locked inventory strategy expansion. Preserve original evidence, not an omitted swap adaptation."
+  },
+  "preservedFailuresAndUnknowns": [
+    "Original strict resource-limited outcomes remain resource-limited even when independent fork rollback is available.",
+    "Curve baseline136 real refresh failure retained alongside137 success.",
+    "No new natural valuation or original-TX opportunity pass follows from source compatibility or refresh regressions.",
+    "Mooniswap57fb remains an actual unverified provenance instance, not a hypothetical no-instance case.",
+    "Original performance failures including BalancerV2 representative four-second budget failure remain; no4A/4B performance promotion.",
+    "fa439 native instance absent at pinnedN remains applicability boundary, not mandatory fabricated pool."
+  ],
+  "minimalTableUpdatesNow": [
+    "No new scope edit required: latest original IMPL SHA042557 already correctly records published three refresh fixes and pendingCurve."
+  ],
+  "minimalTableUpdatesAfterCurvePublication": [
+    {
+      "location": "top current source/timestamp and current remaining-correctness bullet",
+      "change": "Update to exact pushed Curve commit and final evidence only after gates/review complete; retain natural/opportunity/performance separation."
+    },
+    {
+      "location": "table row8 Curve plain+Fluid",
+      "change": "Close only demonstrated quiet-head refresh gap with red136/green137 and exact final review; preserve112 historical executions as reused."
+    },
+    {
+      "location": "table row28 Curve Tricrypto+Mooniswap",
+      "change": "Reference same Curve refresh closure; preserveMooniswap separate57fb unknown and original opportunity outcomes."
+    },
+    {
+      "location": "table row10 YearnAuction+CurveLP",
+      "change": "Only if text points to global Curve refresh pending, replace that pointer; do not alter accepted Yearn/CurveLP local evidence."
+    },
+    {
+      "location": "timestamps",
+      "change": "One newest progress timestamp per touched row; do not remove cumulative evidence or old failures."
+    }
+  ],
+  "matrixTextCorrectionView": [
+    {
+      "matrix": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b.json",
+        "sha256": "d844f0473937ef21bde80f79a217bd9a8aa59204be0ab9b66cad6ce29fe7c314"
+      },
+      "pointers": [
+        "/rows/5/requirements/1/finding",
+        "/rows/5/requirements/2/finding"
+      ],
+      "issue": "Fluid summary incorrectly mentions deferred scope/callback debt/zero-initial debt fixture. Aggregate48 rejection also needs the two evidence classes separated.",
+      "correctedScope": "Three actual Fluid pools/six directions:48 quoted/default/direct-self/direct-external positive executions,44 old strict-declared reverts plus4 independently observed same-N fork rollbacks;12 read-only quotes. Input-first callback only; no caller deferred funding.",
+      "authoritativeEvidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/reports/fluid-current-settlement-correctness-20261015.json",
+          "sha256": "fbd8bed5d53bc9e5c2fc712820f5e122424b844ce4ac743fb0b3b3b7ffd3ae38",
+          "fields": [
+            "scope",
+            "positiveExecutions",
+            "rejections",
+            "counting",
+            "limits"
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/reports/current-interface-fluid-dex-20261015.json",
+          "sha256": "b0ea8dda9514fbc46275e3187bf3b4ba2afa2f629706949452e0c72d0644555a",
+          "pointer": "/families/0/variants/0"
+        }
+      ],
+      "acceptanceImpact": "Summary wording correction only; latest IMPL and source-bound typed evidence already retain the correct scope. Do not change oldraw hashes or count the4 strict resource-limited outcomes as strict passes."
+    }
+  ],
+  "limits": [
+    "Reuse existing audited scope; no repetition of per-EVM reviews.",
+    "099fc commit object verified locally; push receipt inherited from prior authenticated summary, no new remote call.",
+    "Curve final publication may advance after this file; consume owner final receipt before updating completion."
+  ]
+}

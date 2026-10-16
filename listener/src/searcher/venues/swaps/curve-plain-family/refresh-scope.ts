@@ -49,6 +49,13 @@ function modelFor(descriptor: CurvePlainDescriptor): StorageQuoteModel | undefin
     descriptor.binding.quoteAbi === (model.ramp === "A" ? "int128" : "uint256") ? model : undefined;
 }
 
+// Only the exact storage-only models above prove safe carry after the full
+// precision ramp guard. Unknown/full/NG/external-view variants may change with
+// time or external state without touching the pool; keep those quotes fresh.
+export function curveRefreshPolicy(descriptor: CurvePlainDescriptor): "on-touch" | "each-block" {
+  return modelFor(descriptor) ? "on-touch" : "each-block";
+}
+
 /** Only this Family interprets the pool's dependency closure. Keep the pool
  * and immutable implementation observed; no token-behavior assumptions. */
 export function curveRefreshAddresses(descriptor: CurvePlainDescriptor): readonly string[] {

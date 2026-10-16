@@ -1,0 +1,326 @@
+{
+  "kind": "curve-plain-refresh-semantic-impact-final",
+  "result": "pass-static-and-actual-canonical",
+  "baseHead": "3147b98771ea1fd97dc747324773e8447305d3fc",
+  "candidate": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/handoff.json",
+    "sha256": "505a8d4a97b6d9dfc65bfecd0125fe82bc52b2cdd4d50613376bf54b47150d25"
+  },
+  "proof": {
+    "refreshScopeOriginalTextRecoveredExactlyByRemovingOnlyNewPolicyFunction": true,
+    "pricingOriginalTextRecoveredExactlyByRemovingOnlyPolicyImportAndRegistration": true,
+    "helperNewRuntimeSideEffects": false,
+    "exactConsumers": "exact.ts imports only curveRefreshGuardRequests, curveRefreshRequirements, validateCurveRefreshScope. All unchanged byte text and same module initializers/modelFor/constants. New policy function is never called by Exact.",
+    "executionConsumers": "execution.ts and action/recipient/native generation do not import refresh-scope or pricing. Their files and manifest source closure unchanged.",
+    "unchangedActualFiles": [
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/exact.ts",
+        "sha256": "6cf7d36a5db00c2b632560a40a5f02eb35ed54647c879d3fdc587115e913b75e"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+        "sha256": "35771544ec5276e38f6050076ef937a0155b997f436ccedd0cc49337d8d50fd8"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/recipient.ts",
+        "sha256": "73780154dcc3828a8ec231a355f64b7319b33f14616d6999ba43498d1707ce7c"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+        "sha256": "9197503b20ba1edef51c13cd864852409ac00326699b060fb9f2401fdd8ffee8"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/native-transfer-quote.ts",
+        "sha256": "f5f5bceaf6d59c3fdfb8c32f4365b0f363f804754a5e095a2a2f28631ef9d793"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/action.ts",
+        "sha256": "b9874d95d2e433ea4961a29cf383482b97969062e3a04e2429f7a9d03d963d16"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/codec.ts",
+        "sha256": "f0085b228b62279cc4f47c02c32e6f302dbc654fec72ba3ea2109c4f88ef46ab"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
+        "sha256": "f19cf1164c368af5334151fc600203a9e18aacd32a717330402268a30db460d0"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "sha256": "62490e83fec328b0e9420e84cfea78b256d2c2d3568af362162288596e0a252b"
+      }
+    ]
+  },
+  "generatedExpectation": {
+    "beforeCatalog": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/export131/family-capability-shadow.generated.json",
+      "sha256": "58c5ffb539138741f0860275b2a2349c6bdad7d19a6205f4e3a5663a736bcb4f"
+    },
+    "entries": [
+      {
+        "familyId": "curve-plain",
+        "capability": "capture",
+        "before": "e19d181ec09f2786fecc66904f398bd76318bd5a4fdc8118331d0d6c9d151a91",
+        "expectedChanged": false,
+        "reason": "no changed source in semantic dependency closure",
+        "root": {
+          "capability": "capture",
+          "entrySourceFile": "src/searcher/venues/swaps/curve-plain-family/capture.ts",
+          "entryExport": "curvePlainCapture",
+          "additionalSourceFiles": [
+            "src/searcher/venues/swaps/curve-plain-family/manifest.ts"
+          ],
+          "absence": null
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "credit",
+        "before": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "expectedChanged": false,
+        "reason": "no changed source in semantic dependency closure",
+        "root": {
+          "capability": "credit",
+          "entrySourceFile": null,
+          "entryExport": null,
+          "additionalSourceFiles": [],
+          "absence": "declared-absent"
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "discovery",
+        "before": "e04f4c7894efffafcca7a004699687f1c67763db16cdd1cd383e028038d053ad",
+        "expectedChanged": false,
+        "reason": "no changed source in semantic dependency closure",
+        "root": {
+          "capability": "discovery",
+          "entrySourceFile": "src/searcher/venues/swaps/curve-plain-family/discovery.ts",
+          "entryExport": "curvePlainDiscovery",
+          "additionalSourceFiles": [
+            "src/searcher/venues/swaps/curve-plain-family/manifest.ts"
+          ],
+          "absence": null
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "exact",
+        "before": "43f33281abd95e00cd065ec63d80adb9f88cc1efad7a220ef07bbe497d0176d0",
+        "expectedChanged": true,
+        "reason": "file-level closure includes refresh-scope; exact uses only unchanged exports",
+        "root": {
+          "capability": "exact",
+          "entrySourceFile": "src/searcher/venues/swaps/curve-plain-family/exact.ts",
+          "entryExport": "curvePlainExact",
+          "additionalSourceFiles": [
+            "src/searcher/venues/swaps/curve-plain-family/manifest.ts"
+          ],
+          "absence": null
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "execution",
+        "before": "374e9d580c7d6804844a299abd53cf2f43b6799a1fa2471185627cfed08dee2d",
+        "expectedChanged": false,
+        "reason": "no changed source in semantic dependency closure",
+        "root": {
+          "capability": "execution",
+          "entrySourceFile": "src/searcher/venues/swaps/curve-plain-family/execution.ts",
+          "entryExport": "curvePlainExecution",
+          "additionalSourceFiles": [
+            "src/searcher/venues/swaps/curve-plain-family/action.ts",
+            "src/searcher/venues/swaps/curve-plain-family/manifest.ts"
+          ],
+          "absence": null
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "funding",
+        "before": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "expectedChanged": false,
+        "reason": "no changed source in semantic dependency closure",
+        "root": {
+          "capability": "funding",
+          "entrySourceFile": null,
+          "entryExport": null,
+          "additionalSourceFiles": [],
+          "absence": "declared-absent"
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "identity",
+        "before": "712e31ad864cabf46902f503f15015545821f28f8299f9c1cefdfb605bf70c72",
+        "expectedChanged": false,
+        "reason": "no changed source in semantic dependency closure",
+        "root": {
+          "capability": "identity",
+          "entrySourceFile": "src/searcher/venues/swaps/curve-plain-family/identity.ts",
+          "entryExport": "curvePlainIdentity",
+          "additionalSourceFiles": [
+            "src/searcher/venues/swaps/curve-plain-family/manifest.ts"
+          ],
+          "absence": null
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "instance",
+        "before": "bffecb337b7e48b34edb403a8921beeb9bc6ea37e0a92cb7dd9830319689e787",
+        "expectedChanged": false,
+        "reason": "no changed source in semantic dependency closure",
+        "root": {
+          "capability": "instance",
+          "entrySourceFile": "src/searcher/venues/swaps/curve-plain-family/instance.ts",
+          "entryExport": "curvePlainInstance",
+          "additionalSourceFiles": [
+            "src/searcher/venues/swaps/curve-plain-family/manifest.ts"
+          ],
+          "absence": null
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "pricing",
+        "before": "b1de2f4f90944a54410d06244ffa1cff5eb0549724e001fe7a1673a605a84d25",
+        "expectedChanged": true,
+        "reason": "new actual scheduling policy",
+        "root": {
+          "capability": "pricing",
+          "entrySourceFile": "src/searcher/venues/swaps/curve-plain-family/pricing.ts",
+          "entryExport": "curvePlainPricing",
+          "additionalSourceFiles": [
+            "src/searcher/venues/swaps/curve-plain-family/manifest.ts"
+          ],
+          "absence": null
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "routes",
+        "before": "9d75e185cd88a626e82703744802495e002dc814c20bba4d5627b5a9ef777882",
+        "expectedChanged": false,
+        "reason": "no changed source in semantic dependency closure",
+        "root": {
+          "capability": "routes",
+          "entrySourceFile": "src/searcher/venues/swaps/curve-plain-family/routes.ts",
+          "entryExport": "curvePlainRoutes",
+          "additionalSourceFiles": [
+            "src/searcher/venues/swaps/curve-plain-family/manifest.ts"
+          ],
+          "absence": null
+        }
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "victim",
+        "before": "c6f8140cca77dedd0f4d97c6231b214bffb09b9ac1eee5eedb3f58013c7540b9",
+        "expectedChanged": false,
+        "reason": "no changed source in semantic dependency closure",
+        "root": {
+          "capability": "victim",
+          "entrySourceFile": "src/searcher/venues/swaps/curve-plain-family/swap.ts",
+          "entryExport": "curvePlainSwap",
+          "additionalSourceFiles": [
+            "src/searcher/venues/swaps/curve-plain-family/manifest.ts"
+          ],
+          "absence": null
+        }
+      }
+    ],
+    "expectExactlyChanged": [
+      "curve-plain:exact",
+      "curve-plain:pricing"
+    ],
+    "topLevel": "artifactHash expected to change; root must compare actual regenerated artifact before claiming this expectation verified.",
+    "notRuntimeChange": "Exact content hash changes because file-level semantic dependency includes refresh-scope.ts, not because quote request/decode/body changed. Execution content hash should remain unchanged."
+  },
+  "inventoryPlan": {
+    "baseInventory": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/delivery134/family-settlement-interface-review-20261014.json",
+      "sha256": "921c24a6aea6f11e592cb20466b840a88f9ed082176c1697927a23bf6047e956"
+    },
+    "familyId": "curve-plain",
+    "sourcePinsNeedChange": [],
+    "reason": "Existing settlement-interface source closure intentionally does not include pricing/refresh-scope. Keep source/common pins as actual unchanged closure; do not substitute old hash to satisfy gate.",
+    "newEvidencePins": [
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/pricing.ts",
+        "sha256": "4ef0f6754e67efb0c30277ec76f3c54dab89c1c0816af90b1846e7ffbf057428"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/refresh-scope.ts",
+        "sha256": "6b1dcd39f4b27d06bfcd74ef27dce8cc3c65493cb2afa33d622bd09d3979e94a"
+      }
+    ],
+    "currentSchedulingSource": "Add separate currentSchedulingSource/certification field binding these2 new actual hashes plus generated exact/pricing before/after.",
+    "interfaceView": {
+      "previous": {
+        "path": "docs/research/reports/current-interface-curve-plain-20261015.json",
+        "sha256": "ebb61e9bad1921d875a47ac93a8535af7f47e0dfa9669917f5224d80b4e39e5b"
+      },
+      "newSuggested": "docs/research/reports/current-interface-curve-plain-refresh-20261016.json"
+    },
+    "behaviorView": {
+      "previous": {
+        "path": "docs/research/reports/curve-plain-recipient-behavior-20261015.json",
+        "sha256": "3df25bda5835efb2be8496d84d9fe45f0e2c1f0b52392594858834cd97720229"
+      },
+      "newSuggested": "docs/research/reports/curve-plain-refresh-current-behavior-20261016.json",
+      "preserveCounters": {
+        "positiveExecutions": 112,
+        "rejections": 224
+      },
+      "preserve": "Original mixed reused/new accounting, all actual source/hash and error records. No new historical EVM, zero-input/stock/rollback assertions only to their original extent."
+    },
+    "variantChanges": "Only5 existing verified execution rows reference new behavior view; unchanged caller-only/absent-instance states and all capabilities. Old evidence retained."
+  },
+  "requiredFinalEvidence": {
+    "baseline": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/baseline136-checks.json",
+      "sha256": "5146af8671e0afae43a15ca5bcbc84482911dcda81b7bd1ca88379af1d9f934f"
+    },
+    "after": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/apply137-checks.json",
+      "sha256": "66224526325967e3c050fe6a217e769222b76f7fba4c7236437779ea4a3a9738"
+    },
+    "catalogDiff": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/catalog-diff137.json",
+      "sha256": "921f07c9f4d6b03afe02491e0e0f6d1066728bc1a53a2209af141de0efa2467f"
+    },
+    "finalPins": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/final137-pins.json",
+      "sha256": "3d63c6bd0533a2984017028d52be95a50509aa45fe7d178d57ba5f394e971634"
+    }
+  },
+  "limits": [
+    "No new historical EVM or performance run.",
+    "Policy changes which admitted instance is refreshed each head; quote/identity/math/ABI/execution guards unchanged.",
+    "Known fixed model active-ramp rejection unchanged; no broader ramp support inferred."
+  ],
+  "preflight": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/impact136.json",
+    "sha256": "15537b09cb4926421408b07be0c370f95efa40cbb533ab3724c858ca834b20e5"
+  },
+  "actualGeneratedChanges": [
+    {
+      "familyId": "curve-plain",
+      "capability": "exact",
+      "before": "43f33281abd95e00cd065ec63d80adb9f88cc1efad7a220ef07bbe497d0176d0",
+      "after": "cde759ec435d21926aec1cd23e3b4d01de5283605e90325266200de785319506"
+    },
+    {
+      "familyId": "curve-plain",
+      "capability": "pricing",
+      "before": "b1de2f4f90944a54410d06244ffa1cff5eb0549724e001fe7a1673a605a84d25",
+      "after": "fac4aa1b25d7219bd03dea5f4710faaf8b639f3df86df1e5ce5e9f13a9d25974"
+    }
+  ],
+  "actualFinalPins": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/final137-pins.json",
+    "sha256": "3d63c6bd0533a2984017028d52be95a50509aa45fe7d178d57ba5f394e971634"
+  }
+}

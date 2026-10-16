@@ -1,0 +1,63 @@
+{
+  "kind": "fresh-non-author-curve-plain-refresh-source-review",
+  "reviewer": "v4_accept26",
+  "result": "pass-source-scoped",
+  "handoff": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/handoff.json",
+    "sha256": "505a8d4a97b6d9dfc65bfecd0125fe82bc52b2cdd4d50613376bf54b47150d25"
+  },
+  "files": [
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/pricing.ts",
+      "beforeSha256": "8481bd6a8f2a8685a684e3fee2cb7daca18a0149819181a2f9947741a43d91e9",
+      "afterSha256": "4ef0f6754e67efb0c30277ec76f3c54dab89c1c0816af90b1846e7ffbf057428"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/refresh-scope.ts",
+      "beforeSha256": "7412a41813819417924ce00d5601cc4fc63f9a63608b39c3c189c1e80099dbd4",
+      "afterSha256": "6b1dcd39f4b27d06bfcd74ef27dce8cc3c65493cb2afa33d622bd09d3979e94a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/refresh.ts",
+      "beforeSha256": null,
+      "afterSha256": "30d8f9cedd9e396afd87265400743ff11c986c6a25008f390db451e566a9d3f8"
+    }
+  ],
+  "sameNDeploymentBinding": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/sameN-source-join.json",
+    "sha256": "b239c21c518b5c0b55d518b903b923703ea717cbda9e50715685b156622eea5b"
+  },
+  "independentFindings": [
+    "Independently recomputed actual raw4ebdf runtime and cached verified deployment runtime hash: exact byte equality f29fb95ca44fe2f979303e309cbaba61d44dd503fddeb111caae94e1b0857154 at N26152607/hash20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369.",
+    "Read verified source _A_gamma1261–1282 clock interpolation and get_dy1667–1677 factory.views_implementation/external Views call. Existing exact2coin dependency classifier does not prove this full3coin model.",
+    "Two production changes only export a policy derived from existing modelFor and wire it through pricing.refreshPolicyForInstance(descriptor.instance). Actual production root passes pricingDescriptor at strict-production-runtime-session304, so descriptor shape is correct.",
+    "Fixed models require existing exact immutable1167 hash,2coins and matching ABI; arbitrary pool address preserves classification. Unknown/incompatible/full/NG/external variants each-block without adding an admission allowlist.",
+    "No changes to model set, fullprecision A/gamma equality, implementation-hash validation, active-ramp rejection, identity, Exact math, ABI, amounts, execution programs or common runtime.",
+    "New test uses actual lifecycle/catalog admission, production root index, coordinator and effective Exact publication. First old-code failure follows admission at actual missing perBlockRefresh collection, not missingnewexport/import failure.",
+    "Quiet changed head, two consecutive failures without raw fallback, recovery, sameoutput newhead freshness and unrelated V2 on-touch carry tested; raw bootstrap mids deliberately unchanged.",
+    "Latest local scheduler fixture only supplies requested empty effect collections when absent, while existing observed successful deltas override defaults. This corrects fixture transport shape and does not modify production validation. Local preparation failures preserved."
+  ],
+  "localResultEvidence": {
+    "before": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/local-before.log",
+      "sha256": "87a521d81b5235231b48fb43664ef33afeaa3100bbb7dcd24796fe045546347b",
+      "exitCode": 1,
+      "failure": "actual production root perBlockRefreshStateKeys empty"
+    },
+    "after": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/local-attempt3.log",
+      "sha256": "e4875907392d913a730e36a62d316a3023b0052a2a8792554cdea4fc59a03af1",
+      "exitCode": 0
+    }
+  },
+  "remainingRequired": [
+    "Root canonical old-code red/new-code green on actual cloud source, catalog/build and relevant regression reconciliation.",
+    "Parent current-compatible views must reference immutable old112 historical results and new scheduling-only source/canonical evidence."
+  ],
+  "limits": [
+    "Source review plus independently read author local red/green receipts; reviewer did not rerun tests or EVM.",
+    "New offline quote transport is synthetic scheduling evidence, not a new actual3coin formula/transaction validation.",
+    "Original112 historical executions remain existing evidence, no repeated count.",
+    "No active-ramp success for guarded2coin models, new admission, natural valuation, opportunity or phase4 performance claim."
+  ]
+}

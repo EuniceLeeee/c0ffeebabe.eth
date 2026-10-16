@@ -1,0 +1,157 @@
+{
+  "schema": "family-settlement-actual-result-scope-interpretation/v1",
+  "reviewer": "impl_scope_final",
+  "createdAt": "2026-10-16T02:43:34.205755+00:00",
+  "familyId": "curve-plain",
+  "result": "actual-selected-scope-pass; full-family-machine-gate-remains-failed",
+  "actualCanonicalRun": {
+    "stdout": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/apply138.log",
+      "sha256": "b4c9a2b0f69df10d347a208f7d19f0e9d6b2bc1a9336d405783166ec9e61f30e"
+    },
+    "exitCode": 1,
+    "result": {
+      "scope": "settlement capability acceptance only",
+      "installed": 48,
+      "results": [
+        {
+          "familyId": "curve-plain",
+          "passed": false,
+          "failures": [
+            "variant coverage is incomplete",
+            "received-no-receiver declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; 该精确声明 mode 无独立实际 Ready 部署样本，interface/实现身份与收款方/回调语义尚未核实。; 相邻模式 ABI 或 codec 分支存在不能代替本模式执行验收。",
+            "received-uint declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; 该精确声明 mode 无独立实际 Ready 部署样本，interface/实现身份与收款方/回调语义尚未核实。; 相邻模式 ABI 或 codec 分支存在不能代替本模式执行验收。",
+            "native-exchange-uint declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; 该精确声明 mode 无独立实际 Ready 部署样本，interface/实现身份与收款方/回调语义尚未核实。; 相邻模式 ABI 或 codec 分支存在不能代替本模式执行验收。"
+          ]
+        }
+      ]
+    },
+    "invocation": [
+      "npm",
+      "run",
+      "tool-run",
+      "--",
+      "--manifest",
+      "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/gate138-selection.json",
+      "--tool",
+      "listener:searcher:family-settlement-review",
+      "--",
+      "--family",
+      "curve-plain"
+    ],
+    "fullMachineGatePassed": false
+  },
+  "currentGateSource": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/family-settlement-review.ts",
+    "sha256": "b01a7c5ab1576069d065f347b7ca07f6ad0911f0321ab5a5655431277a6a962b",
+    "equalsPublished099fc": true,
+    "readReceipt": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/gate141-read.json",
+      "sha256": "1d2565d71c3e72586a57bc870129867dc7b86deeca5cc8e684e217408bed4df3"
+    },
+    "cliSupportsVariantSelection": false,
+    "sourceOrder": "manifest freshness and validateInventory; complete source closure coverage; common and row pins; complete evidenceFailures including all11 interface IDs; reviewFailures. Failures aggregate unsuppressed."
+  },
+  "existingFailureComparison": {
+    "publishedReport": "docs/research/reports/family-settlement-five-family-gates-20261015.json",
+    "publishedAt": "099fc391cc783c07e75e4c91cbecd8437e466fd1",
+    "publishedReportSha256": "ad86dd5be815f0f0970b30034466e53fc312f5b998aeee9b49035302a27ae05d",
+    "oldActualLog": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/shared59/five-gate87-curve-plain.log",
+      "sha256": "2f5f5711e84d5f1abfd57107ba92b743342434ee9891161436e5201b54faad8c"
+    },
+    "oldExitCode": 1,
+    "failureArraysByteEquivalent": true,
+    "newExtraFailures": []
+  },
+  "userAuthorizedScope": {
+    "basis": "User explicitly excludes extra variants without an actual instance in current samples/Ready from mandatory adaptation gaps. This does not assert no such deployment exists on-chain. The11-ID inventory retains allunknown states and historical evidence; no new exception is inferred from this gate failure.",
+    "actualSelectedVariantIds": [
+      "received (int128 indices, explicit receiver)",
+      "exchange int128 old caller-only implementations",
+      "exchange int128 crvUSD factory clones",
+      "exchange-uint optimized full runtime",
+      "exchange-uint optimized clone",
+      "exchange-uint Tricrypto2 legacy",
+      "native-exchange newer stETH clone",
+      "native-exchange legacy stETH pool"
+    ],
+    "actualSelectedVariantCount": 8,
+    "selectedVerifiedExecutionModes": 5,
+    "selectedCallerOnlyNoAdditionalSettlementModes": 3,
+    "excludedExtraNoInstanceIds": [
+      "received-no-receiver declared mode without distinct real Ready sample",
+      "received-uint declared mode without distinct real Ready sample",
+      "native-exchange-uint declared mode without distinct real Ready sample"
+    ],
+    "excludedStillUnverified": true,
+    "inventoryCoverage": "partial"
+  },
+  "selectedOutcome": {
+    "passed": true,
+    "kind": "Interpretation of already executed complete canonical output, not a new or weakened gate",
+    "basis": [
+      "Full actual gate produced exactly four retained failures: coverage incomplete and the three explicitly unverified no-instance declarations.",
+      "No common/Family source pin failure, source closure assertion, hashed review/evidence failure or selected8 semantics failure appears.",
+      "All actual11 interface IDs and originalpartial inventory were checked without filtering or rewriting.",
+      "5 verified execution modes retain112 successful/224 rejection evidence via unchanged source-compatible behavior;3 caller-only entries are no-new-settlement-mode-required, not new execution counts."
+    ],
+    "fullFamilyPassed": false,
+    "all48FamiliesPassed": false,
+    "newExecutionCount": 0
+  },
+  "preserve": [
+    "Originalapply138 exit1/log and priorfive-gate87 exit1 remain intact.",
+    "All11 inventory IDs,3unknown andpartialcoverage remain.",
+    "No originalhash rewrite, variantdeletion or source/evidencevalidator change.",
+    "Natural/opportunity/4A4B/fullgoal states are not upgraded by this scope interpretation."
+  ],
+  "limits": [
+    "This review used exact actualstdout result; root should retain the full cloud gate138 receipt/log/selection alongside this interpretation.",
+    "No new CLI,test,build,RPC,EVM or source modification; the only cloudcall read existing source and oldlog.",
+    "Scoped commit/push still root-owned; full machine gate must remain reportedfalse."
+  ],
+  "previousSnapshot": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/gate138-scoped-interpretation141.json",
+    "sha256": "705a207f727bf36b501b4daad2edb7de740493e58ebcdac2ea6a72b61c3f6a04"
+  },
+  "expectedFullGateFailures": [
+    "variant coverage is incomplete",
+    "received-no-receiver declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; 该精确声明 mode 无独立实际 Ready 部署样本，interface/实现身份与收款方/回调语义尚未核实。; 相邻模式 ABI 或 codec 分支存在不能代替本模式执行验收。",
+    "received-uint declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; 该精确声明 mode 无独立实际 Ready 部署样本，interface/实现身份与收款方/回调语义尚未核实。; 相邻模式 ABI 或 codec 分支存在不能代替本模式执行验收。",
+    "native-exchange-uint declared mode without distinct real Ready sample: deployment interface; deployment identity; callback semantics; recipient semantics; capability wiring; execution evidence; 该精确声明 mode 无独立实际 Ready 部署样本，interface/实现身份与收款方/回调语义尚未核实。; 相邻模式 ABI 或 codec 分支存在不能代替本模式执行验收。"
+  ],
+  "selectedVariantIds": [
+    "received (int128 indices, explicit receiver)",
+    "exchange int128 old caller-only implementations",
+    "exchange int128 crvUSD factory clones",
+    "exchange-uint optimized full runtime",
+    "exchange-uint optimized clone",
+    "exchange-uint Tricrypto2 legacy",
+    "native-exchange newer stETH clone",
+    "native-exchange legacy stETH pool"
+  ],
+  "unverifiedVariantIds": [
+    "received-no-receiver declared mode without distinct real Ready sample",
+    "received-uint declared mode without distinct real Ready sample",
+    "native-exchange-uint declared mode without distinct real Ready sample"
+  ],
+  "unverifiedVariantInterpretation": {
+    "claim": "现有样本／Ready未找到这三个精确声明模式的独立实际部署，不断言链上不存在，也不把相邻ABI分支当本模式已验。",
+    "modes": [
+      {
+        "id": "received-no-receiver declared mode without distinct real Ready sample",
+        "declaration": "received-no-receiver：int128索引、无receiver参数"
+      },
+      {
+        "id": "received-uint declared mode without distinct real Ready sample",
+        "declaration": "received-uint：uint256索引、带receiver参数"
+      },
+      {
+        "id": "native-exchange-uint declared mode without distinct real Ready sample",
+        "declaration": "native-exchange-uint：payable四参、无receiver参数"
+      }
+    ],
+    "declarationSource": "Root current-codec check reported in this session; exact gatevariant IDs and allunknown statuses independently authenticated above. No new on-chain nonexistence conclusion."
+  }
+}

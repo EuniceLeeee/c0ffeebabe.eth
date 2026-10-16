@@ -1,0 +1,1431 @@
+{
+  "schema": "impl-table-completion-scope-reconciliation/v1",
+  "reviewer": "interface_protocols_b",
+  "createdAt": "2026-10-15T18:06:10.726970+00:00",
+  "scope": "Read-only comparison of latest original IMPL and four completed requirement audits, with exact099fc publication overlay. No new generic review, execution, RPC, build or cloud/source/table mutation.",
+  "result": "scope-accounted; actual Curve quiet-refresh correctness remains pending at this snapshot",
+  "activeGoalComplete": false,
+  "necessaryCorrectnessComplete": false,
+  "coverage": {
+    "implRows": 31,
+    "inScopeRows": 30,
+    "explicitOutOfScopeRows": 1,
+    "matrixEntries": 35,
+    "distinctCanonicalFamilyIds": 31,
+    "canonicalFamilyIds": [
+      "aqua-swapvm",
+      "balancer-v1",
+      "balancer-v2",
+      "balancer-v3",
+      "curve-plain",
+      "curve-underlying",
+      "custom-swap:dodo-v2",
+      "custom-swap:ekubo-router-v1",
+      "custom-swap:oneswap",
+      "custom-swap:precision-pool",
+      "custom-swap:uniswap-v1",
+      "fluid-dex",
+      "kyberswap-elastic",
+      "mooniswap",
+      "protocol:badger-sett-withdraw",
+      "protocol:compound-ctoken",
+      "protocol:curve-lp",
+      "protocol:erc4626",
+      "protocol:erc4626-silo-redeem",
+      "protocol:few-wrapped",
+      "protocol:psm",
+      "protocol:psv",
+      "protocol:set-redemption",
+      "protocol:token-conversion",
+      "protocol:token-migration",
+      "protocol:yearn-auction",
+      "protocol:yieldbasis-lt",
+      "swap:algebra-integral",
+      "univ4",
+      "univ4-fee-hook",
+      "vault-spot"
+    ],
+    "unmappedInScopeRows": [],
+    "unmappedMatrixEntries": [],
+    "newRequiredFamilyOmissionsFound": [],
+    "newMandatoryNoInstanceVariantsFound": [],
+    "note": "35 entries include separate Basic/Legacy, standard/Frax/InfiniFi and BTB/xWin scopes. This count is not the48-family machine inventory acceptance count."
+  },
+  "inputs": {
+    "impl": {
+      "path": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+      "sha256": "042557b8355e6516984c81afb9f3e2258510c4e3cc0754cf559868429b7558a3"
+    },
+    "before135": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/impl-before135.md",
+      "sha256": "7aa0658a33cbd4da4830de8ba934897c456497cae84a9cc58145e95e1c2f4306"
+    },
+    "implUpdateReceipt": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/impl135-receipt.json",
+      "sha256": "6274f61466d54cc040a71129b3e2f7af3e3e0a78f35df9e7576f40ea085adddb"
+    },
+    "matrices": {
+      "a": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/a.json",
+        "sha256": "ab66f607dbac021c75eaed0ed9536c7a7c9bae4f503de232ea2bb78819a7b41b",
+        "entryField": "families"
+      },
+      "b": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b.json",
+        "sha256": "d844f0473937ef21bde80f79a217bd9a8aa59204be0ab9b66cad6ce29fe7c314",
+        "entryField": "rows"
+      },
+      "c": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/c.json",
+        "sha256": "2dd9fc167218b8ab08e2d6a6b5c89440898eeccab62ed7162de9a660f88e745a",
+        "entryField": "familyRows"
+      },
+      "root": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/root.json",
+        "sha256": "5fb481106763d8b446047292acb79b3581ab62d7a94658bb3ca22558d2cf5629",
+        "entryField": "familyRows"
+      }
+    }
+  },
+  "implDeltaCheck": {
+    "changedTableRows": [
+      3,
+      8,
+      9,
+      11,
+      18,
+      19,
+      28
+    ],
+    "other24TableRowsByteIdentical": true,
+    "policyAndCurrentPendingReadAtLines": [
+      5,
+      7,
+      8,
+      9,
+      10,
+      11,
+      18,
+      26
+    ],
+    "currentTableAlreadyRecordsCurvePending": true
+  },
+  "publicationOverlay": {
+    "priorMatrixTip": "3147b98771ea1fd97dc747324773e8447305d3fc",
+    "committedTip": "099fc391cc783c07e75e4c91cbecd8437e466fd1",
+    "commitReceipt": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/delivery133/commit135.log",
+      "sha256": "e35c35ad1fa6c41c0fff9df81b5f0bcffb7b27695da8ff4bcd07eab678415d32",
+      "jsonlRecord": 0
+    },
+    "pushedStatusSource": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/impl135-receipt.json",
+      "sha256": "6274f61466d54cc040a71129b3e2f7af3e3e0a78f35df9e7576f40ea085adddb",
+      "field": "backedByPushedReports"
+    },
+    "commitObjectReadLocally": true,
+    "committedDocumentManifest": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/delivery134/manifest.json",
+      "sha256": "b335c364cbdabc752997b4525e29093e372a86124b7a14cc909ac00024bac64e"
+    },
+    "committedDocumentShaChecks": [
+      {
+        "path": "docs/research/reports/current-interface-protocol-erc4626-refresh-20261016.json",
+        "sha256": "5dfb739c822cfff300d0ae653c844cecdd641b5d67e4c470bf310fc31ee86d12"
+      },
+      {
+        "path": "docs/research/reports/current-interface-protocol-erc4626-silo-redeem-refresh-20261016.json",
+        "sha256": "621ccd2ebc5bb5110cda65a9d9eec73e59c130da32f88434c298e064bd62aa41"
+      },
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-canonical-20261016.json",
+        "sha256": "a719996069f1e5da6a8d166fe912793fff86a20b04d3dd5fc974187bc407f1c7"
+      },
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-current-compatibility-20261016.json",
+        "sha256": "5db8c734a87c798353ef56f70b9a6e448cfa8e1c5535f782c9c3a93f2c4cdec5"
+      },
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-erc4626-frax-custodian-usdc-0.2.8-after-standard-compatible-20261016.json",
+        "sha256": "b9fd080b4829b224ad7bb727476d8dd643d9cc57eb348c46d30744c628fb469b"
+      },
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-erc4626-infinifi-gateway-after-standard-compatible-20261016.json",
+        "sha256": "f08bb1738ae0c5101c223016c399cb80f07d1666244c8ab1e230cdab4276276a"
+      },
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+        "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+      },
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-independent-source-review-final-20261016.json",
+        "sha256": "48f057e35a931ae419fe91f0262f8a5aafcb749c7048bb703d39f7e5d785c1dc"
+      },
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-independent-test-repair126-20261016.json",
+        "sha256": "aac427f99a774752e05d5faa2dadaba72ee9defef69c562687c5c4b693f38bbe"
+      },
+      {
+        "path": "docs/research/reports/erc4626-silo-refresh-silo-recipient-current-behavior-20261016.json",
+        "sha256": "42ce269d6ae3af91bffbcd6758e1deb4451e73c09f4c13117ec8811d59989b97"
+      },
+      {
+        "path": "docs/research/reports/current-interface-protocol-psv-retained-20261016.json",
+        "sha256": "b0051c584c376b8ff7e8ef0503a226b213c98fcb2096256be33718f7dd231282"
+      },
+      {
+        "path": "docs/research/reports/psv-current-runtime-compatibility-20261016.json",
+        "sha256": "d4da5a107fb8fcf39bfb73047698c6b899980b07b1af9410de3d6858405861cf"
+      },
+      {
+        "path": "docs/research/reports/psv-current-runtime-independent-20261016.json",
+        "sha256": "4671fa642fdc39acfffa1596a8a5151b60015f0f12da5d65933a374ff5e93fc3"
+      },
+      {
+        "path": "docs/research/reports/psv-retained-current-behavior-20261016.json",
+        "sha256": "054f665b888e823d1dbdf46340bd0f94b8be3916786096a93bde0ec7782e80cd"
+      },
+      {
+        "path": "docs/research/reports/current-interface-fluid-dex-refresh-20261016.json",
+        "sha256": "978afc72386f1bfa6aa7d5d73f5619b0e425cc0ae4cc95f44f1c35f70277e6fb"
+      },
+      {
+        "path": "docs/research/reports/current-interface-mooniswap-20261016.json",
+        "sha256": "60df11322f7358fc2bdb9826ff1fb29746bda7eb3bb5f49def75f4ff26a6b31a"
+      },
+      {
+        "path": "docs/research/reports/balancer-v1-retained-current-compatibility-20261016.json",
+        "sha256": "c99d93220665768e732f346f42c3d2b4e00c28ab5632f307b29c095875ad9d3e"
+      },
+      {
+        "path": "docs/research/reports/balancer-v1-retained-current-behavior-20261016.json",
+        "sha256": "01bb12a6ecd100319877134e10dfde1321ff7df5c4bf123cf83904fda6afd508"
+      },
+      {
+        "path": "docs/research/reports/current-interface-balancer-v2-20261016.json",
+        "sha256": "1a20a810bf36dcdb6a107e42d1aac35ec2edabfb9d34f85c6d176ca624cedd1f"
+      },
+      {
+        "path": "docs/research/reports/current-interface-balancer-v1-20261016.json",
+        "sha256": "a8fa9b36b425e4b03826f02099dcc25bb38993397e81b9307115a212f8925980"
+      },
+      {
+        "path": "docs/research/reports/fluid-clock-refresh-current-compatibility-20261016.json",
+        "sha256": "081c0ba87eb388e2c7833bd527f512e8a389c03edd798c3ce31594ffb7dc4bbf"
+      },
+      {
+        "path": "docs/research/reports/balancer-v2-retained-current-behavior-20261016.json",
+        "sha256": "e872825cb9bd94c96f0b2b6dcfff744d2d262181adc168dd827d9f655f154605"
+      },
+      {
+        "path": "docs/research/reports/mooniswap-retained-current-compatibility-20261016.json",
+        "sha256": "cdcd33195a6d01b4f7c7c2dbe61d0925de51d7bc9149f65ad47e7bad0311c9f0"
+      },
+      {
+        "path": "docs/research/reports/balancer-v2-retained-current-compatibility-20261016.json",
+        "sha256": "d9e59441b29fe8396667305a02c68b2c98e9d9f597e07b88a0148741b8c9fb94"
+      },
+      {
+        "path": "docs/research/reports/fluid-current-settlement-refresh-20261016.json",
+        "sha256": "0f7947f3cd81da13b97a98758bc58f21ef11577520f5b25f31dd26527f7cc279"
+      },
+      {
+        "path": "docs/research/reports/mooniswap-retained-current-behavior-20261016.json",
+        "sha256": "0b62348b11599c0762a26b73002b53d0902be69833ccc3a8fe64615a9e885816"
+      },
+      {
+        "path": "docs/research/reports/family-settlement-interface-review-20261014.json",
+        "sha256": "921c24a6aea6f11e592cb20466b840a88f9ed082176c1697927a23bf6047e956"
+      }
+    ],
+    "committedPricingShaChecks": [
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/pricing.ts",
+        "sha256": "07883fe844719b3e9411b2ac717d4a846dae9a583da6cd179213e0d3d6bf4d4e"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/pricing.ts",
+        "sha256": "190282366a89a3676ae6fbfbbf45595dd1fd2b6d10d2b091125867e70b467e5c"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/fluid-dex-family/pricing.ts",
+        "sha256": "54e434ac45146cc7ef78e5494632c8bdf869bf876c4595d2cb76e1e167d882ed"
+      }
+    ],
+    "canonicalRefresh": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/canonical-checks130.json",
+      "sha256": "f0c7a9501f2e7c5455f71cfb9b73aabfc9a998655debeea57e1e7ab6dc73c4a7"
+    },
+    "independentCanonicalReview": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/refresh125/independent-canonical-final131.json",
+      "sha256": "b07f897bd2889023b96127d59ec1b96ba91514e2c21e792bc58edc0b2c593fde"
+    },
+    "originalSevenGates": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/delivery134/evidence/refresh133-gates.json",
+      "sha256": "02880cc3517b0094feb723611ab47ec423c1b8cc28cc849451fa5b0f188e39b4"
+    },
+    "fourRepairedGates": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/delivery134/evidence/refresh134-gates.json",
+      "sha256": "7e7d3c6a5d79893e1927e97e44f6b85b705847bede8a618c7b67f900f77e665f"
+    },
+    "gateOutcome": "ERC4626/Silo/PSV three original passes retained; B1/B2/Moon/Fluid four original failures retained and four corrected passes authenticated. Seven scoped gates now pass.",
+    "resolvedOldPending": [
+      "standard ERC4626 quiet-head dependency refresh",
+      "Silo strategy/accounting quiet-head dependency refresh",
+      "Fluid Liquidity/time quiet-head dependency refresh",
+      "PSV current runtime compatibility publication",
+      "BalancerV1/V2 current runtime compatibility publication",
+      "Mooniswap current runtime compatibility publication"
+    ],
+    "oldMatrixFilesPreserved": true
+  },
+  "requiredRemaining": [
+    {
+      "familyId": "curve-plain",
+      "kind": "actual-existing-deployment-dynamic-refresh",
+      "why": "Verified three-coin/full/external Views target may change by time or external state without a pool log; old on-touch scheduling can carry stale effective prices. This is an actual required gap, not an extra candidate.",
+      "existingExecutionEvidenceStatus": "112 selected positive historical executions and applicable negatives remain valid; they do not prove quiet-head refresh.",
+      "owner": "v1 execution136/137; v4 independent/docs",
+      "evidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b.json",
+          "sha256": "d844f0473937ef21bde80f79a217bd9a8aa59204be0ab9b66cad6ce29fe7c314",
+          "pointer": "/confirmedOpenRequiredCodeGaps"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/sameN-source-join.json",
+          "sha256": "b239c21c518b5c0b55d518b903b923703ea717cbda9e50715685b156622eea5b"
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/impact136.json",
+          "sha256": "15537b09cb4926421408b07be0c370f95efa40cbb533ab3724c858ca834b20e5"
+        }
+      ],
+      "completionRule": "Consume the authors actual final canonical receipts, independent source/evidence conclusion and publication when available; do not infer pass from a candidate or this scope document."
+    }
+  ],
+  "matrixTextCorrectionViews": [
+    {
+      "matrix": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/b.json",
+        "sha256": "d844f0473937ef21bde80f79a217bd9a8aa59204be0ab9b66cad6ce29fe7c314"
+      },
+      "pointers": [
+        "/rows/5/requirements/1/finding",
+        "/rows/5/requirements/2/finding"
+      ],
+      "issue": "Fluid summary incorrectly mentions deferred scope/callback debt/zero-initial debt fixture. Aggregate48 rejection also needs the two evidence classes separated.",
+      "correctedScope": "Three actual Fluid pools/six directions:48 quoted/default/direct-self/direct-external positive executions,44 old strict-declared reverts plus4 independently observed same-N fork rollbacks;12 read-only quotes. Input-first callback only; no caller deferred funding.",
+      "authoritativeEvidence": [
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/reports/fluid-current-settlement-correctness-20261015.json",
+          "sha256": "fbd8bed5d53bc9e5c2fc712820f5e122424b844ce4ac743fb0b3b3b7ffd3ae38",
+          "fields": [
+            "scope",
+            "positiveExecutions",
+            "rejections",
+            "counting",
+            "limits"
+          ]
+        },
+        {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/reports/current-interface-fluid-dex-20261015.json",
+          "sha256": "b0ea8dda9514fbc46275e3187bf3b4ba2afa2f629706949452e0c72d0644555a",
+          "pointer": "/families/0/variants/0"
+        }
+      ],
+      "acceptanceImpact": "Summary wording correction only; latest IMPL and source-bound typed evidence already retain the correct scope. Do not change oldraw hashes or count the4 strict resource-limited outcomes as strict passes."
+    }
+  ],
+  "nonBlockingApplicabilityBoundaries": [
+    {
+      "familyId": "univ4-fee-hook",
+      "boundary": "fa439 has no initialized native instance through fixedN26195865; selectedUSDC/WETH tier passed, shared synthetic native tests are not historical native execution."
+    },
+    {
+      "familyId": "swap:algebra-integral",
+      "boundary": "Only six actual Cypher dynamic profiles in this acceptance; static profile and unselected input-first advance-payment remain unverified without creating a hypothetical target."
+    },
+    {
+      "familyId": "curve-plain",
+      "boundary": "Three no-instance receiver/mode declarations remain unknown; actual full/external quiet refresh above is a separate real gap and must close."
+    },
+    {
+      "familyId": "curve-underlying",
+      "boundary": "No invented precision/rate combinations beyond actual native/FRAX/classic instances."
+    },
+    {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "boundary": "Uninstanced extensions/TWAMM do not become required execution targets; actual Router internal callback is not caller continuation."
+    },
+    {
+      "familyId": "custom-swap:dodo-v2",
+      "boundary": "Actual twoGSP/four directions only; otherDVM/DSP/DPP and separateflashLoan not silently added."
+    },
+    {
+      "familyId": "protocol:set-redemption",
+      "boundary": "Actual four-componentBasic redemption and installedLegacy directions required and covered; uninstalledissue not mandatory; selected-component handoff is post-redeem transfer, not protocol external basket redemption."
+    },
+    {
+      "familyId": "protocol:erc4626",
+      "boundary": "Frax asynchronous RWA and instance-specific unadmitted directions are not invented; all18 actually selected standard targets remain covered inC."
+    },
+    {
+      "familyId": "protocol:compound-ctoken",
+      "boundary": "Actual share redemption only; cETH/redeemUnderlying are not installed selected actions."
+    },
+    {
+      "familyId": "mooniswap",
+      "boundary": "57fb is an additional actual instance with incomplete same-source provenance, not a no-instance claim. Preserve unverified and do not extend2c4 success to it."
+    },
+    {
+      "familyId": "fluid-dex",
+      "boundary": "Original jrUSDe opportunity remains original evidence. Three-pool recipient acceptance does not claim current external-recipient execution for that separate instance."
+    },
+    {
+      "familyId": "credit:fluid",
+      "boundary": "Original FluidCredit/wstUSR row is expressly outside current conserving-loop scope, not an omitted required swap family."
+    }
+  ],
+  "separateAcceptanceLayers": {
+    "actualCorrectness": "Current production wiring/reverse identity, selected actual modes/directions, amount quote+quoted+runtime actual receipt, Exact0/no fallback, applicable inventory/native/error/callback/dependency refresh and source-bound reviews. Current real Curve refresh gap remains blocking for this layer.",
+    "naturalIntegration": "Production entry/admission evidence is required where changed and retained. Fresh-from-zero Ready, default price chain, raw/effective natural coverage and valuation are separately recorded; reused Ready and input-only donors never become fresh natural success. Quiet-head effective refresh is required correctness; raw bootstrap retention is not falsely called full repricing.",
+    "opportunity": "Original prefix/call-prestate, enumeration/rank/amount selection/final sim/netEV remain tied to their exact prior state/configuration/version. Callback funding fixtures and end-block samples provide no new opportunity claim; prior negativeEV/denial preserved.",
+    "stage4A": "Original local/source-frozen timing work remains separately pending/unaccepted by these correctness matrices; no new measurement here.",
+    "stage4B": "Original representative-scale timing and workload/budget remain separately pending/failed as recorded; BalancerV2 four-second representative failure is retained. Stage4 serial-resource rule preserved.",
+    "formalMergeAndDeployment": "Actual working-source correctness includes protected peer dirtyV1 identity source; owned commit-only build is a different scope. No globalclean-commit/merge_ready, formalAdapterReplay/family_local, deployment, live, signing or broadcast conclusion."
+  },
+  "rowAccounting": [
+    {
+      "tableRow": 1,
+      "implLine": 30,
+      "title": "Few／Vault：适用范围适配正确性完成，新增收款已验，原自然核心净EV为负",
+      "rowSha256": "10346202d940773310740a8e9da191b85a218b88995b9dc3bb446a3fa4375942",
+      "matrixEntries": [
+        {
+          "matrix": "b",
+          "pointer": "/rows/0",
+          "familyId": "protocol:few-wrapped",
+          "matrixFamilyId": "few"
+        },
+        {
+          "matrix": "b",
+          "pointer": "/rows/1",
+          "familyId": "vault-spot",
+          "matrixFamilyId": "vault-spot-family"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Original natural core exists; default P=0.02 did not select it, P=0.002 diagnostic did."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Original gross-positive core retained; net -17008956787443 wei, not a positive-EV pass."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 2,
+      "implLine": 31,
+      "title": "KyberSwap Elastic：九池已覆盖方向及新增收款／回调结算正确性完成",
+      "rowSha256": "b8650e55e85bda3a7ff8301ee5deea7b27e9300e62a0d3a9d2df6fe48f7bf96b",
+      "matrixEntries": [
+        {
+          "matrix": "a",
+          "pointer": "/families/0",
+          "familyId": "kyberswap-elastic",
+          "matrixFamilyId": "kyberswap-elastic"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Nine actual pools and supported directions use source-bound production admission/amount evidence. New natural rebuild is not inferred."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Deferred funding leg is an isolated test leg; no new market-return or opportunity claim."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 3,
+      "implLine": 32,
+      "title": "Balancer V3：已覆盖 Hook v1/v2 和无 Hook Weighted，36/36方向正确性通过",
+      "rowSha256": "74a6d4c629b54f38a91f4bf2fb3b4f04c7327b0530c9aa94d2a932977552894a",
+      "matrixEntries": [
+        {
+          "matrix": "b",
+          "pointer": "/rows/8",
+          "familyId": "balancer-v3",
+          "matrixFamilyId": "balancer-v3"
+        },
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/0",
+          "familyId": "protocol:erc4626",
+          "matrixFamilyId": "protocol:erc4626"
+        },
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/2",
+          "familyId": "protocol:erc4626",
+          "matrixFamilyId": "protocol:erc4626"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Balancer V3 natural effective coverage remains 35/36; last siUSD direction uses explicit four-hop input. InfiniFi natural raw6/effective0 remains. Standard18 target-specific gaps retained."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Old opportunities retain their original state/configuration; no new whole-route claim from the current 280 executions or ERC4626 settlement tests."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 4,
+      "implLine": 33,
+      "title": "Frax frxUSD Custodian：同步双向及当前收款路径适配正确性完成",
+      "rowSha256": "c54fcc0e81146ee16f1f6689a2125eddc25f012ba532ae306434ccc8922bbcab",
+      "matrixEntries": [
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/1",
+          "familyId": "protocol:erc4626",
+          "matrixFamilyId": "protocol:erc4626"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Synchronous Custodian input sources and same-state admission retained; no new fresh natural rebuild claim."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Original opportunity and unsupported asynchronous RWA remain separate."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 5,
+      "implLine": 34,
+      "title": "Yield Basis LT：三实例普通存入／赎回适配正确性完成",
+      "rowSha256": "7360f04624085b028aa5d44ad6416479de7e7d8453fdbfff05067b3f732bc320",
+      "matrixEntries": [
+        {
+          "matrix": "a",
+          "pointer": "/families/1",
+          "familyId": "protocol:yieldbasis-lt",
+          "matrixFamilyId": "protocol:yieldbasis-lt"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Three LT instances/six directions; BTC input-only spliced reference remains explicit, not natural valuation."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "No new opportunity claim; original WBTC state-dependent nonordinary exit rejection is retained."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 6,
+      "implLine": 35,
+      "title": "Compound V2 cToken：cUSDC/cDAI/cUNI 已覆盖方向正确性通过",
+      "rowSha256": "6f81fadca088c23b34676b722016c5c053c38e20a5f48a9e4baab84df3c403d7",
+      "matrixEntries": [
+        {
+          "matrix": "a",
+          "pointer": "/families/2",
+          "familyId": "protocol:compound-ctoken",
+          "matrixFamilyId": "protocol:compound-ctoken"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "cUSDC/cDAI/cUNI share-redemption source/identity joined; cUNI natural effective-price gap remains separate."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Original redeemUnderlying action is not silently reclassified as the installed share-redeem action."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 7,
+      "implLine": 36,
+      "title": "Algebra Integral：六个Cypher实际实例的新增收款／回调结算正确性完成",
+      "rowSha256": "ca17bc6b38159ed00a43086d69ee47a87196553e3dde4bdcd54dcc4a788637e3",
+      "matrixEntries": [
+        {
+          "matrix": "a",
+          "pointer": "/families/3",
+          "familyId": "swap:algebra-integral",
+          "matrixFamilyId": "swap:algebra-integral"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Six actual Cypher pools/twelve directions; no new all-plugin or natural integration claim."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Deferred funding fixture is not a market loop; static and advance-payment profiles not expanded."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 8,
+      "implLine": 37,
+      "title": "Curve plain＋Fluid native ETH：Curve实际收款路径正确性完成，Fluid已验三池结算正确性完成",
+      "rowSha256": "312b73e6dae102862d1a7e1f0ee00674d5a68b8ca3faca8a66544833f1985d51",
+      "matrixEntries": [
+        {
+          "matrix": "b",
+          "pointer": "/rows/2",
+          "familyId": "curve-plain",
+          "matrixFamilyId": "curve-plain"
+        },
+        {
+          "matrix": "b",
+          "pointer": "/rows/5",
+          "familyId": "fluid-dex",
+          "matrixFamilyId": "fluid-dex"
+        }
+      ],
+      "actualCorrectness": "curve-quiet-refresh-pending; other-selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Fluid same-N Ready-copy revalidation preserves historicalNaturalDiscoveryProven=false. Existing Curve112 settlement executions remain valid."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Original 55-transaction prefix exists; natural backrun target not selected under the recorded V4 degree/rank constraints. Curve quiet refresh is still a required correctness item."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 9,
+      "implLine": 38,
+      "title": "eUSD PSV：双向收款方接线与局部正确性通过，原净EV拒绝保留",
+      "rowSha256": "e9eba03ea8f83b80c63d59d4fea83102ce7d47ab798eb5f9f5fe31975c1d053e",
+      "matrixEntries": [
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/4",
+          "familyId": "protocol:psv",
+          "matrixFamilyId": "protocol:psv"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "PSV original Ready copy revalidated: 82 raw/80 effective, two missing background valuations; no fresh-from-zero assertion."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Original net-EV refusal retained; current 40 positive/20 declared-revert cases do not reopen opportunity success."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 10,
+      "implLine": 39,
+      "title": "Yearn Auction＋Curve LP：选定拍卖实例默认／收款／四参回调适配正确性完成；原机会成果有效",
+      "rowSha256": "0d973845eb4aace9d622a8efebd3e1c5d71179ee1afa02260f0d9ff64d22501c",
+      "matrixEntries": [
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/5",
+          "familyId": "protocol:yearn-auction",
+          "matrixFamilyId": "protocol:yearn-auction"
+        },
+        {
+          "matrix": "b",
+          "pointer": "/rows/4",
+          "familyId": "protocol:curve-lp",
+          "matrixFamilyId": "curve-lp"
+        },
+        {
+          "matrix": "b",
+          "pointer": "/rows/2",
+          "familyId": "curve-plain",
+          "matrixFamilyId": "curve-plain"
+        }
+      ],
+      "actualCorrectness": "selected-execution-complete; curve-family-quiet-refresh-pending-elsewhere",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Yearn naturalDiscovery=false and missing-valuation remain; input-only donor does not supply identity/output. Curve fixed-pool old evidence is retained."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Original B/B diagnostic funded-start core reproduced; actual four-argument callback funding leg proves settlement only, not a market return/profit."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 11,
+      "implLine": 40,
+      "title": "jrUSDe／Fluid＋Strata：已有自然复现及正净EV成果",
+      "rowSha256": "76b8b3dba90e540ec77cfb2a6b9fcc7aa2b74692c3c841e32acfa25ecb5c1355",
+      "matrixEntries": [
+        {
+          "matrix": "b",
+          "pointer": "/rows/5",
+          "familyId": "fluid-dex",
+          "matrixFamilyId": "fluid-dex"
+        },
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/0",
+          "familyId": "protocol:erc4626",
+          "matrixFamilyId": "protocol:erc4626"
+        },
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/3",
+          "familyId": "protocol:erc4626-silo-redeem",
+          "matrixFamilyId": "protocol:erc4626-silo-redeem"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete-with-original-instance-boundary",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Silo junior/senior synchronous paths and c58d standard deposit separately verified. Same-N valuation/input-only gaps retained."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Original jrUSDe/Fluid+Strata natural positive-EV result preserved. New three-pool Fluid settlement evidence is explicitly not extrapolated to the jrUSDe pool."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 12,
+      "implLine": 41,
+      "title": "OneSwap：当前独立Family已接回，所选两池双向适配正确性通过",
+      "rowSha256": "f78eb8e903f1e3a9fb5dcd464524c2ea1873de2ed632d01ecf7da8c6521184bf",
+      "matrixEntries": [
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/6",
+          "familyId": "custom-swap:oneswap",
+          "matrixFamilyId": "custom-swap:oneswap"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Two actual native pools/directions; retained Ready/current admission and donor-input scope, no new natural prices."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "No new original-opportunity claim; tested state filled AMM path, not fabricated orderbook matching."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 13,
+      "implLine": 42,
+      "title": "PrecisionPool／V4：Precision独立Family已接回，所选native池双向适配正确性通过",
+      "rowSha256": "c0d52a07f4a950b1d85566d0216428dc395640688eb2ba580fd95bc9748bf6f2",
+      "matrixEntries": [
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/7",
+          "familyId": "custom-swap:precision-pool",
+          "matrixFamilyId": "custom-swap:precision-pool"
+        },
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/4",
+          "familyId": "univ4",
+          "matrixFamilyId": "univ4"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Precision native pool both directions via old Ready copy/current selective revalidation; natural-discovery=false retained."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "End-block correctness is not original pre-call replay or whole-route opportunity."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 14,
+      "implLine": 43,
+      "title": "Curve underlying：既有native／FRAX及三个经典元池收款正确性完成",
+      "rowSha256": "b1597a3afdf436015c074019769020a36d86565af483e361131941bf93110db6",
+      "matrixEntries": [
+        {
+          "matrix": "b",
+          "pointer": "/rows/3",
+          "familyId": "curve-underlying",
+          "matrixFamilyId": "curve-underlying"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "NativeAlias, FRAX and three classic metapool scopes preserved; 12 effective valuations missing and amount-only donors remain."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Original user-authorized special exception remains; no new opportunity/Adapter Replay claim."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 15,
+      "implLine": 44,
+      "title": "Set BasicIssuance：实际四组件及指定收款适配正确性完成",
+      "rowSha256": "18f94340cdacdd84551fb50c747c2601ac6d02a3029b24445abacc3f4085cc31",
+      "matrixEntries": [
+        {
+          "matrix": "a",
+          "pointer": "/families/5",
+          "familyId": "protocol:set-redemption",
+          "matrixFamilyId": "protocol:set-redemption"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Actual four-component basket maps to four graph directions; full basket redeemed to actor, selected new component only forwarded."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Old default16 and new direct32/32 retained separately; uninstalled issue does not become mandatory."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 16,
+      "implLine": 45,
+      "title": "旧版 Set Core：实际单组件四方向及非零费用收款正确性完成",
+      "rowSha256": "50f7c71725bc4d970d87887e1156025a64064b6f1dbba20c960c04ea7ef02374",
+      "matrixEntries": [
+        {
+          "matrix": "a",
+          "pointer": "/families/6",
+          "familyId": "protocol:set-redemption",
+          "matrixFamilyId": "protocol:set-redemption"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Core single-component four-direction and nonzero-fee source/identity retained; Basic update compatibility certified."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "No new route/opportunity claim from the44 positive/176 fault matrix or220 current byte bindings."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 17,
+      "implLine": 46,
+      "title": "DODO GSP：两池四方向适配正确性完成",
+      "rowSha256": "f44e80959bf1c33822b964ec4fefe5b750fcecda0a71043d693b1f95415cf68b",
+      "matrixEntries": [
+        {
+          "matrix": "a",
+          "pointer": "/families/4",
+          "familyId": "custom-swap:dodo-v2",
+          "matrixFamilyId": "custom-swap:dodo-v2"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Two actual GSP pools/four directions; old16 default and new32/32 direct retained."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Separate flashLoan ABI is not a user deferred-swap capability; DSP/DVM/DPP not invented as required targets."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 18,
+      "implLine": 47,
+      "title": "Balancer V1：Family双接口与原交易腿已验",
+      "rowSha256": "3edae30ceca877647202806cff465ec58d0e4ddf5b54fc0dd7308bcb3eb25814",
+      "matrixEntries": [
+        {
+          "matrix": "b",
+          "pointer": "/rows/6",
+          "familyId": "balancer-v1",
+          "matrixFamilyId": "balancer-v1"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Original8 actual positive executions and current8 full-calldata bindings retained."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "No new natural opportunity claim; caller-only no added settlement path."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 19,
+      "implLine": 48,
+      "title": "Balancer V2：正确性已覆盖，代表性性能仍失败/未完成",
+      "rowSha256": "a0aedbb2db9280f5ec67da3ccb14b8877ceea4744f0cae8308339f80b568e2e9",
+      "matrixEntries": [
+        {
+          "matrix": "b",
+          "pointer": "/rows/7",
+          "familyId": "balancer-v2",
+          "matrixFamilyId": "balancer-v2"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Two pinned states/ten directions; current190 saved requests rebuilt byte-identically."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Opportunity not run. Prior representative performance failure/429/missing samples remain."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "prior-representative-budget-failure-retained",
+        "boundary": "Recorded4s representative budget failed (median4276.945ms);429/incomplete samples remain, no fresh performance run."
+      }
+    },
+    {
+      "tableRow": 20,
+      "implLine": 49,
+      "title": "graviAURA／Badger Sett：现有流动余额赎回正确性通过",
+      "rowSha256": "386801fa8ec69ca50a25c8dffe539db43d2557d569871c71d95d22ef02e4932a",
+      "matrixEntries": [
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/6",
+          "familyId": "protocol:badger-sett-withdraw",
+          "matrixFamilyId": "protocol:badger-sett-withdraw"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "graviAURA liquid-balance withdrawal, zero-fee caller-only scope; four positives, no historical negative fabricated."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "No strategy.withdraw liquidity or wider inventory strategy expansion; original opportunity separate."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 21,
+      "implLine": 50,
+      "title": "Uniswap V1：TransferInput收款与ETH/WETH交付正确性通过",
+      "rowSha256": "5d34059b00a593c4e84cd8b092b0596c71ae035532139b35ccf28775ac2c55ac",
+      "matrixEntries": [
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/2",
+          "familyId": "custom-swap:uniswap-v1",
+          "matrixFamilyId": "custom-swap:uniswap-v1"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete-on-actual-working-source",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Actual standard+issuer32 positives/16 zero-amount rejections. Protected peer V1 identity source remains part of actual-working proof."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "No new original opportunity claim; zero-amount rejections are not same-calldata unfunded trials."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 22,
+      "implLine": 51,
+      "title": "Ekubo＋PSM：两族本次适用范围适配正确性完成，机会／时效另列",
+      "rowSha256": "0a88c5137d8f2881ce041dc3bf462e929f6b1e4b38c940a4d6fd51c2e6a3c115",
+      "matrixEntries": [
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/1",
+          "familyId": "custom-swap:ekubo-router-v1",
+          "matrixFamilyId": "custom-swap:ekubo-router-v1"
+        },
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/3",
+          "familyId": "protocol:psm",
+          "matrixFamilyId": "protocol:psm"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Ekubo native and ERC20 direct current evidence; natural raw2/effective0 retained. PSM actual LitePSM state is fee0."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "PSM original natural net-EV refusal retained; synthetic nonzero fee/halts not labelled historical execution."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 23,
+      "implLine": 52,
+      "title": "GenericTokenMigration：实际ACX→USDC适配正确性完成",
+      "rowSha256": "aa8849b4d3288480b4a263df4e8cc1869c645dc4866b98e2a9c31ac34979276d",
+      "matrixEntries": [
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/7",
+          "familyId": "protocol:token-migration",
+          "matrixFamilyId": "protocol:token-migration"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Actual ACX-to-USDC direction; current identity/amount/receipt retained."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Old opportunity remains tied to old quoted-fallback version; current correctness is not an original-TX replay."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 24,
+      "implLine": 53,
+      "title": "V4 Sat1Hook：原生币收款／回调结算正确性通过",
+      "rowSha256": "b96d890786704c275d6c24ad297fef7e304aa2f335248516242a565907d83a01",
+      "matrixEntries": [
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/5",
+          "familyId": "univ4-fee-hook",
+          "matrixFamilyId": "univ4-fee-hook"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Actual Sat1 native instance; caller output/repayment/native protection verified within selected state."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Isolated callback funding leg is not a market return; no new natural valuation/opportunity."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 25,
+      "implLine": 54,
+      "title": "Uniswap V4无Hook：指定收款／原生币／延迟付款正确性通过",
+      "rowSha256": "44b234ed8aea50fa2c2a7eb875120c92fd7f8f016bfe78af923264fa3d745765",
+      "matrixEntries": [
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/4",
+          "familyId": "univ4",
+          "matrixFamilyId": "univ4"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Nohook ERC20 and native selected interfaces/amounts; source-bound actual execution and separate local rollback evidence."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "No new original-prefix or opportunity claim; call-only historical negatives not independent storage rollback."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 26,
+      "implLine": 55,
+      "title": "V4 fa439 Fee Hook：本次实际接入范围适配正确性完成",
+      "rowSha256": "dc56cce04e91a23673544b64a5c06a93efbfaca47d8cef88e77769a58793dc99",
+      "matrixEntries": [
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/5",
+          "familyId": "univ4-fee-hook",
+          "matrixFamilyId": "univ4-fee-hook"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "fa439 actual USDC/WETH tiered profile; same4e15 input repaired to true9352406 quote. No initialized native instance throughN26195865."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Actual bytecode/PoolKey/behavior supports the selected tier; no verified full source claim or invented native execution."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 27,
+      "implLine": 56,
+      "title": "Fluid Credit／wstUSR：旧授权留仓成果保留，本批保守闭环不适用",
+      "rowSha256": "de960b99fc15038896cb8187ea1907bdc940569ce8c98b4cb82ef85d2128e7fc",
+      "matrixEntries": [],
+      "actualCorrectness": "explicitly-outside-current-conserving-scope",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Prior authorized Fluid Credit/wstUSR inventory result retained in the original row."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Prior rank25/198 and positive-EV inventory result is not the current position-conserving DEX/protocol scope."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 28,
+      "implLine": 57,
+      "title": "Curve Tricrypto＋Mooniswap：Mooniswap收款方接线通过，原完整前序正EV保留",
+      "rowSha256": "fc5618f326ccd29b9c2d92bc6ef61f1a4ba1fe6a67adde6576ae5d4a05834e69",
+      "matrixEntries": [
+        {
+          "matrix": "b",
+          "pointer": "/rows/2",
+          "familyId": "curve-plain",
+          "matrixFamilyId": "curve-plain"
+        },
+        {
+          "matrix": "b",
+          "pointer": "/rows/9",
+          "familyId": "mooniswap",
+          "matrixFamilyId": "mooniswap"
+        }
+      ],
+      "actualCorrectness": "curve-quiet-refresh-pending; moon-selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Moon2c4 both ERC20 directions; Ready-copy current revalidation is not fresh discovery. Additional57fb instance same-source provenance remains unverified."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Old full255-prefix positive-EV result retained. Current Moon32/16/4 and Curve old execution successes do not close the Curve quiet-head dependency gap."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 29,
+      "implLine": 58,
+      "title": "xWin：既有自然正EV成果，当前历史方向正确性已补",
+      "rowSha256": "b9696c23ea91c21c62814aaa9c5d48ed1b151d6c2b4452ea3d997b2cf8bbc26f",
+      "matrixEntries": [
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/9",
+          "familyId": "protocol:token-conversion",
+          "matrixFamilyId": "protocol:token-conversion"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Current same-N two directions16/8; pausedN26144845 remains a correct retryable rejection."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Old natural positive-EV1/4 result remains tied to the older quoted-fallback scope."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 30,
+      "implLine": 59,
+      "title": "BTBBear：mint／redeem适配正确性完成",
+      "rowSha256": "e10c38f11d12fe26f39c2f2e772014bd51468cb0e9845d722f9101dab48c66aa",
+      "matrixEntries": [
+        {
+          "matrix": "c",
+          "pointer": "/familyRows/8",
+          "familyId": "protocol:token-conversion",
+          "matrixFamilyId": "protocol:token-conversion"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Actual BTBBear mint/redeem current16 positives/32 rejects/two zero cases; caller-only and no deferred."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Old opportunity remains version-scoped; current amount execution is not original replay."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    },
+    {
+      "tableRow": 31,
+      "implLine": 60,
+      "title": "1inch Aqua／SwapVM：两个实际策略四方向适配正确性完成，默认／收款／回调已验",
+      "rowSha256": "bb0d88cc48fca71e2ee374b1e7a4117b622b045b7274731740b5d62142779264",
+      "matrixEntries": [
+        {
+          "matrix": "root",
+          "pointer": "/familyRows/0",
+          "familyId": "aqua-swapvm",
+          "matrixFamilyId": "aqua-swapvm"
+        }
+      ],
+      "actualCorrectness": "selected-correctness-complete",
+      "naturalIntegration": {
+        "status": "retained-original-scope-no-new-promotion",
+        "boundary": "Two actual registered strategies/four directions. StrategyA raw2/effective2; strategyB raw2/missing valuation retained."
+      },
+      "opportunity": {
+        "status": "retained-original-result-no-new-promotion",
+        "boundary": "Original credential-denied state remains rejected; callback isolated funding proves debt/receipt safety, not profitable return."
+      },
+      "stage4A": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Original local performance work remains separate; no runtime/correctness evidence converted to timing acceptance."
+      },
+      "stage4B": {
+        "status": "not-accepted-by-this-completion-audit",
+        "boundary": "Representative-scale timing remains separate; no local fixture/sample result promoted to this stage."
+      }
+    }
+  ],
+  "minimalTableAdvice": [
+    "Latest01:56 IMPL already separates the three closed refresh fixes from pendingCurve; no further table edit is necessary for this scope snapshot.",
+    "After actualCurve136/137 final evidence is accepted, update only its specific remaining item and exact publication reference; do not rewrite112 old successes as new runs.",
+    "Keep current no-instance/unselected policy and all original machine variantIDs/unknown evidence. No variant deletion or blanket inventory pass follows from this document.",
+    "Use the Fluid correction view above when citing B; the original b.json remains immutable."
+  ],
+  "verificationLimits": [
+    "This pass authenticated the four matrix bytes, all31 originaltable mappings, the sevenrow IMPLdelta, actualcommit27document bytes and3pricing bytes, plus savedgate log hashes. It did not independently repeat every raw EVM review already referenced by the four audits.",
+    "Old mutablecandidate handoff references remain historical versions; final131 review and099fc actual pinned artifacts supply the completed refresh overlay.",
+    "No newRPC, EVM, performance, build, source edit, originaltable edit or sharedinventory mutation was performed."
+  ]
+}

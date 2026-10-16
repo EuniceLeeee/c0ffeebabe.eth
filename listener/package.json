@@ -464,7 +464,8 @@
     "searcher:xwin-current-ready": "tsx src/searcher/venues/protocols/token-conversion-family/test/xwin-current-ready.ts",
     "searcher:xwin-current-input-contract": "tsx --test src/searcher/venues/protocols/token-conversion-family/test/xwin-current-input.test.ts",
     "test:erc4626-family:standard-refresh": "tsx src/searcher/venues/protocols/erc4626-family/test/standard-refresh.ts",
-    "searcher:fluid-refresh": "tsx src/searcher/venues/swaps/fluid-dex-family/test/refresh.ts"
+    "searcher:fluid-refresh": "tsx src/searcher/venues/swaps/fluid-dex-family/test/refresh.ts",
+    "searcher:curve-plain-refresh": "tsx src/searcher/venues/swaps/curve-plain-family/test/refresh.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

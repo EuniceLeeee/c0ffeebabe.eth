@@ -1,0 +1,185 @@
+{
+  "kind": "fresh-non-author-curve-plain-refresh-final-review",
+  "reviewer": "curve_final_review",
+  "result": "pass",
+  "scope": "Actual scheduling-only Curve plain fix plus existing historical evidence compatibility; no new EVM or performance conclusion",
+  "actualHead": "099fc391cc783c07e75e4c91cbecd8437e466fd1",
+  "source": [
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/pricing.ts",
+      "sha256": "4ef0f6754e67efb0c30277ec76f3c54dab89c1c0816af90b1846e7ffbf057428"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/refresh-scope.ts",
+      "sha256": "6b1dcd39f4b27d06bfcd74ef27dce8cc3c65493cb2afa33d622bd09d3979e94a"
+    },
+    {
+      "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/refresh.ts",
+      "sha256": "30d8f9cedd9e396afd87265400743ff11c986c6a25008f390db451e566a9d3f8"
+    }
+  ],
+  "observedOriginalProcesses": [
+    {
+      "pid": 680732,
+      "exists": false
+    },
+    {
+      "pid": 681318,
+      "exists": false
+    }
+  ],
+  "readOnlyExport": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/export139-manifest.json",
+    "sha256": "4b8999d6c0d0171d24cc5006f1ef6ba0d2825a1ed2f34927f8a5cd82e0d0a7cc"
+  },
+  "actualCodeAndProcessCheck": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/verify139-cloud.json",
+    "sha256": "a1884c68e54b7b8107df29d70ee9a659fffaced9688459d32d20a35c6b1a8c5a"
+  },
+  "evidence": {
+    "handoff": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/handoff.json",
+      "sha256": "505a8d4a97b6d9dfc65bfecd0125fe82bc52b2cdd4d50613376bf54b47150d25"
+    },
+    "priorSourceReview": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/v4-independent-source-review132.json",
+      "sha256": "6ae89644a318130f83b799ed2199e5b5c5e73d8c32d6c7289be91355f0dd5ea8"
+    },
+    "impact": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/impact136.json",
+      "sha256": "15537b09cb4926421408b07be0c370f95efa40cbb533ab3724c858ca834b20e5"
+    },
+    "sameStateDeployment": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/sameN-source-join.json",
+      "sha256": "b239c21c518b5c0b55d518b903b923703ea717cbda9e50715685b156622eea5b"
+    },
+    "before": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/baseline136-checks.json",
+      "sha256": "5146af8671e0afae43a15ca5bcbc84482911dcda81b7bd1ca88379af1d9f934f"
+    },
+    "after": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/apply137-checks.json",
+      "sha256": "66224526325967e3c050fe6a217e769222b76f7fba4c7236437779ea4a3a9738"
+    },
+    "pins": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/final137-pins.json",
+      "sha256": "3d63c6bd0533a2984017028d52be95a50509aa45fe7d178d57ba5f394e971634"
+    },
+    "catalogDiff": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/catalog-diff137.json",
+      "sha256": "921f07c9f4d6b03afe02491e0e0f6d1066728bc1a53a2209af141de0efa2467f"
+    },
+    "beforeSelection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/baseline136-selection.json",
+      "sha256": "f369367f65a53feb322812b6990ae4f8121efb201180b3b53d0ae5b973d009c2"
+    },
+    "afterSelection": {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/apply137-selection.json",
+      "sha256": "20daaa852ddf61cedeabd3c9025c8c98e55282a9fc766c16802c1d8820b20ebf"
+    }
+  },
+  "authenticatedLogs": [
+    {
+      "name": "index",
+      "exitCode": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/baseline136-index.log",
+      "sha256": "ce45a3ab5a4addc67367cc53e9ec4f8aea8edb5b2ec937c32d6d2edf15badd55"
+    },
+    {
+      "name": "refresh-before",
+      "exitCode": 1,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/baseline136-refresh-before.log",
+      "sha256": "ccccd1f070f0585b4c339ecb8b6f5b363beeff889ea4a9a6595940a88ef76008"
+    },
+    {
+      "name": "generate",
+      "exitCode": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-generate.log",
+      "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+    },
+    {
+      "name": "index",
+      "exitCode": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-index.log",
+      "sha256": "affd9bfae69c6934d3ff6f449010178529923b4fd9046d9d1f8af7011bb25c36"
+    },
+    {
+      "name": "refresh",
+      "exitCode": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-refresh.log",
+      "sha256": "fb0a2b46b76ea732cfd597e026f942ee18642f209051cd6e8ab3bbc73bf2280c"
+    },
+    {
+      "name": "family",
+      "exitCode": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-family.log",
+      "sha256": "8fde81655390caa3552adb29a4729d5c7d4d556d87da913353c5cc69c58e022b"
+    },
+    {
+      "name": "native-contract",
+      "exitCode": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-native-contract.log",
+      "sha256": "95145c94fc709faa21fe74101e247f73b847c42fece7912f9c087d16fcfdd6ec"
+    },
+    {
+      "name": "nomination",
+      "exitCode": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-nomination.log",
+      "sha256": "9a97a4e7aa92433b07c1014e9adc83baa0a8e9424fd00ec4139b70acabdffb42"
+    },
+    {
+      "name": "dual",
+      "exitCode": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-dual.log",
+      "sha256": "887760570f25960d040caf01b7d5def2144bb0dec29894877456986776b12a7e"
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-build.log",
+      "sha256": "16f215c44972517a90fc93515d235e4d51888e1f5ef7018769dffac0b50f1907"
+    }
+  ],
+  "findings": [
+    "Actual candidate/source/test bytes match the immutable handoff; pricing and refresh-scope original texts are recovered exactly by removing only the policy import/registration and pure policy helper.",
+    "Cloud old-code baseline reaches actual admitted production root, then fails at empty perBlockRefreshStateKeys; candidate flips the identical test to green. This is a scheduling regression, not new historical price-formula evidence.",
+    "Read current test: actual lifecycle/catalog/root/coordinator/Exact/effective publication; quiet changed heads, two failures with withdrawn amountOut, recovery, same-output fresh head, unrelated V2 carried rows and immutable bootstrap rawMidSource are asserted.",
+    "Existing exact modelFor proof requires immutable proxy runtime, two coins and ABI match; proven models keep on-touch plus unchanged full-precision ramp guard. Unknown/full/NG/external models refresh each block. No instance whitelist or central protocol branch.",
+    "Fresh cloud hash recheck authenticates all nine unchanged Exact/execution/recipient/native/action/codec/routes/identity files. Pure helper addition does not alter old Exact helper bodies or module initializers.",
+    "Complete actual catalog comparison changes exactly Curve plain exact and pricing rows plus top artifactHash; all other rows/top fields unchanged. Exact hash changes due to file-level dependency, not amount/ABI behavior.",
+    "Package comparison adds exactly one new test script. All eight apply operations exit zero, including six canonical executions with current descriptor hashes. Original failed baseline retained.",
+    "Saved N26152607 raw pool runtime exactly equals cached verified deployed runtime; bound verified source has timestamp-interpolated A/gamma and external factory Views lookup. No new chain request required."
+  ],
+  "testResults": {
+    "refresh": 1,
+    "familyContractGroups": 18,
+    "familyIdentityExecution": "pass",
+    "nativeContract": 15,
+    "recipientNominationContract": 10,
+    "sharedDual": 307,
+    "productionBuild": "pass"
+  },
+  "historicalEvidenceReuse": {
+    "positiveExecutions": 112,
+    "rejections": 224,
+    "newExecutionsInThisReview": 0,
+    "statement": "Preserve original execution/reuse accounting. Scheduling-only diff plus unchanged fixed-state quote/execution behavior permits retained evidence compatibility, not 112 new executions."
+  },
+  "preparationFailuresPreserved": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/local-attempt1.log",
+      "sha256": "22290cc310e056e78b18581715d2e0761220ce846ff188983ce88eb5b45af6e9"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/local-attempt2.log",
+      "sha256": "1efac90a96c1db52c615d7d3f94ae30204a48f45e3fa3cf660c373ce9001f90a"
+    }
+  ],
+  "limits": [
+    "Offline quote transport changes are synthetic production-scheduling coverage; no real historical active-ramp execution newly proved.",
+    "Guarded exact two-coin active ramps remain correctly rejected; no new variant admission claim.",
+    "Raw bootstrap mids retain startup provenance; current effective quotes refresh.",
+    "No original opportunity replay, natural valuation, single-block performance, representative performance or overall goal completion.",
+    "Independent reviewer did not restart tests/build or mutate cloud source/catalog/IMPL."
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "kind": "independent-scoped-commit-template-review",
+  "reviewer": "curve_final_review",
+  "result": "pass-template-with-final-payload-binding-required",
+  "template": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/commit139-template.py",
+    "sha256": "b6560a24b9212584f2c5c8820458a1b0888b3b766c6a804a71da684f8c90148f"
+  },
+  "deliveryManifest": {
+    "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh/delivery138/handoff.json",
+    "sha256": "b3f02949c6f1f0dfea3ed6d2ecb99f5ad5255ac6b29c70c7834bde7e071f0ad8"
+  },
+  "alreadyChecked": "apply138 embedded docs payload exactly equals9 delivery138 paths/hashes; all local manifest file bytes match.",
+  "findings": [
+    "Exact HEAD099fc391, expected branch and empty index enforced before staging.",
+    "Package index reconstructed from HEAD plus supplied script additions; actual dirty working package not staged wholesale.",
+    "Generated index reconstructed from HEAD exact entries with exactly Curve plain pricing/exact replaced; pre/post actual catalog diff constrained to those2 rows and top artifactHash; untouched HEAD peer rows preserved.",
+    "Only explicit code/docs and computed package/catalog blobs staged; no git add -A or working-tree resets.",
+    "Working bytes for every staged path and declared protected paths checked unchanged across commit; staged names exact and index empty afterward.",
+    "No cloud execution, commit or mutation performed by this review."
+  ],
+  "requiredFinalAssemblyCheck": {
+    "codeFiles": "Exactly current handoff3 Curve pricing.ts/refresh-scope.ts/test/refresh.ts paths and reviewed hashes",
+    "additions": {
+      "searcher:curve-plain-refresh": "tsx src/searcher/venues/swaps/curve-plain-family/test/refresh.ts"
+    },
+    "docs": "Exactly applied9 delivery138 paths plus explicit current review/gate reports; extras cannot contain source/package/catalog/peer files.",
+    "protectedPaths": "Include pre-existing dirty peer source paths. Final supplied payload is not yet present in reviewed template."
+  }
+}

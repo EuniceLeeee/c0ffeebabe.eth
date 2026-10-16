@@ -1,0 +1,189 @@
+{
+  "kind": "canonical-red-green-refresh-reconciliation",
+  "before": [
+    {
+      "name": "index",
+      "exitCode": 0,
+      "started": "2026-10-15T17:55:46.267900+00:00",
+      "finished": "2026-10-15T17:55:46.630934+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/baseline136-index.log",
+      "logSha256": "ce45a3ab5a4addc67367cc53e9ec4f8aea8edb5b2ec937c32d6d2edf15badd55"
+    },
+    {
+      "name": "refresh-before",
+      "exitCode": 1,
+      "started": "2026-10-15T17:55:46.632071+00:00",
+      "finished": "2026-10-15T17:55:48.522470+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/baseline136-refresh-before.log",
+      "logSha256": "ccccd1f070f0585b4c339ecb8b6f5b363beeff889ea4a9a6595940a88ef76008"
+    }
+  ],
+  "after": [
+    {
+      "name": "generate",
+      "exitCode": 0,
+      "started": "2026-10-15T17:56:59.133276+00:00",
+      "finished": "2026-10-15T17:57:44.556713+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-generate.log",
+      "logSha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+    },
+    {
+      "name": "index",
+      "exitCode": 0,
+      "started": "2026-10-15T17:57:44.563722+00:00",
+      "finished": "2026-10-15T17:57:44.929156+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-index.log",
+      "logSha256": "affd9bfae69c6934d3ff6f449010178529923b4fd9046d9d1f8af7011bb25c36"
+    },
+    {
+      "name": "refresh",
+      "exitCode": 0,
+      "started": "2026-10-15T17:57:44.930296+00:00",
+      "finished": "2026-10-15T17:57:46.933617+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-refresh.log",
+      "logSha256": "fb0a2b46b76ea732cfd597e026f942ee18642f209051cd6e8ab3bbc73bf2280c"
+    },
+    {
+      "name": "family",
+      "exitCode": 0,
+      "started": "2026-10-15T17:57:46.933966+00:00",
+      "finished": "2026-10-15T17:57:48.845756+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-family.log",
+      "logSha256": "8fde81655390caa3552adb29a4729d5c7d4d556d87da913353c5cc69c58e022b"
+    },
+    {
+      "name": "native-contract",
+      "exitCode": 0,
+      "started": "2026-10-15T17:57:48.846114+00:00",
+      "finished": "2026-10-15T17:57:51.152479+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-native-contract.log",
+      "logSha256": "95145c94fc709faa21fe74101e247f73b847c42fece7912f9c087d16fcfdd6ec"
+    },
+    {
+      "name": "nomination",
+      "exitCode": 0,
+      "started": "2026-10-15T17:57:51.152870+00:00",
+      "finished": "2026-10-15T17:57:53.349540+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-nomination.log",
+      "logSha256": "9a97a4e7aa92433b07c1014e9adc83baa0a8e9424fd00ec4139b70acabdffb42"
+    },
+    {
+      "name": "dual",
+      "exitCode": 0,
+      "started": "2026-10-15T17:57:53.349931+00:00",
+      "finished": "2026-10-15T17:58:01.578655+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-dual.log",
+      "logSha256": "887760570f25960d040caf01b7d5def2144bb0dec29894877456986776b12a7e"
+    },
+    {
+      "name": "build",
+      "exitCode": 0,
+      "started": "2026-10-15T17:58:01.579107+00:00",
+      "finished": "2026-10-15T17:58:10.259796+00:00",
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-refresh136/apply137-build.log",
+      "logSha256": "16f215c44972517a90fc93515d235e4d51888e1f5ef7018769dffac0b50f1907"
+    }
+  ],
+  "selection": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/baseline136-selection.json",
+      "sha256": "f369367f65a53feb322812b6990ae4f8121efb201180b3b53d0ae5b973d009c2"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/apply137-selection.json",
+      "sha256": "20daaa852ddf61cedeabd3c9025c8c98e55282a9fc766c16802c1d8820b20ebf"
+    }
+  ],
+  "currentPins": {
+    "head": "099fc391cc783c07e75e4c91cbecd8437e466fd1",
+    "files": [
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/pricing.ts",
+        "beforeSha256": "8481bd6a8f2a8685a684e3fee2cb7daca18a0149819181a2f9947741a43d91e9",
+        "afterSha256": "4ef0f6754e67efb0c30277ec76f3c54dab89c1c0816af90b1846e7ffbf057428"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/refresh-scope.ts",
+        "beforeSha256": "7412a41813819417924ce00d5601cc4fc63f9a63608b39c3c189c1e80099dbd4",
+        "afterSha256": "6b1dcd39f4b27d06bfcd74ef27dce8cc3c65493cb2afa33d622bd09d3979e94a"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/refresh.ts",
+        "beforeSha256": null,
+        "afterSha256": "30d8f9cedd9e396afd87265400743ff11c986c6a25008f390db451e566a9d3f8"
+      }
+    ],
+    "currentFiles": [
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/pricing.ts",
+        "sha256": "4ef0f6754e67efb0c30277ec76f3c54dab89c1c0816af90b1846e7ffbf057428"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/refresh-scope.ts",
+        "sha256": "6b1dcd39f4b27d06bfcd74ef27dce8cc3c65493cb2afa33d622bd09d3979e94a"
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/refresh.ts",
+        "sha256": "30d8f9cedd9e396afd87265400743ff11c986c6a25008f390db451e566a9d3f8"
+      }
+    ],
+    "catalogSha256": "438340888389e75ecb90c43c2920640195898a5551e2328e3b496b8544b2e9bc",
+    "packageSha256": "6b8048b1886053a027f37239c9931bda4b6695d6b61da87c6d23501c4dce804b",
+    "selectionSha256": "20daaa852ddf61cedeabd3c9025c8c98e55282a9fc766c16802c1d8820b20ebf",
+    "changedCatalog": [
+      {
+        "familyId": "curve-plain",
+        "capability": "exact",
+        "before": "43f33281abd95e00cd065ec63d80adb9f88cc1efad7a220ef07bbe497d0176d0",
+        "after": "cde759ec435d21926aec1cd23e3b4d01de5283605e90325266200de785319506"
+      },
+      {
+        "familyId": "curve-plain",
+        "capability": "pricing",
+        "before": "b1de2f4f90944a54410d06244ffa1cff5eb0549724e001fe7a1673a605a84d25",
+        "after": "fac4aa1b25d7219bd03dea5f4710faaf8b639f3df86df1e5ce5e9f13a9d25974"
+      }
+    ]
+  },
+  "catalogDiff": [
+    {
+      "familyId": "curve-plain",
+      "capability": "exact",
+      "before": "43f33281abd95e00cd065ec63d80adb9f88cc1efad7a220ef07bbe497d0176d0",
+      "after": "cde759ec435d21926aec1cd23e3b4d01de5283605e90325266200de785319506"
+    },
+    {
+      "familyId": "curve-plain",
+      "capability": "pricing",
+      "before": "b1de2f4f90944a54410d06244ffa1cff5eb0549724e001fe7a1673a605a84d25",
+      "after": "fac4aa1b25d7219bd03dea5f4710faaf8b639f3df86df1e5ce5e9f13a9d25974"
+    }
+  ],
+  "rootRecords": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/baseline136-checks.json",
+      "sha256": "5146af8671e0afae43a15ca5bcbc84482911dcda81b7bd1ca88379af1d9f934f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/apply137-checks.json",
+      "sha256": "66224526325967e3c050fe6a217e769222b76f7fba4c7236437779ea4a3a9738"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/final137-pins.json",
+      "sha256": "3d63c6bd0533a2984017028d52be95a50509aa45fe7d178d57ba5f394e971634"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/curve-refresh-review/evidence137/catalog-diff137.json",
+      "sha256": "921f07c9f4d6b03afe02491e0e0f6d1066728bc1a53a2209af141de0efa2467f"
+    }
+  ],
+  "independentReview": {
+    "path": "docs/research/reports/curve-plain-refresh-independent-20261016.json",
+    "sha256": "4841efd7a8595c25745ccc156cbc1dab0fce1fd71524d758ffe1eb9d0348132a"
+  },
+  "preparationFailuresPreserved": [
+    "local-attempt1.log: isolated source snapshot omitted V2 lineage json",
+    "local-attempt2.log: new fixture omitted declared rejected effect collections; fixed in candidate before canonical execution"
+  ],
+  "claim": "Actual cloud canonical old-code empty perBlockRefresh regression flips green after2Family-only source edits. No historical EVM or performance experiment."
+}
