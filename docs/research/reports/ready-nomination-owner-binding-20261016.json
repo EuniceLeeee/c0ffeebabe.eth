@@ -1,0 +1,157 @@
+{
+  "kind": "central-ready-nomination-owner-binding-contract-validation",
+  "at": "2026-10-16T07:48:06.215557+00:00",
+  "sourceHeadBefore": "5aacf6ff4fc6f3bbe80c38615129c17bfc0a1478",
+  "actualDirtySourceFiles": [
+    {
+      "path": "listener/src/searcher/strict-identity-attestation.ts",
+      "beforeSha256": "76eb066ab7d7584721ee922af6d427e58afe64048862c9d1ec557ce9eefe66a4",
+      "afterSha256": "438deca4cab39bd233fc80ec118d22753d35819cfee25f01d8f04b6028f37553",
+      "headBeforeSha256": "76eb066ab7d7584721ee922af6d427e58afe64048862c9d1ec557ce9eefe66a4",
+      "headOwnedAfterSha256": "438deca4cab39bd233fc80ec118d22753d35819cfee25f01d8f04b6028f37553"
+    },
+    {
+      "path": "listener/src/searcher/test/strict-identity-attestation.ts",
+      "beforeSha256": "e16d066d88963bcbde43cef788cef6810ea3b07ef1f98ae71f5c890da116c568",
+      "afterSha256": "4ae79c6f0ed1ca097f33e2e9e427f1711d09c02cde3c5aa6a43212e88c9a0e73",
+      "headBeforeSha256": "e16d066d88963bcbde43cef788cef6810ea3b07ef1f98ae71f5c890da116c568",
+      "headOwnedAfterSha256": "4ae79c6f0ed1ca097f33e2e9e427f1711d09c02cde3c5aa6a43212e88c9a0e73"
+    },
+    {
+      "path": "listener/src/searcher/test/universe-rebuild-production.ts",
+      "beforeSha256": "81eda9a66f645be2a523f7057de088b156de3f2365c0a510a56d58293a4f798f",
+      "afterSha256": "fcfcdd472439ed79cbc5e9aab78d1864c1235420b11f74761cb120c93ddf301e",
+      "headBeforeSha256": "9b05308bfd52131cc0ca095a32e30b8c74684cab65ff17c824d5fc5941d04808",
+      "headOwnedAfterSha256": "45673935e7eb5ae7e2ce9944e998d35fd853b657996b732378ddb6eaff01afb5"
+    },
+    {
+      "path": "listener/src/searcher/universe-rebuild-production.ts",
+      "beforeSha256": "5855ca62a3af74ca85bf148c9efd46f90a9094e4fa53fc12e36964586334e057",
+      "afterSha256": "0f7ecb2732c8bd407c5b8dfe1867c18cd05030311470c3538f57af6b58060c11",
+      "headBeforeSha256": "4d8266f1e188bc1ffd5a9ef8627291c3146c90a7a0b1a38e8cf8ab5fc5d74cc1",
+      "headOwnedAfterSha256": "55640c5f99673208778802fb18fc4959e4e18603e73cada9c53d5e089e0889cb"
+    }
+  ],
+  "problem": "strict could select another Family observation before sealing; nomination and memo candidate keys then differed and the checkpoint correctly refused atomic pairing",
+  "change": [
+    "optional requiredFamilyId binds same-Family observation and target while preserving unbound legacy behavior",
+    "reverse B-only cannot suppress fresh A nomination; central fallback uses required Family declaration and still invokes original identity/lifecycle",
+    "production passes nomination Family through strict; wrong owner retains retryable identity evidence instead of fake terminal/verified",
+    "sealer verifies computed original hash equals original nomination and suppliedkey, for routes and funding; hash algorithms, runner and atomiccheckpoint unchanged"
+  ],
+  "actualCloudChecks": [
+    {
+      "check": "strict-baseline235",
+      "script": "searcher:strict-identity-attestation",
+      "exitCode": 1,
+      "expectedExitCode": 1,
+      "sha256": "e42671945f8b8ba7de550a2cbaeaa3e5b64449a30f1488fac3fcb5e80bf06b6e"
+    },
+    {
+      "check": "production-baseline235",
+      "script": "searcher:universe-rebuild-production",
+      "exitCode": 1,
+      "expectedExitCode": 1,
+      "sha256": "2d26780b2669a92b6cff4565ce4fbc5b9e098fd3c4bc07de107c9baf9789b1a7"
+    },
+    {
+      "check": "strict-candidate235",
+      "script": "searcher:strict-identity-attestation",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "ccbfd198d4770c69722bcb138bae44e8f9f997572503af749d22db4aec48d74b"
+    },
+    {
+      "check": "production-candidate235",
+      "script": "searcher:universe-rebuild-production",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "e295c90953b65073e97a3d613539b8c8dca0a04df70e30a71073964fc5e07c3b"
+    },
+    {
+      "check": "runner-candidate235",
+      "script": "searcher:universe-rebuild-runner",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "d5de20adb968799590734a9982102d9693b34e90d4af40ee93b9f5ae8b269da8"
+    },
+    {
+      "check": "checkpoint-candidate235",
+      "script": "searcher:universe-rebuild-checkpoint",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "fb12e591e7b343d4513ee49b3c1976552cb37b1e14abaccb3523a98636461dab"
+    },
+    {
+      "check": "build-live235",
+      "script": "build:live",
+      "exitCode": 0,
+      "expectedExitCode": 0,
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+    }
+  ],
+  "sourcePlanResumeProof": {
+    "at": "2026-10-16T07:46:16.705Z",
+    "originalStoreLoad": true,
+    "originalSourcePlanAndExactCoverageAssertions": true,
+    "noRpcOrArchiveDataRead": true,
+    "runId": "family-all46-ready14400-cachecarry-20261016",
+    "fromBlock": 26187988,
+    "cutoff": {
+      "number": 26202387,
+      "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+      "generation": 26202387
+    },
+    "candidateCount": 44711,
+    "candidateSetHash": "744f5e4c43e4190e5393351c888ee265f0a23540189721ca3b81537f5109bbd8",
+    "universeHash": "4644378b1846ef8dc5a2841a54abd1df5ccc79c20c6fb5670c8eb81b9d0d43d2",
+    "checkpointFingerprint": "c630bb1cc62e9a1510bb4c0e519669181ed68e60354505876bb8ee076fd93b06",
+    "revision": 1256,
+    "verifiedMemos": 14388,
+    "outcomes": {
+      "retryable": 1645,
+      "verified": 551,
+      "terminal-rejected": 92
+    },
+    "expectedSourcePlan": {
+      "startup": "852177ef375a78331167fa17872d828b8f2bd0750e0394f56a17574bd763abc8",
+      "activity": "47413277033d5cbdbe7633deebed280ea7e4269c98e940c4b4cb53f43b05a566"
+    },
+    "coverageCount": 244
+  },
+  "sourcePlanProofSha256": "30f214ac6bf97005d25b0328e04297315bf9e554c96f719c00bddfbc8e6c9bae",
+  "independentReviewSha256": "98f16b91aa35f91b8c0e5ec611d6f1a79cfaca8932bc281b526dd6105e9c53f4",
+  "localTypedFixtureReceiptSha256": "68d139337079227fbbe7f34320b35b5b30da48a8086f236dccb1dc2fedbb7e0d",
+  "preservedActualFailures": [
+    {
+      "attempt": "repair180",
+      "exitCode": 1,
+      "reason": "HTTP/RPC429; finite retry exhausted",
+      "logSha256": "32a7108d25917120d1ca4c9893302f2c86889a6fcea569e97cfea7a7bfdf5126"
+    },
+    {
+      "attempt": "resume222",
+      "exitCode": 1,
+      "reason": "memo/outcome atomic pair mismatch",
+      "logSha256": "03b54cdfa75140fcfc715720da659a26f39524a8d83e2efa608ad07d42899de8"
+    }
+  ],
+  "preservedPartial": {
+    "baseSha256": "51871cfdba1e4fd2cc4486fd7195d4bc0b8f5a523322862f75753358e4a0ddaf",
+    "journalSha256": "9e63e6c900d343a5d37250fc787f6a4403e0e5042324c395d4fe059d1d946b46",
+    "journalAwareRevision": 1256,
+    "journalAwareOutcomes": {
+      "verified": 551,
+      "retryable": 1645,
+      "terminalRejected": 92
+    }
+  },
+  "status": "implemented; deterministic central contract baseline-to-candidate flips and actual production build/regressions pass; same-run real continuation pending",
+  "limits": [
+    "Specific failed candidate/pool and two owners not captured in original222 log",
+    "No per-Family new chain correctness claim from routing mocks",
+    "New Ready not published;250 live not run; no latency/representative performance or production opportunity pass",
+    "Existing peer dirty source preserved in actual workspace and excluded from this commit",
+    "Original atomic pair assertions, hash algorithms, scan range, raw source evidence and safety unchanged; no signing/broadcast/deployment"
+  ]
+}

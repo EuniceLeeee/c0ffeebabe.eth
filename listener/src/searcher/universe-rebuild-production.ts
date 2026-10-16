@@ -713,6 +713,7 @@ function decodeDurableValue(value: unknown): unknown {
 function sealMemoFromPublication(input: {
   readonly candidate: Readonly<Record<string, unknown>>;
   readonly familyId: string;
+  readonly familyCandidateKey: string;
   readonly familyInstanceKey: string;
   readonly instanceKey: string;
   readonly verifiedIdentity: unknown;
@@ -728,6 +729,9 @@ function sealMemoFromPublication(input: {
     input.familyId,
     candidateInstanceIdentity(input.candidate),
   );
+  if (familyCandidateKey !== rebuildFamilyCandidateKey(input.candidate) || familyCandidateKey !== input.familyCandidateKey) {
+    throw new Error("universe rebuild: verified Family does not match nomination key");
+  }
   const memo = Object.freeze({
     familyCandidateKey,
     familyInstanceKey: input.familyInstanceKey,
@@ -1252,6 +1256,7 @@ export function createProbeWiring(
           source: attestInput.cutoff,
           pools: Object.freeze([pool]),
           channelOrder: "reverse-binding-first",
+          requiredFamilyId: candidateFamilyId as FamilyId,
         });
       } catch (error) {
         if (error instanceof ObservedSenderEvidenceMismatch) {
@@ -1313,6 +1318,12 @@ export function createProbeWiring(
           }),
         });
       }
+      if (hashFamilyCandidateKey(accepted.familyId, candidateInstanceIdentity(candidate)) !== rebuildFamilyCandidateKey(candidate)) {
+        return retryable({ candidate, stage: "identity", failureCode: "resource-limited",
+          reasonCode: "strict identity Family mismatch: nominated=" + candidateFamilyId + " accepted=" + accepted.familyId,
+          ...(attestInput.evidenceRef === undefined ? {} : { evidenceRef: attestInput.evidenceRef }),
+        });
+      }
       const publication = result.publications[0] ?? null;
       const instance = publication?.instances[0] ?? null;
       if (instance === null) {
@@ -1368,6 +1379,7 @@ export function createProbeWiring(
         return sealMemoFromPublication({
           candidate,
           familyId,
+          familyCandidateKey: sealInput.familyCandidateKey,
           familyInstanceKey,
           instanceKey,
           verifiedIdentity: Object.freeze({
@@ -1425,6 +1437,7 @@ export function createProbeWiring(
       return sealMemoFromPublication({
         candidate,
         familyId,
+        familyCandidateKey: sealInput.familyCandidateKey,
         familyInstanceKey,
         instanceKey,
         verifiedIdentity: Object.freeze({

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { transpileModule, ScriptTarget, ModuleKind } from "typescript";
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import {
@@ -116,7 +119,87 @@ function runtime(verified: boolean): CentralAdapterRuntime {
   }) as unknown as CentralAdapterRuntime;
 }
 
+// Exercise the actual strict entry with deterministic lifecycle boundaries.
+// Identity/calldata correctness remains covered by the existing real-plugin suites.
+async function assertBoundNominationRouting(): Promise<void> {
+  const source = readFileSync(new URL("../strict-identity-attestation.ts", import.meta.url), "utf8");
+  const js = transpileModule(source, { compilerOptions: { target: ScriptTarget.ES2022, module: ModuleKind.CommonJS } }).outputText;
+  const require = createRequire(import.meta.url);
+  const A = "synthetic:owner-a", B = "synthetic:owner-b";
+  const observation = (id: string) => ({ kind: "address-surface", source: SOURCE, address: POOL,
+    interfaceFingerprints: [id], codeHash: "0x" + "aa".repeat(32), implementationWord: "0x" + "00".repeat(32) });
+  const families = [B, A].map(id => ({ plugin: { manifest: { familyId: id, domain: "protocol" },
+    discovery: { addressSurfaces: [] as { kind: string; fingerprint: string }[] } } }));
+  let reverse: unknown[] = [], fresh: unknown[] = [], freshCalls = 0;
+  let identityRejected = false;
+  const executed: string[] = [], patterns: string[] = [];
+  const routingCatalog = { listAll: () => families,
+    forStrictFamily: (id: string) => families.find(f => f.plugin.manifest.familyId === id),
+    ownerOfPoolAdapter: () => B, ownerOfAction: () => B,
+    matches: (obs: { interfaceFingerprints?: string[] }) => (obs.interfaceFingerprints ?? []).map(id => ({ familyId: id, patternId: id + ":pattern" })) };
+  const module = { exports: {} as Record<string, unknown> };
+  new Function("require", "module", "exports", js)((id: string) => {
+    if (id === "ethers") return require("ethers");
+    if (id.endsWith("capture-materialization.js")) return {
+      executeCatalogReverseBindings: async () => reverse,
+      executeCatalogCaptureNominations: async () => { freshCalls++; return fresh; },
+    };
+    if (id.endsWith("adapter-family-runtime.js")) return { executeAdapterFamilyLifecycleBatch: async (input: {
+      family: typeof families[number]; matches: { matchedPatternId: string }[];
+    }) => {
+      const id = input.family.plugin.manifest.familyId; executed.push(id); patterns.push(input.matches[0]!.matchedPatternId);
+      const outcomes = [{ stage: "identity", status: identityRejected ? "rejected" : "verified", lineageId: id + ":lineage", reasonCode: "real-boundary-negative" }];
+      return { outcomes, publication: { familyId: id, instances: identityRejected ? [] : [{ familyId: id }], outcomes } };
+    } };
+    return {};
+  }, module, module.exports);
+  const attest = module.exports.attestPoolIdentitiesStrict as typeof attestPoolIdentitiesStrict;
+  const input = { catalog: routingCatalog as unknown as FamilyCapabilityCatalog,
+    provider: { call: async () => "0x", getCode: async () => "0x6000", getStorage: async () => "0x" + "00".repeat(32) },
+    runtime: runtime(true), source: SOURCE, pools: [{ address: POOL, adapter: "hint-b" }], channelOrder: "reverse-binding-first" as const };
+  reverse = [observation(B), observation(A)];
+  let result = await attest({ ...input, requiredFamilyId: A as never });
+  assert.equal(result.accepted[0]?.familyId, A, "bound A must execute A even when B observation is first");
+  assert.equal(executed.at(-1), A);
+  assert.equal(result.publications[0]?.familyId, A);
+  assert.equal(result.publications[0]?.instances[0]?.familyId, A);
+  reverse = [observation(B)]; fresh = [observation(A)];
+  const beforeFresh = freshCalls;
+  result = await attest({ ...input, requiredFamilyId: A as never });
+  assert.equal(freshCalls, beforeFresh + 1, "B retain observation cannot suppress A fresh nomination");
+  assert.equal(result.accepted[0]?.familyId, A);
+  fresh = [observation(B)];
+  const beforeIdentity = executed.length;
+  result = await attest({ ...input, requiredFamilyId: A as never });
+  assert.equal(result.accepted.length, 0, "only B must never verify an A nomination");
+  assert.equal(executed.length, beforeIdentity);
+  result = await attest(input);
+  assert.equal(result.accepted[0]?.familyId, B, "unbound legacy keeps its original first-observation behavior");
+  families.find(f => f.plugin.manifest.familyId === A)!.plugin.discovery.addressSurfaces.push({ kind: "interface", fingerprint: A });
+  reverse = [observation(B)]; fresh = [observation(B)];
+  result = await attest({ ...input, requiredFamilyId: A as never });
+  assert.equal(executed.at(-1), A, "required fallback must use A declarations even with adapter hint B");
+  assert.equal(result.accepted[0]?.familyId, A);
+  assert.equal(result.publications[0]?.familyId, A);
+  assert.equal(result.publications[0]?.instances[0]?.familyId, A);
+  identityRejected = true;
+  result = await attest({ ...input, requiredFamilyId: A as never });
+  assert.equal(result.accepted.length, 0, "an A fallback observation still requires the original identity outcome");
+  assert.match(result.rejected[0]?.reason ?? "", /identity_rejected/);
+  reverse = [{ ...observation(A), interfaceFingerprints: [A, A] }];
+  identityRejected = true;
+  result = await attest({ ...input, requiredFamilyId: A as never });
+  assert.equal(result.accepted.length, 0, "selecting A cannot bypass a failed identity outcome");
+  assert.match(result.rejected[0]?.reason ?? "", /identity_rejected/);
+  assert.equal(patterns.at(-1), A + ":pattern", "bound selection preserves the first same-Family pattern");
+}
+
 async function main(): Promise<void> {
+  await assertBoundNominationRouting();
+  if (process.argv.includes("--nomination-owner-only")) {
+    console.log("strict bound nomination routing PASS");
+    return;
+  }
   const previousConcurrency = process.env.SEARCHER_ATTESTATION_CONCURRENCY;
   process.env.SEARCHER_ATTESTATION_CONCURRENCY = "0";
   try {

@@ -223,6 +223,8 @@ export async function attestPoolIdentitiesStrict<
    * The plugin never decides this order.
    */
   readonly channelOrder?: "reverse-binding-first" | "nominate-first";
+  /** Bound nominations must execute their own Family, even at shared addresses. */
+  readonly requiredFamilyId?: FamilyId;
 }): Promise<{
   readonly accepted: readonly StrictAttestedPool<Pool>[];
   readonly rejected: readonly StrictRejectedPool<Pool>[];
@@ -307,6 +309,8 @@ export async function attestPoolIdentitiesStrict<
         // declares. Zero protocol semantics in central paths.
         opaque: Object.freeze(entryOpaque(pool)) as never,
       })]);
+      const matchesRequiredFamily = (observation: UnifiedObservation): boolean => input.requiredFamilyId === undefined ||
+        input.catalog.matches(observation).some(match => match.familyId === input.requiredFamilyId);
       let observations: readonly UnifiedObservation[];
       if (input.channelOrder === "reverse-binding-first") {
         // Retain channel first: reverse binding needs no recent activity and
@@ -319,7 +323,7 @@ export async function attestPoolIdentitiesStrict<
           nominations,
           provider: nominationProvider,
         });
-        if (observations.length === 0) {
+        if (!observations.some(matchesRequiredFamily)) {
           observations = await executeCatalogCaptureNominations({
             catalog: input.catalog,
             source: input.source,
@@ -335,7 +339,7 @@ export async function attestPoolIdentitiesStrict<
           provider: nominationProvider,
         });
       }
-      let observation: UnifiedObservation | undefined = observations[0];
+      let observation: UnifiedObservation | undefined = observations.find(matchesRequiredFamily);
       if (observation === undefined) {
         // Central generic fallback (no per-family logic): when the plugin
         // nomination produced no observation (e.g. a cold pool with no Swap
@@ -350,6 +354,7 @@ export async function attestPoolIdentitiesStrict<
           address,
           pool.adapter,
           entryOpaque(pool),
+          input.requiredFamilyId,
         );
         if (observation === undefined) {
           rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "no_catalog_match" };
@@ -769,6 +774,7 @@ export async function centralAddressSurfaceFallback(
   address: string,
   adapterHint?: string,
   opaque?: Readonly<Record<string, unknown>>,
+  requiredFamilyId?: FamilyId,
 ): Promise<UnifiedObservation | undefined> {
   const code = await provider.getCode(address, source.number);
   if (!ethers.isHexString(code) || code === "0x") return undefined;
@@ -777,10 +783,10 @@ export async function centralAddressSurfaceFallback(
   // the fallback stays fail-closed instead of guessing a family: the
   // observation must match the family that will verify identity.
   const fingerprints: string[] = [];
-  if (adapterHint !== undefined) {
+  if (requiredFamilyId !== undefined || adapterHint !== undefined) {
     let familyId: FamilyId;
     try {
-      familyId = catalog.ownerOfPoolAdapter(adapterHint);
+      familyId = requiredFamilyId ?? catalog.ownerOfPoolAdapter(adapterHint!);
     } catch {
       return undefined;
     }
@@ -819,10 +825,14 @@ function entryOpaque(pool: { readonly address: string; readonly adapter?: string
 function matchFor(
   input: {
     readonly catalog: FamilyCapabilityCatalog;
+    readonly requiredFamilyId?: FamilyId;
   },
   pool: { readonly address: string; readonly adapter?: string },
   matches: readonly { readonly familyId: FamilyId; readonly patternId: string }[],
 ): { readonly familyId: FamilyId; readonly patternId: string } | null {
+  if (input.requiredFamilyId !== undefined) {
+    return matches.find(match => match.familyId === input.requiredFamilyId) ?? null;
+  }
   if (pool.adapter !== undefined) {
     // Prefer the family that owns the pool-adapter label (plugin-declared
     // manifest field; catalog-projected, never a central label table),
