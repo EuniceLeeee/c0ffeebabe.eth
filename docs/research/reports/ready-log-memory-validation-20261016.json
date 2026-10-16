@@ -1,0 +1,105 @@
+{
+  "kind": "actual-dirty-source-common-log-memory-validation",
+  "sourceHeadBefore": "059e90b5ac1090b48f74ab493ab4419ced91451d",
+  "files": [
+    {
+      "path": "listener/src/searcher/universe-rebuild-production.ts",
+      "sha256": "5855ca62a3af74ca85bf148c9efd46f90a9094e4fa53fc12e36964586334e057",
+      "beforeSha256": "17d2a99d27593de5a8e77f6fd2c7d1c202d934449025871314b2e4d3a465adac"
+    },
+    {
+      "path": "listener/src/searcher/catalog-log-accumulator.ts",
+      "sha256": "14e6c4a51415102a62b1fbb4f19c359e6d49c92ee062cff1220709018cfe9b46",
+      "beforeSha256": null
+    },
+    {
+      "path": "listener/src/searcher/test/catalog-log-accumulator.ts",
+      "sha256": "fc0f051de1f158357a60b0f099382de9cd480200757793a28a63ac0937740ed1",
+      "beforeSha256": null
+    }
+  ],
+  "all48Enabled": true,
+  "heapMiB": 8192,
+  "checks": [
+    {
+      "name": "accumulator",
+      "tool": "listener:searcher:catalog-log-accumulator",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/accumulator175.log",
+      "sha256": "97cee33bb2571373122c3e1468b88391a2423dd163e8b4b4f60f26c7ec7497ab",
+      "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json --tool listener:searcher:catalog-log-accumulator\n\n\n> mev-listener@0.1.0 searcher:catalog-log-accumulator\n> node --import tsx --test src/searcher/test/catalog-log-accumulator.ts\n\n\u2714 source/chunk hashes/counts, complete candidates/insertion order, first opaque evidence (1.501382ms)\n\u2714 duplicate full identity conflicting data keeps first admission but hashes/counts both (0.311737ms)\n\u2714 same block/score/fingerprint tie retains first evidence (0.169825ms)\n\u2714 mixed Families and ordered chunk boundaries preserve complete feed (0.169725ms)\n\u2714 invalid/out-of-range and backward chunk cannot re-enter after duplicate expiry (0.381492ms)\n\u2714 empty and repeated-instance scans retain all source evidence with compact admission (31.72616ms)\n\u2714 opaque-only representative cannot re-enter ordinary candidate decode after a conflicting identity (10.99339ms)\n\u2139 tests 7\n\u2139 suites 0\n\u2139 pass 7\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 4030.611106\ntool-run receipt=listener:searcher:catalog-log-accumulator exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json\n"
+    },
+    {
+      "name": "production",
+      "tool": "listener:searcher:universe-rebuild-production",
+      "exitCode": 1,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/production175.log",
+      "sha256": "67c56d650f7e95992a80a936f00c13cb2aee07fef5ca65e311fa047c02f60e80",
+      "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json --tool listener:searcher:universe-rebuild-production\n\n\n> mev-listener@0.1.0 searcher:universe-rebuild-production\n> node --import tsx src/searcher/test/universe-rebuild-production.ts\n\n[revm-fault] {\"schemaVersion\":1,\"stage\":\"rebuild-candidate\",\"kind\":\"rpc-throttle\",\"timeUnixMs\":1792124589487,\"pid\":691189,\"candidateKey\":\"c12c731c4878ecbfacd9352da49a7215db770ca91fdf0d16fa4cfdc24070542d\",\"blockNumber\":25750000,\"category\":\"http429\",\"httpStatus\":429}\n[revm-fault] {\"schemaVersion\":1,\"stage\":\"transport-operation\",\"kind\":\"rpc-throttle\",\"timeUnixMs\":1792124589487,\"pid\":691189,\"category\":\"http429\",\"httpStatus\":429}\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n2 !== 1\n\n    at main (/opt/mev-cloud/family-runtime-20261007/listener/src/searcher/test/universe-rebuild-production.ts:621:10) {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: 2,\n  expected: 1,\n  operator: 'strictEqual',\n  diff: 'simple'\n}\ntool-run receipt=listener:searcher:universe-rebuild-production exit=1 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json\n"
+    },
+    {
+      "name": "runner",
+      "tool": "listener:searcher:universe-rebuild-runner",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/runner175.log",
+      "sha256": "9ab355cfae88faf2945f6306d16f9bffbb2ab63d2ed57fc5badc313c1eba7342",
+      "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json --tool listener:searcher:universe-rebuild-runner\n\n\n> mev-listener@0.1.0 searcher:universe-rebuild-runner\n> node --import tsx src/searcher/test/universe-rebuild-runner.ts\n\nReady no-op graph order PASS (both workflows, original bytes, full edge multiplicity, metadata and validator rejection)\nReady Family update PASS (baseline partitions, disable/restore, scoped addition, atomic failures, full graph parity)\nready instance refresh PASS (no scan, same set/cutoff/coverage, scoped re-attestation, bounded retry, atomic failure)\ntransaction-set runner PASS (one Ready, existing instance dedupe, sparse scope and mismatch fences)\nuniverse rebuild runner PASS\ntool-run receipt=listener:searcher:universe-rebuild-runner exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json\n"
+    },
+    {
+      "name": "startup",
+      "tool": "listener:searcher:universe-rebuild-startup-cli",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/startup175.log",
+      "sha256": "2a8ff3ae09cee962976007fa3059585ddc91f5c4740a744ca13b56d4228d3691",
+      "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json --tool listener:searcher:universe-rebuild-startup-cli\n\n\n> mev-listener@0.1.0 searcher:universe-rebuild-startup-cli\n> node --import tsx src/searcher/test/universe-rebuild-startup-cli.ts\n\nuniverse rebuild startup CLI PASS\nuniverse-rebuild-startup FAIL: unknown argument --lookback-blocks\nuniverse-rebuild-startup FAIL: universe rebuild checkpoint: another run is in progress (run-i)\ntool-run receipt=listener:searcher:universe-rebuild-startup-cli exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json\n"
+    },
+    {
+      "name": "composition48",
+      "tool": "listener:searcher:production-family-composition",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/composition48175.log",
+      "sha256": "9b450b6425bda928c0cb716ae424db4d5dc80e7b85bf43d1bbec31abccb2914f",
+      "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json --tool listener:searcher:production-family-composition\n\n\n> mev-listener@0.1.0 searcher:production-family-composition\n> node --import tsx src/searcher/test/production-family-composition.ts\n\nproduction-family-composition PASS (48/48 active strict Families / 528 exact capabilities / complete strict action closure)\ntool-run receipt=listener:searcher:production-family-composition exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json\n"
+    },
+    {
+      "name": "peapods",
+      "tool": "listener:searcher:peapods-debond-family",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/peapods175.log",
+      "sha256": "1a7dc9939e3a140f74429ff014149524805ef7ff98dae01d857700662365e6ce",
+      "tail": "n --tool listener:searcher:peapods-debond-family\n\n\n> mev-listener@0.1.0 searcher:peapods-debond-family\n> tsx --test src/searcher/venues/protocols/peapods-debond-family/test/contract.ts\n\n\u2714 ABI and default-disabled registration identify debond, not standard ERC4626 (0.782764ms)\n\u2714 compiled runtime recognition is instance-independent and masks only compiler immutables (13.298688ms)\n\u2714 source recognition plus reciprocal binding and positive effects admits arbitrary compatible instances (25.791507ms)\n\u2714 identity keeps runtime unavailable, never admits by selector (1.44011ms)\n\u2714 identity keeps multi-asset unavailable, never admits by selector (6.348823ms)\n\u2714 identity keeps reverse unavailable, never admits by selector (5.992419ms)\n\u2714 identity keeps empty-asset unavailable, never admits by selector (5.272439ms)\n\u2714 identity keeps zero-backing unavailable, never admits by selector (4.910155ms)\n\u2714 identity keeps fee-mismatch unavailable, never admits by selector (4.392809ms)\n\u2714 behavior rejects input mismatch (5.511868ms)\n\u2714 behavior rejects output mismatch (5.011968ms)\n\u2714 behavior rejects backing mismatch (5.457056ms)\n\u2714 behavior rejects fee-shares mismatch (4.736344ms)\n\u2714 behavior rejects supply mismatch (4.695303ms)\n\u2714 behavior rejects caller mismatch (5.824407ms)\n\u2714 behavior rejects source mismatch (5.117977ms)\n\u2714 behavior rejects revert mismatch (10.339289ms)\n\u2714 behavior rejects extra-supply mismatch (4.807111ms)\n\u2714 call and log discovery are both natural nomination, not injected admission (5.983395ms)\n\u2714 source amount semantics preserve both floors, fee shares and near-total exemption (0.582924ms)\n\u2714 captured N state amount is distinct from original execution evidence (0.047051ms)\n\u2714 shared Exact state honors the actual amount, source and sequential backing changes (12.4667ms)\n\u2714 runtime construction passes only r0 into one debond; quoted mode keeps a measured minimum (12.465197ms)\n\u2714 production sim selector constructs runtime trials with throwing Exact/RPC/fallback sentinels (8.544226ms)\n\u2714 backing donation refreshes; unrelated Transfer does not dirty every POD holding that asset (5.665148ms)\n\u2714 production compiled mutation index preserves backing-transfer filtering across shared assets (18.174332ms)\n\u2139 tests 26\n\u2139 suites 0\n\u2139 pass 26\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 823.20029\ntool-run receipt=listener:searcher:peapods-debond-family exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json\n"
+    },
+    {
+      "name": "build",
+      "tool": "listener:build:live",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/build175.log",
+      "sha256": "2194400ea6b6f65c673e6831edb32f6e76a277c8fef3bed68a93a3e764a45a1b",
+      "tail": "\n> mev-analysis@0.1.0 tool-run\n> tsx src/cli/tool-run.ts --manifest /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json --tool listener:build:live\n\n\n> mev-listener@0.1.0 build:live\n> tsc -p tsconfig.live.json --noEmit\n\ntool-run receipt=listener:build:live exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection174.json\n"
+    },
+    {
+      "name": "production-default",
+      "tool": "listener:searcher:universe-rebuild-production",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/production-default177.log",
+      "sha256": "356c06584b2831306f9b70ef0199fa62fb6a267c12521cfcaae39b1106043c4d",
+      "tail": "=2 retainedCandidates=2 classificationHits=0 elapsedMs=3\n[universe-rebuild/scan] request slice=1/1 attempt=1 range=25750000-25750000 span=1\n[universe-rebuild/scan] completed slice=1/1 attempt=1 range=25750000-25750000 logs=0 elapsedMs=11 sliceLogs=0\n[universe-rebuild/scan] mergedSlices=1/1 completedBlocks=1/1 cumulativeLogs=0 classificationHits=0\n[universe-rebuild/activity-scan] transport=trace method=debug_traceBlockByNumber range=25750000-25750000\n[universe-rebuild/scan] request slice=1/1 attempt=1 range=25750000-25750000 span=1\n[universe-rebuild/scan] completed slice=1/1 attempt=1 range=25750000-25750000 logs=0 elapsedMs=10 sliceLogs=0\n[universe-rebuild/scan] mergedSlices=1/1 completedBlocks=1/1 cumulativeLogs=0 classificationHits=0\n[universe-rebuild/activity-scan] transport=trace method=debug_traceBlockByNumber range=25750000-25750000\n[universe-rebuild/scan] request slice=1/1 attempt=1 range=25750000-25750000 span=1\n[universe-rebuild/scan] completed slice=1/1 attempt=1 range=25750000-25750000 logs=0 elapsedMs=10 sliceLogs=0\n[universe-rebuild/scan] mergedSlices=1/1 completedBlocks=1/1 cumulativeLogs=0 classificationHits=0\n[universe-rebuild/activity-scan] transport=trace method=debug_traceBlockByNumber range=25750000-25750000\n[universe-rebuild/scan] request slice=1/1 attempt=1 range=25750000-25750000 span=1\n[universe-rebuild/scan] completed slice=1/1 attempt=1 range=25750000-25750000 logs=0 elapsedMs=11 sliceLogs=0\n[universe-rebuild/scan] mergedSlices=1/1 completedBlocks=1/1 cumulativeLogs=0 classificationHits=0\n[universe-rebuild/activity-scan] transport=trace method=debug_traceBlockByNumber range=25750000-25750000\n[universe-rebuild/scan] request slice=1/1 attempt=1 range=25750000-25750000 span=1\n[universe-rebuild/scan] completed slice=1/1 attempt=1 range=25750000-25750000 logs=0 elapsedMs=11 sliceLogs=0\n[universe-rebuild/scan] mergedSlices=1/1 completedBlocks=1/1 cumulativeLogs=0 classificationHits=0\nuniverse rebuild production wiring PASS\n[revm-fault] {\"schemaVersion\":1,\"stage\":\"rebuild-candidate\",\"kind\":\"rpc-throttle\",\"timeUnixMs\":1792124737182,\"pid\":691849,\"candidateKey\":\"c12c731c4878ecbfacd9352da49a7215db770ca91fdf0d16fa4cfdc24070542d\",\"blockNumber\":25750000,\"category\":\"http429\",\"httpStatus\":429}\n[revm-fault] {\"schemaVersion\":1,\"stage\":\"transport-operation\",\"kind\":\"rpc-throttle\",\"timeUnixMs\":1792124737182,\"pid\":691849,\"category\":\"http429\",\"httpStatus\":429}\ntool-run receipt=listener:searcher:universe-rebuild-production exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection177.json\n"
+    },
+    {
+      "name": "archive48",
+      "tool": "listener:searcher:ready-activity-archive",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/archive48177.log",
+      "sha256": "0a95a94c162dcdb29048c900920cf534b20462702048828e0753199300e896e2",
+      "tail": " (416.939399ms)\n\u2714 non JSON-safe responses fail without publishing, including a late serialization failure (23.983526ms)\n\u2714 256 MiB entry bound rejects a streamed oversized response without publishing or altering prior data (617.24056ms)\n\u2714 decompression bound is enforced even for valid gzip and a self-consistent receipt checksum (12.443675ms)\n\u2714 missing manifest, missing payload, symlinks and foreign entry names fail closed (11.634061ms)\n\u2714 coverage rejects valid but overlapping disk receipts and out-of-range entry keys (22.687932ms)\n\u2714 the successful initial writer pins the context during a foreign-context race (10.590155ms)\n\u2714 legacy v1 raw archives migrate lazily without rewriting raw bytes or decompressing twice (23.129034ms)\n\u2714 fresh writes and repeated coverage reuse verification; resumed cache hits decode only derived arrays (126.312989ms)\n\u2714 classification misses, exact keys and partial progress survive independent readers (123.012369ms)\n\u2714 optional derived resource ceilings skip publication or miss; raw limit failures remain typed and fatal (77.164988ms)\n\u2714 persistent cache hits verify raw compressed SHA even after a successful same-session hit (28.657686ms)\n\u2714 raw receipt/content replacement cannot reuse a prior classification or forge array-count coverage (34.124106ms)\n\u2714 corrupt classified data, counts, receipts and bindings fail closed without overwriting (55.237646ms)\n\u2714 memo invalidates on identical-byte file, entry-directory and archive-directory replacement (23.381493ms)\n\u2714 manifest changes and disappearance invalidate classified reads and memoized coverage (35.522303ms)\n\u2714 missing raw entries cannot borrow completeness from derived entries or remembered coverage (36.695974ms)\n\u2714 symlinks at raw and classified directory/file boundaries fail closed (185.023175ms)\n\u2714 mutation during raw decode, derived decode and memo verification is fenced before success (58.968934ms)\n\u2714 derived publication is immutable, crash scratch is ignored, and independent processes agree (441.829174ms)\n\u2714 classification cannot rebind old derived data to a self-consistent replacement after a raw read (28.695232ms)\n\u2714 tighter handles share only fenced verification and enforce their own raw bounds (48.616595ms)\n\u2714 coverage and sibling reads cannot overwrite the classification-input fence (162.635573ms)\n\u2139 tests 39\n\u2139 suites 0\n\u2139 pass 39\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 3669.586577\ntool-run receipt=listener:searcher:ready-activity-archive exit=0 manifest=/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-root/selection177.json\n"
+    }
+  ],
+  "preservedFailure": "production175 full-env fixed fixture assumes wstETH wrap selector has exactly one nomination; enabling Few also nominates same selector, before any scan compression. Kept exit1; original fixture under its defaults passes177. Production remains48; independent old-source48 oracle and48composition pass. No test expected values edited.",
+  "sourceAcquisition": "all raw selected logs hashed/counts preserved, compact admission representatives only; standard raw archive remains complete, unchanged32blocks/16workers and trace acquisition policy",
+  "status": "implemented/local contract verified; full same-range14400 and real live250 pending",
+  "limits": [
+    "No full workload memory/performance pass yet",
+    "Current source includes protected peer dirty; commit excludes peer selected-transaction feature",
+    "Prior OOM134/137 and caller usage failure retained;48 configuration differs from prior46 failures"
+  ]
+}

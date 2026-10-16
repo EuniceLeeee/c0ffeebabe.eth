@@ -1,0 +1,76 @@
+{
+  "kind": "independent-final-v2-ready-memory-review",
+  "reviewedAt": "2026-10-16T04:20:03.070886+00:00",
+  "decision": "integratable",
+  "blockingFindings": [],
+  "actualBeforeSha256": "17d2a99d27593de5a8e77f6fd2c7d1c202d934449025871314b2e4d3a465adac",
+  "files": {
+    "listener/src/searcher/universe-rebuild-production.ts": "5855ca62a3af74ca85bf148c9efd46f90a9094e4fa53fc12e36964586334e057",
+    "listener/src/searcher/catalog-log-accumulator.ts": "14e6c4a51415102a62b1fbb4f19c359e6d49c92ee062cff1220709018cfe9b46",
+    "listener/src/searcher/test/catalog-log-accumulator.ts": "fc0f051de1f158357a60b0f099382de9cd480200757793a28a63ac0937740ed1"
+  },
+  "checkedHandoffSha256": "3ef35348ff9daae142a40f0bb591bbbfc0a117fdcdd5fc3d4c2cfec547233c1d",
+  "verification": [
+    {
+      "area": "Complete input digest and source/chunk receipts",
+      "finding": "Every normalized raw log contributes to overall SHA256 and canonical500-block chunk SHA256 before identity dedupe. Duplicate identities still count/hash. Trace digestState receives already-consumed all-log state and appends unchanged classified call digestInput afterward. Existing prefixes, null delimiters, chunk boundaries/counts and receipt source fields are preserved."
+    },
+    {
+      "area": "Candidate equality/order/ties",
+      "finding": "The same production catalog decoder, instance alias key and comparator select representatives. Map.set replaces values without moving insertion order; comparator false keeps original tie. Existing startup candidates precede compact log representatives and calls as before. Full-source production old oracle asserts entire candidate objects and order, not just count."
+    },
+    {
+      "area": "500-block identity expiry",
+      "finding": "Valid identity includes canonical block number. seen expires only when chunk index advances; non-integer/out-of-window and backward chunk input fail before complete source receipt. Within-chunk original order remains unchanged."
+    },
+    {
+      "area": "Opaque first evidence and reentry defect",
+      "finding": "Opaque materialization keys inspect every raw log independently before ordinary identity dedupe; first object per key is retained. Object reference dedupe preserves distinct conflicting evidence. Returned opaque-log marker is applied only after raw digest. Ordinary dedupe explicitly skips that kind; original reverse-binding skips only startup/call and therefore still consumes marked logs using the same fields and final knownCandidates suppression. Root conflicting-identity counterexample is covered by a real production fold control that admits B without marker but preserves A with marker."
+    },
+    {
+      "area": "Archive truthfulness",
+      "finding": "Production archive branch still writes complete rawSlice through activityArchive.writeLogs before classification, and classified logs remain complete filtered arrays. Accumulator operates only after those raw writes. Representatives are never source hash preimages, raw archive contents or claimed complete raw snapshots. Complete archive assert and canonical fences remain."
+    },
+    {
+      "area": "Current48 composition",
+      "finding": "Author all48 composition result is present and hash-checked; Fluid credit and Peapods enabled with existing catalog/action closure. This does not claim their real execution/live performance passes."
+    }
+  ],
+  "evidence": {
+    "authorPure": "pure-v2.log:7/7 PASS",
+    "authorProductionOracles": {
+      "production-v2-scoped46.log": "2585933565c969282e45ee0766bf88984684b468e452662c1d203e2d95509b4f",
+      "production-v2-full46.log": "f0fa1c14a2673b8b2ec6219f48f8cd10ce603d365c3d82424e11193e5affbfb9",
+      "production-v2-full47.log": "bd972ae398b10179e478e9dc652fbc8cdfb26197b4aa4957022251b8d1e13180",
+      "production-v2-full48.log": "2ccff781e7ea5ec5ff5a54885e85e276de142880ebd640dda2cb72b6df434776"
+    },
+    "independentLocalAll48": [
+      {
+        "label": "pure48",
+        "exitCode": 0,
+        "startedAt": "2026-10-16T04:18:54.000507+00:00",
+        "log": "independent-pure48.log",
+        "sha256": "c164878893d592ed38aad50960e2600921e69335e524dbdbe309081b2b75017c"
+      },
+      {
+        "label": "oracle48",
+        "exitCode": 0,
+        "startedAt": "2026-10-16T04:18:54.985729+00:00",
+        "log": "independent-oracle48.log",
+        "sha256": "7ebe90ab4bd52ba7675a4b01fe9a268033e09e0b5ea7454d869bd09d646d0d75"
+      }
+    ],
+    "oracleBaselineSha256": "17d2a99d27593de5a8e77f6fd2c7d1c202d934449025871314b2e4d3a465adac",
+    "oracleScript": "listener/src/searcher/test/catalog-log-accumulator-production.ts"
+  },
+  "integrationConditions": [
+    "Actual before production hash must remain17d2a99d27593de5a8e77f6fd2c7d1c202d934449025871314b2e4d3a465adac and only3committable files applied; preserve all unrelated dirty bytes.",
+    "Run root already planned canonical production/runner/startup, source/receipt/archive, Peapods/all48 composition and actual full production build. Existing fixtures that assume raw returned observation count need contract-aware review, not blind expected-value edits.",
+    "Preserve original OOM/Killed receipts and failure logs; archive/new attempt independent and same original frozen range/run-id with new source/config fingerprints honestly recorded."
+  ],
+  "limits": [
+    "Independent small tests use local syntheticRPC; not historical EVM correctness, representative memory capacity, completed14400 preparation or250-head timeliness evidence.",
+    "Four production oracle fixtures have empty trace_block arrays. Call hash interleaving is covered by pure synthetic call preimages and reviewed unchanged production call classification code; no new real protocol call trace claim is made.",
+    "Root still owns actual cloud build/required canonical checks and subsequent one real preparation. No cloud modifications, scans or peer control were performed by this review."
+  ]
+}

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createCatalogLogAccumulator, type CatalogActivityDigestState } from "./catalog-log-accumulator.js";
 import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { dryRunBotVmCodeOverrideEnabled, loadBotVmRuntimeCode } from "../shared/executor/botvm-executor.js";
@@ -1922,6 +1923,54 @@ export function candidatesFromLog(
   return candidatesFromLogInCatalog(log, rebuildCatalog(familyIds));
 }
 
+function familyMaterializationKey(
+  catalog: FamilyCapabilityCatalog,
+  familyId: string,
+  candidate: Readonly<Record<string, unknown>>,
+): string | null {
+  let family;
+  try {
+    family = catalog.forStrictFamily(familyId as never);
+  } catch {
+    return null;
+  }
+  if (!("discovery" in family.plugin)) return null;
+  const discovery = family.plugin.discovery;
+  if (discovery.reverseBinding?.kind !== "implementation") return null;
+  if (discovery.instanceNominationKey === undefined) return null;
+  try {
+    const localKey = discovery.instanceNominationKey(candidate);
+    return typeof localKey === "string" && localKey.trim().length > 0
+      ? familyId + "\u001f" + localKey
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function opaqueLogMaterializationKeys(log: RebuildScanObservation, catalog: FamilyCapabilityCatalog): readonly string[] {
+  const matches = catalog.matches(Object.freeze({
+    kind: "log", source: Object.freeze({ number: log.blockNumber ?? 0,
+      hash: log.blockHash ?? "0x" + "00".repeat(32), generation: log.blockNumber ?? 0 }),
+    address: log.address.toLowerCase(), topics: Object.freeze([...(log.topics ?? [])]), data: log.data,
+  }) as never);
+  const keys: string[] = [];
+  for (const match of matches) {
+    const family = catalog.forStrictFamily(match.familyId);
+    if (!("discovery" in family.plugin)) continue;
+    const discovery = family.plugin.discovery;
+    if (discovery.reverseBinding?.kind !== "implementation") continue;
+    const pattern = discovery.logPatterns?.find(item => item.id === match.patternId);
+    if (pattern?.emitter?.mode !== "singleton-indexed-bytes32") continue;
+    const poolId = log.topics[pattern.emitter.topicIndex]?.toLowerCase();
+    if (poolId === undefined || !/^0x[0-9a-fA-F]{64}$/.test(poolId)) continue;
+    const key = familyMaterializationKey(catalog, match.familyId,
+      Object.freeze({ familyId: match.familyId, address: log.address.toLowerCase(), poolId }));
+    if (key !== null) keys.push(key);
+  }
+  return keys;
+}
+
 function candidatesFromLogInCatalog(
   log: RebuildScanObservation,
   catalog: FamilyCapabilityCatalog,
@@ -2436,7 +2485,7 @@ async function readDeclaredCallActivity(input: {
   readonly fromBlock: number;
   readonly toBlock: number;
   readonly selectors: ReadonlySet<string>;
-  readonly logs: readonly RebuildScanObservation[];
+  readonly digestState: CatalogActivityDigestState;
 }): Promise<{
   readonly calls: readonly RebuildCallObservation[];
   readonly method: CatalogCallTraceMethod;
@@ -2455,11 +2504,7 @@ async function readDeclaredCallActivity(input: {
       " range=" +
       input.fromBlock + "-" + input.toBlock,
   );
-  const digestState = beginCatalogActivityDigest({
-    fromBlock: input.fromBlock,
-    toBlock: input.toBlock,
-    logs: input.logs,
-  });
+  const digestState = input.digestState;
   const representativeByCandidate = new Map<string, ClassifiedCallRepresentative>();
   const totalBlocks = input.toBlock - input.fromBlock + 1;
   const concurrency = input.activityArchive === undefined ? SOURCE_TRACE_SCAN_CONCURRENCY : ARCHIVE_ACTIVITY_CONCURRENCY;
@@ -2776,62 +2821,6 @@ function updateActivityDigest(
   hash.update(String.fromCharCode(0));
 }
 
-interface CatalogActivityChunkDigestState {
-  readonly fromBlock: number;
-  readonly toBlock: number;
-  readonly hash: ReturnType<typeof createHash>;
-  resultCount: number;
-}
-
-interface CatalogActivityDigestState {
-  readonly observationHash: ReturnType<typeof createHash>;
-  readonly chunks: readonly CatalogActivityChunkDigestState[];
-}
-
-function beginCatalogActivityDigest(input: {
-  readonly fromBlock: number;
-  readonly toBlock: number;
-  readonly logs: readonly RebuildScanObservation[];
-}): CatalogActivityDigestState {
-  const observationHash = createHash("sha256");
-  observationHash.update("catalog-activity-observations-v1:");
-  for (const log of input.logs) updateActivityDigest(observationHash, log);
-
-  const chunks: CatalogActivityChunkDigestState[] = [];
-  let logIndex = 0;
-  for (
-    let fromBlock = input.fromBlock;
-    fromBlock <= input.toBlock;
-    fromBlock += SOURCE_SCAN_BATCH_BLOCKS
-  ) {
-    const toBlock = Math.min(
-      input.toBlock,
-      fromBlock + SOURCE_SCAN_BATCH_BLOCKS - 1,
-    );
-    const hash = createHash("sha256");
-    hash.update("catalog-activity-chunk-v1:");
-    let resultCount = 0;
-    while (logIndex < input.logs.length) {
-      const log = input.logs[logIndex];
-      if (!Number.isSafeInteger(log.blockNumber)) {
-        throw new Error("catalog activity log has no canonical block number");
-      }
-      if (log.blockNumber! > toBlock) break;
-      if (log.blockNumber! < fromBlock) {
-        throw new Error("catalog activity logs are outside ordered scan range");
-      }
-      updateActivityDigest(hash, log);
-      resultCount++;
-      logIndex++;
-    }
-    chunks.push({ fromBlock, toBlock, hash, resultCount });
-  }
-  if (logIndex !== input.logs.length) {
-    throw new Error("catalog activity logs escaped the scan range");
-  }
-  return { observationHash, chunks };
-}
-
 function appendCatalogActivityClassification(
   state: CatalogActivityDigestState,
   chunkIndex: number,
@@ -2864,68 +2853,6 @@ function finishCatalogActivityDigest(
       resultHash: chunk.hash.digest("hex"),
     }))),
   });
-}
-
-function catalogActivityObservationHash(
-  logs: readonly RebuildScanObservation[],
-  calls: readonly RebuildCallObservation[],
-): string {
-  const hash = createHash("sha256");
-  hash.update("catalog-activity-observations-v1:");
-  for (const log of logs) updateActivityDigest(hash, log);
-  for (const call of calls) updateActivityDigest(hash, call);
-  return hash.digest("hex");
-}
-
-function catalogActivityChunks(input: {
-  readonly ranges: readonly {
-    readonly fromBlock: number;
-    readonly toBlock: number;
-  }[];
-  readonly logs: readonly RebuildScanObservation[];
-  readonly calls: readonly RebuildCallObservation[];
-}): readonly DurableSourceChunkReceipt[] {
-  let logIndex = 0;
-  let callIndex = 0;
-  const chunks: DurableSourceChunkReceipt[] = [];
-  for (const range of input.ranges) {
-    const hash = createHash("sha256");
-    hash.update("catalog-activity-chunk-v1:");
-    let resultCount = 0;
-    while (logIndex < input.logs.length) {
-      const log = input.logs[logIndex];
-      if (!Number.isSafeInteger(log.blockNumber)) {
-        throw new Error("catalog activity log has no canonical block number");
-      }
-      if (log.blockNumber! > range.toBlock) break;
-      if (log.blockNumber! < range.fromBlock) {
-        throw new Error("catalog activity logs are outside ordered scan range");
-      }
-      updateActivityDigest(hash, log);
-      resultCount++;
-      logIndex++;
-    }
-    while (callIndex < input.calls.length) {
-      const call = input.calls[callIndex];
-      if (call.blockNumber > range.toBlock) break;
-      if (call.blockNumber < range.fromBlock) {
-        throw new Error("catalog activity calls are outside ordered scan range");
-      }
-      updateActivityDigest(hash, call);
-      resultCount++;
-      callIndex++;
-    }
-    chunks.push(Object.freeze({
-      fromBlock: range.fromBlock,
-      toBlock: range.toBlock,
-      resultCount,
-      resultHash: hash.digest("hex"),
-    }));
-  }
-  if (logIndex !== input.logs.length || callIndex !== input.calls.length) {
-    throw new Error("catalog activity observations escaped the scan range");
-  }
-  return Object.freeze(chunks);
 }
 
 export function createRebuildWiring(input?: {
@@ -3092,7 +3019,12 @@ export function createRebuildWiring(input?: {
         : (input?.startupCandidates ?? []).filter(candidateInScope);
       await activityArchive?.assertScope({ chainId: 1, fromBlock: scanInput.fromBlock,
         toBlock: scanInput.cutoff.number, cutoffHash: scanInput.cutoff.hash });
-      const logs: RebuildScanObservation[] = [];
+      const logAccumulator = createCatalogLogAccumulator<RebuildScanObservation, Readonly<Record<string, unknown>>>({
+        fromBlock: scanInput.fromBlock, toBlock: scanInput.cutoff.number, chunkBlocks: SOURCE_SCAN_BATCH_BLOCKS,
+        blockNumber: log => log.blockNumber, identity: fullLogIdentityKey, updateDigest: updateActivityDigest,
+        candidates: log => candidatesFromLogInCatalog(log, catalog), candidateKey: rebuildFamilyInstanceDedupeKey,
+        prefer: preferCandidateRepresentative, opaqueKeys: log => opaqueLogMaterializationKeys(log, catalog),
+      });
       const totalBlocks = scanInput.cutoff.number - scanInput.fromBlock + 1;
       let completedBlocks = 0;
       let logClassificationHits = 0;
@@ -3255,7 +3187,7 @@ export function createRebuildWiring(input?: {
             ), activityArchive,
           );
           for (const slice of slices) {
-            for (const log of slice.logs) logs.push(log);
+            for (const log of slice.logs) logAccumulator.append(log);
             completedBlocks += slice.range.toBlock - slice.range.fromBlock + 1;
           }
           console.log(
@@ -3263,7 +3195,7 @@ export function createRebuildWiring(input?: {
               Math.min(groupStart + slices.length, ranges.length) +
               "/" + ranges.length +
               " completedBlocks=" + completedBlocks + "/" + totalBlocks +
-              " cumulativeLogs=" + logs.length + " classificationHits=" + logClassificationHits,
+              " cumulativeLogs=" + logAccumulator.count() + " classificationHits=" + logClassificationHits,
           );
         }
       }
@@ -3277,7 +3209,7 @@ export function createRebuildWiring(input?: {
             fromBlock: scanInput.fromBlock,
             toBlock: scanInput.cutoff.number,
             selectors: callSelectors,
-            logs,
+            digestState: logAccumulator.digestState,
           });
       if (activityArchive !== undefined) {
         if (callScan === null) throw new Error("raw activity archive requires complete call traces");
@@ -3292,7 +3224,15 @@ export function createRebuildWiring(input?: {
           candidate,
         }));
       }
-      for (const log of logs) mutableObservations.push(log);
+      const logRepresentatives = logAccumulator.representatives();
+      for (const candidate of logRepresentatives.candidates) {
+        mutableObservations.push(Object.freeze({ kind: "startup-candidate", candidate }));
+      }
+      // Reverse-binding-only evidence must not re-enter ordinary candidate
+      // decode after full-log-identity dedupe selected its original winner.
+      for (const log of logRepresentatives.opaqueLogs) {
+        mutableObservations.push(Object.freeze({ ...log, kind: "opaque-log" as const }));
+      }
       for (const call of callScan?.calls ?? []) {
         mutableObservations.push(call);
       }
@@ -3351,9 +3291,8 @@ export function createRebuildWiring(input?: {
         // call pattern over this exact range. Neither physical transport can
         // independently grant source coverage.
         const activityQueryFingerprint = planFingerprints.activity;
-        const calls = callScan?.calls ?? Object.freeze([]);
-        const activityObservationHash = callScan?.observationSetHash ??
-          catalogActivityObservationHash(logs, calls);
+        const activityDigests = callScan ?? finishCatalogActivityDigest(logAccumulator.digestState);
+        const activityObservationHash = activityDigests.observationSetHash;
         receipts.push(Object.freeze({
           sourceKey: digest("source-key-v1:" + canonicalJson({
             sourceKind: "catalog-activity-union",
@@ -3371,8 +3310,7 @@ export function createRebuildWiring(input?: {
           cutoffNumber: scanInput.cutoff.number,
           cutoffHash: scanInput.cutoff.hash,
           coverageKeys: activityPlan.coverageKeys,
-          completedChunks: callScan?.completedChunks ??
-            catalogActivityChunks({ ranges, logs, calls }),
+          completedChunks: activityDigests.completedChunks,
           observationSetHash: activityObservationHash,
           observedThrough: Object.freeze({
             number: scanInput.cutoff.number,
@@ -3446,6 +3384,7 @@ export function createRebuildWiring(input?: {
           }
           continue;
         }
+        if ((observation as { kind?: unknown })?.kind === "opaque-log") continue;
         const log = observation as RebuildScanObservation;
         const logKey = fullLogIdentityKey(log);
         if (seenLogs.has(logKey)) continue;
@@ -3474,30 +3413,8 @@ export function createRebuildWiring(input?: {
       // truth (no recent activity needed); verified observations re-enter
       // through the same catalog matching + decodeCandidate admission the
       // scan channel uses.
-      const materializationKey = (
-        familyId: string,
-        candidate: Readonly<Record<string, unknown>>,
-      ): string | null => {
-        if (!inScope(familyId)) return null;
-        let family;
-        try {
-          family = catalog.forStrictFamily(familyId as never);
-        } catch {
-          return null;
-        }
-        if (!("discovery" in family.plugin)) return null;
-        const discovery = family.plugin.discovery;
-        if (discovery.reverseBinding?.kind !== "implementation") return null;
-        if (discovery.instanceNominationKey === undefined) return null;
-        try {
-          const localKey = discovery.instanceNominationKey(candidate);
-          return typeof localKey === "string" && localKey.trim().length > 0
-            ? familyId + "\u001f" + localKey
-            : null;
-        } catch {
-          return null;
-        }
-      };
+      const materializationKey = (familyId: string, candidate: Readonly<Record<string, unknown>>) =>
+        inScope(familyId) ? familyMaterializationKey(catalog, familyId, candidate) : null;
       const knownMaterializations = new Set<string>();
       for (const raw of reverseInput.knownCandidates) {
         if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
