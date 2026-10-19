@@ -12,6 +12,8 @@ import {
   forkBotVmInstallationEnabled,
   forkBotVmRuntimeReceipt,
   installForkBotVm,
+  installForkBotVmRuntimeCode,
+  type BotVmRuntimeCode,
   loadBotVmRuntimeCode,
   type ForkBotVmRuntimeReceipt,
 } from "../shared/executor/botvm-executor.js";
@@ -1233,6 +1235,17 @@ export function createBlockScanPriceRuntime(input: {
     strictSessionFor,
     () => strictSessionCache.clear(),
     (publication) => {
+      // This callback follows the coordinator's atomic publication. The same
+      // source/generation's backend and simulation drain is recorded separately.
+      if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1") {
+        try {
+          console.log(`[searcher/pricing-publication] ${JSON.stringify({
+            sourceBlock: publication.snapshot.sourceBlock, sourceBlockHash: publication.snapshot.sourceBlockHash,
+            generation: publication.snapshot.generation, effectiveComplete: publication.snapshot.effectiveMids?.complete ?? false,
+            atMs: Date.now(), atMonotonicMs: performance.now(), pid: process.pid, timeOrigin: performance.timeOrigin,
+          })}`);
+        } catch { /* Timing evidence cannot change publication. */ }
+      }
       // Effective sampling amounts come only from successful forward quotes.
       blockScanRouteTelemetry.recordPricing(publication);
       if (blockScanCfg !== undefined && publication.snapshot.effectiveMids?.complete) {
@@ -1308,6 +1321,7 @@ export function createBlockScanPriceRuntime(input: {
           },
         });
         console.log(`[searcher/effective-mid] ${JSON.stringify({
+          atMs: Date.now(), atMonotonicMs: performance.now(), pid: process.pid, timeOrigin: performance.timeOrigin,
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
           samplingSource: "effective-forward", maxInputPathHops: 3, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
@@ -2297,6 +2311,7 @@ async function main(): Promise<void> {
     timeoutMs: blockScanStageSettings.sourceSimulationTimeoutMs,
     runtimeAbort: blockScanRuntimeAbort,
     onFatal: onSimulationFatal,
+    ...(finalSimulationExecutorRuntimeCode === undefined ? {} : { executorRuntimeCode: finalSimulationExecutorRuntimeCode }),
   });
   const priceRuntime = createBlockScanPriceRuntime({
     provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
@@ -2564,7 +2579,8 @@ async function main(): Promise<void> {
       record({ source, workerIndex, event }) {
         try {
           console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,
-            sourceBlock: source.number, generation: source.generation, workerIndex },
+            sourceBlock: source.number, generation: source.generation, workerIndex,
+            atMs: Date.now(), atMonotonicMs: performance.now(), pid: process.pid, timeOrigin: performance.timeOrigin },
             (_key, value) => typeof value === "bigint" ? value.toString() : value)}`);
         } catch { /* Telemetry cannot alter amount selection. */ }
       },
@@ -3075,7 +3091,7 @@ async function main(): Promise<void> {
   const intakeAbort = new AbortController();
   const seedHead = enableBlockScan && !blindProductionAudit ? await provider.getBlockNumber() : 0;
   const headWindowLog = (event: Record<string, unknown>) =>
-    console.log(`[searcher/live-head-window] ${JSON.stringify(event)}`);
+    console.log(`[searcher/live-head-window] ${JSON.stringify({ ...event, pid: process.pid, timeOrigin: performance.timeOrigin })}`);
   const headWindow = maxNewHeads > 0
     ? new LiveHeadWindow(seedHead, maxNewHeads, headWindowLog, () => intakeAbort.abort())
     : undefined;
@@ -3244,6 +3260,7 @@ async function main(): Promise<void> {
             fundingAssets: flashTokens,
             strictSessionFor,
             simulationWork: hintSimulationWork,
+            ...(finalSimulationExecutorRuntimeCode === undefined ? {} : { executorRuntimeCode: finalSimulationExecutorRuntimeCode }),
             simulationGeneration: ++hintGeneration,
             sourceControl: { signal: blockScanRuntimeAbort.signal, deadlineAtMs: tHint + config.oppTtlMs },
           });
@@ -3330,6 +3347,8 @@ interface HandleCtx {
   fundingAssets: readonly string[];
   strictSessionFor: StrictSessionProvider;
   simulationWork: SourceSimulationWork;
+  /** Frozen owner-bound code, only supplied by explicit dry-run code override. */
+  executorRuntimeCode?: BotVmRuntimeCode;
   simulationGeneration: number;
   sourceControl: Parameters<SourceSimulationFactory>[0]["control"];
 }
@@ -3573,7 +3592,7 @@ export async function handleHint(
     // owner balance after mining would change the state behind the source hash.
     // The read-only simulator checks the actual caller/executor state instead.
     if (!ctx.historicalExecutionMode) {
-      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress, ctx.executorRuntimeCode);
     }
 
     const receipt = await ctx.state.provider.getTransactionReceipt(txHash);
@@ -3736,7 +3755,7 @@ export async function handleHint(
         throw new Error(`local victim hash mismatch ${appliedHash}`);
       }
 
-      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress, ctx.executorRuntimeCode);
 
       const receipt = await ctx.state.provider.getTransactionReceipt(txHash);
       if (!receipt || receipt.status !== 1) {
@@ -4356,7 +4375,7 @@ async function processOpportunities(
             Math.max(1, oppDeadlineAtMs - Date.now()),
           );
         }
-        await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+        await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress, ctx.executorRuntimeCode);
       } catch (err) {
         const strictEdge = strictSession.edges.find((edge) =>
           edge.adapterId === oppImpact.matchedAdapterId &&
@@ -4382,7 +4401,7 @@ async function processOpportunities(
     }
     if (!localVictimApply && (ctx.config.liveBackend === "rpc" || !useConfiguredBackend) && fixturePath === "mined") {
       await ensureHintFork(sourceMeta.eventBlockNumber, true);
-      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
+      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress, ctx.executorRuntimeCode);
       deps.segMark("anvilMined");
     }
     const solveProbe = useConfiguredBackend ? ctx.liveBackend : ctx.simulator;
@@ -6122,13 +6141,18 @@ async function resolveAnvilBalanceSlot(
   });
 }
 
-async function prepareForkExecutor(
+export async function prepareForkExecutor(
   provider: ethers.JsonRpcProvider,
   owner: string,
   botvmAddress: string,
+  executorRuntimeCode?: BotVmRuntimeCode,
 ): Promise<void> {
-  const code = await provider.getCode(botvmAddress);
-  if (code === "0x") throw new Error(`BOTVM_ADDRESS has no code on fork: ${botvmAddress}`);
+  if (executorRuntimeCode !== undefined) {
+    await installForkBotVmRuntimeCode(provider, botvmAddress, executorRuntimeCode);
+  } else {
+    const code = await provider.getCode(botvmAddress);
+    if (code === "0x") throw new Error(`BOTVM_ADDRESS has no code on fork: ${botvmAddress}`);
+  }
   await provider.send("anvil_setBalance", [ethers.getAddress(owner), FORK_ETH_BALANCE]);
   await provider.send("anvil_impersonateAccount", [ethers.getAddress(owner)]);
 }

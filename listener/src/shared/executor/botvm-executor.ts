@@ -61,6 +61,25 @@ export function buildExecuteCalldata(script: Uint8Array): string {
   return BOTVM_EXECUTE_SELECTOR + encoded.slice(2);
 }
 
+/** Code-only preparation on an owned fork; never funds or impersonates accounts. */
+export async function installForkBotVmRuntimeCode(
+  provider: Pick<ethers.JsonRpcProvider, "send">,
+  executor: string,
+  runtime: BotVmRuntimeCode,
+): Promise<void> {
+  const addr = ethers.getAddress(executor);
+  if (!ethers.isHexString(runtime.code) || runtime.code === "0x" ||
+    ethers.keccak256(runtime.code) !== runtime.keccak256) {
+    throw new Error("invalid frozen BotVM runtime code");
+  }
+  await provider.send("anvil_setCode", [addr, runtime.code]);
+  // Bypass provider caching: a reset or a prior code lookup may have returned 0x.
+  const code: unknown = await provider.send("eth_getCode", [addr, "latest"]);
+  if (typeof code !== "string" || code.toLowerCase() !== runtime.code.toLowerCase()) {
+    throw new Error(`failed to install exact BotVM runtime at ${addr}`);
+  }
+}
+
 export async function installForkBotVm(
   provider: ethers.JsonRpcProvider,
   owner = DEFAULT_SEARCHER_OWNER,

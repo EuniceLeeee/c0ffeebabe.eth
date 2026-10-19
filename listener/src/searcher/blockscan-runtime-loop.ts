@@ -1400,6 +1400,7 @@ export class BlockScanRuntimeLoop {
         // absolute per-arm deadline above would shrink to zero for later
         // blocks in a catch-up gap and abort every family instantly.
         const generationStartedAtMs = Date.now();
+        const generationStartedAtMonotonicMs = performance.now();
         const generationDeadlineAtMs =
           generationStartedAtMs + stateBudgetMs;
         const generationFamilySettleDeadlineAtMs = Math.min(
@@ -1462,6 +1463,7 @@ export class BlockScanRuntimeLoop {
           sourceBlockHash: header.hash,
         });
         let prepared: BlockScanStatePrepareResult;
+        let backendDrained = false, simulationDrained = false;
         let bootstrapEscalated = false;
         const producerTouched = await this.deps.readBlockSwapTouched(nextBlock, header);
         let producerActivity: StrictCanonicalActivityProof = Object.freeze({
@@ -1591,6 +1593,7 @@ export class BlockScanRuntimeLoop {
                 this.deps.runtimeAbort.signal.reason ??
                   new Error(`block-scan producer generation ${generation} completed`),
               );
+              backendDrained = true;
             } finally {
               console.log(
                 `[searcher/blockscan-producer-call-stats] ${JSON.stringify({
@@ -1603,8 +1606,20 @@ export class BlockScanRuntimeLoop {
               );
             }
           } finally {
-            try { await simulationWork.closeAndDrain(); }
-            finally { detachProducerAbort(); this.producerCriticalActive = false; }
+            try { await simulationWork.closeAndDrain(); simulationDrained = true; }
+            finally {
+              detachProducerAbort(); this.producerCriticalActive = false;
+              if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1") {
+                try {
+                  console.log(`[searcher/pricing-drain] ${JSON.stringify({
+                    kind: "producer", sourceBlock: anchoredGraph.sourceBlock, sourceBlockHash: anchoredGraph.sourceBlockHash,
+                    generation, targetBlock, catchupIndex, startedAtMs: generationStartedAtMs, startedAtMonotonicMs: generationStartedAtMonotonicMs,
+                    atMs: Date.now(), atMonotonicMs: performance.now(), pid: process.pid, timeOrigin: performance.timeOrigin,
+                    backendDrained, simulationDrained,
+                  })}`);
+                } catch { /* Timing evidence cannot change drain. */ }
+              }
+            }
           }
         }
         const recoveryPending = blockScanStateHasRecoveryBacklog(
@@ -2214,6 +2229,8 @@ export class BlockScanRuntimeLoop {
     let coarseSourceBlockHash: string | null = null;
     let exactSourceBlockHash: string | null = null;
     let exactSourceGeneration: number | null = null;
+    let observedSourceGeneration: number | null = null;
+    let usedPricingSource: CanonicalSource | null = null;
     let observedSourceBlockHash: string | null = null;
     let fullCoverage = true;
     let degradedRecallReasons: readonly string[] = Object.freeze([]);
@@ -2233,6 +2250,8 @@ export class BlockScanRuntimeLoop {
     let solverGssPoints = 0;
     let firstFinalSimStartedAtMs: number | null = null;
     let firstSolverStartedAtMs: number | null = null;
+    let firstSolverStartedAtMonotonicMs: number | null = null;
+    let sizingStartedAtMs: number | null = null, sizingStartedAtMonotonicMs: number | null = null;
     let firstEvFinishedAtMs: number | null = null;
     let enumerationFinished = false;
     const atomicResults: BlockScanAtomicResult[] = [];
@@ -2325,7 +2344,8 @@ export class BlockScanRuntimeLoop {
     };
 
     const recordPass = (): void => {
-      const totalMs = Math.max(0, performance.now() - passStarted);
+      const drainedAtMs = Date.now(), drainedAtMonotonicMs = performance.now();
+      const totalMs = Math.max(0, drainedAtMonotonicMs - passStarted);
       diagnostic?.onComplete({ outcome, reason: skippedReason, timing: { ...timing }, totalMs,
         planned: plannedCount, quotePositive, atomicResults,
         detail: { stages: stageBoundaries, plannerBuildMs, solverWallMs, solverPlans,
@@ -2342,6 +2362,14 @@ export class BlockScanRuntimeLoop {
       const structuredFields = {
         startup_warm: startupWarmAttempt,
         source_head_seen_at_ms: passStartedAtMs,
+        source_head_seen_at_monotonic_ms: passStarted,
+        source_block_hash: observedSourceBlockHash, source_generation: exactSourceGeneration ?? observedSourceGeneration,
+        pricing_source_block: usedPricingSource?.number ?? null, pricing_source_block_hash: usedPricingSource?.hash ?? null,
+        pricing_source_generation: usedPricingSource?.generation ?? null,
+        pid: process.pid, time_origin: performance.timeOrigin,
+        pass_drained_at_ms: drainedAtMs, pass_drained_at_monotonic_ms: drainedAtMonotonicMs,
+        sizing_started_at_ms: sizingStartedAtMs, sizing_started_at_monotonic_ms: sizingStartedAtMonotonicMs,
+        first_solver_started_at_monotonic_ms: firstSolverStartedAtMonotonicMs,
         scheduler_queue_ms: Math.max(
           0,
           passWorkerStartedAtMs - passStartedAtMs,
@@ -2620,6 +2648,7 @@ export class BlockScanRuntimeLoop {
         assertHistoricalEffectivePricing(replayPricing, { number: blockNumber, hash: sourceBlockHash }, graphEdges);
       }
       let generation = replayPricing?.generation ?? (executionContext === null ? this.nextGeneration() : ++this.pendingGeneration);
+      observedSourceGeneration = generation;
       let graphView = this.deps.buildGraphView({
         id: `blockscan:${this.topologyKey()}`,
         generation,
@@ -2859,6 +2888,7 @@ export class BlockScanRuntimeLoop {
         // Recompute reference marks, top-K and natural ranks from effective.
         // Nothing here asserts pricing-state authority or manufactures funding.
         amountPricingSnapshot = replayPricing;
+        usedPricingSource = { number: amountPricingSnapshot.sourceBlock, hash: amountPricingSnapshot.sourceBlockHash, generation: amountPricingSnapshot.generation };
         runtimeSourceBlock = blockNumber;
         exactSourceBlockHash = sourceBlockHash;
         finishStage("state", "ran"); timing.stateMs = stageBoundaries.state.stage_ms;
@@ -2944,6 +2974,7 @@ export class BlockScanRuntimeLoop {
             runtime = prepared.runtime;
             graphView = prepared.graph;
             generation = graphView.generation;
+            observedSourceGeneration = generation;
             sourcePricingCalls = { backend: sourcePricingBackend, source: Object.freeze({
               number: graphView.sourceBlock, hash: graphView.sourceBlockHash, generation,
             }) };
@@ -3078,6 +3109,7 @@ export class BlockScanRuntimeLoop {
         diagnostic?.onSnapshot(snapshot);
         if (diagnostic?.through === "prices") return;
         amountPricingSnapshot = snapshot.pricing;
+        usedPricingSource = { number: amountPricingSnapshot.sourceBlock, hash: amountPricingSnapshot.sourceBlockHash, generation: amountPricingSnapshot.generation };
         this.deps.backrunStatePublisher.publish(snapshot.pricing);
         if (this.deps.blind.enabled) auditRuntime = snapshot;
         runtimeSourceBlock = snapshot.sourceBlock;
@@ -3206,6 +3238,7 @@ export class BlockScanRuntimeLoop {
           "predecessor canonical header",
         );
         amountPricingSnapshot = predecessorPricing;
+        usedPricingSource = { number: amountPricingSnapshot.sourceBlock, hash: amountPricingSnapshot.sourceBlockHash, generation: amountPricingSnapshot.generation };
         /*
          * The N-1 state this pass needs is guaranteed (or abandoned). Start
          * current-N production now so the N+1 head finds it ready, and a
@@ -3705,7 +3738,8 @@ export class BlockScanRuntimeLoop {
         }
       }
 
-      beginStage("planner_solver");
+      sizingStartedAtMs = Date.now(); sizingStartedAtMonotonicMs = performance.now();
+      beginStage("planner_solver", { atMs: sizingStartedAtMs, atPerf: sizingStartedAtMonotonicMs });
       if (sizingBudgetMs !== undefined) {
         passSignal.throwIfAborted();
         passDeadlineAtMs = Date.now() + sizingBudgetMs;
@@ -4036,6 +4070,7 @@ export class BlockScanRuntimeLoop {
         try {
           let deferredCandidates: readonly ResolvedPlan[] = [];
           firstSolverStartedAtMs ??= Date.now();
+          firstSolverStartedAtMonotonicMs ??= performance.now();
           recordSolver(item.opp);
           solverPlans++;
           const solved = await solver.solve(
@@ -4159,7 +4194,8 @@ export class BlockScanRuntimeLoop {
                 quoteMode: new Set(instances).size < instances.length
                   ? "ordered-prefix" : "source-state",
                 instances, hops: instances.length,
-                startedAtMs: solveStartedAtMs, wallMs: performance.now() - solveStartedAt,
+                startedAtMs: solveStartedAtMs, startedAtMonotonicMs: solveStartedAt, wallMs: performance.now() - solveStartedAt,
+                pid: process.pid, timeOrigin: performance.timeOrigin,
                 ...solverTiming, outcome: solveOutcome, aborted: signal.aborted,
                 positiveCandidates: completed.length,
               })}`);
@@ -4449,8 +4485,9 @@ export class BlockScanRuntimeLoop {
                 );
                 console.log(
                   `[searcher/blockscan-source-n-call-stats-final] ${JSON.stringify({
-                    sourceBlock: sourcePricingCalls.source.number,
+                    sourceBlock: sourcePricingCalls.source.number, sourceBlockHash: sourcePricingCalls.source.hash,
                     generation: sourcePricingCalls.source.generation,
+                    atMs: Date.now(), atMonotonicMs: performance.now(), pid: process.pid, timeOrigin: performance.timeOrigin,
                     ...sourcePricingCalls.backend.stats(),
                   })}`,
                 );

@@ -468,6 +468,8 @@
     "searcher:curve-plain-refresh": "tsx src/searcher/venues/swaps/curve-plain-family/test/refresh.ts",
     "searcher:live-keyless-identity": "tsx --test src/searcher/test/live-keyless-identity.ts",
     "searcher:live-head-window": "tsx --test src/searcher/test/live-head-window.ts",
+    "searcher:live-fork-executor-code-override": "tsx --test src/searcher/test/live-fork-executor-code-override.ts",
+    "searcher:live-counterfactual-code-override-integration": "SEARCHER_TEST_DISABLE_DOTENV=1 tsx src/searcher/test/live-counterfactual-code-override-integration.ts",
     "searcher:catalog-log-accumulator": "node --import tsx --test src/searcher/test/catalog-log-accumulator.ts",
     "searcher:peapods-debond-family": "tsx --test src/searcher/venues/protocols/peapods-debond-family/test/contract.ts",
     "searcher:ready-activity-archive": "node --import tsx --test src/searcher/test/ready-activity-archive.ts"
