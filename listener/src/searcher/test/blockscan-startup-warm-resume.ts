@@ -68,7 +68,7 @@ async function until(predicate: () => boolean, label: string): Promise<void> {
 }
 type Wire = { id: number; method: string; params: [{ to: string; data: string; from?: string },
   { blockHash: string; requireCanonical: boolean }] };
-type Mode = "normal" | "resume" | "shutdown" | "fatal-source" | "fatal-429" | "revert" |
+type Mode = "empty-first" | "normal" | "resume" | "shutdown" | "fatal-source" | "fatal-429" | "revert" |
   "retry-hash" | "retry-height" | "publish-hash" | "resumed-publish-hash" | "canonical-timeout" |
   "ordinary-error" | "fake-deadline" | "empty-budget" | "queued" | "evidence" |
   "initial-header-429" | "retry-header-429" | "publish-header-429" | "late-header-429" | "header-revert" | "header-bare-429" |
@@ -168,7 +168,7 @@ async function setup(mode: Mode) {
             const error = mode === "fatal-source"
               ? { code: -32000, message: "hash is not currently canonical" }
               : mode === "fatal-429" ? { code: 429, message: "rate limit" }
-              : mode === "revert" ? { code: 3, message: "execution reverted: rate limit 429", data: "0xdeadbeef" }
+              : (mode === "revert" || mode === "empty-first" && call.params[1].blockHash === hash(N)) ? { code: 3, message: "execution reverted: rate limit 429", data: "0xdeadbeef" }
               : null;
             if (error) return { jsonrpc: "2.0", id: call.id, error };
           } else if (tx.data.startsWith(balance.getFunction("balanceOf")!.selector)) {
@@ -390,7 +390,7 @@ function assertIdle(backend: PinnedRethQuoteBackend): void {
 
 /** Execute the actual main shutdown and finite-window bodies, replacing only external owners. */
 function finiteWindowDrain(f: Awaited<ReturnType<typeof setup>>, limit: number,
-  options: { activityDrain?: Promise<void>; deferInstall?: boolean;
+  options: { activityDrain?: Promise<void>; deferInstall?: boolean; waitForWarmup?: boolean;
     failures?: readonly ("activity" | "telemetry" | "recorder" | "state")[] } = {}) {
   const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   const stopStart = main.indexOf("  let stopRuntimePromise: Promise<void> | null = null;");
@@ -413,20 +413,21 @@ function finiteWindowDrain(f: Awaited<ReturnType<typeof setup>>, limit: number,
     const stopController = createLiveRuntimeStop({ runtimeAbort: blockScanRuntimeAbort, emitFatal() {}, exit: onExit });
     const requestRuntimeStop = { ...stopController, fail(error) { onFailure(error); stopController.fail(error); } };
     const intakeAbort = new AbortController();
-    const seedHead = fixtureSeed, maxNewHeads = fixtureLimit;
+    const seedHead = fixtureSeed, maxNewHeads = fixtureLimit, startupWarmEnabled = fixtureWaitForWarmup;
+    let onStartupWarmDrained;
     ${main.slice(windowDeclarationStart, windowDeclarationEnd)}
     ${main.slice(stopStart, stopEnd)}
     if (!deferInstall) requestRuntimeStop.installDrain(stopRuntime);
     const shutdown = requestRuntimeStop.shutdown;
     async function finish() ${main.slice(windowStart + "\n  } finally ".length, mainEnd)}
-    return { finish, stopRuntime, window: headWindow, signalShutdown: shutdown,
+    return { finish, stopRuntime, window: headWindow, notifyStartupDrained: source => onStartupWarmDrained?.(source), signalShutdown: shutdown,
       installDrain() { requestRuntimeStop.installDrain(stopRuntime); } }; })()`;
   const code = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const result = runInNewContext(code, {
     console: { log(line: string) {
       if (line.startsWith("[searcher/live-head-window] ")) events.push(JSON.parse(line.slice(line.indexOf("{"))));
     }, warn() {} }, performance, process: { pid: process.pid }, AbortController, LiveHeadWindow,
-    fixtureSeed: N, fixtureLimit: limit, deferInstall: options.deferInstall === true,
+    fixtureSeed: N, fixtureLimit: limit, fixtureWaitForWarmup: options.waitForWarmup === true, deferInstall: options.deferInstall === true,
     blockScanRuntimeLoop: f.loop, blockScanRuntimeAbort: f.runtimeAbort,
     blockScanHeadFeed: { close: () => cleaned.push("feed") },
     logStageCounters() {}, counters: {}, cancelScheduledWarm() {}, provider: { removeAllListeners() {} },
@@ -439,7 +440,9 @@ function finiteWindowDrain(f: Awaited<ReturnType<typeof setup>>, limit: number,
     state: { stop() { cleaned.push("state"); rejectAt("state"); } },
     onFailure: (error: unknown) => failures.push(error), onExit: (code: number) => exitCodes.push(code),
   }) as { finish(): Promise<void>; stopRuntime(): Promise<void>; window: LiveHeadWindow;
+    notifyStartupDrained(source: { number: number; hash: string; generation: number }): void;
     signalShutdown(): void; installDrain(): void };
+  if (options.waitForWarmup) Object.assign(f.deps, { onStartupWarmDrained: result.notifyStartupDrained });
   return { ...result, events, cleaned, failures, exitCodes };
 }
 const observe = () => ({ sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
@@ -1072,3 +1075,86 @@ await fixture("normal", async f => {
     releaseIdle(); releaseActivity(); await joined.catch(() => {});
   }
 }, "finite-window: steady idle rejection latches before concurrent SIGTERM drain");
+
+await fixture("normal", async f => {
+  let closing = false, release!: () => void;
+  const drain = new Promise<void>(resolve => { release = resolve; });
+  Object.assign(f.deps, { sourceSimulationFactory: () => ({
+    transport: { async simulate() { return { data: "0x" }; } },
+    async closeAndDrain() { closing = true; await drain; },
+  }) });
+  const finite = finiteWindowDrain(f, 3, { waitForWarmup: true });
+  const pass = f.loop.runHead(N, observe());
+  try {
+    await until(() => closing, "price publication waiting for final startup cleanup");
+    assert.equal(f.published.length, 1);
+    assert.equal(f.loop.isStartupWarmPending(), false);
+    for (const number of [N + 5, N + 3]) finite.window.observe({ number, source: "http", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() }, () => {});
+    assert.equal(finite.events.filter(e => e.event === "head").length, 0, "observed warmup heads must not consume the measured count");
+    assert.equal(finite.window.waitingForWarmup, true, "legacy pending flag precedes physical drain");
+    assert(!finite.events.some(e => e.event === "measurement_armed"));
+    release(); await pass;
+    assert.equal(finite.events.find(e => e.event === "measurement_armed")?.measurementSeed, N + 5);
+    assert.equal(finite.events.find(e => e.event === "startup_publication_drained")?.sourceBlock, N);
+    for (const backend of f.backends) assertIdle(backend);
+    finite.window.observe({ number: N + 4, source: "ws", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() }, () => assert.fail("warmup backfilled"));
+    const measured: number[] = [];
+    for (const number of [N + 6, N + 7, N + 8]) finite.window.observe({ number, source: "http", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() }, () => measured.push(number));
+    assert.deepEqual(measured, [N + 6, N + 7, N + 8]); assert.equal(finite.window.closed, true);
+    assert.deepEqual(finite.failures, []);
+    finite.window.observe({ number: N + 9, source: "http", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() }, () => assert.fail("extra head scheduled"));
+    await finite.finish();
+    await until(() => finite.exitCodes.length === 1, "post-warm measured window exit");
+    assert.deepEqual(finite.exitCodes, [0]);
+  } finally { release(); finite.window.dispose?.(); await pass; }
+}, "post-warm-window: actual startup and main arm after cleanup at highest observed head");
+
+for (const failure of ["drain", "cancel", "retire"] as const) await fixture("normal", async f => {
+  let notifications = 0;
+  Object.assign(f.deps, { onStartupWarmDrained() { notifications++; }, sourceSimulationFactory: () => ({
+    transport: { async simulate() { return { data: "0x" }; } },
+    async closeAndDrain() {
+      if (failure === "drain") throw new Error("fixture post-warm drain failure");
+      if (failure === "cancel") f.runtimeAbort.abort(new Error("fixture post-warm cancellation"));
+      if (failure === "retire") await f.coordinator.resetDynamicStateForReplay();
+    },
+  }) });
+  if (failure === "drain") await assert.rejects(f.loop.runHead(N, observe()), /post-warm drain failure/);
+  else await f.loop.runHead(N, observe());
+  assert.equal(f.published.length, 1);
+  assert.equal(notifications, 0, "failed, cancelled or retired publication cannot arm");
+}, `post-warm-window: ${failure} after publication does not arm`);
+
+await fixture("revert", async f => {
+  const finite = finiteWindowDrain(f, 2, { waitForWarmup: true });
+  try {
+    await f.loop.runHead(N, observe());
+    assert.equal(f.published[0]!.effectiveMids!.complete, true);
+    assert.equal([...f.published[0]!.effectiveMids!.rows.values()].filter(row => row.status === "quoted").length, 0);
+    assert.equal(finite.window.waitingForWarmup, true);
+    assert.equal(f.loop.isStartupWarmPending(), false, "legacy publication cannot disable independent guard");
+    for (const number of [N + 1, N + 2]) finite.window.observe({ number, source: "http", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() }, () => {});
+    assert.equal(finite.failures.length, 1);
+    await assert.rejects(finite.finish(), /live window drain failed/);
+    await until(() => finite.exitCodes.length === 1, "empty price guard terminal exit");
+    assert.deepEqual(finite.exitCodes, [1]);
+    assert(!finite.events.some(e => e.event === "measurement_armed" || e.event === "drained"));
+  } finally { finite.window.dispose?.(); }
+}, "post-warm-window: complete zero-quote startup remains guarded and fails closed");
+
+await fixture("empty-first", async f => {
+  const finite = finiteWindowDrain(f, 10, { waitForWarmup: true });
+  try {
+    await f.loop.runHead(N, observe());
+    assert.equal(finite.window.waitingForWarmup, true);
+    assert(![...f.published[0]!.effectiveMids!.rows.values()].some(row => row.status === "quoted"));
+    finite.window.observe({ number: N + 4, source: "ws", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() }, () => {});
+    // Same production price-stage boundary; fixture deliberately omits a downstream solver Exact owner.
+    await f.loop.runHead(N + 1, observe(), { through: "prices", onSnapshot() {}, onEnumeration() {}, onComplete() {} });
+    assert.equal(f.published.length, 2);
+    assert.equal(finite.window.waitingForWarmup, false);
+    assert.equal(finite.events.find(e => e.event === "measurement_armed")?.measurementSeed, N + 4);
+    finite.notifyStartupDrained({ number: N - 1, hash: hash(N - 1), generation: 1 });
+    assert.equal(finite.events.filter(e => e.event === "measurement_armed").length, 1);
+  } finally { finite.window.dispose?.(); }
+}, "post-warm-window: empty startup allows the next valid price-stage publication to arm once");

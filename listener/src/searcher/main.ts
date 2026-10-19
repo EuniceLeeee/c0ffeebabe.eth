@@ -2633,6 +2633,8 @@ async function main(): Promise<void> {
   const blockScanActivityProvider = new BlockScanActivityPrefetch(
     blockScanRawActivityProvider, blockScanRuntimeAbort.signal,
   );
+  const startupWarmEnabled = enableBlockScan && !blindProductionAudit;
+  let onStartupWarmDrained: BlockScanRuntimeLoopDependencies["onStartupWarmDrained"];
   const blockScanRuntimeLoop = new BlockScanRuntimeLoop({
     enabled: enableBlockScan,
     blockScanConfig: blockScanCfg,
@@ -2712,7 +2714,8 @@ async function main(): Promise<void> {
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
     largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
     passBudgetMs: blockScanPassBudgetMs,
-    startupWarmEnabled: enableBlockScan && !blindProductionAudit,
+    startupWarmEnabled,
+    onStartupWarmDrained: (source) => onStartupWarmDrained?.(source),
     startupWarmBudgetMs: blockScanStartupWarmBudgetMs,
     nMinusOneFallbackEnabled: blockScanNMinusOneFallback,
     nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
@@ -3164,16 +3167,22 @@ async function main(): Promise<void> {
   const headWindow = maxNewHeads > 0
     ? new LiveHeadWindow(seedHead, maxNewHeads, headWindowLog, () => {
         intakeAbort.abort();
-        if (blockScanRuntimeLoop.isStartupWarmPending()) {
-          boundedStartupFailure = new Error("finite live window ended before startup completed");
+        if (headWindow?.waitingForWarmup || blockScanRuntimeLoop.isStartupWarmPending()) {
+          boundedStartupFailure = new Error(`finite live window ended before startup completed (${headWindow?.warmupFailure ?? "pending"})`);
           headWindowLog({ event: "startup_incomplete_at_window_close", status: "failed", reason: boundedStartupFailure.message,
             observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
           // Latch failure before a concurrent signal can finish the same drain.
           // The stop controller also retains this result before installDrain.
           requestRuntimeStop.fail(boundedStartupFailure);
         }
-      })
+      }, { waitForWarmup: startupWarmEnabled, warmupMaxMs: 3_600_000 })
     : undefined;
+  onStartupWarmDrained = (source) => {
+    if (headWindow?.armAfterWarmup()) {
+      headWindowLog({ event: "startup_publication_drained", sourceBlock: source.number,
+        sourceBlockHash: source.hash, generation: source.generation });
+    }
+  };
   const observeLiveHead = (number: number, source: "ws" | "http", hash?: string): void => {
     const observedAtMs = Date.now();
     const observedAtMonotonicMs = performance.now();
@@ -3464,6 +3473,7 @@ async function main(): Promise<void> {
       if (config.maxHints > 0 && processedHints >= config.maxHints) break;
     }
   } finally {
+    headWindow?.dispose();
     const drainFailures: unknown[] = boundedStartupFailure === undefined ? [] : [boundedStartupFailure];
     let windowDrainStarted = false;
     const startupCancelled = boundedStartupFailure !== undefined;

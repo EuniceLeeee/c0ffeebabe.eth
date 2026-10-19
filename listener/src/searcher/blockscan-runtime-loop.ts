@@ -754,6 +754,8 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly startupWarmEnabled: boolean;
   /** One-time ordinary-live budget for the first current-head runtime snapshot. */
   readonly startupWarmBudgetMs: number;
+  /** The first complete nonempty price publication, after its pass resources all drained, may arm a bounded window. */
+  readonly onStartupWarmDrained?: (source: CanonicalSource) => void;
   /**
    * Explicit degraded availability mode. It never changes the normal
    * production scanner boundary and remains disabled for blind replay.
@@ -912,6 +914,7 @@ export class BlockScanRuntimeLoop {
   private pendingGeneration = 0;
   private producerCriticalActive = false;
   private startupWarmPending: boolean;
+  private startupWarmDrainedNotified = false;
   private readonly scheduler: LatestHeadScheduler;
   private coarsePricingActive: Promise<void> | null = null;
   private coarsePricingActiveSourceBlock: number | null = null;
@@ -2565,6 +2568,7 @@ export class BlockScanRuntimeLoop {
       readonly source: CanonicalSource;
       readonly backend: PinnedRethQuoteBackend;
     } | null = null;
+    let startupPricingPublication: BlockScanStateSnapshot | null = null;
     let exactTransportDrainMs = 0;
     let fundingPreparation: StrictFundingPreparation | undefined;
     let fundingSettlement: Promise<void> | undefined;
@@ -3152,6 +3156,7 @@ export class BlockScanRuntimeLoop {
         }
 
         const snapshot = runtime.snapshot;
+        startupPricingPublication = snapshot.pricing;
         diagnostic?.onSnapshot(snapshot);
         if (diagnostic?.through === "prices") return;
         amountPricingSnapshot = snapshot.pricing;
@@ -4650,6 +4655,26 @@ export class BlockScanRuntimeLoop {
         ) {
           this.dispatchNextPendingEvidence(blockNumber);
         }
+      }
+      // This is after the whole cleanup/release chain, never an unconditional
+      // finally callback: a failed drain, cancellation or retired epoch cannot arm.
+      const warmPricing = startupPricingPublication;
+      const effective = warmPricing?.effectiveMids;
+      if (!this.startupWarmDrainedNotified && this.deps.onStartupWarmDrained !== undefined &&
+          this.deps.startupWarmEnabled && (outcome === "startup_warm" || outcome === "ran" || outcome === "degraded") &&
+          warmPricing !== null &&
+          effective?.complete === true && !this.startupWarmPending &&
+          !passSignal.aborted && !this.deps.runtimeAbort.signal.aborted && !this.deps.isShuttingDown() &&
+          currentRuntimeCoordinator.latestPricingSnapshot() === warmPricing &&
+          effective.source.number === warmPricing.sourceBlock && effective.source.hash === warmPricing.sourceBlockHash &&
+          effective.source.generation === warmPricing.generation &&
+          [...effective.rows.values()].some(row => row.status === "quoted" &&
+            row.amountIn !== null && row.amountIn > 0n && row.amountOut !== null && row.amountOut > 0n &&
+            row.effectiveMid !== null && Number.isFinite(row.effectiveMid) && row.effectiveMid > 0 &&
+            row.quotedAt?.number === warmPricing.sourceBlock && row.quotedAt.hash === warmPricing.sourceBlockHash &&
+            row.quotedAt.generation <= warmPricing.generation)) {
+        this.deps.onStartupWarmDrained(effective.source);
+        this.startupWarmDrainedNotified = true;
       }
     }
   };

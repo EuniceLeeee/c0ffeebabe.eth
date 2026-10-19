@@ -1,0 +1,126 @@
+{
+  "schema": "bounded-live-post-publication-window/v1",
+  "at": "2026-10-19T10:18:35.279120+00:00",
+  "problem": "The prior bounded live window counted heads during startup. The user requires 250 new observed heads after valid complete positive pricing is published and cleanup succeeds.",
+  "behavior": "Arm once after a still-current complete positive effective publication and successful cleanup. Seed at the highest observed head at arm; count subsequent unique heads and retain final scheduling/drain. Failed, empty, retired or cancelled publication cannot arm. Reorg cannot reset count.",
+  "bounds": {
+    "measurementHeads": 250,
+    "warmupHeads": 250,
+    "warmupWallMs": 3600000,
+    "warmupAttemptBudgetUnchangedMs": 300000,
+    "unboundedLiveUnchanged": true
+  },
+  "baselineHead": "f0513af38b63254a9e68206944a0a484ce484200",
+  "source": [
+    {
+      "path": "listener/src/searcher/blockscan-runtime-loop.ts",
+      "beforeSha256": "2e9ad57a4a41501e0bfc72d6cfae6deaa0cd21e26b1cedd73958eb0bd261f8bc",
+      "afterSha256": "c4e7d9985c2d973a96fc79c42f18ec0d984e605a95bed7c5dba72b684ed1c359"
+    },
+    {
+      "path": "listener/src/searcher/live-head-window.ts",
+      "beforeSha256": "1cfb3a1d7f013608cf45889aca3f0ee448e104c65bdcaba5b8259f542cb40adc",
+      "afterSha256": "01d2c0857c90797f80cc83620430685fb17cb0c70a8e092fcd0afa0bf6ab0102"
+    },
+    {
+      "path": "listener/src/searcher/main.ts",
+      "beforeSha256": "656c9fc16235b478c6fe88f8502cf25c4d7edb2e500d146895d40a5591b51396",
+      "afterSha256": "90c60ca2b1781e4068c6372210d8d478b0baff38b807719eda3d9448a0b2d87a"
+    },
+    {
+      "path": "listener/src/searcher/test/blockscan-startup-warm-resume.ts",
+      "beforeSha256": "a1e78c98f2757cae03ff54c65bcc5a754ee3e94573cef10852a62134ce09056c",
+      "afterSha256": "f0a71e8c6e9ed804e5fa4056b7e6fc963dbdbc32bc027623e64f9898579f4053"
+    },
+    {
+      "path": "listener/src/searcher/test/live-head-window.ts",
+      "beforeSha256": "4f835543ad6421caaa581eb0cd8370959f97a8ef3cb6d71c32ac11fa3ed1ed66",
+      "afterSha256": "1ef7fae98926a6f90c7837105078e8055cf88d198479f1e694e4aee6381cca91"
+    }
+  ],
+  "cloudChecks": [
+    {
+      "name": "head-window",
+      "argv": [
+        "npm",
+        "run",
+        "searcher:live-head-window"
+      ],
+      "startedAt": "2026-10-19T10:13:12.755457+00:00",
+      "endedAt": "2026-10-19T10:13:16.367489+00:00",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/post-publication-window-20261019/head-window.log",
+      "sha256": "dcf44539010e4feca2482f3c76af167a53d1fcd7bdbf275ce78daebdfb2e738b",
+      "bytes": 1208
+    },
+    {
+      "name": "startup-warm",
+      "argv": [
+        "node",
+        "--import",
+        "tsx",
+        "--test",
+        "src/searcher/test/blockscan-startup-warm-resume.ts"
+      ],
+      "startedAt": "2026-10-19T10:13:16.367779+00:00",
+      "endedAt": "2026-10-19T10:13:23.518331+00:00",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/post-publication-window-20261019/startup-warm.log",
+      "sha256": "d9ce66e77de9f0253f5e30a2317e5705c34d7bd37ece95d760bfd4bc30bee649",
+      "bytes": 2763
+    },
+    {
+      "name": "runtime-loop",
+      "argv": [
+        "node",
+        "--import",
+        "tsx",
+        "--test",
+        "src/searcher/test/blockscan-runtime-loop.ts"
+      ],
+      "startedAt": "2026-10-19T10:13:23.518704+00:00",
+      "endedAt": "2026-10-19T10:13:34.102011+00:00",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/post-publication-window-20261019/runtime-loop.log",
+      "sha256": "716b5bf76d4276e0c516d17efb6376fde4e2ef4192e0169dae7197e2c60c10a9",
+      "bytes": 107704
+    },
+    {
+      "name": "build-live",
+      "argv": [
+        "npm",
+        "run",
+        "build:live"
+      ],
+      "startedAt": "2026-10-19T10:13:34.102440+00:00",
+      "endedAt": "2026-10-19T10:13:42.656672+00:00",
+      "exitCode": 0,
+      "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/post-publication-window-20261019/build-live.log",
+      "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "bytes": 71
+    }
+  ],
+  "independentReview": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/post-publication-window-20261019/independent-final-review.json",
+    "sha256": "752961aa648f20b9cff8ccca308153d9db2556ca56c871a4820ea39b47d4c89f",
+    "result": "PASS final file/patch/log binding"
+  },
+  "baselineFlips": {
+    "sameHeadFixture": {
+      "beforePass": 5,
+      "afterPass": 10,
+      "tests": 10
+    },
+    "sameStartupFixture": {
+      "beforePass": 49,
+      "afterPass": 52,
+      "tests": 52,
+      "original46Retained": true
+    }
+  },
+  "limitations": [
+    "Deterministic lifecycle correctness and build evidence; new live performance is not yet verified.",
+    "The user requested a new diagnostic run excluding Balancer V3 and Few while retaining the previous Fluid DEX, Balancer V2 and Curve underlying exclusions. Reduced scope is not full Family performance acceptance.",
+    "Prior runs and timing failures are retained. No signing/broadcast/deployment, quote input, scheduler caps or stage budgets changed."
+  ]
+}

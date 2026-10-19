@@ -128,3 +128,89 @@ test("production mempool intake abort wakes an empty queue and drains already st
   assert.equal(logs.filter((line) => line.includes('"event":"mempool_drained"')).length, 1);
   assert.ok(logs.some((line) => line.includes('"inFlight":1')));
 });
+
+test("post-warm window arms at highest observed head and counts only later unique heads", async () => {
+  const events: Record<string, unknown>[] = [], scheduled: number[] = [];
+  let closes = 0;
+  const window = new LiveHeadWindow(1000, 3, e => events.push(e), () => { closes++; },
+    { waitForWarmup: true, warmupMaxMs: 60_000 });
+  try {
+    window.observe(observation(1005, "http", "a"), () => scheduled.push(1005));
+    window.observe(observation(1003), () => scheduled.push(1003));
+    window.observe(observation(1005, "ws", "b"), () => assert.fail("warm duplicate scheduled"));
+    assert.equal(events.filter(e => e.event === "head").length, 0, "warmup must not consume the measurement head count");
+    assert.equal(window.waitingForWarmup, true);
+    assert.equal(window.armAfterWarmup(), true);
+    assert.equal(events.find(e => e.event === "measurement_armed")?.measurementSeed, 1005);
+    assert.equal(window.armAfterWarmup(), false, "later/reorg warm must not reset an armed window");
+    window.observe(observation(1004), () => assert.fail("late warm head backfilled measurement"));
+    window.observe(observation(1006), () => scheduled.push(1006));
+    window.observe(observation(1006, "ws", "c"), () => assert.fail("duplicate counted"));
+    window.observe(observation(1008), () => scheduled.push(1008));
+    window.observe(observation(1007), () => { assert.equal(closes, 0); scheduled.push(1007); });
+    assert.equal(closes, 1);
+    assert.deepEqual(scheduled, [1005, 1003, 1006, 1008, 1007]);
+    assert.deepEqual(events.filter(e => e.event === "head").map(e => e.number), [1006, 1008, 1007]);
+    window.observe(observation(1009), () => assert.fail("next head scheduled"));
+    await window.nextHead;
+  } finally { window.dispose?.(); }
+});
+
+test("warmup head guard delivers its last head before synchronous failed close, never arms at limit", () => {
+  const events: Record<string, unknown>[] = [], scheduled: number[] = [];
+  let closes = 0;
+  const window = new LiveHeadWindow(10, 2, e => events.push(e), () => { closes++; },
+    { waitForWarmup: true, warmupMaxMs: 60_000 });
+  window.observe(observation(11), () => scheduled.push(11));
+  window.observe(observation(12), () => {
+    assert.equal(closes, 0); scheduled.push(12);
+    assert.equal(window.armAfterWarmup(), false, "publication at the guard boundary cannot race admission");
+  });
+  assert.deepEqual(scheduled, [11, 12]); assert.equal(closes, 1);
+  assert.equal(window.closed, true); assert.equal(window.waitingForWarmup, true);
+  assert.equal(window.warmupFailure, "head-limit");
+  assert.equal(events.filter(e => e.event === "measurement_armed").length, 0);
+  assert.equal(events.filter(e => e.event === "input_closed").length, 1);
+});
+
+test("fixed warmup wall guard closes even when no further heads arrive", async () => {
+  let closes = 0;
+  const window = new LiveHeadWindow(10, 250, () => {}, () => { closes++; },
+    { waitForWarmup: true, warmupMaxMs: 10 });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(window.closed, true); assert.equal(window.warmupFailure, "deadline");
+  assert.equal(closes, 1); assert.equal(window.armAfterWarmup(), false);
+});
+
+test("arming checks the absolute warmup deadline before a delayed timer can fire", () => {
+  // Execute the actual class with a stalled timer and an independently advanced monotonic clock.
+  const source = readFileSync(new URL("../live-head-window.ts", import.meta.url), "utf8");
+  const code = ts.transpileModule(source.replaceAll("export ", ""),
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  let now = 10, closes = 0;
+  const Window = runInNewContext(`${code}; LiveHeadWindow`, {
+    performance: { now: () => now }, Date, setTimeout: () => ({ unref() {} }), clearTimeout() {},
+  });
+  const window = new Window(10, 250, () => {}, () => { closes++; }, { waitForWarmup: true, warmupMaxMs: 100 });
+  now = 110;
+  assert.equal(window.armAfterWarmup(), false);
+  assert.equal(closes, 1); assert.equal(window.warmupFailure, "deadline");
+});
+
+test("arming or disposing cancels only the warmup wall timer", async () => {
+  for (const arm of [true, false]) {
+    let closes = 0;
+    const window = new LiveHeadWindow(10, 2, () => {}, () => { closes++; },
+      { waitForWarmup: true, warmupMaxMs: 10 });
+    if (arm) assert.equal(window.armAfterWarmup(), true); else window.dispose();
+    await new Promise(resolve => setTimeout(resolve, 25));
+    assert.equal(closes, 0);
+    if (arm) {
+      window.observe(observation(11), () => {}); window.observe(observation(12), () => {});
+      assert.equal(closes, 1, "measurement still has its original exact head limit");
+    }
+  }
+  for (const warmupMaxMs of [0, -1, NaN, 1.5, 2_147_483_648]) {
+    assert.throws(() => new LiveHeadWindow(10, 2, () => {}, () => {}, { waitForWarmup: true, warmupMaxMs }));
+  }
+});
