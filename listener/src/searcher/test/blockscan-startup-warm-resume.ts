@@ -88,6 +88,7 @@ async function setup(mode: Mode) {
   const headerWire: number[] = [], headerHeld: ServerResponse[] = [];
   const releases: (() => void)[] = [];
   const requests: PrepareStrictRuntimeInput[] = [], sessions: StrictProductionRuntimeSession[] = [];
+  const sessionPurposes = new Map<StrictProductionRuntimeSession, StrictSessionRequest["purpose"]>();
   const published: BlockScanStateSnapshot[] = [], bridged: BlockScanStateSnapshot[] = [];
   const snapshots: AdapterRuntimeSnapshot[] = [];
   const exacts: { session: StrictProductionRuntimeSession;
@@ -226,6 +227,7 @@ async function setup(mode: Mode) {
         kind: request.purpose === "exact-execution" ? "exact" : "pricing", control: request.control,
         touchedPools: request.touchedPools, requiredEdgeIds: request.requiredEdgeIds });
       sessions.push(session);
+      sessionPurposes.set(session, request.purpose);
       return session;
     } finally { activeSessionPreparations--; }
   };
@@ -371,7 +373,7 @@ async function setup(mode: Mode) {
       recordNotStarted: input => drops.push(input.sourceBlock) },
   };
   const loop = new BlockScanRuntimeLoop(deps);
-  return { loop, coordinator, runtimeAbort, wire, requests, sessions, published, bridged, snapshots, exacts, headers, starts, drops,
+  return { loop, coordinator, runtimeAbort, wire, requests, sessions, sessionPurposes, published, bridged, snapshots, exacts, headers, starts, drops,
     held, headerWire, headerHeld, releases, errors, backends, logs, server, deps,
     graphInputs, activityCalls, activityReads, activityHeaderReads, activityBehavior, resets,
     get maxActivePrepare() { return maxActivePrepare; },
@@ -557,8 +559,8 @@ await fixture("resume", async f => {
   assert.equal(firstRow.quotedAt!.generation, 1, "carried row retains its original observation");
   assert.equal(f.published[0]!.coverage.carriedEdgeKeys.length, 1);
   assert.equal(f.published[0]!.coverage.refreshedEdgeKeys.length, 1);
-  const oldExact = f.sessions.find(s => s.source.generation === 1 && s.creationTiming.refreshedInstanceCount === 0)!;
-  const freshExact = f.sessions.find(s => s.source.generation === 2 && s.creationTiming.refreshedInstanceCount === 0)!;
+  const oldExact = f.sessions.find(s => s.source.generation === 1 && f.sessionPurposes.get(s) === "exact-execution")!;
+  const freshExact = f.sessions.find(s => s.source.generation === 2 && f.sessionPurposes.get(s) === "exact-execution")!;
   assert(oldExact && freshExact); assert.notEqual(oldExact, freshExact);
   const oldQuote = f.exacts.find(e => e.session === oldExact)!.quote;
   const freshQuote = f.exacts.find(e => e.session === freshExact)!.quote;
@@ -575,6 +577,8 @@ await fixture("resume", async f => {
   const resumeLog = f.logs.find(s => s.startsWith("[searcher/blockscan-startup-warm-resume]"))!;
   assert(JSON.parse(resumeLog.slice(resumeLog.indexOf("{"))).processMemory.heapUsed > 0);
   assert.equal(f.sessions.filter(s => s.source.number === N).length, 4, "raw and exact sessions must both be recreated");
+  assert.deepEqual(f.sessions.filter(s => s.source.number === N && f.sessionPurposes.get(s) === "source-n-runtime")
+    .map(s => s.creationTiming.refreshedInstanceCount), [1, 0], "successful raw state must not refresh again on the same pinned retry");
   const before = f.wire.length;
   await assert.rejects(f.requests[0]!.pricingCallBackend!.call({ to: QUOTER, data: "0xbeef01" }));
   await turn(); assert.equal(f.wire.length, before);

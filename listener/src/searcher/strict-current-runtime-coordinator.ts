@@ -88,6 +88,7 @@ interface StartupWarmDraft {
   readonly graph: VerifiedGraphView;
   readonly resetEpoch: number;
   pricingEpoch: number;
+  raw?: BlockScanStateSnapshot;
   effective?: EffectiveMidSnapshot;
 }
 
@@ -339,6 +340,7 @@ export class StrictCurrentRuntimeCoordinator
         startupDraft.graph.sourceBlockHash.toLowerCase() !== input.graph.sourceBlockHash.toLowerCase() ||
         strictGraphPublicationFingerprint(startupDraft.graph) !== strictGraphPublicationFingerprint(input.graph) ||
         input.graph.generation < startupDraft.graph.generation ||
+        (startupDraft.raw !== undefined && input.graph.generation <= startupDraft.raw.generation) ||
         (startupDraft.effective !== undefined && input.graph.generation <= startupDraft.effective.source.generation))) {
       input.startupWarmResume.close();
       throw new Error("startup warm data cursor retired or mismatched");
@@ -348,6 +350,14 @@ export class StrictCurrentRuntimeCoordinator
     const sessionStartedAtMs = Date.now();
     const previous = this.publishedPricing;
     const rawBasis = this.rawBasisFor(input.graph, previous, input.canonicalActivity);
+    const rawDraft = rawBasis === null ? startupDraft?.raw : undefined;
+    const retryStateKeys = rawDraft === undefined ? undefined : new Set(
+      rawDraft.coverage.unresolvedEdgeKeys.map(edgeKey => {
+        const stateKey = rawDraft.pricingStateKeyByEdgeKey?.get(edgeKey);
+        if (stateKey === undefined) throw new Error(`startup raw draft omits state key ${edgeKey}`);
+        return stateKey;
+      }),
+    );
     const sessionPromise = Promise.resolve().then(() => this.sessionFor({
       purpose: rawBasis === null ? "source-n-runtime" : "exact-execution",
       source,
@@ -356,6 +366,7 @@ export class StrictCurrentRuntimeCoordinator
       fundingAssets: prefunding === undefined
         ? input.fundingTokens : EMPTY_FUNDING_ASSETS,
       ...(rawBasis !== null ? { requiredEdgeIds: new Set<string>() }
+        : retryStateKeys !== undefined ? { touchedPools: retryStateKeys }
         : this.effectivePricing === undefined && previous !== null && input.touchedPools !== undefined
           ? { touchedPools: input.touchedPools } : {}),
       ...(input.pricingCallBackend === undefined
@@ -374,7 +385,7 @@ export class StrictCurrentRuntimeCoordinator
         }));
     const pricingPromise = this.preparePricing(sessionPromise, input.graph, previous, rawBasis,
       pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend,
-      input.canonicalActivity, simulationTransport, startupDraft);
+      input.canonicalActivity, simulationTransport, startupDraft, rawDraft);
     const [pricingResult, executionResult, fundingResult] = await Promise.allSettled([
       pricingPromise,
       executionPromise,
@@ -459,6 +470,7 @@ export class StrictCurrentRuntimeCoordinator
     activity?: StrictCanonicalActivityProof,
     simulationTransport?: StrictSimulationTransport,
     startupDraft?: StartupWarmDraft,
+    rawDraft?: BlockScanStateSnapshot,
   ): Promise<{ session: StrictProductionRuntimeSession; built: StrictPricingBuildResult }> {
     // Raw is immutable after bootstrap, but effective/local Exact state still
     // obeys the Ready's environment-sensitive refresh policy every block.
@@ -477,7 +489,8 @@ export class StrictCurrentRuntimeCoordinator
       assertSessionGraphSource(session, graph);
       const built = rawBasis === null
         ? buildStrictPricingSnapshot(session, graph, {
-            previous: this.effectivePricing === undefined ? previous : null, canonicalActivity: activity,
+            previous: rawDraft ?? (this.effectivePricing === undefined ? previous : null),
+            canonicalActivity: activity, samePinPrivate: rawDraft !== undefined,
           })
         : { snapshot: rawBasis };
       return { session, built };
@@ -498,7 +511,8 @@ export class StrictCurrentRuntimeCoordinator
         ...(startupDraft?.effective === undefined ? {} : { resumeSameSource: true as const }),
         disabledEdgeIds: this.disabledEffectiveEdges(sizing),
         quoteGraph: rawBasis === null ? undefined : graph,
-        touchedStateKeys: startupDraft?.effective !== undefined ? new Set<string>()
+        touchedStateKeys: startupDraft?.effective !== undefined ?
+          (rawDraft === undefined ? new Set<string>() : refreshedStateKeys((await raw).session))
           : rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity)
             ? activity.touchedStateKeys : undefined,
       }, simulationTransport);
@@ -506,6 +520,12 @@ export class StrictCurrentRuntimeCoordinator
     // A rejection cannot leave the sibling pricing work detached from the
     // producer's existing cancellation/drain boundary.
     const [rawResult, effectiveResult] = await Promise.allSettled([raw, effective]);
+    if (startupDraft !== undefined && rawBasis === null && rawResult.status === "fulfilled" &&
+        pricingEpoch === this.pricingEpoch &&
+        (!control.signal?.aborted || control.signal.reason instanceof StateCallAbortedError &&
+          control.signal.reason.kind === "deadline")) {
+      startupDraft.raw = rawResult.value.built.snapshot;
+    }
     if (rawResult.status === "rejected") throw rawResult.reason;
     if (effectiveResult.status === "rejected") throw effectiveResult.reason;
     const { session, built } = rawResult.value;
@@ -520,7 +540,7 @@ export class StrictCurrentRuntimeCoordinator
       throw new Error("effective pricing incomplete or mismatched source");
     }
     // Save only an original partial builder object: its successful rows retain
-    // process-local amount lineage. Raw, failures and issued handles are not cached.
+    // process-local amount lineage. Failed rows are not reused and issued handles are never cached.
     // The caller alone can continue after a deadline, drain and canonical recheck.
     if (startupDraft !== undefined) {
       const abort = control.signal?.reason;
@@ -769,6 +789,8 @@ function buildStrictPricingSnapshot(
   input: {
     readonly previous: BlockScanStateSnapshot | null;
     readonly canonicalActivity?: StrictCanonicalActivityProof;
+    /** Only the caller-owned, same-pin startup draft may use this path. */
+    readonly samePinPrivate?: boolean;
   },
 ): StrictPricingBuildResult {
   assertSessionGraphSource(session, graph);
@@ -805,7 +827,7 @@ function buildStrictPricingSnapshot(
    * authorized merely because a map happens to be available.
    */
   const previous = input.previous;
-  const canDeltaPublish = previous !== null &&
+  const canDeltaPublish = !input.samePinPrivate && previous !== null &&
     strictGraphPublicationFingerprint(previous.graph) === graphFingerprint &&
     previous.coverage.expectedEdgeKeys.length === pricedEdgeKeys.size &&
     previous.coverage.expectedEdgeKeyHash === pricingIndex.expectedEdgeKeyHash &&
@@ -911,7 +933,12 @@ function buildStrictPricingSnapshot(
       ? session.currentPricingForEdge(edge)
       : null;
     if (current === null) {
-      const carried = perBlockRefresh.has(stateKey) ? null : compatibleCarryForEdge({
+      const carried = perBlockRefresh.has(stateKey) ? null : (input.samePinPrivate
+        ? compatibleSamePinRawCarryForEdge({
+            edge, edgeKey, stateKey, previous: input.previous,
+            previousEdge: previousEdgeByKey.get(edgeKey), source: sourceFor(graph), familyId,
+          })
+        : compatibleCarryForEdge({
         edge,
         edgeKey,
         stateKey,
@@ -920,7 +947,7 @@ function buildStrictPricingSnapshot(
         canonicalActivity: input.canonicalActivity,
         source: sourceFor(graph),
         familyId,
-      });
+      }));
       if (carried?.kind === "priced") {
         const mid = canDeltaPublish
           ? previousForDelta!.mids.get(edgeKey) ?? strictMidForEdge(carried.mid, edge)
@@ -1156,6 +1183,18 @@ function strictMidForEdge(
   });
 }
 
+/** The pricing session refreshed whole instances, which may cover more state
+ * keys than the unresolved key that selected each instance. */
+function refreshedStateKeys(session: StrictProductionRuntimeSession): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const edge of session.edges) {
+    if (session.currentPricingForEdge(edge) === null) continue;
+    const key = session.stateKeyForEdge(edge);
+    if (key !== null) keys.add(key);
+  }
+  return keys;
+}
+
 function sameStateKeyCoverage(
   left: StateKeyCoverage | undefined,
   right: StateKeyCoverage,
@@ -1221,6 +1260,40 @@ function compatibleCarryForEdge(input: {
     return null;
   }
   if (previous.coverageByEdgeKey.get(edgeKey)?.status !== "resolved") return null;
+  const mid = previous.mids.get(edgeKey);
+  return mid === undefined ? null : { kind: "priced", mid };
+}
+
+/** Carry only successful, source-pinned raw data from this startup's private
+ * draft. Ordinary cross-block carry retains its separate activity proof. */
+function compatibleSamePinRawCarryForEdge(input: {
+  readonly edge: VerifiedGraphView["edges"][number];
+  readonly edgeKey: string;
+  readonly stateKey: string | null;
+  readonly previous: BlockScanStateSnapshot | null;
+  readonly previousEdge: VerifiedGraphView["edges"][number] | undefined;
+  readonly source: CanonicalSource;
+  readonly familyId: string;
+}):
+  | { readonly kind: "priced"; readonly mid: RouteVenueMid }
+  | { readonly kind: "unavailable"; readonly reason: string }
+  | null {
+  const { edge, edgeKey, stateKey, previous, previousEdge, source, familyId } = input;
+  if (previous === null || previousEdge === undefined || stateKey === null ||
+      source.number !== previous.sourceBlock ||
+      source.hash.toLowerCase() !== previous.sourceBlockHash.toLowerCase() ||
+      source.generation <= previous.generation ||
+      !sameEdgeContract(previousEdge, edge) ||
+      previous.pricingStateKeyByEdgeKey?.get(edgeKey) !== stateKey ||
+      previous.pricingFamilyIdByEdgeKey?.get(edgeKey) !== familyId) return null;
+  const coverage = previous.coverageByEdgeKey.get(edgeKey);
+  const provenance = previous.pricingProvenanceByEdgeKey?.get(edgeKey);
+  if (provenance === "unavailable" && coverage?.status === "rejected" &&
+      coverage.reason.trim().length > 0) {
+    return { kind: "unavailable", reason: coverage.reason };
+  }
+  if (coverage?.status !== "resolved" ||
+      (provenance !== "refreshed" && provenance !== "carried")) return null;
   const mid = previous.mids.get(edgeKey);
   return mid === undefined ? null : { kind: "priced", mid };
 }

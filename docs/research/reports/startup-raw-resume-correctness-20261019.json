@@ -1,0 +1,293 @@
+{
+  "schemaVersion": 1,
+  "scope": "Same physical source private startup raw continuation; production coordinator only",
+  "baseHead": "2dd51697623db6a3b056684ae8c1eb5dd84a95b0",
+  "frozenBaseline": {
+    "sourceFingerprint": "2d24cc9f9ec1eab73b2a583afa8002f7536fcadcace13a7ae423d3389c4b9d98",
+    "sourceFingerprintAlgorithm": "SHA256 UTF8 JSON compact sorted-key array of path+sha256 rows ordered by path",
+    "configSha256": "7b114983a85cba14a603e329420600d9122f3b0dc5769077296276c5956efdfd",
+    "ready": {
+      "original": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/ready-live250-restored-20261016/ready.json",
+      "copy": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-all48-blockscan-only-20261019/ready.json",
+      "sha256BeforeLive": "47a0cf31a475f75fc554397bf32683f8b2a80893cc2b311f274dde9ccdda2a7d",
+      "fromBlock": 26187988,
+      "toBlock": 26202387,
+      "generation": 10,
+      "revision": 4516,
+      "activeInstances": 24351,
+      "familiesWithActive": 43,
+      "discoveryCutoffDoesNotCoverLaterHeads": true
+    },
+    "graphEdges": 51471,
+    "enabledFamilies": 48,
+    "predeclaredBudget": {
+      "effectiveAndEnumerationMs": 4000,
+      "fullPassIncludingDrainMs": 11000,
+      "mustFinishBeforeNextObservedHead": true,
+      "largeGraphCancellationProtectionMs": 30000,
+      "protectionIsNotPassThreshold": true,
+      "newHeadLimit": 250,
+      "coldStartAndAllFailuresRetained": true,
+      "notLongTermP95": true,
+      "notHistorical3x3": true
+    },
+    "startupAttemptBudgetMs": 300000
+  },
+  "behavior": [
+    "Carry resolved same-pin raw snapshot data through the existing caller-owned startup cursor; never carry session or execution authority.",
+    "Retry unresolved state keys through existing touchedPools selection and default each-block refresh union.",
+    "Requote effective rows for every state key of actually refreshed instances, including shared-state siblings.",
+    "Raw-only progress can survive a deadline before the effective builder returns; no draft publication, first successful atomic publication remains baseline.",
+    "Ordinary runtime/coarse and cross-block carry unchanged. Source/hash/graph/reset/epoch/canonical checks and new execution/Funding sessions retained."
+  ],
+  "validation": {
+    "rootActualLoopFlip": {
+      "before": "45/46; second raw refresh [1,1] violates [1,0]",
+      "after": "46/46; second raw refresh [1,0]"
+    },
+    "independent": {
+      "reviewer": "retry_classification_current",
+      "baseProductionHead": "2dd51697623db6a3b056684ae8c1eb5dd84a95b0",
+      "scope": "Private same-pin startup raw-data continuation only; no live/RPC/cloud writes",
+      "verdict": "No substantive blocking finding in final source. Independent offline production-path cost flip and required negative regressions pass; root must guard cloud baseline, apply, build/test, and preserve actual performance failure until measured.",
+      "sources": [
+        {
+          "file": "listener/src/searcher/strict-current-runtime-coordinator.ts",
+          "baselineSha256": "e6ca3c49e5e555d6125857c05c62cdaae4e25edf8ff1e6a581083da07273c2ed",
+          "candidateSha256": "2e768364bdbbcc269e1d21d14f41e5731f90ec2d9d66518dc5b357adb1dcfdd2"
+        },
+        {
+          "file": "listener/src/searcher/strict-production-runtime-session.ts",
+          "baselineSha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19",
+          "candidateSha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+        },
+        {
+          "file": "listener/src/searcher/blockscan-runtime-loop.ts",
+          "baselineSha256": "f1229a58cdfa6917e32b168ccf1e1c763a8a1c3b32c97c34069ae844463fa482",
+          "candidateSha256": "f1229a58cdfa6917e32b168ccf1e1c763a8a1c3b32c97c34069ae844463fa482"
+        },
+        {
+          "file": "listener/src/searcher/blockscan-effective-mid.ts",
+          "baselineSha256": "39a9311130ba7eda6da7f995a58a87acd089940924cbd62b73e531a3273e349f",
+          "candidateSha256": "39a9311130ba7eda6da7f995a58a87acd089940924cbd62b73e531a3273e349f"
+        },
+        {
+          "file": "listener/src/searcher/main.ts",
+          "baselineSha256": "67cd56454dc48688bc881d7a05f3f42035c29030d9205a9d510343185eb31ace",
+          "candidateSha256": "67cd56454dc48688bc881d7a05f3f42035c29030d9205a9d510343185eb31ace"
+        },
+        {
+          "file": "listener/src/searcher/test/strict-startup-warm-resume-cursor.ts",
+          "baselineSha256": "f53b69e627d24ecf8b5b2c0b0ea078680a28179279060abad83fba86cd4da321",
+          "candidateSha256": "562a2a967a3edfe4c3af270c24e51ff26552b37243cfd8dc855bd04d98ba6a58"
+        },
+        {
+          "file": "listener/src/searcher/test/blockscan-startup-warm-resume.ts",
+          "baselineSha256": "a1e78c98f2757cae03ff54c65bcc5a754ee3e94573cef10852a62134ce09056c",
+          "candidateSha256": "a1e78c98f2757cae03ff54c65bcc5a754ee3e94573cef10852a62134ce09056c"
+        },
+        {
+          "file": "listener/src/searcher/test/strict-startup-warm-raw-refresh-policy.ts",
+          "baselineSha256": "17bb4a1572f6dbd5f6f8217be5f0fa4b80684f6046e3fc30d46f14ce7c5b9c0f",
+          "candidateSha256": "17bb4a1572f6dbd5f6f8217be5f0fa4b80684f6046e3fc30d46f14ce7c5b9c0f"
+        }
+      ],
+      "executions": [
+        {
+          "path": "independent-raw-refresh-policy-baseline.log",
+          "sha256": "09122d6aa19e9e9b0a4faf476cff29a9a912de181f51ecb1a15aac2a8749fa39",
+          "bytes": 521,
+          "exitCode": 1,
+          "passed": 0,
+          "total": 4,
+          "note": "baseline: first cost assertion fails [4,4] != [4,2]"
+        },
+        {
+          "path": "independent-raw-refresh-policy-second.log",
+          "sha256": "437171a5a352f0eb94c0ab9db5e67a031c48036fe603865212170c1137925d79",
+          "bytes": 454,
+          "exitCode": 0,
+          "passed": 4,
+          "total": 4,
+          "note": "candidate: real mixed-policy V2 Family / current root / coordinator / builder"
+        },
+        {
+          "path": "independent-cursor-final.log",
+          "sha256": "58a6f3bcfd03e34b4b2c775b7713e9023f994a37ee01657ef0ab32a9618fbf5e",
+          "bytes": 1299,
+          "exitCode": 0,
+          "passed": 16,
+          "total": 16,
+          "note": "candidate: scope, invalidation, raw-only progress, atomic baseline"
+        },
+        {
+          "path": "independent-loop-final.log",
+          "sha256": "5181f011b634ef8a644e99409a34997e60fecb2e41bb7d0d2e676d2a9d96bcd3",
+          "bytes": 2224,
+          "exitCode": 0,
+          "passed": 46,
+          "total": 46,
+          "note": "candidate: actual loop and physical local HTTP drain"
+        },
+        {
+          "path": "independent-failure-recovery-final.log",
+          "sha256": "85fde7beecd00a7ade4e791e59e760a59d23042bff6d99b8af125b6abf511ad4",
+          "bytes": 2871,
+          "exitCode": 0,
+          "passed": 27,
+          "total": 27,
+          "note": "candidate: dynamic/per-block failures and nonpublication"
+        },
+        {
+          "path": "independent-strict-runtime-final.log",
+          "sha256": "90bab341304a0287b741f72fc7b0873635ba776b0550cbdffa844040b56a1f91",
+          "bytes": 5349,
+          "exitCode": 0,
+          "passed": null,
+          "total": null,
+          "note": "candidate: full existing runtime authority contract"
+        },
+        {
+          "path": "independent-effective-final.log",
+          "sha256": "574a7332a2ecc2b566478564ad6e1b9215a2b9e03dddbc8c6151fc1ad02825a1",
+          "bytes": 6128,
+          "exitCode": 0,
+          "passed": 71,
+          "total": 71,
+          "note": "candidate: full existing and policy-fence effective contract"
+        },
+        {
+          "path": "independent-build-live-final.log",
+          "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+          "bytes": 71,
+          "exitCode": 0,
+          "passed": null,
+          "total": null,
+          "note": "candidate: production TypeScript build"
+        }
+      ],
+      "preparationFailuresRetained": [
+        {
+          "path": "independent-cursor.log",
+          "sha256": "e480c3dabba018dd4ea61e32a4f07f2d1849367abf6adcdf7f6ead6a8479815c",
+          "exitCode": 1,
+          "reason": "Import failed before tests: exported tree lacked local v2-lineages.json; dependency copied and final command succeeded."
+        },
+        {
+          "path": "independent-failure-recovery.log",
+          "sha256": "e480c3dabba018dd4ea61e32a4f07f2d1849367abf6adcdf7f6ead6a8479815c",
+          "exitCode": 1,
+          "reason": "Same missing v2-lineages dependency; no test reached; retained separately."
+        },
+        {
+          "path": "independent-raw-refresh-policy-first.log",
+          "sha256": "c4f17f1431167730bc3d4252f48d07358a69949d20645aec0f34eef232163156",
+          "exitCode": 1,
+          "reason": "Independent new fixture used checksum-ambiguous sample-address string comparison, missing shared-key setup. Fixture corrected to unambiguous numeric addresses; source unchanged."
+        }
+      ],
+      "verifiedBoundaries": [
+        "Only existing process-local startup cursor can reach samePinPrivate raw carry; ordinary prepare and coarse defaults unchanged.",
+        "Physical block number/hash and graph fingerprint, monotonic raw/effective generation, current pricing/reset epochs and canonical callback remain required.",
+        "Current raw unresolved is retried by unresolved edge→stateKey→all Ready instance closure, with session default perBlock union unchanged.",
+        "Existing perBlock keys force real reads even at same pin; refreshed whole-instance state keys invalidate corresponding previous effective rows.",
+        "Only current===null, nonperBlock, compatible old resolved or behavior-proven unavailable data may carry; unresolved has no carry path.",
+        "Raw snapshot data is rebound to current graph edges; no old session/issuer/Exact authority retained.",
+        "Draft state remains private; rawBasis stays null until final successful canonical/epoch atomic publication establishes the initial baseline.",
+        "Loop cancellation/drain/source-revalidation and original budgets/concurrency stay unchanged."
+      ],
+      "independentNewFixture": {
+        "path": "listener/src/searcher/test/strict-startup-warm-raw-refresh-policy.ts",
+        "scenarios": [
+          "Same-pin mixed-policy raw refresh [4,2] with default each-block and split pricing-group closure; static successful effective tuple retains original quotedAt.",
+          "Ordinary runtime without cursor refreshes [4,4] and cannot see private draft.",
+          "Ordinary coarse without cursor refreshes [4,4] and cannot see private draft.",
+          "One unresolved stateKey shared by two static instances selects both plus default each-block instances; all 8 raw edges recover and effective refreshed-state tuples reissue."
+        ]
+      },
+      "limitations": [
+        "Offline fixture results establish correctness and avoid repeated completed work; they do not prove real 48-family, 51,471-edge startup latency.",
+        "Existing physical 429/timeouts and 22-second HTTP-200 tail remain unresolved measured conditions; no scheduler tuning was reviewed or applied.",
+        "Behavior-proven unavailable carry is statically checked against the same provenance/coverage contract as prior ordinary carry; existing full runtime tests cover unavailable-data semantics, while the new raw policy fixture focuses on successful/unresolved/perBlock/shared-key cases.",
+        "No broadcast/signing/deployment/live restart performed by this reviewer."
+      ],
+      "commands": [
+        "cd baseline/listener && node --import tsx src/searcher/test/strict-startup-warm-raw-refresh-policy.ts",
+        "cd candidate/listener && node --import tsx src/searcher/test/strict-startup-warm-raw-refresh-policy.ts",
+        "cd candidate/listener && node --import tsx src/searcher/test/strict-startup-warm-resume-cursor.ts",
+        "cd candidate/listener && node --import tsx src/searcher/test/blockscan-startup-warm-resume.ts",
+        "cd candidate/listener && node --import tsx src/searcher/test/strict-effective-failure-recovery.ts",
+        "cd candidate/listener && node --import tsx src/searcher/test/strict-production-runtime-session.ts",
+        "cd candidate/listener && node --import tsx src/searcher/test/blockscan-effective-mid.ts",
+        "cd candidate/listener && npm run build:live"
+      ]
+    },
+    "rootReviewOfIndependentFixture": "Reviewed real Family/root/session/coordinator/builder 4-instance fixture; each-block reads, stateKey closure, original quotedAt, ordinary-mode isolation and recovered raw coverage are asserted. No blocker found.",
+    "cloudChecks": [
+      {
+        "name": "raw-policy",
+        "exitCode": 0,
+        "seconds": 2.014,
+        "logSha256": "437171a5a352f0eb94c0ab9db5e67a031c48036fe603865212170c1137925d79"
+      },
+      {
+        "name": "failure-recovery",
+        "exitCode": 0,
+        "seconds": 2.557,
+        "logSha256": "179d67eaa94bf290da6c7b92997f02443ce5325c5c0e6eb67813596cf3d4bf41"
+      },
+      {
+        "name": "startup",
+        "exitCode": 0,
+        "seconds": 6.94,
+        "logSha256": "ef586761f0d014180ca795615cdab1905545efa927c0ba1cf10cac574329dc41"
+      },
+      {
+        "name": "effective",
+        "exitCode": 0,
+        "seconds": 0.264,
+        "logSha256": "574a7332a2ecc2b566478564ad6e1b9215a2b9e03dddbc8c6151fc1ad02825a1"
+      },
+      {
+        "name": "cursor",
+        "exitCode": 0,
+        "seconds": 1.919,
+        "logSha256": "58a6f3bcfd03e34b4b2c775b7713e9023f994a37ee01657ef0ab32a9618fbf5e"
+      },
+      {
+        "name": "strict-runtime",
+        "exitCode": 0,
+        "seconds": 4.748,
+        "logSha256": "90bab341304a0287b741f72fc7b0873635ba776b0550cbdffa844040b56a1f91"
+      },
+      {
+        "name": "head-window",
+        "exitCode": 0,
+        "seconds": 2.408,
+        "logSha256": "d61966b8a7fe35932986ab02dd55db11b90d1dc3e1d05813fb848bca8a0d4e18"
+      },
+      {
+        "name": "build-live",
+        "exitCode": 0,
+        "seconds": 8.36,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      }
+    ],
+    "unrelatedFrozenFilesUnchanged": 2075
+  },
+  "performanceStatus": {
+    "lastLive": "FAIL: 250 observed heads, zero effective publications, zero productive passes; startup3499342ms",
+    "sourceLiveReport": "docs/research/reports/live250-blockscan-only-20261019.json",
+    "currentChange": "Offline correctness/work-reduction only; no new live or representative performance acceptance.",
+    "remaining": [
+      "Physical throttle and timeout events and successful HTTP response tail remain measured unresolved conditions.",
+      "Representative all48/51471-edge production startup and stage timing still unverified after fixes."
+    ]
+  },
+  "preservation": {
+    "noFamilySelectionOrConcurrencyOrBudgetChange": true,
+    "noReadyRebuild": true,
+    "noLiveStarted": true,
+    "noSigningBroadcastDeployment": true
+  }
+}
