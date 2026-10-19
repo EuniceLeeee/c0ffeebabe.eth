@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { transpileModule, ScriptTarget, ModuleKind } from "typescript";
 import {
   UniverseRebuildCheckpointStore,
   canonicalJson,
@@ -19,6 +20,7 @@ import {
 } from "../universe-rebuild-checkpoint.js";
 import {
   assertReceiptsMatchCurrentSourcePlan,
+  assertReadyFamilyActivation,
   UniverseRunIncomplete,
   refreshReadyInstances,
   restrictReadyFamilies,
@@ -29,6 +31,7 @@ import {
 } from "../universe-rebuild-runner.js";
 import { strictEdgeCollectionFromBlock } from
   "../strict-edge-collection-policy.js";
+import { assertReadyCheckpointPublicationCurrent } from "../strict-ready-runtime.js";
 
 const SOURCE = Object.freeze({
   number: 25_750_000,
@@ -87,7 +90,7 @@ interface Fixture {
 // existing refresh fixture, without importing main's runtime or invoking RPC.
 async function startupReadyFromMain(
   wiring: RebuildUniverseInput,
-  flags: { readonly blind: boolean; readonly dryRun: boolean },
+  flags: { readonly blind: boolean; readonly useReadyGeneration: boolean },
   refresh: typeof refreshReadyInstances = refreshReadyInstances,
 ): Promise<{ readyUniverse: ReadyUniverseGeneration; rebuildEnvelope: StartupCheckpointEnvelope }> {
   const source = await readFile(new URL("../main.ts", import.meta.url), "utf8");
@@ -96,13 +99,38 @@ async function startupReadyFromMain(
   assert(start >= 0 && end > start, "main Ready selection/root-check boundary must exist");
   const run = new Function(
     "rebuildStore", "rebuildWiring", "refreshReadyInstances", "rebuildUniverse",
-    "UniverseRunIncomplete", "blindUseIncumbentReady", "dryRunUseReadyGeneration", "console", "process",
+    "UniverseRunIncomplete", "blindUseIncumbentReady", "useReadyGeneration", "console", "process",
+    "assertReadyCheckpointPublicationCurrent",
     `return (async () => { ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
   );
   return run(wiring.store, wiring, refresh,
     async () => { throw new Error("Ready reuse must not start discovery/rebuild"); },
-    UniverseRunIncomplete, flags.blind, flags.dryRun,
-    { log(message: string) { wiring.log?.(message); } }, { env: {} });
+    UniverseRunIncomplete, flags.blind, flags.useReadyGeneration,
+    { log(message: string) { wiring.log?.(message); } }, { env: {} },
+    assertReadyCheckpointPublicationCurrent);
+}
+
+// Exercise main's actual memo selection AND rehydration statements. The fixture
+// only supplies its registry domain and rehydrator; it does not choose memos.
+async function rehydrateReadyFromMain(
+  rebuildEnvelope: StartupCheckpointEnvelope,
+  rebuildWiring: RebuildUniverseInput,
+): Promise<void> {
+  const source = await readFile(new URL("../main.ts", import.meta.url), "utf8");
+  const start = source.indexOf("  const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);");
+  const end = source.indexOf("  const flashTokens =", start);
+  assert(start >= 0 && end > start, "main memo selection/rehydration boundary must exist");
+  const body = transpileModule(source.slice(start, end), {
+    compilerOptions: { target: ScriptTarget.ES2022, module: ModuleKind.ESNext },
+  }).outputText;
+  const run = new Function(
+    "readyUniverse", "rebuildEnvelope", "rebuildWiring", "selectActiveReadyMemos",
+    "assertReadyFamilyActivation", "PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG",
+    body,
+  );
+  run(rebuildEnvelope.readyGeneration, rebuildEnvelope, rebuildWiring,
+    activeReadyMemos, assertReadyFamilyActivation,
+    { forStrictFamily: () => ({ plugin: { manifest: { domain: "swap" } } }) });
 }
 
 function makeFixture(
@@ -205,8 +233,8 @@ function makeFixture(
           stage: "identity",
           failureCode: "rpc",
           reasonCode: "factory-child-reverse-binding:rpc",
-          candidateSnapshot: Object.freeze({ id }),
-        });
+          candidateSnapshot: input.candidate,
+        } as const);
       }
       return Object.freeze({
         status: "verified",
@@ -317,6 +345,83 @@ async function main(): Promise<void> {
   );
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
+    // Separate Ready directories inherit the ordinary rolling-rebuild state.
+    // No old outcome, coverage receipt or Graph is treated as the new run.
+    {
+      const oldDir = join(dir, "prior-ready"), newDir = join(dir, "next-ready");
+      const old = makeFixture(oldDir);
+      old.failKeys.add("b");
+      old.terminalKeys.add("c");
+      const partitions = {
+        candidateFamilyId: () => "univ2", familyDiscoveryDefinitionHash: () => "d".repeat(64),
+        dedupeFamilyCandidates: (observations: readonly unknown[]) => old.input.dedupeFamilyCandidates(observations)
+          .map(candidate => ({ ...(candidate as { id: string }), familyId: "univ2" })),
+      };
+      await rebuildUniverse({ ...old.input, ...partitions });
+      const before = await readFile(join(oldDir, "checkpoint.json"), "utf8");
+      const previous = (await old.store.load())!;
+      assert.equal(previous.readyGeneration!.familyPartitions!.univ2!.outcomesByCandidateKey["cand:c"]!.status,
+        "terminal-rejected", "the inherited snapshot includes the actual rejection, not only counters");
+      const nextSource = Object.freeze({ ...SOURCE, number: SOURCE.number + 10,
+        hash: "0x" + "b2".repeat(32), generation: 2 });
+      const freshReceipts = sourceReceipts(nextSource.number).map(receipt => ({
+        ...receipt, toBlock: nextSource.number, cutoffNumber: nextSource.number,
+        cutoffHash: nextSource.hash,
+        completedChunks: [{ ...receipt.completedChunks[0]!, toBlock: nextSource.number }],
+        observedThrough: { number: nextSource.number, hash: nextSource.hash },
+        appliedThrough: { number: nextSource.number, hash: nextSource.hash },
+      }));
+      const next = makeFixture(newDir, { runId: "different-ready",
+        scanSwapWindow: async () => ({
+          observations: ["a", "b", "c", "d"].map(id => ({ id, block: nextSource.number })),
+          sourceReceipts: freshReceipts,
+        }),
+      });
+      const inherited = await next.store.inheritReadyFrom(old.store);
+      assert.deepEqual(inherited, previous, "inherit the existing state without rewriting proofs");
+      await assert.rejects(next.store.inheritReadyFrom(old.store), /CAS conflict/);
+      await assert.rejects(old.store.inheritReadyFrom(old.store), /CAS conflict/);
+      next.failKeys.add("b");
+      const ready = await rebuildUniverse({ ...next.input, ...partitions,
+        freezeCanonicalHead: async () => nextSource,
+        observationRange: { fromBlock: nextSource.number, toBlock: nextSource.number },
+      });
+      assert.equal(next.attestCalls.has("a"), false, "unchanged proof skips full strict across directories");
+      for (const id of ["b", "c", "d"]) {
+        assert.equal(next.attestCalls.get(id), 1, "retryable, old rejection and new instance use existing strict rules");
+      }
+      assert.equal(next.scanCalls(), 1, "new source coverage must be obtained normally");
+      assert.equal(ready.generation, previous.readyGeneration!.generation + 1);
+      assert.deepEqual(ready.cutoff, nextSource);
+      assert.equal(ready.candidateAccounting.verified, 3);
+      assert.equal((await next.store.load())!.retryableAttemptsByCandidateKey["cand:b"]!.attemptCount, 2,
+        "retry history carries across Ready without suppressing the new attempt");
+      assert.equal(await readFile(join(oldDir, "checkpoint.json"), "utf8"), before,
+        "the original Ready and its rejected results remain untouched");
+
+      const stale = makeFixture(join(dir, "stale-ready"));
+      await stale.store.inheritReadyFrom(old.store);
+      stale.invalidReusableKeys.add("a");
+      await rebuildUniverse(stale.input);
+      assert.equal(stale.attestCalls.get("a"), 1, "existing invalidation still forces strict");
+
+      const empty = new UniverseRebuildCheckpointStore({ path: join(dir, "empty", "checkpoint.json") });
+      await assert.rejects(empty.inheritReadyFrom(empty), /completed source checkpoint/);
+      await mkdir(join(dir, "corrupt"));
+      await writeFile(join(dir, "corrupt", "checkpoint.json"), before.replace('"revision":', '"revision":999'));
+      await assert.rejects(empty.inheritReadyFrom(new UniverseRebuildCheckpointStore({
+        path: join(dir, "corrupt", "checkpoint.json"),
+      })), /fingerprint/);
+      const run = await old.store.beginOrResumeRun({
+        expectedRevision: previous.revision, runId: "unfinished-next-run", cutoff: SOURCE,
+        fromBlock: SOURCE.number, universeHash: "u", candidateSetHash: "c", candidateCount: 0,
+        candidatesByKey: {}, observedThrough: SOURCE, sourceReceipts: sourceReceipts(SOURCE.number),
+      });
+      assert(run.inProgressRun);
+      await assert.rejects(empty.inheritReadyFrom(old.store), /completed source checkpoint/);
+      assert.equal(await empty.load(), null, "failed imports cannot create a destination checkpoint");
+    }
+
     // A: retryable counts as an accounted outcome: the verified partition is
     // published, the completed run clears, and retryable work moves to the
     // independent probe queue.
@@ -746,6 +851,68 @@ async function main(): Promise<void> {
     assert.equal(failedResume.attestCalls.get("d"), 1);
     assert.equal(failedResume.scanCalls(), 1);
     assert.deepEqual((await failedResume.store.load())?.retryableAttemptsByCandidateKey, {});
+
+    // Explicit same-run completion preserves handled failures exactly. Only
+    // the missing candidate is attempted; failures never enter the Graph,
+    // even if an older memo for that candidate still exists in the store.
+    const pendingOnly = makeFixture(join(dir, "resume-completed-outcomes"), {
+      scanSwapWindow: async scan => ({
+        observations: ["a", "b", "c", "d"].map(id => ({ id })),
+        sourceReceipts: sourceReceipts(scan.fromBlock),
+      }),
+    });
+    pendingOnly.failKeys.add("b");
+    pendingOnly.terminalKeys.add("c");
+    await assert.rejects(rebuildUniverse({
+      ...pendingOnly.input,
+      attestationConcurrency: 1,
+      attestFamilyInstanceOnce: async input => {
+        if ((input.candidate as { id: string }).id === "d") throw new Error("pending-only fixture stop");
+        return pendingOnly.input.attestFamilyInstanceOnce(input);
+      },
+    }), /pending-only fixture stop/);
+    await pendingOnly.store.casUpsertMemo(pendingOnly.input.sealDurableVerifiedMemo({
+      candidate: { id: "b" }, result: {}, proofSource: SOURCE, familyCandidateKey: "cand:b",
+    }));
+    const pendingBefore = (await pendingOnly.store.load())!;
+    const pendingResume = {
+      ...pendingOnly.input,
+      resumeCompletedOutcomes: true,
+      freezeCanonicalHead: async (): Promise<never> => { throw new Error("completion must not move cutoff"); },
+      scanSwapWindow: async (): Promise<never> => { throw new Error("completion must not re-scan"); },
+    };
+    await assert.rejects(rebuildUniverse({ ...pendingResume,
+      expectedSourcePlanFingerprints: () => ({ startup: "9".repeat(64), activity: "5".repeat(64) }),
+    }), /completed-outcome resume source plan changed/);
+    await assert.rejects(rebuildUniverse({ ...pendingResume,
+      assertCanonicalHead: async () => { throw new Error("completion canonical fence failed"); },
+    }), /completion canonical fence failed/);
+    assert.deepEqual(await pendingOnly.store.load(), pendingBefore, "failed resume gates cannot mutate the checkpoint");
+    const pendingReady = await rebuildUniverse(pendingResume);
+    const pendingAfter = (await pendingOnly.store.load())!;
+    assert.deepEqual(pendingReady.cutoff, SOURCE);
+    assert.deepEqual(pendingReady.activeInstanceKeys, ["inst:a", "inst:d"]);
+    assert.deepEqual(pendingReady.candidateAccounting, {
+      total: 4, verified: 2, terminalRejected: 1, retryable: 1, remainingUnaccounted: 0,
+    });
+    assert.equal(pendingOnly.scanCalls(), 1);
+    for (const id of ["a", "b", "c", "d"]) assert.equal(pendingOnly.attestCalls.get(id), 1);
+    const priorRetry = pendingBefore.inProgressRun!.outcomesByCandidateKey["cand:b"];
+    assert.equal(priorRetry.status, "retryable");
+    assert.deepEqual(pendingAfter.retryableAttemptsByCandidateKey["cand:b"], {
+      ...priorRetry, runId: pendingResume.runId, cutoff: SOURCE,
+    }, "preserving a retryable is not a fresh attempt or a new timestamp");
+    await assert.rejects(rebuildUniverse(pendingResume), /completed-outcome resume requires an unfinished run/);
+    assert.deepEqual(await pendingOnly.store.load(), pendingAfter, "completion mode cannot silently start a new rolling run");
+
+    // Completion still re-attests a verified memo whose binding is no longer
+    // reusable; retaining negative outcomes cannot bypass admission validation.
+    throwFixture.invalidReusableKeys.add("a");
+    const invalidatedCompletion = await rebuildUniverse({ ...throwFixture.input, resumeCompletedOutcomes: true });
+    assert.equal(throwFixture.attestCalls.get("a"), 2);
+    assert.equal(throwFixture.attestCalls.get("b"), 1);
+    assert.equal(throwFixture.attestCalls.get("c"), 1);
+    assert.equal(invalidatedCompletion.candidateAccounting.remainingUnaccounted, 0);
 
     // E: a catalog-shaped but incomplete source set is rejected before the
     // run can attest or mint coverage. A source scan crash likewise leaves no
@@ -1593,11 +1760,31 @@ async function main(): Promise<void> {
     const refreshDir = await mkdtemp(join(tmpdir(), "ready-instance-refresh-"));
     try {
       const refresh = makeFixture(refreshDir);
-      await assert.rejects(startupReadyFromMain(refresh.input, { blind: false, dryRun: true }),
+      await assert.rejects(startupReadyFromMain(refresh.input, { blind: false, useReadyGeneration: true }),
         /requires one complete Ready checkpoint/);
       refresh.terminalKeys.add("c");
       const priorReady = await rebuildUniverse(refresh.input);
       const prior = (await refresh.store.load())!;
+      const selectedMemo = prior.verifiedMemos["cand:a"]!;
+      const legacyAlias = sealFixtureMemo({ ...selectedMemo,
+        familyCandidateKey: "cand:legacy-alias", candidateKey: "cand:legacy-alias",
+        compiledDescriptor: { kind: "descriptor", version: "old-alias" } });
+      const aliasFirst = { ...prior, verifiedMemos: {
+        "cand:legacy-alias": legacyAlias, ...prior.verifiedMemos,
+      } };
+      assert.doesNotThrow(() => assertReadyCheckpointPublicationCurrent(aliasFirst));
+      const consumedMemos: DurableVerifiedMemo[] = [];
+      await rehydrateReadyFromMain(aliasFirst, { ...refresh.input,
+        rehydrateVerifiedInstance: (input) => {
+          consumedMemos.push(input.memo);
+          return refresh.input.rehydrateVerifiedInstance(input);
+        },
+      });
+      assert.deepEqual(consumedMemos.map(memo => memo.familyCandidateKey),
+        activeReadyMemos(prior).map(memo => memo.familyCandidateKey),
+        "main rehydrates exactly the catalog-selected candidates even when a legacy alias comes first");
+      assert.equal(consumedMemos.find(memo => memo.familyInstanceKey === selectedMemo.familyInstanceKey),
+        selectedMemo, "main must consume the same evidence checked by the publication guard");
       const scansBefore = refresh.scanCalls();
       const noScan = async (): Promise<never> => { throw new Error("refresh must not discover"); };
       const refreshInput = {
@@ -1607,8 +1794,19 @@ async function main(): Promise<void> {
         expectedSourcePlanFingerprints: () => { throw new Error("do not relabel old discovery"); },
       };
       await assert.rejects(startupReadyFromMain({ ...refreshInput,
-        store: { load: async () => ({ ...prior, inProgressRun: {} }) } as unknown as UniverseRebuildCheckpointStore,
-      }, { blind: false, dryRun: true }), /requires one complete Ready checkpoint/);
+        store: { load: async () => ({ ...prior, inProgressRun: { outcomesByCandidateKey: {} } }) } as unknown as UniverseRebuildCheckpointStore,
+      }, { blind: false, useReadyGeneration: true }), /requires one complete Ready checkpoint/);
+      const unpublishedMemo = sealFixtureMemo({ ...prior.verifiedMemos["cand:a"]!,
+        familyCandidateKey: "cand:new", candidateKey: "cand:new",
+        familyInstanceKey: "inst:new", instanceKey: "inst:new", candidateSnapshot: { id: "new" } });
+      for (const flags of [{ blind: false, useReadyGeneration: true }, { blind: true, useReadyGeneration: false }]) {
+        await assert.rejects(startupReadyFromMain({ ...refreshInput,
+          store: { load: async () => ({ ...prior, inProgressRun: null,
+            verifiedMemos: { ...prior.verifiedMemos, "cand:new": unpublishedMemo } }) } as unknown as UniverseRebuildCheckpointStore,
+        }, flags, async () => { throw new Error("stale admission must stop before refresh"); }),
+        /Ready\/Graph is stale.*added=1/,
+        "actual main reuse path rejects a completed probe whose admitted instance is not published");
+      }
       let startupRefreshes = 0;
       const countRefresh: typeof refreshReadyInstances = async (input) => {
         startupRefreshes++;
@@ -1617,13 +1815,17 @@ async function main(): Promise<void> {
           "main forwards existing production attestation wiring");
         return refreshReadyInstances(input);
       };
-      for (const dryRun of [false, true]) {
-        const blind = await startupReadyFromMain(refreshInput, { blind: true, dryRun }, countRefresh);
+      for (const useReadyGeneration of [false, true]) {
+        const blind = await startupReadyFromMain(refreshInput, { blind: true, useReadyGeneration }, countRefresh);
         assert.deepEqual(blind.readyUniverse, priorReady, "blind fixed Ready is never refreshed, even with both flags");
       }
       assert.equal(startupRefreshes, 0);
-      const unchangedStartup = await startupReadyFromMain(refreshInput, { blind: false, dryRun: true }, countRefresh);
-      assert.equal(startupRefreshes, 1, "dry-run reuse invokes the existing selective refresh exactly once");
+      await assert.rejects(startupReadyFromMain(refreshInput,
+        { blind: false, useReadyGeneration: false }, countRefresh),
+      /Ready reuse must not start discovery\/rebuild/,
+      "without explicit reuse main keeps its default discovery path");
+      const unchangedStartup = await startupReadyFromMain(refreshInput, { blind: false, useReadyGeneration: true }, countRefresh);
+      assert.equal(startupRefreshes, 1, "explicit reuse invokes the existing selective refresh exactly once");
       const unchanged = unchangedStartup.readyUniverse;
       assert.equal(unchanged.generation, priorReady.generation);
       assert.equal((await refresh.store.load())!.revision, prior.revision);
@@ -1654,7 +1856,7 @@ async function main(): Promise<void> {
           ...seal(input),
           compiledDescriptor: { kind: "descriptor", quoteModel: "pool-owned" },
         }),
-      }, { blind: false, dryRun: true });
+      }, { blind: false, useReadyGeneration: true });
       const revised = revisedStartup.readyUniverse;
       assert.equal(refresh.scanCalls(), scansBefore);
       assert.equal(refresh.attestCalls.get("a"), 3, "invalidated instance retries a transient failure then verifies");
@@ -1700,7 +1902,7 @@ async function main(): Promise<void> {
             ...seal(input), compiledDescriptor: { kind: "must-not-persist" },
           }),
           log: (message) => failureLogs.push(message),
-        }, { blind: false, dryRun: true }),
+        }, { blind: false, useReadyGeneration: true }),
         new RegExp(`ready refresh cand:a: attempt=${expectedAttempts}/3 .*incumbent unchanged`));
         assert.equal(refresh.attestCalls.get("a")! - attemptsBefore, expectedAttempts,
           "only retryable outcomes use the bounded three-attempt budget");
@@ -1725,14 +1927,14 @@ async function main(): Promise<void> {
         }),
       }), /changed identity/);
       assert.deepEqual(await refresh.store.load(), after);
-      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, dryRun: true },
+      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, useReadyGeneration: true },
         async () => { throw new Error("fixture source/fatal stop"); }), /fixture source\/fatal stop/);
-      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, dryRun: true },
+      await assert.rejects(startupReadyFromMain(refreshInput, { blind: false, useReadyGeneration: true },
         async () => ({ ...revised, generation: revised.generation + 1 })), /root verification/);
       let reloads = 0;
       await assert.rejects(startupReadyFromMain({ ...refreshInput,
         store: { load: async () => reloads++ === 0 ? after : null } as unknown as UniverseRebuildCheckpointStore,
-      }, { blind: false, dryRun: true }, async () => revised), /root verification/);
+      }, { blind: false, useReadyGeneration: true }, async () => revised), /root verification/);
       assert.deepEqual(await refresh.store.load(), after, "startup refresh failure never falls back or mutates incumbent");
       let fences = 0;
       await assert.rejects(refreshReadyInstances({
@@ -1801,6 +2003,32 @@ async function main(): Promise<void> {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+  const sparseDir = await mkdtemp(join(tmpdir(), "ready-transactions-runner-"));
+  try {
+    const fixture = makeFixture(sparseDir);
+    const observationScope = { kind: "transaction-set" as const, selectionHash: "a".repeat(64), transactionCount: 3 };
+    const txInput: RebuildUniverseInput = { ...fixture.input, observationScope,
+      resolveTransactionObservationRange: async () => ({ fromBlock: 1, toBlock: SOURCE.number }),
+      scanSwapWindow: async ({ fromBlock }) => ({ observations: [{ id: "a" }, { id: "a" }, { id: "b" }],
+        sourceReceipts: sourceReceipts(fromBlock).map(receipt => ({ ...receipt, observationScope,
+          completedChunks: receipt.completedChunks.map(chunk => ({ ...chunk, observationScope })) })) }),
+      buildCoverage: value => fixture.input.buildCoverage(value).map(row => ({ ...row, observationScope })),
+    };
+    const ready = await rebuildUniverse(txInput);
+    assert.deepEqual(ready.observationScope, observationScope);
+    assert.equal(ready.universeRange.fromBlock, 1, "sparse TX bounds do not trigger continuous-window scanning");
+    assert.equal(ready.candidateAccounting.total, 2);
+    assert.deepEqual([...fixture.attestCalls], [["a", 1], ["b", 1]], "existing dedupe attests one instance once");
+    const checkpoint = await fixture.store.load();
+    await assert.rejects(rebuildUniverse(fixture.input), /observation scope differs/);
+    await assert.rejects(rebuildUniverse({ ...txInput, observationScope: { ...observationScope, selectionHash: "b".repeat(64) } }), /observation scope differs/);
+    await assert.rejects(rebuildUniverse({ ...txInput, observationWindowBlocks: 1 }), /cannot be combined/);
+    assert.deepEqual(await fixture.store.load(), checkpoint);
+    const retry = await rebuildUniverse(txInput);
+    assert.deepEqual(retry.observationScope, observationScope);
+    assert.deepEqual([...fixture.attestCalls], [["a", 1], ["b", 1]], "same TX set keeps valid strict memos");
+    console.log("transaction-set runner PASS (one Ready, existing instance dedupe, sparse scope and mismatch fences)");
+  } finally { await rm(sparseDir, { recursive: true, force: true }); }
   console.log("universe rebuild runner PASS");
 }
 

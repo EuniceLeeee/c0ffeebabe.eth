@@ -150,12 +150,19 @@ for (const target of [
   "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad",
   "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
   "0xa356867fDCEa8e71AEaF87805808803806231FdC",
-  "0x99a58482bd75cbab83b27ec03ca68ff489b5788f",
-  "0x16c6521dff6bab339122a0fe25a9116693265353",
   ANGSTROM_MAINNET_ADAPTER,
   ANGSTROM_MAINNET_HOOK,
 ]) {
   assert(targets.has(target.toLowerCase()), `missing strict intake ${target}`);
+}
+const curveIntakeEnabled = PRODUCTION_FAMILY_ACTIVATIONS.some(entry => entry.enabled &&
+  (entry.sourceFile === "curve-plain.production.ts" || entry.sourceFile === "curve-underlying.production.ts"));
+for (const target of [
+  "0x99a58482bd75cbab83b27ec03ca68ff489b5788f",
+  "0x16c6521dff6bab339122a0fe25a9116693265353",
+]) {
+  assert.equal(targets.has(target.toLowerCase()), curveIntakeEnabled,
+    `Curve intake must follow its owning Family activation: ${target}`);
 }
 
 assert.equal(PRODUCTION_STRICT_FAMILY_DECLARATIONS.isSwapLog({

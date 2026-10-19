@@ -5,7 +5,8 @@ import {
   type StateCallControl,
 } from "../shared/state/state-backend.js";
 import { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
-import { isRpcThrottleError } from "./rpc-throttle-guard.js";
+import { isRpcThrottleError, type LiveRpcThrottleObservation } from "./rpc-throttle-guard.js";
+import { RevmFatalError, type RevmFatalReason } from "./revm-sim-client.js";
 import { BlockActivityRangeInvalidatedError, MAX_ACTIVITY_TRANSITIONS } from "./blockscan-touched-state.js";
 import {
   isPassScopedExactStateBackend,
@@ -632,6 +633,8 @@ export interface SourceSimulationContext {
 export type SourceSimulationFactory = (input: {
   readonly source: CanonicalSource;
   readonly control: { readonly signal: AbortSignal; readonly deadlineAtMs: number };
+  /** Optional pass-owned retirement policy; other callers retain fail-fast. */
+  readonly onRpcThrottle?: (reason: Extract<RevmFatalReason, { kind: "rpc-throttle" }>) => void;
 }) => SourceSimulationContext;
 
 /** One existing pass/producer/hint slot; no scheduling or quote-time admission.
@@ -711,6 +714,8 @@ export interface BlockScanRuntimeLoopDependencies {
     "run"
   > & Partial<Pick<RethTransportScheduler, "completeStartup">>;
   readonly runtimeAbort: AbortController;
+  /** Ordinary live only; blind/offline callers keep their fatal policy. */
+  readonly rpcThrottleObservation?: Pick<LiveRpcThrottleObservation, "observeError" | "observeFatal" | "observeRecovery">;
   readonly sharedPlanner: Pick<TemplatePlanner, "setFlashLiquidity">;
   readonly backrunStatePublisher: Pick<
     BufferedBlockScanBackrunStatePublisher,
@@ -1003,6 +1008,28 @@ export class BlockScanRuntimeLoop {
 
   private observeTopologyHeader(blockNumber: number): Promise<BlockScanSourceHeader> {
     return this.deps.frozenTopology.observeHeader(blockNumber);
+  }
+
+  private observeRpcThrottle(blockNumber: number, error: unknown, controller?: AbortController): void {
+    if (!isRpcThrottleError(error)) return;
+    controller?.abort(error);
+    if (this.deps.rpcThrottleObservation) {
+      this.deps.rpcThrottleObservation.observeError(blockNumber, error);
+    } else if (!this.deps.runtimeAbort.signal.aborted) {
+      this.deps.runtimeAbort.abort(error);
+    }
+  }
+
+  private sourceSimulationWork(blockNumber: number, controller: AbortController): SourceSimulationWork {
+    const factory = this.deps.sourceSimulationFactory;
+    const observation = this.deps.rpcThrottleObservation;
+    return new SourceSimulationWork(factory && observation ? input => factory({
+      ...input,
+      onRpcThrottle: reason => {
+        controller.abort(new RevmFatalError(reason));
+        observation.observeFatal(blockNumber, reason);
+      },
+    }) : factory);
   }
 
   private topologyKey(): string {
@@ -1439,7 +1466,8 @@ export class BlockScanRuntimeLoop {
         const observeHeaderStartedAtMs = Date.now();
         try {
           header = await this.observeTopologyHeader(nextBlock);
-        } catch {
+        } catch (error) {
+          this.observeRpcThrottle(input.graph.sourceBlock, error);
           this.producerCriticalActive = false;
           break;
         } finally {
@@ -1480,14 +1508,14 @@ export class BlockScanRuntimeLoop {
         });
         const producerController = new AbortController();
         const detachProducerAbort = linkAbortController(this.deps.runtimeAbort.signal, producerController);
-        const simulationWork = new SourceSimulationWork(this.deps.sourceSimulationFactory);
+        const simulationWork = this.sourceSimulationWork(input.graph.sourceBlock, producerController);
         const producerPricingBackend = new PinnedRethQuoteBackend(
           this.deps.rpcUrl,
           anchoredGraph.sourceBlockHash,
           {
             signal: producerController.signal,
             onSourceUnavailable: (error) => producerController.abort(error),
-            onRpcThrottle: (error) => this.deps.runtimeAbort.abort(error),
+            onRpcThrottle: (error) => this.observeRpcThrottle(input.graph.sourceBlock, error, producerController),
             maxBatchSize: 128,
             maxConcurrentBatches: 4,
             retryRpcThrottle: true,
@@ -1587,6 +1615,7 @@ export class BlockScanRuntimeLoop {
             });
             bootstrapEscalated = true;
           }
+          producerController.signal.throwIfAborted();
           result = prepared;
         } finally {
           try {
@@ -1684,8 +1713,13 @@ export class BlockScanRuntimeLoop {
           ? nextBlock + 1
           : published.sourceBlock + 1;
       }
+      if (!this.deps.runtimeAbort.signal.aborted && result !== null &&
+          result.status !== "incomplete" && result.sourceBlock === targetBlock) {
+        this.deps.rpcThrottleObservation?.observeRecovery(targetBlock);
+      }
     })();
     task.catch((error) => {
+      this.observeRpcThrottle(input.graph.sourceBlock, error);
       console.log(
         `[searcher/blockscan-nminus1-state] ${JSON.stringify({
           sourceBlock: input.graph.sourceBlock,
@@ -1807,6 +1841,7 @@ export class BlockScanRuntimeLoop {
   private async observeControlledHeader(
     number: number, deadlineAtMs: number, signal: AbortSignal,
     stage = "startup canonical header",
+    observationBlock = number,
   ): Promise<BlockScanSourceHeader> {
     const controller = new AbortController();
     const detach = linkAbortController(signal, controller);
@@ -1817,10 +1852,11 @@ export class BlockScanRuntimeLoop {
     }).catch(error => {
       // The controlled raw observer sees the first HTTP response, without a
       // provider's internal throttle retry. Observe even retirement-time errors.
-      if (isRpcThrottleError(error) && !this.deps.runtimeAbort.signal.aborted) {
+      if (!this.deps.rpcThrottleObservation && isRpcThrottleError(error) &&
+          !this.deps.runtimeAbort.signal.aborted) {
         console.warn("[searcher/blockscan-startup-warm] HTTP 429 during canonical header observation");
-        this.deps.runtimeAbort.abort(error);
       }
+      this.observeRpcThrottle(observationBlock, error, controller);
       throw error;
     });
     try {
@@ -2161,7 +2197,7 @@ export class BlockScanRuntimeLoop {
       passController,
     );
     const passSignal = passController.signal;
-    const simulationWork = new SourceSimulationWork(this.deps.sourceSimulationFactory);
+    const simulationWork = this.sourceSimulationWork(blockNumber, passController);
     const activePass = this.activePass = {
       blockNumber,
       mode: passMode,
@@ -2519,7 +2555,7 @@ export class BlockScanRuntimeLoop {
       canonicalBlock: number,
       stage: string,
     ): Promise<BlockScanSourceHeader> =>
-      this.observeControlledHeader(canonicalBlock, passDeadlineAtMs, passSignal, stage);
+      this.observeControlledHeader(canonicalBlock, passDeadlineAtMs, passSignal, stage, blockNumber);
     beginStage("state", {
       atMs: passStartedAtMs,
       atPerf: passStarted,
@@ -2582,6 +2618,10 @@ export class BlockScanRuntimeLoop {
           }
           throw error; // This pass never publishes or carries an invalid range.
         }
+      })
+      .catch(error => {
+        this.observeRpcThrottle(blockNumber, error, passController);
+        throw error;
       })
       .then(
         (value): PromiseSettledResult<ReadonlySet<string>> => {
@@ -2791,7 +2831,7 @@ export class BlockScanRuntimeLoop {
               `block-scan source-N pricing block ${blockNumber} ` +
               `generation ${generation}`,
             onSourceUnavailable: (error) => passController.abort(error),
-            onRpcThrottle: (error) => this.deps.runtimeAbort.abort(error),
+            onRpcThrottle: (error) => this.observeRpcThrottle(blockNumber, error, passController),
             allowSingleCallFallback: false,
             ...(this.deps.rethTransportScheduler === undefined
               ? {} : { transportScheduler: this.deps.rethTransportScheduler }),
@@ -3004,6 +3044,7 @@ export class BlockScanRuntimeLoop {
             );
           }
         }
+        passSignal.throwIfAborted();
         finishStage(
           "state",
           runtime.status === "incomplete" ? "failed" : "ran",
@@ -3517,7 +3558,7 @@ export class BlockScanRuntimeLoop {
               signal: passSignal,
               deadlineAtMs: exactFactoryInput.deadlineAtMs,
               onSourceUnavailable: (error) => passController.abort(error),
-              onRpcThrottle: (error) => this.deps.runtimeAbort.abort(error),
+              onRpcThrottle: (error) => this.observeRpcThrottle(blockNumber, error, passController),
               maxBatchSize: exactFactoryInput.maxBatchSize,
               retryRpcThrottle: true,
               maxConcurrentBatches:
@@ -4429,6 +4470,7 @@ export class BlockScanRuntimeLoop {
         skippedReason ??= "solve_deadline";
       }
     } catch (error) {
+      this.observeRpcThrottle(blockNumber, error, passController);
       if (
         passSignal.aborted &&
         passSignal.reason instanceof PendingEvidencePriorityInterruption
@@ -4547,6 +4589,11 @@ export class BlockScanRuntimeLoop {
           skippedReason ??= "diagnostic_stage_deadline";
         }
         completeAuditStages();
+        if (!passSignal.aborted && !this.deps.runtimeAbort.signal.aborted &&
+            stageBoundaries.state.status === "ran" &&
+            (outcome === "ran" || outcome === "degraded" || outcome === "startup_warm")) {
+          this.deps.rpcThrottleObservation?.observeRecovery(blockNumber);
+        }
         recordPass();
       } finally {
         if (

@@ -1,0 +1,582 @@
+{
+  "schemaVersion": 1,
+  "scope": "Align app-run2 live central pipeline with current Family workspace; actual dirty baseline preserved",
+  "appRoot": "/opt/mev-cloud/app-run2",
+  "appHead": "a70c0555704ee011063306af161731e085e21edd",
+  "baseHead": "9dc4e70a1a1aff74164cb07c8c981e4592410429",
+  "behavior": [
+    "Bring actual app four-hop effective valuation into existing producer and quote interfaces.",
+    "Bring app temporary RPC throttle observation/retirement across source passes; retain quota stop and complete drain.",
+    "Bring independent Ready reuse/inheritance and completed-outcome resume options while preserving current atomic publication/reverse identity.",
+    "Bring optional stage/funding settings and telemetry; current run retains existing inputs, concurrency and disabled submission.",
+    "Retain current 48 installed Families, actual-receipt/runtime callback/native conversion, 0/1 rounding and inventory protections.",
+    "Retain current pinned-startup effective/raw continuation and bounded live cold-window failure/drain."
+  ],
+  "compatibility": {
+    "baseFailures": [
+      "Actual baseline selector builds blocked callback prefix before rejection:25/26; minimum early guard yields26/26.",
+      "Actual baseline Ready classification tests expect raw logs instead of typed startup-candidate; fixture corrected3/3."
+    ],
+    "incomingTestFailure": "App-only settlement inventory assumed external raw-native recipient; adapted through existing generic runtime-asset settlement mapping. Original307 tests passed; failure retained.",
+    "excluded": "App compact/raw VM/compiler and submission follow-up branch require different contracts; not needed for price publication and would replace current stronger settlement semantics."
+  },
+  "localChecks": [
+    {
+      "name": "effective-mid",
+      "exitCode": 0,
+      "seconds": 0.18,
+      "sha256": "a545dac37ee5b77baffa70fe01402f1101b59d88fb654216c0dca4a6afb77589"
+    },
+    {
+      "name": "runtime-loop",
+      "exitCode": 0,
+      "seconds": 5.514,
+      "sha256": "e23972d46edf69fb1086fa2b16b24511e7e554bb3e69ade2cb3619b07c9e6919"
+    },
+    {
+      "name": "startup-warm",
+      "exitCode": 0,
+      "seconds": 5.746,
+      "sha256": "ccf12b543b27023e21eb5a593a4a44c2b31b0e810962ad7da43dd67863020172"
+    },
+    {
+      "name": "raw-continuation",
+      "exitCode": 0,
+      "seconds": 1.031,
+      "sha256": "1f17585dd5c66a95b289ff9cd9064bf06a89e32b9c71c18cb669ff40c3a3d74b"
+    },
+    {
+      "name": "head-window",
+      "exitCode": 0,
+      "seconds": 1.304,
+      "sha256": "7ac41ac565917bcec804c4114c743e6022e0482c46c5aa2ab7a5e188657677a5"
+    }
+  ],
+  "independent": [
+    {
+      "review": "independent merged live pipeline source review",
+      "createdAt": "2026-10-19T08:48:29.814331+00:00",
+      "readOnly": true,
+      "noRpcBuildTestLiveOrSecretReads": true,
+      "status": "source integration suitable for validation; publication and 250-window acceptance unverified",
+      "pins": {
+        "listener/src/searcher/main.ts": {
+          "snapshots/app": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/snapshots/app/listener/src/searcher/main.ts",
+            "sha256": "6707854c601c95954bf39104189c804273882255396600e5135dd19b06ee77f3",
+            "bytes": 298945
+          },
+          "snapshots/family": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/snapshots/family/listener/src/searcher/main.ts",
+            "sha256": "0f594cf1bb0d2d3b1cc9dad7de4d2cf5ee2c7999ef5ecbfda14a02fc894c95a1",
+            "bytes": 310041
+          },
+          "merged-candidates": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/merged-candidates/listener/src/searcher/main.ts",
+            "sha256": "656c9fc16235b478c6fe88f8502cf25c4d7edb2e500d146895d40a5591b51396",
+            "bytes": 313247
+          }
+        },
+        "listener/src/searcher/blockscan-runtime-loop.ts": {
+          "snapshots/app": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/snapshots/app/listener/src/searcher/blockscan-runtime-loop.ts",
+            "sha256": "69e627ec4b0162bade154ae4c3c0c5f483578f6b33e168e7da703c3977163fa0",
+            "bytes": 200054
+          },
+          "snapshots/family": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/snapshots/family/listener/src/searcher/blockscan-runtime-loop.ts",
+            "sha256": "f1229a58cdfa6917e32b168ccf1e1c763a8a1c3b32c97c34069ae844463fa482",
+            "bytes": 201418
+          },
+          "merged-candidates": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/merged-candidates/listener/src/searcher/blockscan-runtime-loop.ts",
+            "sha256": "2e9ad57a4a41501e0bfc72d6cfae6deaa0cd21e26b1cedd73958eb0bd261f8bc",
+            "bytes": 203965
+          }
+        },
+        "listener/src/searcher/blockscan-effective-mid.ts": {
+          "snapshots/app": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/snapshots/app/listener/src/searcher/blockscan-effective-mid.ts",
+            "sha256": "6b232445706ce6619c83248086659875b201c1fc837c10d610c98368b5bb7a92",
+            "bytes": 22987
+          },
+          "snapshots/family": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/snapshots/family/listener/src/searcher/blockscan-effective-mid.ts",
+            "sha256": "39a9311130ba7eda6da7f995a58a87acd089940924cbd62b73e531a3273e349f",
+            "bytes": 23511
+          },
+          "merged-candidates": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/merged-candidates/listener/src/searcher/blockscan-effective-mid.ts",
+            "sha256": "13ea12a4d464f32dcf68c43666f773f32afd2d5ffeaf3677d4c61efa14794948",
+            "bytes": 23774
+          }
+        }
+      },
+      "scope": {
+        "target": "keyless dry-run blockscan, backrun/mempool disabled; three user-selected families disabled; wait for actual pricing publication and observe authorized 250 new heads",
+        "excluded": "No repeat of old per-family latency attribution; no broad source audit; no changes to candidates/cloud/IMPL"
+      },
+      "findings": [
+        {
+          "id": "window-start",
+          "severity": "conditional-blocker",
+          "source": "merged-candidates/listener/src/searcher/main.ts:3158-3187,3472-3505",
+          "fact": "LiveHeadWindow is created immediately from seedHead; every later real WS/HTTP head consumes the bounded window while startupWarmPending remains true. At 250 heads, pending startup latches failure and ordinary cancellation/drain. It does not wait for price publication before starting the 250-head count.",
+          "action": "If latest requested measurement is 250 heads AFTER warm publication, move measurement admission to a completed publication/drain boundary with an explicit warmup lifecycle; preserve cold failure evidence and existing stop/drain. If 250 heads including warmup remains intended, retain current boundary and report failure when publication is absent; do not call process startup completion."
+        },
+        {
+          "id": "ready-activation",
+          "severity": "launch-precondition",
+          "source": "merged-candidates/listener/src/searcher/main.ts:2148-2154",
+          "fact": "assertReadyCheckpointPublicationCurrent and assertReadyFamilyActivation remain. Environment-only family disable against an unchanged all-family Ready can reject before warmup.",
+          "action": "Freeze a legitimate Ready/config pair matching the three disabled families using existing supported composition/projection; preserve original checkpoint. This review did not inspect the new run configuration or assert a mismatch exists."
+        },
+        {
+          "id": "publication-proof",
+          "severity": "acceptance-precondition",
+          "source": "merged-candidates/listener/src/searcher/main.ts:1299-1312; blockscan-runtime-loop.ts:3109-3204,4566-4571",
+          "fact": "effective-mid complete alone is a draft result; startup success requires coordinator publication with effectiveComplete, non-incomplete runtime, startup_warm record, then matching source/generation backend+simulation drain. Current candidate logs these boundaries separately. Degraded publication may initialize healthy predecessors and is not evidence every enabled family succeeded.",
+          "action": "Require actual pricing-publication with effectiveComplete=true and exact source/hash/generation; join startup_warm, source-n-call-stats-final/pass drain, output rows and family coverage. Record failed/unresolved/absent families separately."
+        }
+      ],
+      "retainedCapabilities": [
+        {
+          "capability": "app ordinary-live temporary throttle policy",
+          "evidence": "candidate runtime-loop observeRpcThrottle/sourceSimulationWork and main rpcThrottleObservation; rpc-throttle-guard identical to app",
+          "details": "Fail/drain affected pass; spent quota immediate terminal; five failed distinct sources terminal; later healthy drained source recovery. Does not hide 429 or retry outside scheduler."
+        },
+        {
+          "capability": "app four-hop effective input discovery",
+          "evidence": "candidate effective constant MAX_EFFECTIVE_INPUT_PATH_HOPS=4; all traversal/preparation/depth loops use it; candidate main imports/logs same constant",
+          "details": "App implementation preserved plus target same-source private draft safety checks; not a guarantee of speed and may increase actual work."
+        },
+        {
+          "capability": "target private same-pin resumable warm",
+          "evidence": "candidate runtime-loop:1873-1995; candidate effective:235-244; target retained strict-current-runtime-coordinator",
+          "details": "One source pin and backend, fresh generation/session controls on retry; canonical+topology+coordinator revalidation before publication; only allowed deadline failures retry; backend drain/simulation retirement each attempt; cursor close in finally."
+        },
+        {
+          "capability": "app source-N production pipeline",
+          "evidence": "candidate runtime-loop:2790-3046",
+          "details": "Separate bootstrap budget after activity, source-pinned shared producer transport, raw/effective preparation, steady Funding preparation and steady wider batching remain. No alternate benchmark scheduler."
+        },
+        {
+          "capability": "target strict shutdown and unsigned identity",
+          "evidence": "candidate main:631-633,906-913,3235-3278,3469-3505; retained live-runtime-identity.ts",
+          "details": "Explicit keyless validates dry-run+submit=0 before lazy dotenv or private-key property access, public owner VoidSigner; idempotent stop latches abort, joins runtime/activity/simulation and closes telemetry. Candidate runtime waitForIdle also joins producer successors, beyond app baseline."
+        }
+      ],
+      "notImportedAndNotWarmupBlockers": [
+        {
+          "capability": "app raw Solidity/Yul executor entry and raw script schemas",
+          "reason": "Changes execution/final-sim representation, not pre-pricing Ready/raw/effective initialization. Current protected executor/runtime settlement retained; whole-live executable equivalence to app is not claimed."
+        },
+        {
+          "capability": "app submission evidence, builder follow-up and fee routing",
+          "reason": "Broadcast/submission path outside unsigned blockscan scope; no dependency for pricing publication."
+        },
+        {
+          "capability": "app narrower family defaults",
+          "reason": "Current user-selected family set must be frozen explicitly. Importing old defaults would silently change workload."
+        }
+      ],
+      "remainingRisks": [
+        {
+          "risk": "Shared transport remains same underlying pinned backend/scheduler as both actual workspaces. Throttle adaptation persists during a cold pin and completeStartup restoration occurs only after successful startup drain. Merging app central code alone cannot guarantee recovery from a very slow provider/quote workload.",
+          "classification": "empirical startup remains unverified, not newly proven implementation blocker"
+        },
+        {
+          "risk": "Startup may renew deadline for the same canonical pin; new-head scheduling does not itself prove publication or forward progress. Actual publication and matching drain must be observed.",
+          "classification": "lifecycle measurement"
+        },
+        {
+          "risk": "Fallback effective owned backend still aborts runtime on terminal throttle; ordinary Source-N path supplies producer backend and uses imported per-pass observer.",
+          "classification": "scope boundary, not ordinary warm-path defect"
+        }
+      ],
+      "recommendation": "Validate frozen candidate and compatible Ready/config, resolve head-window counting against latest requirement, then run only authorized dry-run. Do not mark warmup fixed or performance passed before matching actual publication/drain evidence. No further app execution/submission port is necessary for the price-publication target based on these three-file source comparisons.",
+      "validationPerformed": "Read actual local three-way source exports and candidate bytes; read retained identity helper and merge decision artifacts. No new test/build/live results claimed. Canonical test/tool reconciliation belongs to parent integration execution."
+    },
+    {
+      "review": "independent minimal baseline compatibility corrections",
+      "createdAt": "2026-10-19T08:55:23.028878+00:00",
+      "verdict": "installable within parent central integration; no blocking findings",
+      "scope": "local validation-tree only, no cloud/RPC/live/build",
+      "files": [
+        {
+          "relativePath": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+          "validatedCandidate": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/validation-tree/listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+            "sha256": "97224ba04620fa9a602065906d2859ef070f2d9f9168cfed9ae450deba59946b",
+            "bytes": 10637
+          },
+          "mergedCandidate": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/merged-candidates/listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+            "sha256": "97224ba04620fa9a602065906d2859ef070f2d9f9168cfed9ae450deba59946b",
+            "bytes": 10637
+          },
+          "actualFamilyBefore": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/snapshots/family/listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+            "sha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+            "bytes": 10350
+          }
+        },
+        {
+          "relativePath": "listener/src/searcher/test/ready-activity-classification.ts",
+          "validatedCandidate": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/validation-tree/listener/src/searcher/test/ready-activity-classification.ts",
+            "sha256": "75d8a8fc0746ae66ce838f21bda916ab71e24f10b24b13c75507e4294701a8f1",
+            "bytes": 9638
+          },
+          "mergedCandidate": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/merged-candidates/listener/src/searcher/test/ready-activity-classification.ts",
+            "sha256": "75d8a8fc0746ae66ce838f21bda916ab71e24f10b24b13c75507e4294701a8f1",
+            "bytes": 9638
+          },
+          "actualFamilyBefore": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/snapshots/family/listener/src/searcher/test/ready-activity-classification.ts",
+            "sha256": "9fb1b19d1eea2c779a268e75e7606b05ead99ba364ceb9b0561a283f068fa14e",
+            "bytes": 9400
+          }
+        }
+      ],
+      "findings": [
+        {
+          "change": "blocked-prefix callback preflight",
+          "source": "simulator/blockscan-sim-amount-selector.ts:56-63",
+          "review": "Same existing session.blocksPrefixInversion predicate now runs before callback-specific quote-output/direct-output/deferred-input builds. Previous post-build predicate retained. Production predicate derives immutable binding.kind===credit. Regular runtime legs and funded fallback remain intact; callback-enabled valid paths, disabled callback control, quote fallback, source fault propagation and final sim remain covered. This avoids forbidden speculative construction rather than weakening execution checks.",
+          "baseline": "actual family baseline 25/26, callback blocked-prefix issued 12 settlement requests where 0 was required; saved existing log retained",
+          "result": "independently rerun all 26 cases passed, including blocked-prefix zero requests, callback success/revert/infrastructure and funded fallback"
+        },
+        {
+          "change": "Ready fixture typed observation",
+          "source": "test/ready-activity-classification.ts:94",
+          "review": "Fixture expectation now matches production universe-rebuild-production.ts:3334-3336 wrapping classified log representatives as startup-candidate. No production classification logic changed by this correction. Original complete activity hashes, result count, cold/warm byte-equivalence, alternate-family scope separation and interrupted-resume assertions remain. Expected inner candidate uses existing classifier as before family identity setup, so this validates wrapper/cache semantics, not independent protocol decoder correctness.",
+          "baseline": "actual family baseline 1/3; two cold parity checks expected raw log instead of typed candidate",
+          "result": "independently rerun all 3 tests passed for trace_block, debug_traceBlockByNumber and interrupted classification recovery"
+        }
+      ],
+      "tests": [
+        {
+          "argv": [
+            "node",
+            "--import",
+            "tsx",
+            "--test",
+            "src/searcher/test/blockscan-sim-amount-selector.ts"
+          ],
+          "cwd": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/validation-tree/listener",
+          "exitCode": 0,
+          "tests": 26,
+          "passed": 26,
+          "failed": 0,
+          "log": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/independent-selector-regression.log",
+            "sha256": "b444b8ddfa29e6ccb29a3796add6d89b4b5f97b7fd33d13f6751569508f753c4",
+            "bytes": 2675
+          }
+        },
+        {
+          "argv": [
+            "node",
+            "--import",
+            "tsx",
+            "--test",
+            "src/searcher/test/ready-activity-classification.ts"
+          ],
+          "cwd": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/validation-tree/listener",
+          "exitCode": 0,
+          "tests": 3,
+          "passed": 3,
+          "failed": 0,
+          "log": {
+            "path": "/Users/eunice/src/MEV/logs/app-run2-central-integration-20261019/independent-ready-classification-regression.log",
+            "sha256": "afebc161173def760ca2ecf7fb49fda9c0446ba492361e611013328ed241363e",
+            "bytes": 4261
+          }
+        }
+      ],
+      "limits": [
+        "This independently confirms only the two targeted corrections on the local integrated candidate; full integration build and remaining suites are parent-owned.",
+        "No production startup, pricing publication, 250-block completion or timing pass is asserted.",
+        "Family-to-candidate diff also includes preexisting approved fundingActionId integration and test parameter typing; these are not introduced by the two corrections reviewed here."
+      ]
+    }
+  ],
+  "notPerformancePass": true,
+  "livePlan": {
+    "newHeads": 250,
+    "familiesEnabled": 45,
+    "disabled": [
+      "fluid-dex",
+      "balancer-v2",
+      "curve-underlying"
+    ],
+    "backrun": false,
+    "mempool": false,
+    "dryRun": true,
+    "submission": false,
+    "ready": "Existing production-filtered45Family Ready generation11/revision4517;24065active/49603edges; no new discovery",
+    "completion": "Actual complete same-source price publication and bounded250-head production run/drain; process startup is insufficient",
+    "swap": "8GiB task-owned swap as previously authorized; preserve paging metrics; no steady-state performance pass with paging"
+  },
+  "preservation": {
+    "noSigningBroadcastDeployment": true,
+    "originalReadySha256": "47a0cf31a475f75fc554397bf32683f8b2a80893cc2b311f274dde9ccdda2a7d",
+    "oldFailuresRetained": true,
+    "preexistingDirty": " M listener/package.json\n M listener/src/searcher/blockscan-at-block-cli.ts\n M listener/src/searcher/generated/family-capability-shadow.generated.json\n M listener/src/searcher/main.ts\n M listener/src/searcher/ready-family-update-cli.ts\n M listener/src/searcher/strict-ready-runtime.ts\n M listener/src/searcher/test/blockscan-at-block-cli.ts\n M listener/src/searcher/test/family-dual-execution.ts\n M listener/src/searcher/test/strict-ready-runtime.ts\n M listener/src/searcher/test/universe-rebuild-production.ts\n M listener/src/searcher/test/universe-rebuild-runner.ts\n M listener/src/searcher/test/universe-rebuild-startup-cli.ts\n M listener/src/searcher/universe-rebuild-checkpoint.ts\n M listener/src/searcher/universe-rebuild-production.ts\n M listener/src/searcher/universe-rebuild-runner.ts\n M listener/src/searcher/universe-rebuild-startup-cli.ts\n M listener/src/searcher/venues/swaps/aqua-swapvm-family/test/historical-dual.ts\n M listener/src/searcher/venues/swaps/balancer-v2-family/test/historical-recipient.ts\n M listener/src/searcher/venues/swaps/univ1-family/codec.ts\n M listener/src/searcher/venues/swaps/univ1-family/exact.ts\n M listener/src/searcher/venues/swaps/univ1-family/execution.ts\n M listener/src/searcher/venues/swaps/univ1-family/identity.ts\n M listener/src/searcher/venues/swaps/univ1-family/manifest.ts\n M listener/src/searcher/venues/swaps/univ1-family/pricing.ts\n M listener/src/searcher/venues/swaps/univ1-family/routes.ts\n M listener/src/searcher/venues/swaps/univ1-family/state.ts\n M listener/src/searcher/venues/swaps/univ1-family/test/contract.ts\n M listener/src/searcher/venues/swaps/univ1-family/test/fixtures.ts\n M listener/src/searcher/venues/swaps/univ1-family/types.ts\n?? analysis/node_modules\n?? listener/node_modules\n?? listener/src/searcher/ready-transaction-input.ts\n?? listener/src/searcher/test/family-integration/kyber-yb-compound/historical-dual.debug.ts\n?? listener/src/searcher/test/ready-transaction-input.ts\n?? listener/src/searcher/venues/protocols/set-redemption-family/test/historical-runtime-dual.debug.ts\n?? listener/src/searcher/venues/swaps/balancer-v3-family/test/historical-runtime-dual.debug.ts\n?? listener/src/searcher/venues/swaps/univ1-family/test/historical-dual.ts\n?? listener/src/searcher/venues/swaps/univ1-family/test/historical-ready.ts\n?? listener/src/searcher/venues/swaps/univ1-family/test/implementation-bytecode.json\n"
+  },
+  "cloudValidation": {
+    "checks": [
+      {
+        "name": "build-live",
+        "exitCode": 0,
+        "seconds": 8.507,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      },
+      {
+        "name": "effective-mid",
+        "exitCode": 0,
+        "seconds": 0.324,
+        "logSha256": "a545dac37ee5b77baffa70fe01402f1101b59d88fb654216c0dca4a6afb77589"
+      },
+      {
+        "name": "runtime-loop",
+        "exitCode": 0,
+        "seconds": 10.24,
+        "logSha256": "f3cace06f15e3a8f524f4caed3709993188a05056cf80e945c932d6965684b05"
+      },
+      {
+        "name": "startup-warm",
+        "exitCode": 0,
+        "seconds": 6.858,
+        "logSha256": "e11c5ef9dfb59742919e92a4746bc016ee2dfb2ef1ae79c575092cb6686e37c1"
+      },
+      {
+        "name": "raw-continuation",
+        "exitCode": 0,
+        "seconds": 1.859,
+        "logSha256": "437171a5a352f0eb94c0ab9db5e67a031c48036fe603865212170c1137925d79"
+      },
+      {
+        "name": "head-window",
+        "exitCode": 0,
+        "seconds": 2.296,
+        "logSha256": "7865d24f1a54351e5573ba7ffbf9def6bd34bdce266c44d605a84273d5e4b0ad"
+      },
+      {
+        "name": "stage-settings",
+        "exitCode": 0,
+        "seconds": 1.997,
+        "logSha256": "7428a4f9a55d9c41e8371c812e1081103220f9468c75156f94aa98cd02b3c58e"
+      },
+      {
+        "name": "throttle",
+        "exitCode": 0,
+        "seconds": 0.362,
+        "logSha256": "ec830e18952e0a1b49b414ca558235a5ff372137dc7f679e27f9fe4e52dcb928"
+      },
+      {
+        "name": "sim-selector",
+        "exitCode": 0,
+        "seconds": 0.477,
+        "logSha256": "3964daa5b6bf0f3f7328395e890d4b785275c6e6b51bfb068010d117174baaad"
+      },
+      {
+        "name": "effective-telemetry",
+        "exitCode": 0,
+        "seconds": 3.514,
+        "logSha256": "bb65592e64509dd7ea2daf3458793f81baba5d50573a315a87b33843222ab216"
+      },
+      {
+        "name": "ready-archive",
+        "exitCode": 0,
+        "seconds": 3.04,
+        "logSha256": "3b5c8ef31e81bb362bf7dc20ffdc30400f10351b648eb61e1203f603ef894146"
+      },
+      {
+        "name": "ready-classification",
+        "exitCode": 0,
+        "seconds": 6.928,
+        "logSha256": "1b5014fba759bbde4e1f43679792327b3af54ba5158b1db871279f791b0c42d9"
+      },
+      {
+        "name": "ready-runner",
+        "exitCode": 0,
+        "seconds": 2.786,
+        "logSha256": "865ec125e2e8fb398127125914afa3fec59c31ef16993df889b9b71186bc5a06"
+      },
+      {
+        "name": "family-dual",
+        "exitCode": 1,
+        "seconds": 8.578,
+        "logSha256": "b8dc17780acaea7c1195473b8c6f748b6047af039afb642652f285822a13a5be"
+      },
+      {
+        "name": "pinned-backend",
+        "exitCode": 0,
+        "seconds": 23.276,
+        "logSha256": "38d1ea2f3723cc96a0fb239c8fb4749ec9f4dc7ed5916304f921e93a2ea2ec1c"
+      },
+      {
+        "name": "runtime-defaults",
+        "exitCode": 0,
+        "seconds": 1.95,
+        "logSha256": "6632eb8ba9d1cc56c8746d1e5fbed1512c7f7c825da7c19748bd623075d94448"
+      },
+      {
+        "name": "family-declarations",
+        "exitCode": 0,
+        "seconds": 1.701,
+        "logSha256": "13a174bdca7acb421661cad0a52510e0ac0949a44305f71ec305e314bf2ea5fb"
+      },
+      {
+        "name": "runtime-settlement",
+        "exitCode": 0,
+        "seconds": 0.454,
+        "logSha256": "c033a5e405295a8b69058afdda07e722aa5a833e10a9e0a0fc9b65c5e1268457"
+      },
+      {
+        "name": "strict-session",
+        "exitCode": 0,
+        "seconds": 4.747,
+        "logSha256": "90bab341304a0287b741f72fc7b0873635ba776b0550cbdffa844040b56a1f91"
+      },
+      {
+        "name": "family-dual-final",
+        "exitCode": 0,
+        "seconds": 8.588,
+        "logSha256": "20565f3efc8f811690d5e5184c3638086f0408dd2e51deb06e356b7cbf30d85d"
+      },
+      {
+        "name": "build-live-final",
+        "exitCode": 0,
+        "seconds": 8.376,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      }
+    ],
+    "complete": {
+      "at": "2026-10-19T09:08:07.575526+00:00",
+      "allPassed": true,
+      "checkGroups": 19,
+      "attempts": 21,
+      "priorFailuresRetained": true,
+      "concurrentHistoricalTestChangesPreserved": [],
+      "files": [
+        {
+          "path": "listener/src/searcher/blockscan-effective-mid.ts",
+          "before": "39a9311130ba7eda6da7f995a58a87acd089940924cbd62b73e531a3273e349f",
+          "after": "13ea12a4d464f32dcf68c43666f773f32afd2d5ffeaf3677d4c61efa14794948"
+        },
+        {
+          "path": "listener/src/searcher/blockscan-enumeration-solver-telemetry.ts",
+          "before": "9adb22084a1c25bc7cd4a05b27c65023873c83c6cfd51f1d364de7a81f5e0db5",
+          "after": "8fef81a63876013b7efc0d720c7ab3e108c1b355d7ab01b770e955739634fa6f"
+        },
+        {
+          "path": "listener/src/searcher/blockscan-live-stage-settings.test.ts",
+          "before": "89d62b35b0897ed8df60c81584b798c94271e81b32b58347777f99d158e44933",
+          "after": "01473b0cde5fc13d1e07adc49f85c8ddbfc5ff33483dad315dc88cbb9357689b"
+        },
+        {
+          "path": "listener/src/searcher/blockscan-runtime-loop.ts",
+          "before": "f1229a58cdfa6917e32b168ccf1e1c763a8a1c3b32c97c34069ae844463fa482",
+          "after": "2e9ad57a4a41501e0bfc72d6cfae6deaa0cd21e26b1cedd73958eb0bd261f8bc"
+        },
+        {
+          "path": "listener/src/searcher/main.ts",
+          "before": "0f594cf1bb0d2d3b1cc9dad7de4d2cf5ee2c7999ef5ecbfda14a02fc894c95a1",
+          "after": "656c9fc16235b478c6fe88f8502cf25c4d7edb2e500d146895d40a5591b51396"
+        },
+        {
+          "path": "listener/src/searcher/ready-activity-archive.ts",
+          "before": "720a3c6476105218acca11d25aa0ddafbe26ef16854fb33968cc6b2279547d60",
+          "after": "2837590704b88faed8a063a0c6c5912919bea1051d61f683c39f6ca409c1dc0d"
+        },
+        {
+          "path": "listener/src/searcher/rpc-throttle-guard.ts",
+          "before": "b7f57125a5f16234cd4a56341944042648c5314464c78f5724d7fcc890c9bc0b",
+          "after": "124f76a701d3a911c3b4bcff0cc043bcf5b075c3e3232e7dd992d59c41eb1318"
+        },
+        {
+          "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+          "before": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+          "after": "97224ba04620fa9a602065906d2859ef070f2d9f9168cfed9ae450deba59946b"
+        },
+        {
+          "path": "listener/src/searcher/test/blockscan-effective-mid.ts",
+          "before": "93c193dd4fae12bc8c83049945f01b64b87ca8c7f80b6c523646241c9534fefa",
+          "after": "be16803f847ba200f62a64760a8770abe61281b198d15aa4ebba0045d761a960"
+        },
+        {
+          "path": "listener/src/searcher/test/blockscan-enumeration-solver-telemetry.ts",
+          "before": "a002321d1d79e70539478a613c6645ddde3f2d09477f48d31d32f34578dc5d45",
+          "after": "a1aafc136bcdd642e1b8cb6321b8d57cbaab618250bbc4e57342fcdc42cccda1"
+        },
+        {
+          "path": "listener/src/searcher/test/blockscan-runtime-loop.ts",
+          "before": "03644e191b10c74a75f48217a7dd0ef67e7b591a2c1da2e3dda2bc8dcd436f5b",
+          "after": "426a94a6f44c777dac77df7d1416182ff5e6c3b68ffc1c20b27a83ea39ee0597"
+        },
+        {
+          "path": "listener/src/searcher/test/blockscan-sim-amount-selector.ts",
+          "before": "38df0999b17a06c3b609425fb924fb03c832b18534590095bf5de3a4d325c4db",
+          "after": "2ca406706d03f437ee3586e029b6abee511cccb5f037c95cc826d1f9c8a82788"
+        },
+        {
+          "path": "listener/src/searcher/test/family-dual-execution.ts",
+          "before": "62fc27d47289c02a669555cf673d4ba564d67dbea753c9e8fac25953679251c4",
+          "after": "159ec5801bc1cd5d66adebd769c39ff997dc44d76e0b8033679b2cd7e6863852"
+        },
+        {
+          "path": "listener/src/searcher/test/pinned-reth-quote-backend.ts",
+          "before": "ce45bb82f584d2018333c44d5d806c7ac1691af1b84b8314afea8d33fe5270a9",
+          "after": "5777854135f54c47f57f67663f14e14c2911c63afe70dda20ebe6f4d192480cb"
+        },
+        {
+          "path": "listener/src/searcher/test/ready-activity-archive.ts",
+          "before": "46ca664878bcdb95396efd315211e27a6c9d1f9d59fed7a7d79adb151137cab5",
+          "after": "0199278a4cd2beaf2fc6be2a958a4ce32bb673af3513e6570cac7ab53eddea80"
+        },
+        {
+          "path": "listener/src/searcher/test/ready-activity-classification.ts",
+          "before": "9fb1b19d1eea2c779a268e75e7606b05ead99ba364ceb9b0561a283f068fa14e",
+          "after": "75d8a8fc0746ae66ce838f21bda916ab71e24f10b24b13c75507e4294701a8f1"
+        },
+        {
+          "path": "listener/src/searcher/test/rpc-throttle-guard.ts",
+          "before": "397b45ed07e6788aadd410c542afd3db363627e9a1ca5330809becaa5c8ac432",
+          "after": "0deca5749cf6d3cf115f522281f8a2128becea622fde07126aabe738c05bdb96"
+        },
+        {
+          "path": "listener/src/searcher/test/runtime-defaults.ts",
+          "before": "9197c5e5eff48dfca0e802ad4be3c862ed149f8af475336bab50c6f0edd346de",
+          "after": "7fa54228dad95f378b09e03911e8c2af9796d940dc7bf3b16750dfba99876a42"
+        },
+        {
+          "path": "listener/src/searcher/test/strict-production-family-declarations.ts",
+          "before": "12a6ee556e984d4419621959c3477efd30bbeee19eadf4527077449837bbd9de",
+          "after": "f78345865653d4bd2d21bbf5888530e5f0f4d91fc7bb6f95ab35e277a0c11518"
+        },
+        {
+          "path": "listener/src/searcher/test/universe-rebuild-runner.ts",
+          "before": "217a8f482efa05527a583cb50f70164fab7b1d7acd8040a058bbfda8d093b680",
+          "after": "f18e160693c720617dfbaa9820ffdc025825d37105c3e3e8889f6d70cb2725b8"
+        },
+        {
+          "path": "listener/src/searcher/universe-rebuild-checkpoint.ts",
+          "before": "2b7e0b46b1da03af8684f6c30bdd9203814c1418b6167f19986936ea10458f42",
+          "after": "b02c8f859586298e683bef22eb0e05502cb689eb45c367e5e569af475a554569"
+        },
+        {
+          "path": "listener/src/searcher/universe-rebuild-runner.ts",
+          "before": "1b47829e48f57a1460a7c4101da9d9846240d64d954cbe90f5403832f2ea104d",
+          "after": "07dbf8e76ba066c92d10ac02d646437a42fe4c0b0e5900d4334d0da130bccaf8"
+        }
+      ]
+    },
+    "familyDualFinal": "308/308",
+    "buildLiveFinal": "pass"
+  },
+  "sourceFingerprint": "adee1409f1ee431630d29886cf8add51d6c5145165c128d28ea073536f6c24cc"
+}

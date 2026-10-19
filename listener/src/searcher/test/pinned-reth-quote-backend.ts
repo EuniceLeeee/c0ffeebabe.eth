@@ -1515,7 +1515,7 @@ async function run(): Promise<void> {
         transportLane: "producer-bulk",
         allowSingleCallFallback: false,
       });
-      const batchesBefore = state.batches.length;
+      const batchesBefore: number = state.batches.length;
       state.holdResponses = true;
       try {
         const results = await Promise.all(Array.from({ length: 2050 }, (_, index) =>

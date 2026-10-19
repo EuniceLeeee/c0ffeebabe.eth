@@ -36,7 +36,7 @@ import { readBlockTouchedStateKeys, type BlockTouchedProvider } from "./blocksca
 import { BlockScanActivityPrefetch } from "./blockscan-activity-prefetch.js";
 import { startBlockScanHeadFeed } from "./blockscan-head-feed.js";
 import { LiveHeadWindow, parseLiveMaxNewHeads } from "./live-head-window.js";
-import { isRpcThrottleError } from "./rpc-throttle-guard.js";
+import { isRpcQuotaExhaustedError, isRpcThrottleError, LiveRpcThrottleObservation } from "./rpc-throttle-guard.js";
 import {
   initBlockScanEnumerationSolverTelemetry,
 } from "./blockscan-enumeration-solver-telemetry.js";
@@ -45,7 +45,10 @@ import { createSolverExecutionInputRecorder } from "./solver-execution-input-rec
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { BlockScanPoolRevertAttributor, poolRevertFilterEnabled, assertPoolRevertBackendSupport } from "./blockscan-pool-revert.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
-import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried, resolveEffectiveAmountCascade } from "./blockscan-effective-mid.js";
+import {
+  buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried,
+  MAX_EFFECTIVE_INPUT_PATH_HOPS, resolveEffectiveAmountCascade,
+} from "./blockscan-effective-mid.js";
 import { effectiveEthPricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
@@ -93,8 +96,10 @@ import type {
   PoolIdentityFailureReason,
   RejectedPoolIdentity,
 } from "./venues/identity.js";
-import { UniverseRebuildCheckpointStore } from
-  "./universe-rebuild-checkpoint.js";
+import {
+  UniverseRebuildCheckpointStore,
+  activeReadyMemos as selectActiveReadyMemos,
+} from "./universe-rebuild-checkpoint.js";
 import {
   UniverseRunIncomplete,
   assertReadyFamilyActivation,
@@ -102,7 +107,10 @@ import {
   refreshReadyInstances,
 } from "./universe-rebuild-runner.js";
 import { createRebuildWiring } from "./universe-rebuild-production.js";
-import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
+import {
+  assertReadyCheckpointPublicationCurrent,
+  resolveStrictReadyRuntime,
+} from "./strict-ready-runtime.js";
 import {
   StrictProductionRuntimeRoot,
   type StrictProductionRuntimeSession,
@@ -235,6 +243,7 @@ import type { LiveStateBackend, QuoteHop, QuoteRequest } from "./live-state-back
 import { DEFAULT_BRIBE_BPS, validateLiveEnvelope } from "./live-envelope.js";
 import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
+import { SourceBlockSimulator } from "./simulator/source-block.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
 import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
@@ -729,6 +738,18 @@ export function resolveBlockScanRefineCandidates(env: NodeJS.ProcessEnv = proces
 /** Live stage policy, shared by main and diagnostics. Preserve each setting's
  * existing fallback/clamping rule; core enumeration config remains separate. */
 export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = process.env, maxCandidates = 0) {
+  const singleFundingRaw = env.SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED ?? "0";
+  if (singleFundingRaw !== "0" && singleFundingRaw !== "1")
+    throw new Error("SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED must be 0 or 1");
+  const fixedInputRaw = env.SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT;
+  let fixedEffectiveWethInput: bigint | undefined;
+  if (fixedInputRaw !== undefined) {
+    if (!/^\d+(?:\.\d{1,18})?$/.test(fixedInputRaw))
+      throw new Error("SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT must be a positive WETH amount");
+    fixedEffectiveWethInput = ethers.parseEther(fixedInputRaw);
+    if (fixedEffectiveWethInput <= 0n || fixedEffectiveWethInput > ethers.MaxUint256)
+      throw new Error("SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT must be a positive uint256 WETH amount");
+  }
   const passBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
   const passBudgetMs = Number.isFinite(passBudgetRaw)
     ? Math.max(1, Math.floor(passBudgetRaw)) : 11_000;
@@ -776,7 +797,8 @@ export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = proce
   // Deliberately no rounding/fallback: the live transport constructor owns
   // validation of non-integer/non-finite state concurrency, as before.
   const stateRpcBatchConcurrency = Math.max(1, Number(env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4"));
-  return Object.freeze({ passBudgetMs, largeGraphPassBudgetMs, largeGraphEdgeThreshold,
+  return Object.freeze({ singleFunding: singleFundingRaw === "1", fixedEffectiveWethInput,
+    passBudgetMs, largeGraphPassBudgetMs, largeGraphEdgeThreshold,
     startupWarmBudgetMs, hotPricingFamilyBudgetMs, runtimePublicationReserveMs, solveReserveMs,
     solveConcurrency, solverSearch, finalSimulationConcurrency, refineCandidates,
     sourceSimulationTimeoutMs: Number(env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
@@ -793,6 +815,7 @@ type BlockScanAmountSelectorFactory = NonNullable<BlockScanRuntimeLoopDependenci
 export function createBlockScanLiveAmountSelectorFactory(input: {
   executor: string;
   quoteConcurrency: number;
+  singleFunding?: boolean;
   simRejects: BlockScanSimRejectCache;
   poolRevertAttributor?: BlockScanPoolRevertAttributor;
   record?(input: {
@@ -809,8 +832,21 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
       const p = plan.opportunity.kind === "block-scan-arb" ? plan.opportunity.searchSeed.searchCenter : 0n;
       const pTrials: { plan: ResolvedPlan; sim: SimulationResult }[] = [];
       const diagnosticDeadlineAtMs = Math.min(opts?.deadlineAtMs ?? Infinity, Date.now() + (opts?.deadlineMs ?? 3000));
+      // Reuse the source-pinned, per-token maximum-capacity projection once.
+      // All amounts in this solve use that entry; no fallback or re-selection.
+      const fundingToken = plan.opportunity.kind === "block-scan-arb" ? plan.opportunity.flashToken : undefined;
+      const funding = input.singleFunding && fundingToken !== undefined
+        ? opts?.strictSession?.fundingProjection().sources.get(fundingToken.toLowerCase())
+        : undefined;
+      if (input.singleFunding && funding === undefined)
+        throw new Error("single funding selection lacks a verified token source");
+      if (funding !== undefined) input.record?.({ source, workerIndex, event: {
+        type: "funding_selected", searchId, token: fundingToken,
+        fundingActionId: funding.adapterId, maxBorrow: funding.amount, policy: "max-borrow-per-token",
+      } });
       const selector = createBlockScanSimAmountSelector({
         source, executor: input.executor, runTrial,
+        fundingActionId: funding?.adapterId,
         async simulate(candidate, control) {
           const sim = await simulate(candidate, control);
           if (p > 0n && candidate.flashAmount === p) pTrials.push({ plan: candidate, sim });
@@ -895,7 +931,8 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const enableBackrun = process.env.SEARCHER_ENABLE_BACKRUN !== "0";
   const enableMempool = enableBackrun && process.env.SEARCHER_ENABLE_MEMPOOL === "1";
   const enableMevShare = enableBackrun && process.env.SEARCHER_ENABLE_MEV_SHARE !== "0";
-  if (enableBackrun && !enableMempool && !enableMevShare) {
+  if (enableBackrun && !enableMempool && !enableMevShare &&
+      process.env.SEARCHER_HISTORICAL_BACKRUN_SPEC === undefined) {
     throw new Error("SEARCHER_ENABLE_BACKRUN=1 requires at least one victim source");
   }
 
@@ -959,6 +996,25 @@ function booleanEnvFlag(
   throw new Error(`${name} must be 0 or 1`);
 }
 
+/** Ready reuse changes startup discovery only, never signing/submission posture. */
+export function resolveReadyGenerationReuse(
+  env: Readonly<Record<string, string | undefined>>,
+  dryRun: boolean,
+): boolean {
+  // Always validate the legacy flag, even when the general opt-in is enabled.
+  const legacyDryRunReuse = dryRunOnlyFlag(
+    "SEARCHER_DRY_RUN_USE_READY_GENERATION",
+    env.SEARCHER_DRY_RUN_USE_READY_GENERATION,
+    dryRun,
+  );
+  const reuseReadyGeneration = booleanEnvFlag(
+    "SEARCHER_USE_READY_GENERATION",
+    env.SEARCHER_USE_READY_GENERATION,
+    false,
+  );
+  return reuseReadyGeneration || legacyDryRunReuse;
+}
+
 /** Only terminal shutdown: retain an early fatal until the runtime drain exists. */
 export function createLiveRuntimeStop({ runtimeAbort, emitFatal, exit }: {
   runtimeAbort: AbortController;
@@ -1020,7 +1076,7 @@ export function createLiveSourceSimulationFactory(input: {
   if (!Number.isSafeInteger(chainId) || chainId <= 0 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("invalid strict simulation chain or timeout");
   }
-  return ({ source, control }) => {
+  return ({ source, control, onRpcThrottle }) => {
     if (runtimeAbort.signal.aborted) throw runtimeAbort.signal.reason;
     return createRevmStrictSourceSimulation({
       identity: { source, chainId, rpcUrl },
@@ -1031,6 +1087,12 @@ export function createLiveSourceSimulationFactory(input: {
       executionGasLimit: 0x1000000,
       createClient: createClient ?? (({ onFatal }) => new RevmSimClient({ executablePath, timeoutMs, onFatal })),
       onFatal(reason) {
+        if (reason.kind === "rpc-throttle" && onRpcThrottle !== undefined) {
+          // The strict source slot is already fenced and owns its drain.
+          // Ordinary live may retire only this pass while observing successors.
+          onRpcThrottle(reason);
+          return;
+        }
         // Task-wide admission closes synchronously, before domain conversion.
         if (!runtimeAbort.signal.aborted) runtimeAbort.abort(new RevmFatalError(reason));
         onFatal(reason);
@@ -1040,7 +1102,7 @@ export function createLiveSourceSimulationFactory(input: {
 }
 
 export function createBlockScanPriceRuntime(input: {
-  /** Opt-in historical CLI setting; no live default change. */
+  /** Explicit fixed sampling amount shared by live and historical callers. */
   fixedEffectiveWethInput?: bigint;
   provider: ethers.JsonRpcProvider;
   rpcUrl: string;
@@ -1282,7 +1344,7 @@ export function createBlockScanPriceRuntime(input: {
       ) : undefined;
       try {
         let session: StrictProductionRuntimeSession | undefined;
-        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=3 cascadeAmountChanges=${cascadeAmountChanges}`);
+        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=${MAX_EFFECTIVE_INPUT_PATH_HOPS} cascadeAmountChanges=${cascadeAmountChanges}`);
         const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
           fixedWethInput: input.fixedEffectiveWethInput,
           cascadeAmountChanges,
@@ -1323,7 +1385,7 @@ export function createBlockScanPriceRuntime(input: {
         console.log(`[searcher/effective-mid] ${JSON.stringify({
           atMs: Date.now(), atMonotonicMs: performance.now(), pid: process.pid, timeOrigin: performance.timeOrigin,
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
-          samplingSource: "effective-forward", maxInputPathHops: 3, reference: effective.reference,
+          samplingSource: "effective-forward", maxInputPathHops: MAX_EFFECTIVE_INPUT_PATH_HOPS, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
           complete: effective.complete, wallMs: effective.wallMs,
           cascadeAmountChanges,
@@ -1382,11 +1444,7 @@ async function main(): Promise<void> {
     executor: ethers.getAddress(config.botvmAddress).toLowerCase(),
     transactionOrigin: normalizeTransactionOrigin(config.wallet.address),
   });
-  const dryRunUseReadyGeneration = dryRunOnlyFlag(
-    "SEARCHER_DRY_RUN_USE_READY_GENERATION",
-    process.env.SEARCHER_DRY_RUN_USE_READY_GENERATION,
-    config.dryRun,
-  );
+  const useReadyGeneration = resolveReadyGenerationReuse(process.env, config.dryRun);
   const blindForkBotVmFlag = process.env.SEARCHER_BLIND_INSTALL_FORK_BOTVM;
   const blindInstallForkBotVm = forkBotVmInstallationEnabled(
     blindProductionAudit,
@@ -1522,6 +1580,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     requestRuntimeStop.fatal(reason);
   };
+  const rpcThrottleObservation = new LiveRpcThrottleObservation(onSimulationFatal);
   const blockScanStageSettings = resolveBlockScanLiveStageSettings(process.env, blockScanCfg?.maxCandidates ?? 0);
   const {
     passBudgetMs: blockScanPassBudgetMs,
@@ -1800,11 +1859,13 @@ async function main(): Promise<void> {
     );
   }
   console.log(`[searcher/live] runtime_commit=${process.env.SEARCHER_RUNTIME_COMMIT ?? "unavailable"}`);
-  const sourceMode = victimSourceMode(
-    config.enableBackrun,
-    config.enableMempool,
-    config.enableMevShare,
-  );
+  const sourceMode = process.env.SEARCHER_HISTORICAL_BACKRUN_SPEC !== undefined
+    ? ("disabled" as const)
+    : victimSourceMode(
+        config.enableBackrun,
+        config.enableMempool,
+        config.enableMevShare,
+      );
   if (blindProductionAudit && sourceMode !== "disabled") {
     throw new Error("blind production audit requires the victim feed to be disabled");
   }
@@ -2005,19 +2066,30 @@ async function main(): Promise<void> {
   });
   let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
-  if (blindUseIncumbentReady || dryRunUseReadyGeneration) {
+  const historicalBackrunSpec = process.env.SEARCHER_HISTORICAL_BACKRUN_SPEC;
+  if (historicalBackrunSpec !== undefined) {
+    if (rebuildEnvelope?.readyGeneration == null || rebuildEnvelope.inProgressRun !== null) {
+      throw new Error("historical backrun requires one complete Ready checkpoint");
+    }
+    readyUniverse = rebuildEnvelope.readyGeneration;
+    console.log("[searcher/historical] ready generation=" + readyUniverse.generation +
+      " cutoff=" + readyUniverse.cutoff.number + " instances=" + readyUniverse.activeInstanceKeys.length);
+  } else if (blindUseIncumbentReady || useReadyGeneration) {
+    if (rebuildEnvelope?.readyGeneration != null) {
+      assertReadyCheckpointPublicationCurrent(rebuildEnvelope);
+    }
     if (
       rebuildEnvelope === null ||
       rebuildEnvelope.readyGeneration === null ||
       rebuildEnvelope.inProgressRun !== null
     ) {
       throw new Error(
-        (blindUseIncumbentReady ? "blind replay" : "dry-run live observation") +
+        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
           " requires one complete Ready checkpoint",
       );
     }
     readyUniverse = rebuildEnvelope.readyGeneration;
-    if (dryRunUseReadyGeneration && !blindUseIncumbentReady) {
+    if (useReadyGeneration && !blindUseIncumbentReady) {
       readyUniverse = await refreshReadyInstances({
         ...rebuildWiring,
         store: rebuildStore,
@@ -2030,7 +2102,7 @@ async function main(): Promise<void> {
     }
     console.log(
       "[searcher/startup] " +
-        (blindUseIncumbentReady ? "blind replay" : "dry-run live observation") +
+        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
         " uses incumbent readyGeneration=" +
         readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
         " activeInstances=" + readyUniverse.activeInstanceKeys.length +
@@ -2073,19 +2145,11 @@ async function main(): Promise<void> {
     throw new Error("strict startup readyGeneration failed root verification");
   }
   const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
+  if (historicalBackrunSpec === undefined) assertReadyCheckpointPublicationCurrent(rebuildEnvelope);
   const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);
-  // Historical checkpoints can contain more than one memo per instance.
-  // Current terminal outcomes revoke their candidate memo atomically, while
-  // this defensive dedupe keeps runtime rehydration one-instance-per-key
-  // during the one-time checkpoint transition.
-  const seenReadyInstances = new Set<string>();
-  const activeReadyMemos = Object.values(rebuildEnvelope.verifiedMemos)
-    .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
-    .filter((memo) => {
-      if (seenReadyInstances.has(memo.familyInstanceKey)) return false;
-      seenReadyInstances.add(memo.familyInstanceKey);
-      return true;
-    });
+  // Rehydrate the exact candidate evidence sealed into Ready, not the first
+  // historical alias that happens to share its instance key.
+  const activeReadyMemos = selectActiveReadyMemos(rebuildEnvelope);
   assertReadyFamilyActivation(activeReadyMemos, rebuildWiring.isFamilyEnabled);
   const routeReadyMemos = activeReadyMemos.filter((memo) =>
     PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
@@ -2315,6 +2379,7 @@ async function main(): Promise<void> {
   });
   const priceRuntime = createBlockScanPriceRuntime({
     provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
+    fixedEffectiveWethInput: blockScanStageSettings.fixedEffectiveWethInput,
     blockScanRuntimeAbort, blockScanRethTransportScheduler, blockScanCfg,
     recordPricing: publication => blockScanRouteTelemetry.recordPricing(publication),
   });
@@ -2524,13 +2589,14 @@ async function main(): Promise<void> {
       }, control);
     },
   });
-  // The existing activity reader owns both pricing modes. Observe either
-  // physical sibling's throttle before their joined range can be cancelled,
-  // and keep one provider identity for its completed-block memoization.
+  // Keep one activity provider identity for completed-block memoization.
+  // A spent allocation is terminal immediately; temporary throttles are
+  // observed once per failed pass by the runtime, after joining its reads.
   const activityReadFailed = (error: unknown): never => {
-    if (isRpcThrottleError(error)) {
-      console.error("[searcher/blockscan-activity] RPC throttle; stopping live");
-      onSimulationFatal({ kind: "rpc-throttle", category: "rpc-rate-limit" });
+    const exhausted = isRpcQuotaExhaustedError(error);
+    if (exhausted || blindProductionAudit && isRpcThrottleError(error)) {
+      console.error("[searcher/blockscan-activity] terminal RPC throttle; stopping runtime");
+      onSimulationFatal({ kind: "rpc-throttle", category: exhausted ? "rpc-quota" : "rpc-rate-limit" });
     }
     throw error;
   };
@@ -2574,6 +2640,7 @@ async function main(): Promise<void> {
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
     amountSelectorFactory: createBlockScanLiveAmountSelectorFactory({
       executor: executionIdentity.executor, quoteConcurrency: blockScanSolverSearch.quoteConcurrency,
+      singleFunding: blockScanStageSettings.singleFunding,
       simRejects: blockScanSimRejects,
       poolRevertAttributor: blockScanPoolRevertAttributor,
       record({ source, workerIndex, event }) {
@@ -2593,6 +2660,7 @@ async function main(): Promise<void> {
     rpcUrl: config.rpcUrl,
     strictSession: strictSessionFor,
     sourceSimulationFactory,
+    rpcThrottleObservation: blindProductionAudit ? undefined : rpcThrottleObservation,
     rethTransportScheduler: blockScanRethTransportScheduler,
     runtimeAbort: blockScanRuntimeAbort,
     sharedPlanner: planner,
@@ -3152,6 +3220,13 @@ async function main(): Promise<void> {
     });
   }
 
+  const baseHintCtx = {
+    config, provider, state, detector, planner, profitTokenValuation, solver, simulator,
+    bundleRouter, submissionCoordinator, graph, tokenIndex, poolAddrs: allPoolMap,
+    tokenQuery: mainnetBackend, counters, cache: poolStateCache, poolStateUpdater,
+    fixtureRecorder, liveBackend, victimSource, pendingVictimOutcomes, recentWarmPools,
+    pinnedWarmTargets, blockTracker, fundingAssets: flashTokens, strictSessionFor,
+  };
   let stopRuntimePromise: Promise<void> | null = null;
   const stopRuntime = (): Promise<void> => {
     if (stopRuntimePromise) return stopRuntimePromise;
@@ -3204,6 +3279,108 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
+  // ── Historical backrun: replay one real mined trigger as a live mempool hint ──
+  const runHistoricalBackrunOnce = async (): Promise<void> => {
+    if (historicalBackrunSpec === undefined) throw new Error("missing historical spec");
+    const spec = JSON.parse(readFileSync(historicalBackrunSpec, "utf8")) as {
+      name?: string; N: number; triggerIndex: number; tx: string; out: string;
+    };
+    if (!Number.isSafeInteger(spec.N) || spec.N <= 0) throw new Error("invalid N");
+    if (!Number.isSafeInteger(spec.triggerIndex) || spec.triggerIndex < 0) throw new Error("invalid triggerIndex");
+    if (!/^0x[0-9a-f]{64}$/.test(spec.tx)) throw new Error("invalid trigger tx");
+    if (typeof spec.out !== "string" || !isAbsolute(spec.out)) throw new Error("invalid out");
+    mkdirSync(spec.out, { recursive: true, mode: 0o700 });
+    const save = (name: string, value: unknown): void => {
+      writeFileSync(resolve(spec.out, name),
+        JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2) + "\n",
+        { mode: 0o600 });
+    };
+    const block = await provider.send("eth_getBlockByNumber", [ethers.toQuantity(spec.N), true]);
+    const headerB = await provider.send("eth_getBlockByNumber", [ethers.toQuantity(spec.N - 1), false]);
+    if (!block || block.parentHash !== headerB.hash) throw new Error("N/B parent mismatch");
+    const trigger = block.transactions[spec.triggerIndex];
+    if (!trigger || trigger.hash.toLowerCase() !== spec.tx.toLowerCase()) throw new Error("trigger hash mismatch at index");
+    const rawFor = async (t: Record<string, any>): Promise<string> => {
+      const fromRpc = await provider.send("eth_getRawTransactionByHash", [t.hash]);
+      if (typeof fromRpc === "string" && ethers.keccak256(fromRpc) === t.hash) return fromRpc;
+      const type = Number(BigInt(t.type ?? "0x0"));
+      const signature = ethers.Signature.from({ r: t.r, s: t.s, v: Number(BigInt(t.v)) });
+      const value: Record<string, any> = { type, to: t.to, nonce: Number(BigInt(t.nonce)),
+        gasLimit: BigInt(t.gas), data: t.input, value: BigInt(t.value),
+        chainId: BigInt(t.chainId ?? "0x1"), signature };
+      if (type <= 1) value.gasPrice = BigInt(t.gasPrice);
+      else { value.maxFeePerGas = BigInt(t.maxFeePerGas); value.maxPriorityFeePerGas = BigInt(t.maxPriorityFeePerGas); }
+      if (type > 0) value.accessList = t.accessList;
+      if (type === 3) { value.maxFeePerBlobGas = BigInt(t.maxFeePerBlobGas); value.blobVersionedHashes = t.blobVersionedHashes; }
+      const vNum = Number(BigInt(t.v));
+      if (type === 0 && (vNum === 27 || vNum === 28)) value.chainId = 0n;
+      const serialized = ethers.Transaction.from(value).serialized;
+      if (ethers.keccak256(serialized) !== t.hash) throw new Error("raw reserialize hash mismatch " + t.hash);
+      return serialized;
+    };
+    const prefixTxs: Array<{ rawTx: string; expectedHash: string }> = [];
+    for (let i = 0; i < spec.triggerIndex; i += 1) {
+      const t = block.transactions[i];
+      prefixTxs.push({ rawTx: await rawFor(t), expectedHash: t.hash });
+    }
+    const triggerRaw = await rawFor(trigger);
+    console.log(JSON.stringify({ stage: "historical-backrun-prepare", N: spec.N,
+      triggerIndex: spec.triggerIndex, prefixTxs: prefixTxs.length }));
+    // Live backrun semantics: fork at canonical B, queue the real prefix, then the
+    // prefetched trigger is applied by handleHint and mined as one local block.
+    await state.queueHistoricalRawTransactions(spec.N, prefixTxs);
+    // The production executor is counterfactual at this historical block (no
+    // code before its deployment). Install the current BotVM runtime code at the
+    // executor address: code-only counterfactual, reported as such.
+    const histOwner = ethers.getAddress(String(process.env.BOTVM_OWNER));
+    const histExecutor = ethers.getAddress(config.botvmAddress);
+    const installed = await installForkBotVm(state.provider, histOwner, histExecutor);
+    console.log(JSON.stringify({ stage: "historical-backrun-executor", installed,
+      counterfactualExecutorCode: true }));
+    blockTracker.latest = spec.N - 1;
+    const observed: unknown[] = [];
+    class RecordingBackend extends RpcAnvilLiveBackend {
+      override async simulate(plan: ResolvedPlan) {
+        const result = await super.simulate(plan);
+        observed.push({ mode: "simulate", plan, result });
+        return result;
+      }
+      override async finalVerify(plan: ResolvedPlan) {
+        const result = await super.finalVerify(plan);
+        observed.push({ mode: "finalVerify", plan, result });
+        return result;
+      }
+    }
+    const histWork = new SourceSimulationWork(sourceSimulationFactory);
+    const recordingBackend = new RecordingBackend(state, simulator);
+    const prefetchedTx = {
+      hash: spec.tx, from: trigger.from, nonce: Number(BigInt(trigger.nonce)),
+      to: trigger.to, data: trigger.input, value: BigInt(trigger.value), blockNumber: null,
+    };
+    try {
+      await handleHint(
+        { payload: {}, hashes: [spec.tx], source: "mempool",
+          prefetched: { tx: prefetchedTx as unknown as ethers.TransactionResponse, rawTx: triggerRaw } },
+        spec.tx,
+        {
+          ...baseHintCtx,
+          config: { ...config, oppTtlMs: 900_000 },
+          skipHintFork: true,
+          liveBackend: recordingBackend,
+          simulationWork: histWork,
+          simulationGeneration: 1,
+          sourceControl: { signal: blockScanRuntimeAbort.signal, deadlineAtMs: Date.now() + 900_000 },
+          startedAt: Date.now(),
+        },
+      );
+    } finally {
+      await histWork.closeAndDrain();
+      save("observed-sims.json", { name: spec.name ?? null, N: spec.N,
+        triggerIndex: spec.triggerIndex, observed });
+    }
+    console.log(JSON.stringify({ stage: "historical-backrun-done", out: spec.out, observed: observed.length }));
+  };
+
   const mempoolStream = () => {
     console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
     return mempoolHints(
@@ -3219,6 +3396,15 @@ async function main(): Promise<void> {
       intakeAbort.signal,
     );
   };
+  if (historicalBackrunSpec !== undefined) {
+    try {
+      await runHistoricalBackrunOnce();
+    } catch (error) {
+      console.error("[searcher/historical] failed: " + (error instanceof Error ? error.stack ?? error.message : String(error)));
+      process.exitCode = 1;
+    }
+    process.exit(process.exitCode ?? 0);
+  }
   const hintStream = sourceMode === "disabled"
     ? disabledHints(intakeAbort.signal)
     : sourceMode === "public-mempool"
@@ -3251,33 +3437,8 @@ async function main(): Promise<void> {
         activeHintSimulationWork = hintSimulationWork;
         try {
           await handleHint(hint, txHash, {
-            config,
-            provider,
-            state,
-            detector,
-            planner,
-            profitTokenValuation,
-            solver,
-            simulator,
-            bundleRouter,
-            submissionCoordinator,
-            graph,
-            tokenIndex,
-            poolAddrs: allPoolMap,
-            tokenQuery: mainnetBackend,
-            counters,
+            ...baseHintCtx,
             startedAt: tHint,
-            cache: poolStateCache,
-            poolStateUpdater,
-            fixtureRecorder,
-            liveBackend,
-            victimSource,
-            pendingVictimOutcomes,
-            recentWarmPools,
-            pinnedWarmTargets,
-            blockTracker,
-            fundingAssets: flashTokens,
-            strictSessionFor,
             simulationWork: hintSimulationWork,
             ...(finalSimulationExecutorRuntimeCode === undefined ? {} : { executorRuntimeCode: finalSimulationExecutorRuntimeCode }),
             simulationGeneration: ++hintGeneration,
@@ -3348,6 +3509,8 @@ async function main(): Promise<void> {
 interface HandleCtx {
   /** Explicit historical input only; never submit a materialized past source. */
   historicalExecutionMode?: HistoricalBackrunMode;
+  /** Caller already materialized the fork (prefix queued); do not re-fork it away. */
+  skipHintFork?: boolean;
   onHistoricalEv?: (input: { evaluation: Awaited<ReturnType<typeof evaluateEv>>;
     source: CanonicalSource; resolved: ResolvedPlan; sim: import("./simulator/botvm-simulator.js").SimulationResult }) => void;
   config: LiveConfig;
@@ -3619,7 +3782,12 @@ export async function handleHint(
     fixturePath = "rawTx";
     rawTx = prefetchedRaw;
 
-    await ensureHintFork(latestBlock);
+    if (ctx.historicalExecutionMode || ctx.skipHintFork) {
+      // State was materialized by the historical caller; do not re-fork it away.
+      ctx.cache.beginHint(latestBlock);
+    } else {
+      await ensureHintFork(latestBlock);
+    }
     const appliedHash = await ctx.state.applyRawTx(rawTx);
     if (appliedHash.toLowerCase() !== txHash.toLowerCase()) {
       throw new Error(`local victim hash mismatch ${appliedHash}`);

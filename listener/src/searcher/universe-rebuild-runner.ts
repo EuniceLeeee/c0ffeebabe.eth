@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { assertTransactionObservationScope, type TransactionObservationScope } from "./ready-transaction-input.js";
 import {
   AttestationCheckpointWriter,
   UniverseRebuildCheckpointStore,
@@ -58,6 +59,9 @@ export class UniverseRunIncomplete extends Error {
 }
 
 export interface UniverseRebuildDependencies {
+  /** Sparse input reuses this runner; absence preserves the continuous window. */
+  readonly observationScope?: TransactionObservationScope;
+  readonly resolveTransactionObservationRange?: () => Promise<{ readonly fromBlock: number; readonly toBlock: number }>;
   /** Freeze the canonical head, or one explicitly requested historical cutoff. */
   readonly freezeCanonicalHead: (
     requestedBlock?: number,
@@ -245,6 +249,10 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
   };
   /** Bounded identity/materialization workers; defaults to 24. */
   readonly attestationConcurrency?: number;
+  /** Same sealed unfinished run only: retain completed negative/retryable
+   * outcomes without another attempt. Verified memos still require reuse
+   * validation, and candidates without an outcome still run strict. */
+  readonly resumeCompletedOutcomes?: boolean;
   /** Optional progress logging. */
   readonly log?: (message: string) => void;
 }
@@ -262,12 +270,21 @@ export async function rebuildUniverse(
       "universe rebuild: explicit range and rolling window are mutually exclusive",
     );
   }
-  const explicitRange = input.observationRange === undefined
+  assertTransactionObservationScope(input.observationScope);
+  if ((input.observationScope === undefined) !== (input.resolveTransactionObservationRange === undefined) ||
+    (input.observationScope !== undefined && (input.observationRange !== undefined || input.observationWindowBlocks !== undefined || familyUpdateScope !== undefined))) {
+    throw new Error("transaction input requires its own source resolver and cannot be combined with a block window or Family delta");
+  }
+  let explicitRange = input.observationRange === undefined
     ? null
     : validateExplicitObservationRange(input.observationRange);
   const encodeCandidate = input.encodeCandidateSnapshot ?? ((value) => value);
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
   let checkpoint = await input.store.load() ?? null;
+  const previousScopeOwner = checkpoint?.inProgressRun ?? checkpoint?.readyGeneration;
+  if (previousScopeOwner && canonicalJson(previousScopeOwner.observationScope ?? null) !== canonicalJson(input.observationScope ?? null)) {
+    throw new Error("Ready observation scope differs from checkpoint; use the same TX list or a separate checkpoint");
+  }
   if (familyUpdateScope !== undefined || checkpoint?.inProgressRun?.familyUpdateScope !== undefined) {
     if (familyUpdateScope === undefined || checkpoint?.readyGeneration?.familyPartitions === undefined) {
       throw new Error("Ready Family scoped rebuild requires its partitioned parent and scope");
@@ -331,6 +348,9 @@ export async function rebuildUniverse(
   }
   checkpoint = await migrateAlreadyReadyKeptRun(input.store, checkpoint, log);
   const incumbentRun = checkpoint?.inProgressRun ?? null;
+  if (input.resumeCompletedOutcomes && incumbentRun === null) {
+    throw new Error("universe rebuild: completed-outcome resume requires an unfinished run");
+  }
   const retainedCandidates = Object.freeze(
     [
       ...Object.values(checkpoint?.verifiedMemos ?? {}),
@@ -401,6 +421,9 @@ export async function rebuildUniverse(
         .map(([, candidate]) => decodeCandidate(candidate)));
       sourceReceipts = incumbentRun.sourceReceipts;
     } else {
+      if (input.resumeCompletedOutcomes) {
+        throw new Error("universe rebuild: completed-outcome resume source plan changed");
+      }
       // ★ Layer 2 slow path: discovery plan drift — re-run discovery over the
       // SAME fixed range with the current catalog; the run identity
       // (runId/cutoff/fromBlock) stays untouched and verified memos are
@@ -451,6 +474,13 @@ export async function rebuildUniverse(
     }
   } else {
     // ★ Only with no unfinished run do we create a new time world.
+    if (input.resolveTransactionObservationRange !== undefined) {
+      explicitRange = await input.resolveTransactionObservationRange();
+      if (!Number.isSafeInteger(explicitRange.fromBlock) || !Number.isSafeInteger(explicitRange.toBlock) ||
+        explicitRange.fromBlock < 0 || explicitRange.toBlock < explicitRange.fromBlock) {
+        throw new Error("invalid transaction observation bounds");
+      }
+    }
     cutoff = await input.freezeCanonicalHead(explicitRange?.toBlock);
     if (familyUpdateScope !== undefined && (canonicalJson(cutoff) !== canonicalJson(checkpoint!.readyGeneration!.cutoff) ||
       explicitRange?.fromBlock !== checkpoint!.readyGeneration!.universeRange.fromBlock ||
@@ -511,7 +541,7 @@ export async function rebuildUniverse(
     }
   }
   log(
-    "universe rebuild fixed source range: run=" + input.runId +
+    "universe rebuild fixed source " + (input.observationScope === undefined ? "range" : "TX envelope") + ": run=" + input.runId +
       " from=" + fromBlock + " cutoff=" + cutoff.number + ":" + cutoff.hash +
       " resumed=" + String(incumbentRun !== null && !discoveryPlanChanged) +
       " discoveryPlanChanged=" + String(discoveryPlanChanged) +
@@ -541,6 +571,7 @@ export async function rebuildUniverse(
   // reconciles the SAME run's partition/receipts (time identity immutable).
   checkpoint = discoveryPlanChanged
     ? await input.store.reconcileFixedRunPlan({
+        ...(input.observationScope === undefined ? {} : { observationScope: input.observationScope }),
         expectedRevision: checkpoint?.revision ?? 0,
         runId: input.runId,
         cutoff,
@@ -556,6 +587,7 @@ export async function rebuildUniverse(
         sourceReceipts,
       })
     : await input.store.beginOrResumeRun({
+        ...(input.observationScope === undefined ? {} : { observationScope: input.observationScope }),
         ...(familyUpdateScope === undefined ? {} : { familyUpdateScope }),
         expectedRevision: checkpoint?.revision ?? 0,
         runId: input.runId,
@@ -667,7 +699,9 @@ export async function rebuildUniverse(
       hash: cutoff.hash,
     }),
   }));
-  // Every non-verified candidate gets one fresh attempt per rebuild/resume.
+  // By default every non-verified candidate gets a fresh attempt per resume.
+  // Explicit same-run completion may retain their existing outcomes; neither
+  // terminal-rejected nor retryable can supply an admitted Graph instance.
   // Valid verified memos still skip attestation below; a fresh retryable result
   // is accounted once and does not block publishing the verified Graph.
   const attestationCounts: Record<RunOutcome["status"], number> = {
@@ -705,6 +739,10 @@ export async function rebuildUniverse(
   ): Promise<RunOutcome["status"]> => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
+    if (input.resumeCompletedOutcomes && oldOutcome !== undefined &&
+        oldOutcome.status !== "verified") {
+      return oldOutcome.status;
+    }
     let reusableMemo: DurableVerifiedMemo | null = null;
     if (oldOutcome === undefined || oldOutcome.status === "verified") {
       try {
@@ -917,6 +955,7 @@ export async function rebuildUniverse(
   const catalogSnapshot = buildReadyCatalogSnapshot(activeMemos);
   const familyPartitions = buildReadyFamilyPartitions(input, currentRun);
   const ready = Object.freeze({
+    ...(currentRun.observationScope === undefined ? {} : { observationScope: currentRun.observationScope }),
     ...(currentRun.familyUpdateScope === undefined ? {} : { familyUpdateScope: currentRun.familyUpdateScope }),
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,
     cutoff: Object.freeze({ ...cutoff }),

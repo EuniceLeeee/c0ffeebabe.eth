@@ -132,9 +132,9 @@ test("declared standing-position pricing shares Exact but does not grant scanner
 });
 
 for (const gasCostWei of [null, 100_000_000_000_000n]) {
-  test(`${gasCostWei === null ? "default 0.002 ETH" : "gas at 200 bps"}: forward inputs, three-hop references and raw units`, async () => {
+  test(`${gasCostWei === null ? "default 0.002 ETH" : "gas at 200 bps"}: forward inputs, four-hop references and raw units`, async () => {
     const rows: PriceRow[] = [
-      // Deliberately order the four-hop chain backwards to catch in-pass propagation.
+      // Deliberately order the chain backwards to catch in-pass propagation.
       [edge("z", "unreachable", "z-out"), 4], [edge("y", "z", "y-z"), 3],
       [edge("x", "y", "x-y"), 2], [edge("USDC", "x", "u-x"), 5e8],
       [edge(W, U, "w-u"), 2e-9],
@@ -148,7 +148,7 @@ for (const gasCostWei of [null, 100_000_000_000_000n]) {
     const p = gasCostWei === null ? DEFAULT_RAW : 5_000_000_000_000_001n;
     const expected = new Map<string, bigint | null>([
       [W, p], [U, p * 7n + 1n], ["x", p * 49n + 8n], ["y", p * 343n + 57n],
-      ["z", null], ["reverse-only", p * 7n + 1n], ["disconnected", null], ["fee", null],
+      ["z", p * 2401n + 400n], ["reverse-only", p * 7n + 1n], ["disconnected", null], ["fee", null],
     ]);
     const prices = pricing(rows);
     const controller = new AbortController();
@@ -1427,20 +1427,27 @@ test("amount cascade is explicit opt-in and rejects ambiguous configuration", ()
   }
 });
 
-test("three-hop references quote depth-three outgoing directions but never create a fourth-hop input", async () => {
+test("four-hop references prepare and quote depth-four outgoing directions but never create a fifth-hop input", async () => {
   const edges = [edge(W, "a", "w-a"), edge("a", "b", "a-b"), edge("b", "c", "b-c"),
-    edge("c", "d", "c-d"), edge("d", W, "d-w")];
-  const calls: TokenEdge[] = [];
-  const result = await build(pricing([...edges].reverse().map(e => [e, NaN])), {quote: async ({edge, amountIn}) => {
-    calls.push(edge); return {source: SOURCE, amountIn, amountOut: amountIn + 1n};
-  }});
-  assert.deepEqual(calls, edges.slice(0, 4));
-  assert.equal(row(result, edges[3]!).amountIn, DEFAULT_RAW + 3n);
-  noQuote(row(result, edges[4]!), "missing-valuation");
+    edge("c", "d", "c-d"), edge("d", "e", "d-e"), edge("e", W, "e-w")];
+  const calls: TokenEdge[] = [], prepared: string[][] = [];
+  const result = await build(pricing([...edges].reverse().map(e => [e, NaN])), {
+    prepareQuote: async required => { prepared.push([...required]); },
+    quote: async ({edge, amountIn}) => {
+      assert.equal(prepared.length, 1, "one source-bound session is prepared before any layer");
+      assert(prepared[0]!.includes(blockScanEdgeKey(edge)), "every issued quote was prepared");
+      calls.push(edge); return {source: SOURCE, amountIn, amountOut: amountIn + 1n};
+    },
+  });
+  assert.deepEqual(calls, edges.slice(0, 5));
+  assert.deepEqual(new Set(prepared[0]), new Set(edges.slice(0, 5).map(blockScanEdgeKey)));
+  assert.equal(row(result, edges[4]!).amountIn, DEFAULT_RAW + 4n);
+  assert.equal(row(result, edges[4]!).amountOut, DEFAULT_RAW + 5n);
+  noQuote(row(result, edges[5]!), "missing-valuation");
   const refs = effectiveAmountReferences(result)!;
-  assert.deepEqual(refs.get("c")!.path.map(r => r.edgeId), ["w-a", "a-b", "b-c"]);
-  assert.equal(refs.has("d"), false);
-  assert.deepEqual(effectiveRowAmountReference(row(result, edges[3]!)), refs.get("c"));
+  assert.deepEqual(refs.get("d")!.path.map(r => r.edgeId), ["w-a", "a-b", "b-c", "c-d"]);
+  assert.equal(refs.has("e"), false);
+  assert.deepEqual(effectiveRowAmountReference(row(result, edges[4]!)), refs.get("d"));
 });
 
 test("failed shortest sources do not poison amounts and successful longer sources may recover reachability", async () => {

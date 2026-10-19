@@ -247,6 +247,18 @@ export class ReadyActivityArchive {
     try {
       const root = await pathStamp(this.directory, true, true);
       const manifestPath = join(this.directory, "manifest.json");
+      // A newly linked manifest is complete, but its creator still has to unlink
+      // the temporary name. Wait before pinning nlink/ctime on an initial writer.
+      if (create && !this.observedManifest) {
+        const deadline = Date.now() + 30_000;
+        for (;;) {
+          const stat = await lstat(manifestPath, { bigint: true });
+          if (!stat.isFile()) fail("invalid archive file");
+          if (stat.nlink === 1n) break;
+          if (stat.nlink !== 2n || Date.now() >= deadline) fail("manifest publication is unfinished");
+          await delay(5);
+        }
+      }
       const manifestStamp = await pathStamp(manifestPath);
       if (!(await smallFile(manifestPath)).equals(Buffer.from(this.manifest))) {
         fail("manifest/context mismatch");
@@ -273,7 +285,7 @@ export class ReadyActivityArchive {
       catch (error) { if (!hasCode(error, "EEXIST")) throw error; }
       await sync(this.directory);
     } finally { await handle.close(); await unlink(temp); }
-    return this.context();
+    return this.context(create);
   }
 
   private keyFromName(name: string): Key {

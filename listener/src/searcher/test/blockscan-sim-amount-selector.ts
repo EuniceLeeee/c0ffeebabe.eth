@@ -8,6 +8,7 @@ import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { SourceBlockSimulator, sourceBlockRevmRequest } from "../simulator/source-block.js";
 import * as registry from "../../adapters/registry.js";
 import { RuntimeAmountProgram, runtimeAmountFlowAdapter } from "../../adapters/runtime-amount-program.js";
+import { ethers } from "ethers";
 
 const addr = (n: string) => `0x${n.repeat(40)}`;
 const executor = addr("a"), token = addr("b"), middle = addr("c");
@@ -299,4 +300,39 @@ test("quoted control never invokes runtime construction even when the session su
   await selector.solve(f.plan, f.state, f.probe, f.opts);
   assert.equal(f.quotes.length, 8);
   assert.equal(f.builds.length, 8);
+});
+
+for (const outcome of ["success", "revert", "infrastructure", "blocked-prefix", "disabled"] as const)
+test(`capability-based callback composition: ${outcome}; no chain-external Exact`, async () => {
+  const f = fixture(), seen: { amount: bigint; mode: string }[] = [], requested: string[] = [];
+  const fault = Error("transport unavailable");
+  f.session.issueExact = () => { throw Error("callback construction must not quote off-chain"); };
+  f.session.blocksPrefixInversion = () => outcome === "blocked-prefix";
+  f.session.buildRuntimeAmountLeg = ({ edge, settlement }: any) => {
+    if (settlement) requested.push(settlement.kind);
+    return { actionAdapterId: "fixture-owned", program: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()),
+      settlement: edge === f.plan.tokenPath.edges[0] ? { quoteOutput: true, directOutput: true } : { deferredInput: addr("2") },
+      ...(settlement ? { settlementRequest: settlement } : {}) };
+  };
+  const selector = createBlockScanSimAmountSelector({ source, executor, callbackSettlement: outcome !== "disabled",
+    async simulate(plan) {
+      const callback = typeof plan.root.params.settlementProgram === "string";
+      seen.push({ amount: plan.flashAmount, mode: callback ? "callback" : "funded" });
+      if (!callback) return f.result(5n);
+      if (outcome === "infrastructure") return { ...f.result(0n), failure: { kind: "source-fault", code: 429, cause: fault } };
+      if (outcome === "revert") return { ...f.result(0n), failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: Error("fixture") } };
+      return f.result(5n);
+    } });
+  if (outcome === "infrastructure") {
+    await assert.rejects(selector.solve(f.plan, f.state, f.probe, f.opts), e => e === fault);
+    assert.deepEqual(seen.map(x => x.mode), ["callback"]);
+  } else {
+    await selector.solve(f.plan, f.state, f.probe, f.opts);
+    assert.deepEqual([...new Set(seen.map(x => x.amount))].sort((a, b) => Number(a - b)), [10n, 100n, 1000n, 10000n]);
+    for (const amount of [10n, 100n, 1000n, 10000n]) assert.deepEqual(seen.filter(x => x.amount === amount).map(x => x.mode),
+      outcome === "success" ? ["callback"] : outcome === "revert" ? ["callback", "funded"] : ["funded"]);
+  }
+  assert.equal(f.quotes.length, 0); assert.equal(f.builds.length, 0);
+  if (outcome === "blocked-prefix" || outcome === "disabled") assert.equal(requested.length, 0);
+  else assert.deepEqual(requested.slice(0, 3), ["quote-output", "direct-output", "deferred-input"]);
 });

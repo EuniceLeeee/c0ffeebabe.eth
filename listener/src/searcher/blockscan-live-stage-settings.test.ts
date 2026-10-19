@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createBlockScanLiveAmountSelectorFactory, resolveBlockScanLiveStageSettings } from "./main.js";
+import { createBlockScanLiveAmountSelectorFactory, resolveBlockScanCoreConfig, resolveBlockScanLiveStageSettings } from "./main.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { BlockScanPoolRevertAttributor } from "./blockscan-pool-revert.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
@@ -12,6 +12,7 @@ import type { CanonicalSource } from "./venues/adapter-request-program.js";
 
 test("live stage defaults include the original budgets, worker counts and 4+16 transport", () => {
   assert.deepEqual(resolveBlockScanLiveStageSettings({}), {
+    singleFunding: false, fixedEffectiveWethInput: undefined,
     passBudgetMs: 11000, largeGraphPassBudgetMs: 30000, largeGraphEdgeThreshold: 20000,
     startupWarmBudgetMs: 300000, hotPricingFamilyBudgetMs: 5000, runtimePublicationReserveMs: 1500,
     solveReserveMs: 8000, solveConcurrency: 4, finalSimulationConcurrency: 1, sourceSimulationTimeoutMs: 60000,
@@ -25,6 +26,7 @@ test("live stage defaults include the original budgets, worker counts and 4+16 t
 
 test("all stage overrides are forwarded without changing the independent core configuration", () => {
   const env = Object.freeze({
+    SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED: "1", SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT: "0.02",
     SEARCHER_BLOCKSCAN_PASS_BUDGET_MS: "12345.9", SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS: "45678.9",
     SEARCHER_BLOCKSCAN_LARGE_GRAPH_EDGE_THRESHOLD: "23456.9", SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS: "345678",
     SEARCHER_BLOCKSCAN_STATE_HOT_FAMILY_BUDGET_MS: "5678.9", SEARCHER_BLOCKSCAN_RUNTIME_PUBLICATION_RESERVE_MS: "2345.9",
@@ -39,6 +41,7 @@ test("all stage overrides are forwarded without changing the independent core co
     SEARCHER_REVM_TIMEOUT_MS: "1234",
   });
   assert.deepEqual(resolveBlockScanLiveStageSettings(env, 700), {
+    singleFunding: true, fixedEffectiveWethInput: 20_000_000_000_000_000n,
     passBudgetMs: 12345, largeGraphPassBudgetMs: 45678, largeGraphEdgeThreshold: 23456,
     startupWarmBudgetMs: 345678, hotPricingFamilyBudgetMs: 5678, runtimePublicationReserveMs: 2345,
     solveReserveMs: 6789, solveConcurrency: 6, finalSimulationConcurrency: 3, sourceSimulationTimeoutMs: 1234,
@@ -48,6 +51,23 @@ test("all stage overrides are forwarded without changing the independent core co
     solverSearch: { amountGrid: "geometric", gridHalfWidth: 3, gssMaxTries: 12,
       quoteConcurrency: 5, quoteToleranceRawUnits: 1n },
   });
+});
+
+test("single funding and fixed P are explicit while 10/512 keeps all sizing rules", () => {
+  const env = { SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED: "1",
+    SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT: "0.02", SEARCHER_BLOCKSCAN_MAX_CANDIDATES: "10",
+    SEARCHER_BLOCKSCAN_REFINE_CANDIDATES: "512" };
+  const cfg = resolveBlockScanCoreConfig(env), settings = resolveBlockScanLiveStageSettings(env, cfg.maxCandidates);
+  assert.equal(cfg.maxCandidates, 10); assert.equal(settings.refineCandidates, 512);
+  assert.equal(settings.singleFunding, true); assert.equal(settings.fixedEffectiveWethInput, 20_000_000_000_000_000n);
+  assert.deepEqual(settings.solverSearch, resolveBlockScanLiveStageSettings({}).solverSearch);
+  for (const value of ["", "0", "-1", "1e-2", "NaN", "0.0000000000000000001", "9".repeat(80)])
+    assert.throws(() => resolveBlockScanLiveStageSettings({ SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT: value }));
+  for (const value of ["", "2", "true"])
+    assert.throws(() => resolveBlockScanLiveStageSettings({ SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED: value }));
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+  assert.match(source, /fixedEffectiveWethInput: blockScanStageSettings\.fixedEffectiveWethInput/);
+  assert.match(source, /singleFunding: blockScanStageSettings\.singleFunding/);
 });
 
 test("source-simulation timeout preserves the live Number parser; validation remains with its owner", () => {
@@ -208,6 +228,38 @@ test("one factory bounds whole trials across source/worker selectors and preserv
     const f = fixtures[0]!;
     await workers[0]!.solve(f.plan, f.state, f.probe, f.options);
     assert.equal(events.at(-1)!.event.searchId, 2, "worker-local search identity must survive reuse");
+  }
+});
+
+test("single funding reuses the maximum-borrow token projection for every amount without fallback", async () => {
+  for (const reverts of [false, true]) {
+    const f = fixture(1), session = f.options.strictSession! as any;
+    (f.plan.opportunity as any).seedEdges = f.plan.tokenPath.edges;
+    let projections = 0;
+    session.fundingProjection = () => {
+      projections++;
+      return { sources: new Map([[token, { amount: 10000n, adapterId: "larger-source", fundingId: "larger" }]]) };
+    };
+    session.fundingActionIds = () => { throw new Error("must not expand duplicate funding sources"); };
+    const build = session.buildFundingRoot;
+    session.buildFundingRoot = (input: any) => {
+      assert.equal(input.actionAdapterId, "larger-source"); assert(input.amount <= 10000n);
+      return build(input);
+    };
+    const amounts: bigint[] = [], records: Record<string, unknown>[] = [];
+    const factory = createBlockScanLiveAmountSelectorFactory({ executor, quoteConcurrency: 3,
+      singleFunding: true, simRejects: new BlockScanSimRejectCache(), record: ({ event }) => records.push(event) });
+    const selector = factory({ source: f.source, workerIndex: 0, async simulate(plan): Promise<SimulationResult> {
+      amounts.push(plan.flashAmount);
+      return reverts ? { ...simulationResult(), success: false, netProfit: 0n, grossProfit: 0n,
+        failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: new Error("selected funding trial reverted") } } : simulationResult();
+    } });
+    if (reverts) await assert.rejects(selector.solve(f.plan, f.state, f.probe, f.options));
+    else await selector.solve(f.plan, f.state, f.probe, f.options);
+    assert.equal(projections, 1);
+    assert.deepEqual(amounts, reverts ? [10n] : [10n, 100n, 1000n, 10000n]);
+    const selection = records.filter(event => event.type === "funding_selected");
+    assert.equal(selection.length, 1); assert.equal(selection[0]!.fundingActionId, "larger-source");
   }
 });
 

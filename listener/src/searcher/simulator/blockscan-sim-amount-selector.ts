@@ -25,6 +25,8 @@ export function createBlockScanSimAmountSelector(input: {
   record?(event: Record<string, unknown>): void;
   /** False is the frozen quoted-construction control for paired benchmarks. */
   runtimeAmounts?: boolean;
+  /** Source-pinned per-token maximum-borrow entry selected once by the caller. */
+  fundingActionId?: string;
   /** Paired correctness control; default uses capabilities. */
   callbackSettlement?: boolean;
 }) {
@@ -51,7 +53,8 @@ export function createBlockScanSimAmountSelector(input: {
             return leg === null ? null : { ...leg, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut };
           });
           const runtimeLegs = legs !== null && legs.every(leg => leg !== null) ? legs : null;
-          const proposedSettlement = input.callbackSettlement === false || !runtimeLegs ? null : buildRuntimeSettlementRoot({
+          const proposedSettlement = input.callbackSettlement === false || !runtimeLegs ||
+              plan.tokenPath.edges.some(edge => session.blocksPrefixInversion(edge)) ? null : buildRuntimeSettlementRoot({
             legs: runtimeLegs, amount, minimumProfit: plan.opportunity.targetNetProfit ?? 1n, executor: input.executor,
             build: (index, request) => session.buildRuntimeAmountLeg({ edge: plan.tokenPath.edges[index]!, executor: input.executor,
               runtimeEvidence: opts.runtimeEvidence ?? [], settlement: request }),
@@ -67,7 +70,9 @@ export function createBlockScanSimAmountSelector(input: {
             onExactCall: () => { if (opts.timing) opts.timing.hopExactCalls++; },
           });
           if (opts.timing) opts.timing.quoteMs += performance.now() - quoteStart;
-          const actions = session.fundingActionIds(plan.opportunity.flashToken, amount);
+          const actions = input.fundingActionId === undefined
+            ? session.fundingActionIds(plan.opportunity.flashToken, amount)
+            : [input.fundingActionId];
           if (!actions.length && !settlement) throw new Error("sim amount selector missing verified funding action");
           let best: AmountSimulation<ResolvedPlan> = { success: false, reason: "no positive executable funding action" };
           for (const action of [...(settlement ? [null] : []), ...actions]) {

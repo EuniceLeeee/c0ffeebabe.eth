@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
-import { cp, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
+import fsPromises, { cp, link, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, unlink, utimes, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { test, type TestContext } from "node:test";
 import zlib, { gzipSync, gunzipSync } from "node:zlib";
 import { ReadyActivityArchive, READY_ACTIVITY_MAX_ENTRY_BYTES } from "../ready-activity-archive.js";
@@ -353,6 +354,61 @@ test("duplicate writes canonicalize object keys; same data succeeds and differen
   assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
   assert.match(String((results.find(result => result.status === "rejected") as PromiseRejectedResult).reason), /conflicting/);
   assert.ok(!(await readdir(directory)).some(name => name.startsWith(".")));
+}));
+
+test("initial writer waits for manifest link cleanup before pinning metadata", async () => fixture(async (directory, options) => {
+  const archive = new ReadyActivityArchive(options);
+  await archive.writeLogs({ ...range, logs: [{ ok: true }] });
+  const manifest = join(directory, "manifest.json");
+  const before = await readFile(manifest);
+  const pending = join(directory, ".pending-00000000-0000-4000-8000-000000000001");
+  await link(manifest, pending);
+  let settled = false;
+  const result = new ReadyActivityArchive(options).writeLogs({ ...range, logs: [{ ok: true }] })
+    .then(() => { settled = true; return null; }, error => { settled = true; return error; });
+  try {
+    await delay(20);
+    assert.equal(settled, false, "temporary publication metadata must settle first");
+  } finally {
+    await unlink(pending);
+  }
+  assert.equal(await result, null);
+  assert.deepEqual(await readFile(manifest), before);
+  assert.deepEqual(await new ReadyActivityArchive(options).readLogs(range), [{ ok: true }]);
+  assert.equal((await readdir(directory)).length, 2);
+}));
+
+test("losing initial manifest publication still waits for the winner's link cleanup", async t => fixture(async (directory, options) => {
+  const manifest = join(directory, "manifest.json");
+  const pending = join(directory, ".pending-00000000-0000-4000-8000-000000000001");
+  const originalLink = fsPromises.link;
+  let signalPublished!: () => void;
+  const published = new Promise<void>(resolve => { signalPublished = resolve; });
+  const mock = t.mock.method(fsPromises, "link", async (from: string, to: string) => {
+    if (to === manifest) {
+      await cp(from, pending);
+      await originalLink(pending, manifest);
+      signalPublished();
+    }
+    return originalLink(from, to);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { mock.mock.restore(); syncBuiltinESMExports(); });
+  let settled = false;
+  const result = new ReadyActivityArchive(options).writeLogs({ ...range, logs: [{ ok: true }] })
+    .then(() => { settled = true; return null; }, error => { settled = true; return error; });
+  await published;
+  const before = await readFile(manifest);
+  try {
+    await delay(20);
+    assert.equal(settled, false, "losing creator must not switch to the read-only path");
+  } finally {
+    await unlink(pending);
+  }
+  assert.equal(await result, null);
+  assert.deepEqual(await readFile(manifest), before);
+  assert.deepEqual(await new ReadyActivityArchive(options).readLogs(range), [{ ok: true }]);
+  assert.equal((await readdir(directory)).length, 2);
 }));
 
 test("publication is consistent across independent processes", async () => fixture(async (directory, options) => {

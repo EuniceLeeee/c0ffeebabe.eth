@@ -14,6 +14,7 @@ import {
   type FileHandle,
 } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { assertTransactionObservationScope, type TransactionObservationScope } from "./ready-transaction-input.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 
@@ -123,6 +124,8 @@ export type RunOutcome =
   | RetryableAttempt;
 
 export interface DurableSourceChunkReceipt {
+  /** With a TX scope, block bounds are an envelope, not continuous coverage. */
+  readonly observationScope?: TransactionObservationScope;
   readonly fromBlock: number;
   readonly toBlock: number;
   readonly resultCount: number;
@@ -136,6 +139,7 @@ export interface DurableSourceChunkReceipt {
  * itself. Every receipt names the exact key set and completed range chunks.
  */
 export interface DurableSourceReceipt {
+  readonly observationScope?: TransactionObservationScope;
   readonly sourceKey: string;
   readonly sourceKind:
     | "startup-candidate-union"
@@ -158,6 +162,7 @@ export interface DurableSourceReceipt {
 }
 
 export interface InProgressUniverseRun {
+  readonly observationScope?: TransactionObservationScope;
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly runId: string;
   readonly cutoff: CanonicalSource;
@@ -196,6 +201,7 @@ export interface ReadyFamilyPartition {
 }
 
 export interface ReadyUniverseGeneration {
+  readonly observationScope?: TransactionObservationScope;
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly generation: number;
   readonly cutoff: CanonicalSource;
@@ -219,6 +225,7 @@ export interface ReadyUniverseGeneration {
   readonly observedThrough: { readonly number: number; readonly hash: string };
   readonly appliedThrough: { readonly number: number; readonly hash: string };
   readonly sourceCoverage: readonly {
+    readonly observationScope?: TransactionObservationScope;
     readonly familyId: string;
     readonly sourceId: string;
     readonly completeThroughBlock: number;
@@ -481,7 +488,8 @@ function assertReadyFamilyPartitions(
       throw new Error("Ready Family partition candidate membership/hash mismatch");
     }
     assertCompleteSourceReceipts(partition.sourceReceipts);
-    assertSourceReceiptsBindRun(partition.sourceReceipts, { cutoff: ready.cutoff, fromBlock: ready.universeRange.fromBlock });
+    assertSourceReceiptsBindRun(partition.sourceReceipts, { cutoff: ready.cutoff, fromBlock: ready.universeRange.fromBlock,
+      observationScope: ready.observationScope });
     const coverage = new Set(partition.sourceReceipts.flatMap(receipt => receipt.coverageKeys));
     if (ready.sourceCoverage.filter(entry => entry.familyId === familyId)
       .some(entry => !coverage.has(entry.familyId + "|" + entry.sourceId))) {
@@ -596,6 +604,7 @@ export function prepareReadyFamilyUpdate(base: StartupCheckpointEnvelope, input:
       canonicalJson([...ids].sort()) !== canonicalJson(Object.keys(delta.familyPartitions).sort()) ||
       [...ids].some(id => replaced.has(id) || !enabled.has(id)) ||
       Object.values(delta.familyPartitions).some(partition => !partition.enabled) ||
+      canonicalJson(delta.observationScope ?? null) !== canonicalJson(ready.observationScope ?? null) ||
       canonicalJson(delta.cutoff) !== canonicalJson(ready.cutoff) ||
       canonicalJson(delta.universeRange) !== canonicalJson(ready.universeRange) ||
       canonicalJson(delta.observedThrough) !== canonicalJson(ready.observedThrough) ||
@@ -1355,6 +1364,23 @@ export class UniverseRebuildCheckpointStore {
       await journal?.close();
       await rm(directory, { recursive: true, force: true });
     }
+  }
+
+  /** Seed a new run directory with an existing completed Ready checkpoint.
+   * This is the same rolling-rebuild state, not a new cache or admission path.
+   * The runner still creates fresh source receipts and checks every reused memo.
+   */
+  async inheritReadyFrom(
+    source: UniverseRebuildCheckpointStore,
+  ): Promise<StartupCheckpointEnvelope> {
+    const checkpoint = await source.load();
+    if (checkpoint === null || checkpoint.readyGeneration === null ||
+      checkpoint.inProgressRun !== null) {
+      throw new Error("Ready inheritance requires a completed source checkpoint");
+    }
+    activeReadyMemos(checkpoint);
+    // Never overwrite either an existing destination or the source itself.
+    return this.#cas(0, () => checkpoint);
   }
 
   async #fileSignature(path: string): Promise<string | null> {
@@ -2159,6 +2185,7 @@ export class UniverseRebuildCheckpointStore {
 
   /** Create the fixed-cutoff run or return the existing one for it. */
   async beginOrResumeRun(input: {
+    readonly observationScope?: TransactionObservationScope;
     readonly expectedRevision: number;
     readonly runId: string;
     readonly cutoff: CanonicalSource;
@@ -2180,6 +2207,7 @@ export class UniverseRebuildCheckpointStore {
     assertSourceReceiptsBindRun(input.sourceReceipts, {
       cutoff: input.cutoff,
       fromBlock: input.fromBlock,
+      observationScope: input.observationScope,
     });
     return this.#cas(input.expectedRevision, (current) => {
       const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
@@ -2192,6 +2220,7 @@ export class UniverseRebuildCheckpointStore {
           );
         }
         if (
+          canonicalJson(existing.observationScope ?? null) !== canonicalJson(input.observationScope ?? null) ||
           canonicalJson(existing.familyUpdateScope ?? null) !== canonicalJson(input.familyUpdateScope ?? null) ||
           existing.cutoff.number !== input.cutoff.number ||
           existing.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
@@ -2236,6 +2265,7 @@ export class UniverseRebuildCheckpointStore {
         ...base,
         revision: base.revision + 1,
         inProgressRun: Object.freeze({
+          ...(input.observationScope === undefined ? {} : { observationScope: immutableReadyValue(input.observationScope) }),
           ...(input.familyUpdateScope === undefined ? {} : { familyUpdateScope: immutableReadyValue(input.familyUpdateScope) }),
           runId: input.runId,
           cutoff: Object.freeze({ ...input.cutoff }),
@@ -2264,6 +2294,7 @@ export class UniverseRebuildCheckpointStore {
    * carried and every candidate re-enters findReusableMemo.
    */
   async reconcileFixedRunPlan(input: {
+    readonly observationScope?: TransactionObservationScope;
     readonly expectedRevision: number;
     readonly runId: string;
     readonly cutoff: CanonicalSource;
@@ -2294,6 +2325,7 @@ export class UniverseRebuildCheckpointStore {
       // The run's time identity is checked FIRST: reconcile can never move
       // the cutoff/range, regardless of what the receipts claim.
       if (
+        canonicalJson(run.observationScope ?? null) !== canonicalJson(input.observationScope ?? null) ||
         run.cutoff.number !== input.cutoff.number ||
         run.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
         run.cutoff.generation !== input.cutoff.generation ||
@@ -2310,6 +2342,7 @@ export class UniverseRebuildCheckpointStore {
       assertSourceReceiptsBindRun(input.sourceReceipts, {
         cutoff: input.cutoff,
         fromBlock: input.fromBlock,
+        observationScope: input.observationScope,
       });
       // Old outcomes are not verification authority under the new discovery
       // plan: keep only outcomes still bound to the new partition (their
@@ -2588,7 +2621,8 @@ function assertReadyPromotion(
   run: InProgressUniverseRun,
   ready: ReadyUniverseGeneration,
 ): void {
-  if (canonicalJson(run.familyUpdateScope ?? null) !== canonicalJson(ready.familyUpdateScope ?? null) ||
+  if (canonicalJson(run.observationScope ?? null) !== canonicalJson(ready.observationScope ?? null) ||
+    canonicalJson(run.familyUpdateScope ?? null) !== canonicalJson(ready.familyUpdateScope ?? null) ||
     (run.familyUpdateScope !== undefined && canonicalJson([...run.familyUpdateScope.familyIds].sort()) !==
       canonicalJson(Object.keys(ready.familyPartitions ?? {}).sort()))) {
     throw new Error("Ready Family promotion lost scoped parent lineage");
@@ -2688,6 +2722,7 @@ function assertReadyPromotion(
     ready.sourceCoverage.length === 0 || !exactCoverageSet ||
     coverageKeys.size !== ready.sourceCoverage.length ||
     ready.sourceCoverage.some((coverage) =>
+      canonicalJson(coverage.observationScope ?? null) !== canonicalJson(run.observationScope ?? null) ||
       coverage.completeThroughBlock !== run.cutoff.number ||
       coverage.completeThroughHash?.toLowerCase() !==
         run.cutoff.hash.toLowerCase()
@@ -2727,6 +2762,10 @@ function assertCompleteSourceReceipts(
   const sourceKeys = new Set<string>();
   const coverageKeys = new Set<string>();
   for (const receipt of receipts) {
+    assertTransactionObservationScope(receipt.observationScope);
+    if (receipt.observationScope !== undefined && receipt.completedChunks.length !== 1) {
+      throw new Error("transaction source receipt requires one exact selection completion");
+    }
     if (
       !/^[0-9a-f]{64}$/.test(receipt.sourceKey) ||
       !/^[0-9a-f]{64}$/.test(receipt.queryFingerprint) ||
@@ -2757,6 +2796,7 @@ function assertCompleteSourceReceipts(
     let expectedFrom = receipt.fromBlock;
     for (const chunk of receipt.completedChunks) {
       if (
+        canonicalJson(chunk.observationScope ?? null) !== canonicalJson(receipt.observationScope ?? null) ||
         chunk.fromBlock !== expectedFrom ||
         chunk.toBlock < chunk.fromBlock ||
         chunk.toBlock > receipt.toBlock ||
@@ -2797,9 +2837,12 @@ function assertSourceReceiptsBindRun(
   run: {
     readonly cutoff: CanonicalSource;
     readonly fromBlock: number;
+    readonly observationScope?: TransactionObservationScope;
   },
 ): void {
+  assertTransactionObservationScope(run.observationScope);
   if (receipts.some((receipt) =>
+    canonicalJson(receipt.observationScope ?? null) !== canonicalJson(run.observationScope ?? null) ||
     receipt.fromBlock !== run.fromBlock ||
     receipt.toBlock !== run.cutoff.number ||
     receipt.cutoffNumber !== run.cutoff.number ||

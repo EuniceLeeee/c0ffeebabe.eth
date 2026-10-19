@@ -23,6 +23,42 @@ import {
 import { initBlockScanEnumerationSolverTelemetry } from
   "../blockscan-enumeration-solver-telemetry.js";
 
+test("route retention defaults to 10 GiB without changing price or disk reserves", async () => {
+  for (const maxFileBytes of [undefined, 1_024]) {
+    const expected = maxFileBytes ?? 10 * 1024 * 1024 * 1024;
+    const workerUrl = new URL("data:text/javascript," + encodeURIComponent(`
+      import assert from "node:assert/strict";
+      import { parentPort, workerData } from "node:worker_threads";
+      assert.equal(workerData.maxFileBytes, ${expected});
+      assert.equal(workerData.maxMidFileBytes, 16 * 1024 * 1024 * 1024);
+      assert.equal(workerData.minFreeBytes, 1024 * 1024 * 1024);
+      parentPort.on("message", message => {
+        if (message.type === "shutdown") {
+          parentPort.postMessage({ type: "shutdown-complete" });
+          parentPort.close();
+        }
+      });
+      parentPort.postMessage({ type: "ready", enabled: true });
+    `));
+    const warnings: string[] = [];
+    const sink = await initBlockScanEnumerationSolverTelemetry({
+      path: "route-retention-test.jsonl",
+      eventsPath: "route-retention-events-test.jsonl",
+      runId: "route-retention-options",
+      maxFileBytes,
+      workerUrl,
+      workerExecArgv: [],
+      onWarning: message => warnings.push(message),
+    });
+    try {
+      assert.equal(sink.enabled, true, warnings.join("\n"));
+      assert.deepEqual(warnings, []);
+    } finally {
+      await sink.shutdown(5_000);
+    }
+  }
+});
+
 test("Exact OFF preserves the complete real telemetry record with exact=null", async () => {
   await withTempDir(async (dir) => {
     const path = join(dir, "routes.jsonl");

@@ -19,6 +19,8 @@ export type EffectivePricingInput = Pick<BlockScanStateSnapshot,
 /** Single global default P (0.002 WETH); a positive spread floor and available gas select G instead.
  * Exact reuses the resulting row amount and hands that same input to Solver. */
 export const DEFAULT_EFFECTIVE_WETH_INPUT = 2_000_000_000_000_000n;
+/** Maximum successful forward quotes used to derive an input amount. */
+export const MAX_EFFECTIVE_INPUT_PATH_HOPS = 4;
 
 export interface EffectiveMidRow {
   readonly edgeId: string;
@@ -130,8 +132,8 @@ type EffectiveMidQuote = (
 ) => Promise<Pick<RouteExactResult, "source" | "amountIn" | "amountOut">>;
 
 /** Forward effective sampling: shortest successful WETH paths first, then the
- * greatest output at that depth. Depth-three tokens still quote their outgoing
- * edges, but those outputs cannot seed a fourth-hop sampling reference. */
+ * greatest output at that depth. Depth-four tokens still quote their outgoing
+ * edges, but those outputs cannot seed a fifth-hop sampling reference. */
 export async function buildEffectiveMids(input: {
   /** Verified pricing-state identity; raw mids are deliberately not consumed. */
   readonly pricing: EffectivePricingInput;
@@ -270,9 +272,9 @@ export async function buildEffectiveMids(input: {
 
   const references = new Map<string, EffectiveAmountReference>([[weth,
     Object.freeze({ amountIn: referenceWethInput, path: Object.freeze([]) })]]);
-  const pending = Array.from({ length: 4 }, () => new Map<string, EffectiveAmountReference>());
+  const pending = Array.from({ length: MAX_EFFECTIVE_INPUT_PATH_HOPS + 1 }, () => new Map<string, EffectiveAmountReference>());
   const offer = (token: string, reference: EffectiveAmountReference) => {
-    if (references.has(token) || reference.path.length === 0 || reference.path.length > 3) return;
+    if (references.has(token) || reference.path.length === 0 || reference.path.length > MAX_EFFECTIVE_INPUT_PATH_HOPS) return;
     const candidates = pending[reference.path.length]!;
     const prior = candidates.get(token);
     // Equal outputs use the complete edge path, independent of graph ordering
@@ -284,7 +286,7 @@ export async function buildEffectiveMids(input: {
   };
   const offerOutput = (row: EffectiveMidRow, reference: EffectiveAmountReference) => {
     if (row.status !== "quoted" || edges.get(row.edgeId)!.leavesStandingPosition ||
-        reference.path.length >= 3 || row.tokenOut === weth ||
+        reference.path.length >= MAX_EFFECTIVE_INPUT_PATH_HOPS || row.tokenOut === weth ||
         row.tokenOut === row.tokenIn || reference.path.some(step => step.tokenIn === row.tokenOut)) return;
     offer(row.tokenOut, Object.freeze({ amountIn: row.amountOut!,
       path: Object.freeze([...reference.path, row]) }));
@@ -311,7 +313,7 @@ export async function buildEffectiveMids(input: {
   // Bind one existing source-bound session for a structural superset. Quote
   // failures prune the actual layered work; no second quote pipeline/session.
   const reachable = new Set([weth]);
-  for (let depth = 0; depth < 3; depth++) {
+  for (let depth = 0; depth < MAX_EFFECTIVE_INPUT_PATH_HOPS; depth++) {
     const additions = work.filter((item, index) => enabled(index) && !item.edge.leavesStandingPosition &&
       reachable.has(item.edge.tokenIn.toLowerCase())).map(item => item.edge.tokenOut.toLowerCase());
     for (const token of additions) reachable.add(token);
@@ -321,7 +323,7 @@ export async function buildEffectiveMids(input: {
     (input.cascadeAmountChanges || !reusable.has(index) || reusable.get(index)!.amountIn === null)).map(item => item.edgeId));
   if (input.prepareQuote && required.size > 0 && !closed()) await input.prepareQuote(required);
 
-  for (let depth = 0; depth <= 3; depth++) {
+  for (let depth = 0; depth <= MAX_EFFECTIVE_INPUT_PATH_HOPS; depth++) {
     for (const [token, reference] of pending[depth]!) {
       if (!references.has(token)) references.set(token, reference);
     }

@@ -3,7 +3,7 @@ import { descriptor as oneswapFixture } from "../venues/swaps/oneswap-family/tes
 import { descriptor as aquaFixture } from "../venues/swaps/aqua-swapvm-family/test/fixtures.js";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { RuntimeAmountProgram } from "../../adapters/runtime-amount-program.js";
@@ -27,6 +27,7 @@ import { UNIV4_FEE_HOOK_ADDRESS } from "../venues/swaps/univ4-fee-hook-family/ma
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
 import { descriptor as balancerV1Fixture } from "../venues/swaps/balancer-v1-family/test/fixtures.js";
 import { setup as balancerV2Fixture, fixture as balancerV2Responses } from "../venues/swaps/balancer-v2-family/test/fixtures.js";
+import { descriptor as univ1Fixture, standardAnswer as univ1Standard } from "../venues/swaps/univ1-family/test/fixtures.js";
 import { descriptor as compoundCTokenFixture } from "../venues/protocols/compound-ctoken-family/test/fixtures.js";
 import { descriptor as algebraIntegralFixture } from "../venues/swaps/algebra-integral-family/test/fixtures.js";
 import { descriptor as kyberswapElasticFixture } from "../venues/swaps/kyberswap-elastic-family/test/fixtures.js";
@@ -51,7 +52,9 @@ const priced = installed.filter(x => ["swap", "protocol"].includes(x.plugin.mani
 const family = (id: string): any => { const found = priced.find(x => x.familyId === id); assert(found, id); return found.plugin; };
 const raw = JSON.parse(readFileSync(new URL("./fixtures/runtime-family-descriptors.json", import.meta.url), "utf8"),
   (_key, value) => value?.$durableType === "bigint" ? BigInt(value.value) : value);
-const fixtures: any[] = raw.descriptors;
+// V1's identity now distinguishes implementation fee models. Old captured
+// descriptors are not new admission evidence; use the current contract fixtures.
+const fixtures: any[] = raw.descriptors.filter((d: any) => d.familyId !== "custom-swap:uniswap-v1");
 fixtures.push(fewWrappedFixture());
 fixtures.push(vaultSpotFixture());
 fixtures.push(aquaFixture());
@@ -63,6 +66,10 @@ for (const d of fixtures.filter(d => d.familyId === "fluid-dex")) {
   d.rawToken0 = d.token0;
   d.rawToken1 = d.token1;
 }
+for (const d of [univ1Fixture(), univ1Fixture(univ1Standard)]) fixtures.push({ ...d,
+  pool: "0x3000000000000000000000000000000000000001", instanceKey: "0x3000000000000000000000000000000000000001",
+  token: "0x3000000000000000000000000000000000000002", factory: "0x3000000000000000000000000000000000000003",
+  issuer: d.issuer === ethers.ZeroAddress ? ethers.ZeroAddress : "0x3000000000000000000000000000000000000004" });
 // These four missing Ready families are synthetic ABI fixtures, not minted
 // identity/admission records. Normal strict/Ready verification is NOT bypassed.
 function synthetic(id: string, fields: Record<string, unknown>, lineage = 0) {
@@ -172,6 +179,40 @@ test("every installed swap/protocol Family, including disabled entries, has both
     assert(["funding", "credit"].includes(p.manifest.domain));
     assert(p[p.manifest.domain], entry.familyId + " must retain its own domain capability");
   }
+});
+
+test("settlement capability audit covers installed and disabled Families without central identity rules", () => {
+  const inventory = installed.map(entry => {
+    const p: any = entry.plugin;
+    const directions = fixtures.filter(d => d.familyId === entry.familyId).flatMap(d => routes(d).map(r => {
+      const leg = build(d, r), capabilities = leg.settlement ?? {};
+      const requests: any[] = [];
+      if (capabilities.quoteOutput) requests.push({ kind: "quote-output" });
+      if (capabilities.directOutput) requests.push({ kind: "direct-output", recipient: origin });
+      if (capabilities.settleOutput) requests.push({ kind: "settle-output", recipient: origin, amountIn: 19n });
+      if (capabilities.deferredDebtInput) {
+        assert(capabilities.deferredInput, "debt-input capability requires a deferred recipient");
+        requests.push({ kind: "deferred-input", paymentAmount: 19n, paymentInput: "debt",
+          paymentProgram: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()) });
+      }
+      if (capabilities.deferredInput) requests.push({ kind: "deferred-input", paymentAmount: 19n,
+        paymentProgram: ethers.hexlify(new RuntimeAmountProgram().constant(1, 0n).bytes()) });
+      for (const request of requests) {
+        const mapped = mapRuntimeAssetSettlementRequest({ route: r, executor, request });
+        assert(mapped, "declared graph-asset request must have a raw settlement mapping");
+        const result = p.execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: mapped });
+        assert(result, entry.familyId); assert.deepEqual(result.settlementRequest, mapped);
+        assert.deepEqual(result.settlement, capabilities);
+      }
+      return { instance: d.instanceKey, direction: r.direction, capabilities, requestContracts: requests.map(r => r.kind) };
+    }));
+    if (["swap", "protocol"].includes(p.manifest.domain)) assert(directions.length > 0, entry.familyId);
+    return { familyId: entry.familyId, domain: p.manifest.domain,
+      enabled: load.plugins.includes(entry), directions,
+      evidence: "offline emitter/request contract; not new historical admission or every-instance execution" };
+  });
+  if (process.env.RUNTIME_SETTLEMENT_AUDIT_OUT) writeFileSync(process.env.RUNTIME_SETTLEMENT_AUDIT_OUT, JSON.stringify(inventory, null, 2) + "\n");
+  assert.equal(new Set(inventory.map(x => x.familyId)).size, installed.length);
 });
 
 for (const d of fixtures) test(d.familyId + (d.variant ? ":" + d.variant : "") + ": all projected directions construct without a quoted amount and reject foreign tokens", () => {
