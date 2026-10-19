@@ -235,9 +235,9 @@ async function setup(mode: Mode) {
       const target = reuse?.quoteGraph ?? pricing;
       const source = { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation };
       let session: StrictProductionRuntimeSession | undefined;
-      let index = 0;
       return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, control, weth: pool.token0, gasCostWei: null,
         enumerationSpreadBps: 20, concurrency: 1, previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
+        resumeSameSource: reuse?.resumeSameSource,
         prepareQuote: async requiredEdgeIds => {
           session = await sessionFor({ purpose: "exact-execution", source, fundingAssets: [], control,
             exactCallBackend: backend, requiredEdgeIds });
@@ -246,7 +246,7 @@ async function setup(mode: Mode) {
           assert(session, "effective quote requires the current source's lazy Exact session");
           // Synthetic expensive remote step plus real Family decode/authority.
           // Deliberately omit controls here to exercise the attempt call facade.
-          await backend.call({ to: QUOTER, data: ++index === 1 ? "0xbeef01" : TAIL, from: EXECUTOR });
+          await backend.call({ to: QUOTER, data: request.edge.tokenIn.toLowerCase() === pool.token0.toLowerCase() ? "0xbeef01" : TAIL, from: EXECUTOR });
           const quote = await session.issueExact({ ...request, requireChainAmountQuote: false,
             executor: EXECUTOR, runtimeEvidence: [] });
           assert("amountIn" in quote);
@@ -551,6 +551,12 @@ await fixture("resume", async f => {
   assert.equal(warmWire.length, 8, "three raw + two Funding + two effective reads + only the interrupted tail repeated");
   assert.equal(warmWire.filter(c => c.params[0].data === "0xbeef01").length, 1);
   assert.equal(warmWire.filter(c => c.params[0].data === TAIL).length, 2);
+  const successfulWarmQuotes = f.exacts.filter(e => e.session.source.number === N);
+  assert.equal(successfulWarmQuotes.length, 2, "same-pin retry must not reissue already successful Exact quotes");
+  const firstRow = [...f.published[0]!.effectiveMids!.rows.values()].find(row => row.tokenIn === pool.token0.toLowerCase())!;
+  assert.equal(firstRow.quotedAt!.generation, 1, "carried row retains its original observation");
+  assert.equal(f.published[0]!.coverage.carriedEdgeKeys.length, 1);
+  assert.equal(f.published[0]!.coverage.refreshedEdgeKeys.length, 1);
   const oldExact = f.sessions.find(s => s.source.generation === 1 && s.creationTiming.refreshedInstanceCount === 0)!;
   const freshExact = f.sessions.find(s => s.source.generation === 2 && s.creationTiming.refreshedInstanceCount === 0)!;
   assert(oldExact && freshExact); assert.notEqual(oldExact, freshExact);
@@ -558,7 +564,7 @@ await fixture("resume", async f => {
   const freshQuote = f.exacts.find(e => e.session === freshExact)!.quote;
   assert.throws(() => freshExact.buildExecution({ edge: freshExact.edges[0]!, exact: oldQuote,
     minAmountOut: 1n, executor: EXECUTOR }), /same session-issued/);
-  assert.equal(freshExact.buildExecution({ edge: freshExact.edges[0]!, exact: freshQuote,
+  assert.equal(freshExact.buildExecution({ edge: freshExact.edges.find(e => e.tokenIn.toLowerCase() === pool.token1.toLowerCase())!, exact: freshQuote,
     minAmountOut: 1n, executor: EXECUTOR }).status, "resolved");
   assertAtomicBlockScanRuntime(f.snapshots[0]!);
   for (const request of f.requests.slice(0, 2)) {

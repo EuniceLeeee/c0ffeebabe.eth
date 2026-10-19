@@ -1,0 +1,199 @@
+{
+  "schema": "startup-effective-resume-correctness/v1",
+  "dateUtc": "2026-10-19T06:46:35.539388+00:00",
+  "status": "implemented; local and actual cloud offline correctness/build passed; representative performance still failed/unverified",
+  "baseline": {
+    "head": "60418c62993616f9edaa426f5eaab9800cf74322",
+    "actualDirtySourceFingerprint": "fc53a0bf228b2962e12bc2125dfcc4fb6048b04d12d731d429a8a7e7cfb29473",
+    "sourceFileCount": 2077
+  },
+  "retainedMeasuredFailure": {
+    "run": "live250-all48-blockscan-only-20261019",
+    "sourceBlock": 26224367,
+    "sourceHash": "0x7f49865d2ba028cf532a1bc55e6e132e32544d7713fbeb83c746ace5dbf25197",
+    "enabledFamilies": 48,
+    "graphEdges": 51471,
+    "observedNewHeads": 250,
+    "observedRange": [
+      26224368,
+      26224617
+    ],
+    "startupMs": 3499342,
+    "publishedPrices": 0,
+    "rawAttempts": 12,
+    "rawInstancesPerAttempt": 24283,
+    "partialEffectiveDrafts": 11,
+    "throttleRetries": 10,
+    "physicalTimeoutRetries": 6,
+    "finalTransportConcurrency": 1,
+    "finalBatchSize": 1,
+    "logSha256": "5b887c891f55b10a607175397c15c17897927a342e894e18552c87c70f266780"
+  },
+  "finding": "Startup reconstructed raw and effective after every expired attempt. Successful call-byte memo did not retain completed Exact/forward-amount work; partial quoted row counts regressed across attempts.",
+  "change": [
+    "One private cursor belongs to the existing startup retry loop and coordinator. Only original incomplete effective data survives, never Ready contents, sessions or execution handles.",
+    "Only existing deadline retry after real drain and canonical revalidation consumes the cursor. Every attempt rebuilds raw, current Exact session, Funding and execution preparation; full atomic publication and epoch CAS stay unchanged.",
+    "Reuse only successful quoted rows with original amount/output, quotedAt and process-local forward lineage; unsuccessful rows are retried. Same physical source, graph fingerprint, monotonic generation and unchanged sampling mode/notional/spread/cascade/WETH are required.",
+    "Success, nonretry exit, shutdown, reset, another preparation, canonical or graph change retire the cursor. Complete-but-unpublished effective results are not retained. Ordinary prepare/coarse and cross-block carry semantics remain unchanged."
+  ],
+  "scopeInvariants": [
+    "Current coordinator closure binds immutable production chain, Ready/catalog, executor and runtime-code identity; private cursor cannot transfer between coordinators.",
+    "Run exclusions change only upon publication; any existing publication rejects this startup cursor.",
+    "No Family, batch/concurrency, graph size, reference amount policy, phase budgets, final sim, repayment/profit or conservation gate changes."
+  ],
+  "validation": {
+    "regressionFlip": {
+      "fixture": "listener/src/searcher/test/blockscan-startup-warm-resume.ts",
+      "baselinePassed": 45,
+      "baselineTotal": 46,
+      "candidatePassed": 46,
+      "candidateTotal": 46,
+      "beforeSuccessfulExactInvocations": 3,
+      "afterSuccessfulExactInvocations": 2,
+      "requiredUniqueSuccessfulQuotes": 2,
+      "sameFinalAmounts": true,
+      "carriedRows": 1,
+      "freshRows": 1
+    },
+    "effectiveTests": 71,
+    "independentCursorScenarios": 13,
+    "strictProductionRuntimeContract": "PASS",
+    "independentReviewSha256": "31e146cb97f4cbc1303276a30ddf9f7bb7bf55d43a34eddcdba92695f66347b4",
+    "localProductionBuild": "PASS after restoring actual cloud peer-dirty dependency files read-only; initial missing snapshot export error retained",
+    "canonicalReconciliation": {
+      "query": [
+        "latency"
+      ],
+      "tool": "analysis:blockscan-pass-latency",
+      "manifestSha256": "5a41d425299534b37b38579c53482fbb1f076cab45fe7dbf672784649a59aa20",
+      "scope": {
+        "startLine": 1,
+        "endLine": 2411538,
+        "logStartLine": 8,
+        "minRun": 250,
+        "runtimeCommit": "d25a00a919ad82f11706e55f968ff402ed7a7049",
+        "processStartLine": 1,
+        "processStartCount": 1,
+        "runtimeCommitLines": 1,
+        "recordsBeforeRuntimeCommit": 0,
+        "processIdentityBinding": "log-anchor-only",
+        "externalPidBindingRequired": true,
+        "eligibleForQualification": true,
+        "ineligibleReason": null
+      },
+      "totals": {
+        "passes": 1,
+        "fast": 0,
+        "missingTotalMs": 0,
+        "overThreshold": 1
+      },
+      "qualifyingRuns": [],
+      "invalidByReason": {
+        "over_threshold": 1
+      },
+      "productionBoundaryMetrics": {
+        "headToPublicationMs": {
+          "samples": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "headToPricingDrainMs": {
+          "samples": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "sizingToPassDrainMs": {
+          "samples": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        }
+      },
+      "reconciliation": "confirms failed startup and zero published price/sizing boundary samples; manual per-attempt draft and transport diagnostics add cause detail, not new completed passes"
+    },
+    "cloudChecks": [
+      {
+        "name": "startup",
+        "exitCode": 0,
+        "seconds": 7.561,
+        "logSha256": "f41bc813b1b5f43203bb1b60f5634784d1fadb04fbd988263c053d1da973e948"
+      },
+      {
+        "name": "effective",
+        "exitCode": 0,
+        "seconds": 0.32,
+        "logSha256": "574a7332a2ecc2b566478564ad6e1b9215a2b9e03dddbc8c6151fc1ad02825a1"
+      },
+      {
+        "name": "cursor",
+        "exitCode": 0,
+        "seconds": 1.896,
+        "logSha256": "aa759551fc214183ff74a9b99df7dfa37857a49629d1cae3449485c35b4a8a95"
+      },
+      {
+        "name": "strict-runtime",
+        "exitCode": 0,
+        "seconds": 4.815,
+        "logSha256": "90bab341304a0287b741f72fc7b0873635ba776b0550cbdffa844040b56a1f91"
+      },
+      {
+        "name": "head-window",
+        "exitCode": 0,
+        "seconds": 2.479,
+        "logSha256": "da97f109e379120c486645629e3b74db7f6cc0d7162e378968ee4b776ff507ba"
+      },
+      {
+        "name": "build-live",
+        "exitCode": 0,
+        "seconds": 8.378,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      }
+    ],
+    "unrelatedFrozenFilesUnchanged": 2071
+  },
+  "changedFiles": [
+    {
+      "path": "listener/src/searcher/blockscan-runtime-loop.ts",
+      "before": "8cad71bf0682d5563dd11b33ebdec8b86e323b0e640fee3230d00be5e455baff",
+      "after": "f1229a58cdfa6917e32b168ccf1e1c763a8a1c3b32c97c34069ae844463fa482"
+    },
+    {
+      "path": "listener/src/searcher/strict-current-runtime-coordinator.ts",
+      "before": "5836e3e2f872bf11ef4e980b1911520095a9aab04be83e6f93cc5daa2c2c4db3",
+      "after": "e6ca3c49e5e555d6125857c05c62cdaae4e25edf8ff1e6a581083da07273c2ed"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-effective-mid.ts",
+      "before": "7f63c38c9db55ef7a51a60b70416798f2a43c5854d100349caa30a77bc0b2190",
+      "after": "39a9311130ba7eda6da7f995a58a87acd089940924cbd62b73e531a3273e349f"
+    },
+    {
+      "path": "listener/src/searcher/main.ts",
+      "before": "9e1134db673359cc86b13034cb81dd6993b04adddf42090d5b2bd87601200cc8",
+      "after": "0f594cf1bb0d2d3b1cc9dad7de4d2cf5ee2c7999ef5ecbfda14a02fc894c95a1"
+    },
+    {
+      "path": "listener/src/searcher/test/blockscan-startup-warm-resume.ts",
+      "before": "42af86d0231864af82559f7ce76336934edbea95b407d5d9bbf429da802e1699",
+      "after": "19cc7e58f559f19580db47981e2d08b31cb80bdf25ae8061221ac891135569b9"
+    },
+    {
+      "path": "listener/src/searcher/test/blockscan-effective-mid.ts",
+      "before": "a29ebab45e18304227135b96b1177a464008537450cc063c08e2d10a59ef0b5a",
+      "after": "93c193dd4fae12bc8c83049945f01b64b87ca8c7f80b6c523646241c9534fefa"
+    },
+    {
+      "path": "listener/src/searcher/test/strict-startup-warm-resume-cursor.ts",
+      "before": null,
+      "after": "fa4ef60d9430ae507d5ef1e9da3f841734ac11bd03768a540845f5bd86e7d768"
+    }
+  ],
+  "limitations": [
+    "Raw all-instance refresh still repeats each attempt; this slice does not fix that cost.",
+    "Permanent scheduler reduction and the observed 22-second single-item HTTP response remain separate latency findings; no recovery policy was changed.",
+    "Offline invocation reduction is not elapsed production-performance acceptance. Original 250-head failure retained; no new live, Ready rebuild or representative heavy timing run launched.",
+    "No historical on-chain execution or opportunity result is upgraded by these fixture tests. No goal completion claimed."
+  ]
+}

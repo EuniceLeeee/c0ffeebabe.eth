@@ -1553,6 +1553,70 @@ test("enabled cascade invalidates unreachable dependents without issuing quotes 
   assert.equal(row(recovered, tail).status, "quoted");
 });
 
+
+test("startup partial continuation retains successful lineage and retries all unsuccessful statuses", async () => {
+  const names = ["kept", "failed", "unsupported", "zero", "cancelled"];
+  const all = names.map(id => edge(W, U, id));
+  const prices = pricing(all.map(e => [e, 2]));
+  const controller = new AbortController();
+  const previous = await build(prices, { concurrency: 1, control: { signal: controller.signal },
+    quote: async ({ edge, amountIn }) => {
+      if (edge.target === "failed") throw new Error("temporary");
+      if (edge.target === "unsupported") throw { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" };
+      if (edge.target === "cancelled") controller.abort();
+      return { source: SOURCE, amountIn, amountOut: edge.target === "zero" ? 0n : amountIn * 2n };
+    } });
+  assert.equal(previous.complete, false);
+  const current = { ...SOURCE, generation: SOURCE.generation + 1 };
+  const calls: TokenEdge[] = [];
+  const next = await build(atSource(prices, current), { previous, resumeSameSource: true,
+    touchedStateKeys: new Set(), quote: async ({ edge, amountIn }) => {
+      calls.push(edge); return { source: current, amountIn, amountOut: amountIn * 2n };
+    } });
+  assert.deepEqual(calls, all.slice(1));
+  assert.equal(next.complete, true);
+  assert.equal(row(next, all[0]!), row(previous, all[0]!));
+  assert.equal(effectiveRowAmountReference(row(next, all[0]!)), effectiveRowAmountReference(row(previous, all[0]!)));
+  assert.equal(effectiveMidRowCarried(next, row(next, all[0]!)), true);
+  assert.deepEqual(row(next, all[0]!).quotedAt, SOURCE);
+});
+
+for (const change of ["none", "amount", "gas-amount", "mode", "spread", "cascade", "weth", "hash", "height", "generation", "complete"] as const) {
+  test(`startup continuation policy fence: ${change}`, async () => {
+    const all = [edge(W, U, "first"), edge(W, U, "last")];
+    const prices = pricing(all.map(e => [e, 2]));
+    const controller = new AbortController();
+    const previous = await build(prices, { concurrency: 1, control: { signal: controller.signal },
+      ...(change === "gas-amount" ? { gasCostWei: 1n } : {}),
+      quote: async ({ edge, amountIn }) => {
+        if (change !== "complete" && edge.target === "last") controller.abort();
+        return { source: SOURCE, amountIn, amountOut: amountIn * 2n };
+      } });
+    const current = { number: SOURCE.number + (change === "height" ? 1 : 0),
+      hash: change === "hash" ? hash(123) : SOURCE.hash,
+      generation: SOURCE.generation + (change === "generation" ? 0 : 1) };
+    const overrides: Partial<BuildInput> = change === "amount" ? { fixedWethInput: 10n }
+      : change === "gas-amount" ? { gasCostWei: 2n }
+      : change === "mode" ? { fixedWethInput: DEFAULT_RAW }
+      : change === "spread" ? { enumerationSpreadBps: 201 }
+      : change === "cascade" ? { cascadeAmountChanges: true }
+      : change === "weth" ? { weth: U } : {};
+    const calls: TokenEdge[] = [];
+    const next = await build(atSource(prices, current), { previous, resumeSameSource: true,
+      touchedStateKeys: new Set(), ...overrides, quote: async ({ edge, amountIn }) => {
+        calls.push(edge); return { source: current, amountIn, amountOut: amountIn * 2n };
+      } });
+    assert.equal(next.complete, true);
+    if (change === "none") {
+      assert.deepEqual(calls, [all[1]]);
+      assert.equal(row(next, all[0]!), row(previous, all[0]!));
+    } else {
+      assert.notEqual(row(next, all[0]!), row(previous, all[0]!), "policy/source change must discard old success");
+      if (change !== "weth") assert.deepEqual(calls, all);
+    }
+  });
+}
+
 let failed = 0;
 for (const [name, run] of tests) {
   try { await run(); console.log(`PASS ${name}`); }

@@ -60,6 +60,7 @@ import type {
   StrictCanonicalActivityProof,
   StrictSessionProvider,
   StrictFundingPreparation,
+  StrictStartupWarmResume,
   StrictFundingPreparationInput,
   PrepareStrictRuntimeInput,
 } from
@@ -869,6 +870,7 @@ export interface BlockScanRuntimeLoopDependencies {
 }
 
 export interface CurrentSourceRuntimeCoordinator {
+  startStartupWarmResume?(graph: VerifiedGraphView): StrictStartupWarmResume;
   latestPricingSnapshot(): BlockScanStateSnapshot | null;
   prepareCoarsePricing(input: {
     readonly graph: VerifiedGraphView;
@@ -1848,6 +1850,7 @@ export class BlockScanRuntimeLoop {
     let deadlineAtMs = input.deadlineAtMs;
     const reserveMs = input.deadlineAtMs - input.preparationSettleDeadlineAtMs!;
     let attempt = 0;
+    const startupWarmResume = coordinator.startStartupWarmResume?.(input.graph);
     const assertOpen = (): void => {
       if (passController.signal.aborted) throw passController.signal.reason;
       if (this.deps.runtimeAbort.signal.aborted) throw this.deps.runtimeAbort.signal.reason;
@@ -1870,88 +1873,90 @@ export class BlockScanRuntimeLoop {
         throw error;
       }
     };
-    for (;;) {
-      assertOpen();
-      const controller = new AbortController();
-      const detach = linkAbortController(passController.signal, controller);
-      const settleDeadlineAtMs = deadlineAtMs - reserveMs;
-      const admittedAtMs = Date.now();
-      const deadlineError = new StateCallAbortedError("startup warm attempt deadline reached", "deadline");
-      const timer = setTimeout(() => controller.abort(deadlineError),
-        Math.max(0, deadlineAtMs - Date.now()));
-      // This facade also fences callers which omit their own work controls.
-      // Only successful bytes survive; no session or issued handle is retained.
-      const calls: Pick<StateBackend, "call"> = Object.freeze({
-        call: (request, control = {}) => backend.call(request, {
-          deadlineAtMs: Math.min(settleDeadlineAtMs, control.deadlineAtMs ?? Infinity),
-          signal: control.signal === undefined ? controller.signal
-            : AbortSignal.any([controller.signal, control.signal]),
-        }),
-      });
-      let retry = false;
-      try {
-        if (attempt++ > 0) {
-          await validate("startup warm retry canonical header", controller.signal);
-          graph = this.deps.buildGraphView({
-            id: input.graph.id, generation: this.nextGeneration(),
+    try {
+      for (;;) {
+        assertOpen();
+        const controller = new AbortController();
+        const detach = linkAbortController(passController.signal, controller);
+        const settleDeadlineAtMs = deadlineAtMs - reserveMs;
+        const admittedAtMs = Date.now();
+        const deadlineError = new StateCallAbortedError("startup warm attempt deadline reached", "deadline");
+        const timer = setTimeout(() => controller.abort(deadlineError),
+          Math.max(0, deadlineAtMs - Date.now()));
+        // This facade also fences callers which omit their own work controls.
+        // Only successful bytes survive; no session or issued handle is retained.
+        const calls: Pick<StateBackend, "call"> = Object.freeze({
+          call: (request, control = {}) => backend.call(request, {
+            deadlineAtMs: Math.min(settleDeadlineAtMs, control.deadlineAtMs ?? Infinity),
+            signal: control.signal === undefined ? controller.signal
+              : AbortSignal.any([controller.signal, control.signal]),
+          }),
+        });
+        let retry = false;
+        try {
+          if (attempt++ > 0) {
+            await validate("startup warm retry canonical header", controller.signal);
+            graph = this.deps.buildGraphView({
+              id: input.graph.id, generation: this.nextGeneration(),
+              sourceBlock: pin.number, sourceBlockHash: pin.hash,
+              // Rebind the original Ready authority, not the GraphView's copies.
+              edges: readyEdges, landedCoverage: this.landedCoverage(),
+              topologyKey: pin.topologyKey,
+            });
+          }
+          assertOpen();
+          const source = Object.freeze({ number: pin.number, hash: pin.hash, generation: graph.generation });
+          const request: PrepareStrictRuntimeInput = {
+            ...input, graph, deadlineAtMs, startupWarmResume,
+            preparationSettleDeadlineAtMs: settleDeadlineAtMs,
+            pricingFamilySettleDeadlineAtMs: settleDeadlineAtMs,
+            signal: controller.signal, pricingCallBackend: calls,
+            simulationTransport: simulationWork.transportFor(source, { signal: passController.signal, deadlineAtMs }),
+            canonicalActivity: input.canonicalActivity === undefined ? undefined : {
+              ...input.canonicalActivity, source,
+            },
+            validateBeforePublish: () => validate("startup warm publication canonical header", controller.signal),
+          };
+          const runtime = await coordinator.prepare(request);
+          assertOpen();
+          if (runtime.status === "incomplete" && Date.now() >= settleDeadlineAtMs) throw deadlineError;
+          return { runtime, graph };
+        } catch (error) {
+          // Do not retry arbitrary failures merely because a clock also expired.
+          retry = !passController.signal.aborted && !this.deps.runtimeAbort.signal.aborted &&
+            !this.deps.isShuttingDown() && admittedAtMs < settleDeadlineAtMs &&
+            Date.now() >= settleDeadlineAtMs && (
+              controller.signal.reason === deadlineError ||
+              (error instanceof StateCallAbortedError && error.kind === "deadline") ||
+              (error instanceof Error && error.message === "strict current runtime deadline expired")
+            );
+          if (!retry) throw error;
+        } finally {
+          clearTimeout(timer);
+          controller.abort(new Error("startup warm attempt settled"));
+          detach();
+          // prepare joins its workers; caller cancellation removes queued work
+          // before drain (which would otherwise dispatch it). Keep the memo open.
+          try { await backend.drain(); }
+          finally {
+            if (retry || passController.signal.aborted) await simulationWork.retire({
+              number: pin.number, hash: pin.hash, generation: graph.generation,
+            });
+          }
+        }
+        if (retry) {
+          console.log(`[searcher/blockscan-startup-warm-resume] ${JSON.stringify({
             sourceBlock: pin.number, sourceBlockHash: pin.hash,
-            // Rebind the original Ready authority, not the GraphView's copies.
-            edges: readyEdges, landedCoverage: this.landedCoverage(),
-            topologyKey: pin.topologyKey,
-          });
-        }
-        assertOpen();
-        const source = Object.freeze({ number: pin.number, hash: pin.hash, generation: graph.generation });
-        const request: PrepareStrictRuntimeInput = {
-          ...input, graph, deadlineAtMs,
-          preparationSettleDeadlineAtMs: settleDeadlineAtMs,
-          pricingFamilySettleDeadlineAtMs: settleDeadlineAtMs,
-          signal: controller.signal, pricingCallBackend: calls,
-          simulationTransport: simulationWork.transportFor(source, { signal: passController.signal, deadlineAtMs }),
-          canonicalActivity: input.canonicalActivity === undefined ? undefined : {
-            ...input.canonicalActivity, source,
-          },
-          validateBeforePublish: () => validate("startup warm publication canonical header", controller.signal),
-        };
-        const runtime = await coordinator.prepare(request);
-        assertOpen();
-        if (runtime.status === "incomplete" && Date.now() >= settleDeadlineAtMs) throw deadlineError;
-        return { runtime, graph };
-      } catch (error) {
-        // Do not retry arbitrary failures merely because a clock also expired.
-        retry = !passController.signal.aborted && !this.deps.runtimeAbort.signal.aborted &&
-          !this.deps.isShuttingDown() && admittedAtMs < settleDeadlineAtMs &&
-          Date.now() >= settleDeadlineAtMs && (
-            controller.signal.reason === deadlineError ||
-            (error instanceof StateCallAbortedError && error.kind === "deadline") ||
-            (error instanceof Error && error.message === "strict current runtime deadline expired")
-          );
-        if (!retry) throw error;
-      } finally {
-        clearTimeout(timer);
-        controller.abort(new Error("startup warm attempt settled"));
-        detach();
-        // prepare joins its workers; caller cancellation removes queued work
-        // before drain (which would otherwise dispatch it). Keep the memo open.
-        try { await backend.drain(); }
-        finally {
-          if (retry || passController.signal.aborted) await simulationWork.retire({
-            number: pin.number, hash: pin.hash, generation: graph.generation,
-          });
+            generation: graph.generation, attempt, ...backend.stats(),
+            processMemory: process.memoryUsage(),
+          })}`);
+          // Yield even for a tiny configured budget; shutdown/evidence retain
+          // their ordinary opportunity to interrupt this single worker.
+          await new Promise<void>(resolve => setImmediate(resolve));
+          deadlineAtMs = Date.now() + Math.max(1, this.deps.startupWarmBudgetMs);
         }
       }
-      if (retry) {
-        console.log(`[searcher/blockscan-startup-warm-resume] ${JSON.stringify({
-          sourceBlock: pin.number, sourceBlockHash: pin.hash,
-          generation: graph.generation, attempt, ...backend.stats(),
-          processMemory: process.memoryUsage(),
-        })}`);
-        // Yield even for a tiny configured budget; shutdown/evidence retain
-        // their ordinary opportunity to interrupt this single worker.
-        await new Promise<void>(resolve => setImmediate(resolve));
-        deadlineAtMs = Date.now() + Math.max(1, this.deps.startupWarmBudgetMs);
-      }
-    }
+    } finally { startupWarmResume?.close(); }
   }
 
   readonly runHead = async (

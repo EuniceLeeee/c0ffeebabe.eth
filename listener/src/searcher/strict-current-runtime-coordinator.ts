@@ -33,7 +33,7 @@ import {
   type VerifiedGraphView,
 } from "./venues/blockscan-state-capability.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
-import type { StateBackend } from "../shared/state/state-backend.js";
+import { StateCallAbortedError, type StateBackend } from "../shared/state/state-backend.js";
 import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import { effectiveMidRowCarried, type EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
@@ -81,7 +81,18 @@ export type StrictFundingPreparationInput = Pick<PrepareAdapterRuntimeInput,
   "preparationSettleDeadlineAtMs" | "signal" | "pricingCallBackend" | "simulationTransport"
 >;
 
+/** Opaque, process-local data cursor owned only by one startup retry loop. */
+export interface StrictStartupWarmResume { close(): void; }
+
+interface StartupWarmDraft {
+  readonly graph: VerifiedGraphView;
+  readonly resetEpoch: number;
+  pricingEpoch: number;
+  effective?: EffectiveMidSnapshot;
+}
+
 export interface PrepareStrictRuntimeInput extends PrepareAdapterRuntimeInput {
+  readonly startupWarmResume?: StrictStartupWarmResume;
   readonly fundingPreparation?: StrictFundingPreparation;
   readonly canonicalActivity?: StrictCanonicalActivityProof;
   /**
@@ -141,6 +152,7 @@ type StrictPricingProvenance =
  */
 export class StrictCurrentRuntimeCoordinator
   implements CurrentSourceRuntimeCoordinator {
+  private readonly startupDrafts = new WeakMap<StrictStartupWarmResume, StartupWarmDraft>();
   private publishedPricing: BlockScanStateSnapshot | null = null;
   private bootstrapRawPricing: BlockScanStateSnapshot | null = null;
   /** Policy-only exclusions for this live run, excluding instances whose
@@ -170,11 +182,17 @@ export class StrictCurrentRuntimeCoordinator
         readonly touchedStateKeys?: ReadonlySet<string>;
         readonly disabledEdgeIds?: ReadonlySet<string>;
         /** Explicit quote target; snapshot remains the unmodified sizing reference. */
-        readonly quoteGraph?: VerifiedGraphView },
+        readonly quoteGraph?: VerifiedGraphView; readonly resumeSameSource?: true },
       simulationTransport?: StrictSimulationTransport,
     ) => Promise<EffectiveMidSnapshot>,
     private readonly exactQuoteCache?: AdapterFamilyExactQuoteCache,
   ) {}
+
+  startStartupWarmResume(graph: VerifiedGraphView): StrictStartupWarmResume {
+    const handle: StrictStartupWarmResume = Object.freeze({ close: () => this.startupDrafts.delete(handle) });
+    this.startupDrafts.set(handle, { graph, resetEpoch: this.fundingEpoch, pricingEpoch: this.pricingEpoch });
+    return handle;
+  }
 
   latestPricingSnapshot(): BlockScanStateSnapshot | null {
     return this.publishedPricing;
@@ -312,7 +330,21 @@ export class StrictCurrentRuntimeCoordinator
     )) {
       throw new Error("strict Funding preparation differs from current pass");
     }
+    const startupDraft = input.startupWarmResume === undefined ? undefined
+      : this.startupDrafts.get(input.startupWarmResume);
+    if (input.startupWarmResume !== undefined && (startupDraft === undefined ||
+        startupDraft.resetEpoch !== this.fundingEpoch || startupDraft.pricingEpoch !== this.pricingEpoch ||
+        this.publishedPricing !== null || input.validateBeforePublish === undefined ||
+        startupDraft.graph.sourceBlock !== input.graph.sourceBlock ||
+        startupDraft.graph.sourceBlockHash.toLowerCase() !== input.graph.sourceBlockHash.toLowerCase() ||
+        strictGraphPublicationFingerprint(startupDraft.graph) !== strictGraphPublicationFingerprint(input.graph) ||
+        input.graph.generation < startupDraft.graph.generation ||
+        (startupDraft.effective !== undefined && input.graph.generation <= startupDraft.effective.source.generation))) {
+      input.startupWarmResume.close();
+      throw new Error("startup warm data cursor retired or mismatched");
+    }
     const pricingEpoch = ++this.pricingEpoch;
+    if (startupDraft !== undefined) startupDraft.pricingEpoch = pricingEpoch;
     const sessionStartedAtMs = Date.now();
     const previous = this.publishedPricing;
     const rawBasis = this.rawBasisFor(input.graph, previous, input.canonicalActivity);
@@ -342,7 +374,7 @@ export class StrictCurrentRuntimeCoordinator
         }));
     const pricingPromise = this.preparePricing(sessionPromise, input.graph, previous, rawBasis,
       pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend,
-      input.canonicalActivity, simulationTransport);
+      input.canonicalActivity, simulationTransport, startupDraft);
     const [pricingResult, executionResult, fundingResult] = await Promise.allSettled([
       pricingPromise,
       executionPromise,
@@ -426,6 +458,7 @@ export class StrictCurrentRuntimeCoordinator
     backend?: Pick<StateBackend, "call">,
     activity?: StrictCanonicalActivityProof,
     simulationTransport?: StrictSimulationTransport,
+    startupDraft?: StartupWarmDraft,
   ): Promise<{ session: StrictProductionRuntimeSession; built: StrictPricingBuildResult }> {
     // Raw is immutable after bootstrap, but effective/local Exact state still
     // obeys the Ready's environment-sensitive refresh policy every block.
@@ -461,11 +494,13 @@ export class StrictCurrentRuntimeCoordinator
       const sizing = rawBasis ?? (await raw).built.snapshot;
       assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
       return quote(sizing, control, backend, {
-        previous: rawBasis === null ? undefined : previous?.effectiveMids,
+        previous: startupDraft?.effective ?? (rawBasis === null ? undefined : previous?.effectiveMids),
+        ...(startupDraft?.effective === undefined ? {} : { resumeSameSource: true as const }),
         disabledEdgeIds: this.disabledEffectiveEdges(sizing),
         quoteGraph: rawBasis === null ? undefined : graph,
-        touchedStateKeys: rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity)
-          ? activity.touchedStateKeys : undefined,
+        touchedStateKeys: startupDraft?.effective !== undefined ? new Set<string>()
+          : rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity)
+            ? activity.touchedStateKeys : undefined,
       }, simulationTransport);
     })();
     // A rejection cannot leave the sibling pricing work detached from the
@@ -483,6 +518,15 @@ export class StrictCurrentRuntimeCoordinator
         effectiveMids.source.hash.toLowerCase() !== source.hash.toLowerCase() ||
         effectiveMids.source.generation !== source.generation) {
       throw new Error("effective pricing incomplete or mismatched source");
+    }
+    // Save only an original partial builder object: its successful rows retain
+    // process-local amount lineage. Raw, failures and issued handles are not cached.
+    // The caller alone can continue after a deadline, drain and canonical recheck.
+    if (startupDraft !== undefined) {
+      const abort = control.signal?.reason;
+      startupDraft.effective = !effectiveMids.complete &&
+        (!control.signal?.aborted || abort instanceof StateCallAbortedError && abort.kind === "deadline")
+        ? effectiveMids : undefined;
     }
     assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
     if (!effectiveMids.complete) throw new Error("effective pricing incomplete or mismatched source");

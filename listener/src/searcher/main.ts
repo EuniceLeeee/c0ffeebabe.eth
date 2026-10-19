@@ -1286,7 +1286,7 @@ export function createBlockScanPriceRuntime(input: {
         const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
           fixedWethInput: input.fixedEffectiveWethInput,
           cascadeAmountChanges,
-          previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
+          previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys, resumeSameSource: reuse?.resumeSameSource,
           disabledEdgeIds: reuse?.disabledEdgeIds,
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
           enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 1024,

@@ -58,6 +58,8 @@ export interface EffectiveAmountReference {
 // cannot prove that their inputs were derived without raw mids, so cannot carry.
 const amountReferenceState = new WeakMap<EffectiveMidSnapshot, {
   readonly weth: string;
+  readonly spreadBps: number;
+  readonly cascade: boolean;
   readonly references: ReadonlyMap<string, EffectiveAmountReference>;
 }>();
 const rowAmountReferences = new WeakMap<EffectiveMidRow, EffectiveAmountReference>();
@@ -150,6 +152,8 @@ export async function buildEffectiveMids(input: {
   readonly control: AdapterWorkControl;
   readonly concurrency: number;
   readonly previous?: EffectiveMidSnapshot;
+  /** Private startup retry: preserve successful tuples only under identical sampling policy. */
+  readonly resumeSameSource?: boolean;
   /** Run-local policy exclusions, not Ready/admission rejections. Apply before
    * carry and quote preparation, including each-block and full refreshes. */
   readonly disabledEdgeIds?: ReadonlySet<string>;
@@ -228,6 +232,11 @@ export async function buildEffectiveMids(input: {
   const previous = input.previous;
   const previousState = previous && amountReferenceState.get(previous);
   const canReuse = previous !== undefined && previousState?.weth === weth && input.touchedStateKeys !== undefined &&
+    (!input.resumeSameSource || (!previous.complete && source.number === previous.source.number &&
+      source.hash === previous.source.hash.toLowerCase() && source.generation > previous.source.generation &&
+      previous.referenceWethInput === referenceWethInput &&
+      previous.reference === (input.fixedWethInput !== undefined ? "fixed" : gasCostWei === null ? "default" : "gas") &&
+      previousState.spreadBps === input.enumerationSpreadBps && previousState.cascade === !!input.cascadeAmountChanges)) &&
     ((input.fixedWethInput === undefined && previous.reference !== "fixed") ||
       (previous.reference === "fixed" && previous.referenceWethInput === input.fixedWethInput)) &&
     ((source.number > previous.source.number && source.generation > previous.source.generation) ||
@@ -362,7 +371,7 @@ export async function buildEffectiveMids(input: {
     reference: input.fixedWethInput !== undefined ? "fixed" : gasCostWei === null ? "default" : "gas",
     referenceWethInput, rows: deltaMap(previousRows, updates, removals),
     complete: !closed() && rows.every(row => row.status !== "cancelled"), wallMs: Date.now() - started });
-  amountReferenceState.set(snapshot, { weth, references });
+  amountReferenceState.set(snapshot, { weth, references, spreadBps: input.enumerationSpreadBps, cascade: !!input.cascadeAmountChanges });
   return snapshot;
 }
 
