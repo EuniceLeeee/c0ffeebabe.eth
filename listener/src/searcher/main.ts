@@ -3092,8 +3092,19 @@ async function main(): Promise<void> {
   const seedHead = enableBlockScan && !blindProductionAudit ? await provider.getBlockNumber() : 0;
   const headWindowLog = (event: Record<string, unknown>) =>
     console.log(`[searcher/live-head-window] ${JSON.stringify({ ...event, pid: process.pid, timeOrigin: performance.timeOrigin })}`);
+  let boundedStartupFailure: Error | undefined;
   const headWindow = maxNewHeads > 0
-    ? new LiveHeadWindow(seedHead, maxNewHeads, headWindowLog, () => intakeAbort.abort())
+    ? new LiveHeadWindow(seedHead, maxNewHeads, headWindowLog, () => {
+        intakeAbort.abort();
+        if (blockScanRuntimeLoop.isStartupWarmPending()) {
+          boundedStartupFailure = new Error("finite live window ended before startup completed");
+          headWindowLog({ event: "startup_incomplete_at_window_close", status: "failed", reason: boundedStartupFailure.message,
+            observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
+          // Latch failure before a concurrent signal can finish the same drain.
+          // The stop controller also retains this result before installDrain.
+          requestRuntimeStop.fail(boundedStartupFailure);
+        }
+      })
     : undefined;
   const observeLiveHead = (number: number, source: "ws" | "http", hash?: string): void => {
     const observedAtMs = Date.now();
@@ -3145,6 +3156,7 @@ async function main(): Promise<void> {
   const stopRuntime = (): Promise<void> => {
     if (stopRuntimePromise) return stopRuntimePromise;
     stopRuntimePromise = (async () => {
+      const cleanupFailures: unknown[] = [];
       console.log("\n[searcher/live] shutting down");
       shuttingDown = true;
       intakeAbort.abort();
@@ -3159,6 +3171,7 @@ async function main(): Promise<void> {
         const failure = settled.find(result => result.status === "rejected");
         if (failure?.status === "rejected") throw failure.reason;
       } catch (error) {
+        cleanupFailures.push(error);
         console.warn(
           `[searcher/live] block-scan shutdown failed: ` +
             `${error instanceof Error ? error.message : String(error)}`,
@@ -3167,16 +3180,22 @@ async function main(): Promise<void> {
       try {
         await blockScanRouteTelemetry.shutdown();
       } catch (error) {
+        cleanupFailures.push(error);
         console.warn(
           `[searcher/live] block-scan route telemetry shutdown failed: ` +
             `${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      if (solverInputRecorder) {
-        solverInputRecorder.close();
-        console.log(`[searcher/solver-inputs] closed ${JSON.stringify(solverInputRecorder.snapshot())}`);
+      try {
+        if (solverInputRecorder) {
+          solverInputRecorder.close();
+          console.log(`[searcher/solver-inputs] closed ${JSON.stringify(solverInputRecorder.snapshot())}`);
+        }
+      } catch (error) {
+        cleanupFailures.push(error);
       }
-      state.stop();
+      try { state.stop(); } catch (error) { cleanupFailures.push(error); }
+      if (cleanupFailures.length > 0) throw new AggregateError(cleanupFailures, "live runtime shutdown failed");
     })();
     return stopRuntimePromise;
   };
@@ -3284,12 +3303,21 @@ async function main(): Promise<void> {
       if (config.maxHints > 0 && processedHints >= config.maxHints) break;
     }
   } finally {
-    let drainFailed = false;
+    const drainFailures: unknown[] = boundedStartupFailure === undefined ? [] : [boundedStartupFailure];
+    let windowDrainStarted = false;
+    const startupCancelled = boundedStartupFailure !== undefined;
+    let earlyDrainFailure = false;
     try {
-      if (headWindow?.closed && !blockScanRuntimeAbort.signal.aborted) {
+      if (headWindow?.closed && (startupCancelled || !blockScanRuntimeAbort.signal.aborted)) {
+        windowDrainStarted = true;
         headWindowLog({ event: "drain_started", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
-        await blockScanRuntimeLoop.waitForIdle();
-        headWindowLog({ event: "drained", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
+        if (startupCancelled) {
+          // Cold startup can renew its attempt budget indefinitely. A finite
+          // observation window cancels that setup through the ordinary drain.
+          await stopRuntime();
+        } else {
+          await blockScanRuntimeLoop.waitForIdle();
+        }
         // Observe the next real head for the final pass's next-head budget, without admitting it.
         if (!blockScanRuntimeAbort.signal.aborted) await Promise.race([
           headWindow.nextHead,
@@ -3297,14 +3325,23 @@ async function main(): Promise<void> {
         ]);
       }
     } catch (error) {
-      drainFailed = true;
-      headWindowLog({ event: "drain_failed", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
+      drainFailures.push(error);
+      // Preserve immediate failure latching if SIGTERM is already draining.
+      earlyDrainFailure = true;
+      headWindowLog({ event: "drain_failed", startupCancelled, observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
       requestRuntimeStop.fail(error instanceof Error ? error : new Error("live window drain failed"));
-      throw error;
-    } finally {
-      await stopRuntime();
-      if (headWindow?.closed && !drainFailed) shutdown();
     }
+    try { await stopRuntime(); } catch (error) { if (!drainFailures.includes(error)) drainFailures.push(error); }
+    if (drainFailures.length > 0) {
+      const error = new AggregateError(drainFailures, "live window drain failed");
+      if (!earlyDrainFailure) {
+        headWindowLog({ event: "drain_failed", startupCancelled, observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
+        if (!startupCancelled) requestRuntimeStop.fail(error);
+      }
+      throw error;
+    }
+    if (windowDrainStarted) headWindowLog({ event: "drained", startupCancelled, observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
+    if (headWindow?.closed) shutdown();
   }
 }
 

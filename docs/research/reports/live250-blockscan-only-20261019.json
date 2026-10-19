@@ -1,0 +1,287 @@
+{
+  "at": "2026-10-19T05:53:34.613989+00:00",
+  "outcome": "failed-performance; assisted graceful shutdown after 250 observed new heads",
+  "runDirectory": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-all48-blockscan-only-20261019",
+  "enabledFamilies": 48,
+  "readyCheckpointFamiliesWithActive": 43,
+  "graphEdges": 51471,
+  "headEventCounts": {
+    "head": 250,
+    "duplicate": 171,
+    "gap": 2,
+    "out_of_order": 30,
+    "input_closed": 1,
+    "drain_started": 1,
+    "next_head": 1,
+    "drained": 1
+  },
+  "seed": 26224367,
+  "observedRange": [
+    26224368,
+    26224617
+  ],
+  "effectivePublications": 0,
+  "productiveNewHeadPasses": 0,
+  "startupStateMs": 3499341.6970889997,
+  "stagesNotRun": [
+    "enumeration",
+    "planner_solver",
+    "final_sim",
+    "ev"
+  ],
+  "callStatsFinal": {
+    "sourceBlock": 26224367,
+    "sourceBlockHash": "0x7f49865d2ba028cf532a1bc55e6e132e32544d7713fbeb83c746ace5dbf25197",
+    "generation": 1,
+    "atMs": 1792389214420,
+    "atMonotonicMs": 3550136.348059,
+    "pid": 782480,
+    "timeOrigin": 1792385664284.467,
+    "lane": "producer-bulk",
+    "scopeLabel": "block-scan source-N pricing block 26224367 generation 1",
+    "allowSingleCallFallback": false,
+    "maxBatchSize": 64,
+    "maxConcurrentBatches": 8,
+    "currentConcurrentBatchLimit": 1,
+    "currentBatchSizeLimit": 1,
+    "throttleRetries": 10,
+    "timeoutRetries": 6,
+    "totalCalls": 125403,
+    "memoHits": 994436,
+    "batchesSent": 26647,
+    "batchedItems": 114098,
+    "batchLatencyMs": 2592810,
+    "maxBatchItemsSent": 64,
+    "pendingItems": 0,
+    "liveItems": 0,
+    "inFlightBatches": 0,
+    "peakInFlightBatches": 7,
+    "activeTransports": 0,
+    "abortedBatches": 15,
+    "completedAfterScopeAbort": 0,
+    "transportQueueWaitMs": 73916.07914697818,
+    "maxTransportQueueWaitMs": 2391.9100620001554,
+    "peakSchedulerActiveTotal": 7,
+    "peakSchedulerLaneActive": 7,
+    "batchFailures": 0,
+    "singleCallFallbacks": 0,
+    "batchesOnNewSocket": 12,
+    "batchesOnReusedSocket": 26614,
+    "drainMs": 0,
+    "persistentCacheContentSha256": null,
+    "persistentCacheConfigured": false,
+    "persistentCacheEntries": 0,
+    "persistentCacheHits": 0,
+    "persistentCacheSourceBlockHash": null,
+    "persistentCacheWrites": 0
+  },
+  "finished": {
+    "at": "2026-10-19T05:53:34.613989+00:00",
+    "exitCode": 0,
+    "runtimePid": 782457,
+    "supervisorPid": 782456,
+    "automaticRestart": false
+  },
+  "log": {
+    "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-all48-blockscan-only-20261019/live.log",
+    "bytes": 1616540627,
+    "sha256": "5b887c891f55b10a607175397c15c17897927a342e894e18552c87c70f266780",
+    "lines": 2411545
+  },
+  "canonical": {
+    "query": [
+      "latency"
+    ],
+    "tool": "analysis:blockscan-pass-latency",
+    "manifestSha256": "58e4cb980c9088fdf3b570cef19524d98f7d804f1cb1f1d0524ddbcbc1ed0707",
+    "exitCode": 0,
+    "qualifyingRuns": [],
+    "invalidByReason": {
+      "over_threshold": 1
+    },
+    "unsupportedWindowArgumentFailurePreserved": true,
+    "scope": "entire single-run log, including seed startup and all 250 observations, cancellations and drain",
+    "qualificationScope": {
+      "startLine": 1,
+      "endLine": 2411545,
+      "logStartLine": 1,
+      "minRun": 250,
+      "runtimeCommit": "d25a00a919ad82f11706e55f968ff402ed7a7049",
+      "processStartLine": 8,
+      "processStartCount": 1,
+      "runtimeCommitLines": 1,
+      "recordsBeforeRuntimeCommit": 0,
+      "processIdentityBinding": "log-anchor-only",
+      "externalPidBindingRequired": true,
+      "eligibleForQualification": false,
+      "ineligibleReason": "process_start_not_scope_start:8"
+    },
+    "reconciliation": "agrees: one failed startup pass over budget, zero price/sim boundary samples, no qualifying run; npm preamble keeps default full-log qualification ineligible, and does not change failure conclusion",
+    "zeroStageDurationsMeanNotRun": true
+  },
+  "limits": [
+    "250 observations include HTTP catch-up and out-of-order evidence; not 250 timely completed production blocks",
+    "no Family performance upgraded",
+    "startup retry/concurrency degradation remains unresolved",
+    "no rerun automatically started"
+  ],
+  "postRunProcessCheck": {
+    "workspaceRuntimeProcesses": [],
+    "forkPortsListening": false,
+    "checkedAfterFinished": true
+  },
+  "sourceIntegrity": {
+    "sourceRows": 2077,
+    "sourceDiffs": [],
+    "head": "d25a00a919ad82f11706e55f968ff402ed7a7049",
+    "originalReadySha256": "47a0cf31a475f75fc554397bf32683f8b2a80893cc2b311f274dde9ccdda2a7d",
+    "liveCopyReadySha256": "47a0cf31a475f75fc554397bf32683f8b2a80893cc2b311f274dde9ccdda2a7d",
+    "latencyManifestSha256": "58e4cb980c9088fdf3b570cef19524d98f7d804f1cb1f1d0524ddbcbc1ed0707",
+    "knownPidsPresent": []
+  },
+  "shutdown": {
+    "assisted": true,
+    "signal": "SIGTERM",
+    "target": "verified own main process 782480",
+    "requestedAt": "2026-10-19T05:51:13.106092+00:00",
+    "completedAt": "2026-10-19T05:53:34.613989+00:00",
+    "observedExitCode": 0,
+    "exitZeroIsNotPerformancePass": true
+  },
+  "lifecycleRepair": {
+    "status": "implemented and correctness regression passed on actual cloud baseline; no new live run",
+    "files": [
+      {
+        "path": "listener/src/searcher/main.ts",
+        "beforeSha256": "c0644ffa94a9fc0f6d3108948a26f507e06d1605d5913ba46129387129cdc0e4",
+        "afterSha256": "9e1134db673359cc86b13034cb81dd6993b04adddf42090d5b2bd87601200cc8"
+      },
+      {
+        "path": "listener/src/searcher/test/blockscan-startup-warm-resume.ts",
+        "beforeSha256": "87f03141647774ec06d9c9db1d0e19a364358a073dfa9964b857dcd895124a2d",
+        "afterSha256": "42af86d0231864af82559f7ce76336934edbea95b407d5d9bbf429da802e1699"
+      }
+    ],
+    "patchSha256": "2af6c64558ac21bdcd42a84c1bbe54b584263ac72a4fb51d451c68d2f6ccc49a",
+    "behavior": [
+      "Finite window closeIntake synchronously records cold startup incomplete and calls existing requestRuntimeStop.fail before any concurrent SIGTERM can commit exit0; early failure before drain installation uses the existing latch.",
+      "Cold window reuses existing cancellation plus all actual I/O drain and exits1; no successful drained event. This is failed performance evidence, not completed live processing.",
+      "Already warm finite windows retain final admitted head, waitForIdle and next-head observation before normal shutdown/exit0.",
+      "Unlimited startup retries, Family behavior, amount/quote/execution policy, concurrency, scheduler and budgets are unchanged.",
+      "stopRuntime retains cleanup errors through telemetry/recorder/state cleanup and rejects; waitForIdle errors latch failure immediately so SIGTERM cannot downgrade them."
+    ],
+    "localFailureFlip": {
+      "actualBefore": "46 tests:40 pass,6 fail (cold cancellation, cleanup aggregation, warned errors,3 signal/early-install races)",
+      "candidateAfter": "46/46 pass; existing head-window5/5 pass",
+      "intermediateBefore": "Retained candidate with late steady fail lock rejects the new steady-race test; actual original and final candidate pass it"
+    },
+    "cloudChecks": [
+      {
+        "name": "startup-window",
+        "exitCode": 0,
+        "seconds": 8.005062818527222,
+        "logSha256": "217f22ac016086b24d4c0bcaf26cfc530b95e69718e5401f480dec708e2a0170"
+      },
+      {
+        "name": "head-window",
+        "exitCode": 0,
+        "seconds": 2.5142149925231934,
+        "logSha256": "6afb50e496112b2cc4858ec665a406a4ab3cd96f2c396dce7dbb55fc061d473a"
+      },
+      {
+        "name": "build-live",
+        "exitCode": 0,
+        "seconds": 8.509780645370483,
+        "logSha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      }
+    ],
+    "cloudTestCounts": {
+      "startupWindow": {
+        "pass": 46,
+        "fail": 0
+      },
+      "headWindow": {
+        "pass": 5,
+        "fail": 0
+      }
+    },
+    "independentReview": {
+      "kind": "finite-live-window-cold-drain-independent-review/v1",
+      "reviewer": "atomic_pair_independent",
+      "scope": "Local candidate and actual-source extracted regression; no cloud write or live run by reviewer",
+      "decision": "approve surgical application to exact frozen baseline; correctness of bounded shutdown only, not live performance acceptance",
+      "source": {
+        "beforeMainSha256": "c0644ffa94a9fc0f6d3108948a26f507e06d1605d5913ba46129387129cdc0e4",
+        "patchSha256": "2af6c64558ac21bdcd42a84c1bbe54b584263ac72a4fb51d451c68d2f6ccc49a",
+        "afterMainSha256": "9e1134db673359cc86b13034cb81dd6993b04adddf42090d5b2bd87601200cc8",
+        "afterTestSha256": "42af86d0231864af82559f7ce76336934edbea95b407d5d9bbf429da802e1699"
+      },
+      "checks": [
+        "Read the final before/after diff. Only main finite-head close/drain and cleanup failure propagation changed; runtime loop, scheduling, Family behavior and unlimited mode are untouched.",
+        "Cold finite window records startup_incomplete_at_window_close and latches failure synchronously in LiveHeadWindow closeIntake before SIGTERM can resolve a shared drain with exit0. The existing stop controller retains pre-install failure and drains through the same idempotent stopRuntime promise.",
+        "The final admitted head is scheduled before LiveHeadWindow closes. An already-warm window still joins waitForIdle, waits for the next observed head boundary, then shuts down normally.",
+        "A steady waitForIdle rejection calls fail immediately before awaiting cleanup, preserving the preexisting failure-latch timing under concurrent SIGTERM.",
+        "Cold incomplete, cleanup failures and steady idle errors cannot emit a successful drained event; cleanup continues through telemetry, recorder and state and terminates nonzero.",
+        "Candidate test-tree main and test files match the frozen candidate hashes; baseline test-tree main matches the frozen before hash and uses the same new test source."
+      ],
+      "validation": {
+        "authorCandidateLogSha256": "3cae4c51b813ac8f42671403ef2ae251e2aee4ad77d09f975c3168c97c7e2b1b",
+        "authorCandidate": "46/46 pass, exit0",
+        "authorBaselineLogSha256": "bdb5f582ed4fb1ac0c8fd156801bf10fbf511a16ea5a7fcc9e34ed3ff7c9b70b",
+        "authorBaseline": "40/46 pass, 6 fail, exit1; steady control passes before and after",
+        "authorHeadWindowLogSha256": "ef36bf1a3bd6b9ceac506cac7022bbf7691d92cb3055682d5d34811c37d00463",
+        "authorHeadWindow": "5/5 pass, exit0",
+        "reviewerRerun": "candidate blockscan-startup-warm-resume 46/46 pass, exit0",
+        "intermediateSteadyRaceLogSha256": "61845993690223891dbc619d9ce5f7e01f96ed8a4770a532570d46320c51a6cd",
+        "intermediateSteadyRace": "0/1 pass in rejected draft with delayed fail latch; final fixes it"
+      },
+      "limits": [
+        "The reviewer did not independently run the current cloud build or live; root reports the exact applied patch passed cloud startup-window 46/46, head-window 5/5 and build:live.",
+        "Finite cold startup is explicitly failed and drained, not a successful 250-head performance sample; a new live window and representative performance evidence remain necessary.",
+        "This review does not certify unrelated dirty source, the 48 Family correctness, or long-run live latency."
+      ]
+    },
+    "independentReviewSha256": "66fbfbdcd50788996abc7c187411d8b5eeee0aa1e308fe26a90df8743afa96ac",
+    "peerDirtyPreservation": {
+      "changedFrozenFiles": [
+        "listener/src/searcher/main.ts",
+        "listener/src/searcher/test/blockscan-startup-warm-resume.ts"
+      ],
+      "preservedOtherFrozenFiles": 2075,
+      "stagedSourceFiles": [
+        "listener/src/searcher/main.ts",
+        "listener/src/searcher/test/blockscan-startup-warm-resume.ts"
+      ],
+      "peerMainChangesRemainUnstaged": true
+    },
+    "performanceFix": false
+  },
+  "predeclaredBudget": {
+    "effectiveAndEnumerationMs": 4000,
+    "fullPassIncludingDrainMs": 11000,
+    "mustFinishBeforeNextObservedHead": true,
+    "largeGraphCancellationProtectionMs": 30000,
+    "protectionIsNotPassThreshold": true,
+    "newHeadLimit": 250,
+    "coldStartAndAllFailuresRetained": true,
+    "notLongTermP95": true,
+    "notHistorical3x3": true
+  },
+  "sourceFingerprint": "f5f9d3c78449a719ca56d6bfa72c88b531f5af868eec5a1b384943951569b727",
+  "sourceFingerprintAlgorithm": "sha256 UTF8 sorted source rows JSON compact path/sha256; old resume289 fingerprint retained separately",
+  "configuration": {
+    "dryRun": true,
+    "submissionEnabled": false,
+    "backrunEnabled": false,
+    "mempoolEnabled": false,
+    "enabledFamilyCount": 48,
+    "maxNewHeads": 250,
+    "warmConcurrency": 8,
+    "warmBatchSize": 64,
+    "startupAttemptBudgetMs": 300000,
+    "steadyState": {
+      "batchConcurrency": 8,
+      "maxBatchSize": 1000
+    }
+  }
+}

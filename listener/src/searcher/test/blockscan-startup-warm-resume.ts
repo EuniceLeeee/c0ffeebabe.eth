@@ -2,7 +2,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
 import { ethers } from "ethers";
 import {
   BlockScanRuntimeLoop, type BlockScanRuntimeLoopDependencies, type BlockScanExecutionWorker,
@@ -28,6 +31,7 @@ import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
 import { assertAtomicBlockScanRuntime } from "../detector/blockscan-scanner-production.js";
 import { readBlockScanObservedHeader } from "../blockscan-observed-header.js";
+import { LiveHeadWindow } from "../live-head-window.js";
 
 const N = 101;
 const hash = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
@@ -380,6 +384,61 @@ function assertIdle(backend: PinnedRethQuoteBackend): void {
   assert.deepEqual([s.pendingItems, s.liveItems, s.inFlightBatches, s.activeTransports], [0, 0, 0, 0]);
   assert.equal(s.maxConcurrentBatches, 8);
   assert.equal(s.allowSingleCallFallback, false); assert.equal(s.persistentCacheConfigured, false);
+}
+
+/** Execute the actual main shutdown and finite-window bodies, replacing only external owners. */
+function finiteWindowDrain(f: Awaited<ReturnType<typeof setup>>, limit: number,
+  options: { activityDrain?: Promise<void>; deferInstall?: boolean;
+    failures?: readonly ("activity" | "telemetry" | "recorder" | "state")[] } = {}) {
+  const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  const stopStart = main.indexOf("  let stopRuntimePromise: Promise<void> | null = null;");
+  const stopEnd = main.indexOf("  requestRuntimeStop.installDrain(stopRuntime);", stopStart);
+  const mainEnd = main.indexOf("\n}\n\ninterface HandleCtx");
+  const windowStart = main.lastIndexOf("\n  } finally {", mainEnd);
+  assert(stopStart > 0 && stopEnd > stopStart && windowStart > stopEnd && mainEnd > windowStart);
+  const controllerStart = main.indexOf("export function createLiveRuntimeStop(");
+  const controllerEnd = main.indexOf("/** Production dependency factory", controllerStart);
+  const windowDeclarationStart = main.indexOf("  const headWindowLog = ");
+  const windowDeclarationEnd = main.indexOf("  const observeLiveHead = ", windowDeclarationStart);
+  assert(controllerStart > 0 && controllerEnd > controllerStart && windowDeclarationEnd > windowDeclarationStart);
+  const events: Record<string, unknown>[] = [], cleaned: string[] = [], failures: unknown[] = [];
+  const exitCodes: number[] = [];
+  const rejectAt = (stage: NonNullable<typeof options.failures>[number]): void => {
+    if (options.failures?.includes(stage)) throw new Error(`fixture ${stage} cleanup failure`);
+  };
+  const body = `(() => { let shuttingDown = false;
+    ${main.slice(controllerStart, controllerEnd).replace(/^export /, "")}
+    const stopController = createLiveRuntimeStop({ runtimeAbort: blockScanRuntimeAbort, emitFatal() {}, exit: onExit });
+    const requestRuntimeStop = { ...stopController, fail(error) { onFailure(error); stopController.fail(error); } };
+    const intakeAbort = new AbortController();
+    const seedHead = fixtureSeed, maxNewHeads = fixtureLimit;
+    ${main.slice(windowDeclarationStart, windowDeclarationEnd)}
+    ${main.slice(stopStart, stopEnd)}
+    if (!deferInstall) requestRuntimeStop.installDrain(stopRuntime);
+    const shutdown = requestRuntimeStop.shutdown;
+    async function finish() ${main.slice(windowStart + "\n  } finally ".length, mainEnd)}
+    return { finish, stopRuntime, window: headWindow, signalShutdown: shutdown,
+      installDrain() { requestRuntimeStop.installDrain(stopRuntime); } }; })()`;
+  const code = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const result = runInNewContext(code, {
+    console: { log(line: string) {
+      if (line.startsWith("[searcher/live-head-window] ")) events.push(JSON.parse(line.slice(line.indexOf("{"))));
+    }, warn() {} }, performance, process: { pid: process.pid }, AbortController, LiveHeadWindow,
+    fixtureSeed: N, fixtureLimit: limit, deferInstall: options.deferInstall === true,
+    blockScanRuntimeLoop: f.loop, blockScanRuntimeAbort: f.runtimeAbort,
+    blockScanHeadFeed: { close: () => cleaned.push("feed") },
+    logStageCounters() {}, counters: {}, cancelScheduledWarm() {}, provider: { removeAllListeners() {} },
+    blockScanActivityProvider: { async closeAndDrain() {
+      cleaned.push("activity-start"); await options.activityDrain; rejectAt("activity"); cleaned.push("activity-end");
+    } },
+    activeHintSimulationWork: undefined, activeBlindSimulationWork: undefined,
+    blockScanRouteTelemetry: { async shutdown() { cleaned.push("telemetry"); rejectAt("telemetry"); } },
+    solverInputRecorder: { close() { cleaned.push("recorder"); rejectAt("recorder"); }, snapshot: () => ({}) },
+    state: { stop() { cleaned.push("state"); rejectAt("state"); } },
+    onFailure: (error: unknown) => failures.push(error), onExit: (code: number) => exitCodes.push(code),
+  }) as { finish(): Promise<void>; stopRuntime(): Promise<void>; window: LiveHeadWindow;
+    signalShutdown(): void; installDrain(): void };
+  return { ...result, events, cleaned, failures, exitCodes };
 }
 const observe = () => ({ sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
 const values = (snapshot: BlockScanStateSnapshot) => ({ mids: [...snapshot.mids],
@@ -849,3 +908,157 @@ await fixture("range", async f => {
   assert.equal(f.loop.isStartupWarmPending(), false);
   assert.equal(f.requests.length, 1);
 }, "activity-reorg: cancellation cannot authorize reset");
+
+await fixture("resume", async f => {
+  f.loop.schedule(N);
+  await until(() => f.held.length === 2, "cold window reaches second real HTTP attempt");
+  assert.equal(f.loop.isStartupWarmPending(), true);
+  let releaseActivity!: () => void;
+  const activityDrain = new Promise<void>(resolve => { releaseActivity = resolve; });
+  const finish = finiteWindowDrain(f, 2, { activityDrain });
+  for (const number of [N + 1, N + 2]) finish.window.observe({ number, source: "http",
+    observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() }, () => f.loop.schedule(number));
+  let complete = false;
+  const joined = finish.finish().finally(() => { complete = true; });
+  try {
+    await turn();
+    assert.equal(f.runtimeAbort.signal.aborted, true, "closed cold window must cancel before joining an infinitely renewing warm");
+    assert.equal(complete, false, "window must join its actual I/O cleanup tail");
+    assert(!finish.events.some(e => e.event === "drained"));
+    await until(() => f.held.every(response => response.destroyed), "physical HTTP attempts retired");
+    releaseActivity();
+    await assert.rejects(joined, /live window drain failed/);
+    assert.equal(f.requests.length, 2, "closed window must not create a third warm attempt");
+    assert.equal(f.published.length, 0);
+    assert.deepEqual(f.starts, [N]); assert(f.drops.includes(N + 2));
+    assert.equal(finish.events.filter(e => e.event === "startup_incomplete_at_window_close").length, 1);
+    assert(!finish.events.some(e => e.event === "drained"));
+    assert.equal(finish.events.find(e => e.event === "drain_failed")?.startupCancelled, true);
+    await until(() => finish.exitCodes.length === 1, "failed cold window terminal exit");
+    assert.deepEqual(finish.exitCodes, [1]); assert.equal(finish.failures.length, 1);
+    for (const backend of f.backends) assertIdle(backend);
+  } finally {
+    // Also lets the unmodified production body finish after the expected before failure.
+    f.runtimeAbort.abort(new Error("fixture bounded-window cleanup"));
+    releaseActivity(); await joined.catch(() => {});
+  }
+}, "finite-window: cold deadline resumption cancels then joins physical drain");
+
+await fixture("normal", async f => {
+  await f.loop.runHead(N, observe());
+  assert.equal(f.loop.isStartupWarmPending(), false);
+  let releaseActivity!: () => void;
+  const activity = new Promise<void>(resolve => { releaseActivity = resolve; });
+  const readActivity = f.deps.readBlockSwapTouched;
+  f.deps.readBlockSwapTouched = async (...args) => { await activity; return readActivity(...args); };
+  const finish = finiteWindowDrain(f, 1);
+  finish.window.observe({ number: N + 1, source: "http", observedAtMs: Date.now(),
+    observedAtMonotonicMs: performance.now() }, () => f.loop.schedule(N + 1));
+  let complete = false;
+  const joined = finish.finish().finally(() => { complete = true; });
+  try {
+    await turn();
+    assert.equal(f.runtimeAbort.signal.aborted, false, "steady final head must retain its original natural completion");
+    assert.equal(complete, false); assert(!finish.events.some(e => e.event === "drained"));
+    finish.window.observe({ number: N + 2, source: "ws", observedAtMs: Date.now(),
+      observedAtMonotonicMs: performance.now() }, () => assert.fail("next head was admitted"));
+    releaseActivity(); await joined;
+    assert.deepEqual(f.starts, [N, N + 1]); assert(!f.drops.includes(N + 1));
+    assert.equal(f.published.length, 2, "steady final head must publish before normal shutdown");
+    assert.notEqual(finish.events.find(e => e.event === "drained")?.startupCancelled, true);
+    await until(() => finish.exitCodes.length === 1, "steady window terminal exit");
+    assert.deepEqual(finish.failures, []); assert.deepEqual(finish.exitCodes, [0]);
+    for (const backend of f.backends) assertIdle(backend);
+  } finally { releaseActivity(); await joined.catch(() => {}); }
+}, "finite-window: steady final head retains publication and true I/O tail");
+
+await fixture("normal", async f => {
+  await f.loop.runHead(N, observe());
+  const finish = finiteWindowDrain(f, 1, { failures: ["activity", "telemetry", "recorder", "state"] });
+  for (const number of [N + 1, N + 2]) finish.window.observe({ number, source: "http",
+    observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() }, () => {});
+  await assert.rejects(finish.finish(), /live window drain failed/);
+  assert.deepEqual(finish.cleaned, ["feed", "activity-start", "telemetry", "recorder", "state"]);
+  assert.equal(finish.events.filter(e => e.event === "drain_failed").length, 1);
+  assert(!finish.events.some(e => e.event === "drained"), "failed cleanup cannot report a successful drain");
+  await until(() => finish.exitCodes.length === 1, "cleanup failure terminal exit");
+  assert.equal(finish.failures.length, 1); assert.deepEqual(finish.exitCodes, [1]);
+}, "finite-window: all cleanup stages run and failures remain terminal");
+
+await fixture("normal", async f => {
+  await f.loop.runHead(N, observe());
+  const finish = finiteWindowDrain(f, 1, { failures: ["activity", "telemetry"] });
+  for (const number of [N + 1, N + 2]) finish.window.observe({ number, source: "http",
+    observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() }, () => {});
+  await assert.rejects(finish.finish(), /live window drain failed/);
+  assert(finish.cleaned.includes("recorder") && finish.cleaned.includes("state"));
+  await until(() => finish.exitCodes.length === 1, "warned failure terminal exit");
+  assert.equal(finish.failures.length, 1); assert.deepEqual(finish.exitCodes, [1]);
+  assert(!finish.events.some(e => e.event === "drained"), "warn-only failures must not become a successful drain");
+}, "finite-window: warned I/O and telemetry failures cannot report drained success");
+
+for (const signalOrder of ["before-close", "after-close", "before-install"] as const) {
+  await fixture("shutdown", async f => {
+    f.loop.schedule(N);
+    await until(() => f.held.length === 1, "cold shutdown race has actual HTTP work");
+    let releaseActivity!: () => void;
+    const activityDrain = new Promise<void>(resolve => { releaseActivity = resolve; });
+    const finish = finiteWindowDrain(f, 1, { activityDrain, deferInstall: signalOrder === "before-install" });
+    if (signalOrder === "before-close") { finish.signalShutdown(); await turn(); }
+    finish.window.observe({ number: N + 1, source: "http", observedAtMs: Date.now(),
+      observedAtMonotonicMs: performance.now() }, () => f.loop.schedule(N + 1));
+    if (signalOrder !== "before-close") finish.signalShutdown();
+    if (signalOrder === "before-install") {
+      await turn();
+      assert.deepEqual(finish.exitCodes, [], "early terminal result must wait for its installed drain");
+      finish.installDrain();
+    }
+    const joined = finish.finish();
+    try {
+      await turn();
+      const marker = finish.events.find(e => e.event === "startup_incomplete_at_window_close");
+      assert.equal(marker?.status, "failed", "cold failure must be recorded synchronously before the shared drain can exit");
+      assert.deepEqual(finish.exitCodes, [], "SIGTERM must still join the held physical cleanup");
+      releaseActivity();
+      await assert.rejects(joined, /live window drain failed/);
+      await until(() => finish.exitCodes.length === 1, "concurrent normal shutdown cannot downgrade failure");
+      assert.deepEqual(finish.exitCodes, [1]);
+      assert.equal(finish.failures.length, 1);
+      assert(!finish.events.some(e => e.event === "drained"));
+      assert.equal(f.requests.length, 1);
+      for (const backend of f.backends) assertIdle(backend);
+    } finally {
+      f.runtimeAbort.abort(new Error("fixture shutdown race cleanup"));
+      releaseActivity(); await joined.catch(() => {});
+    }
+  }, `finite-window: SIGTERM ${signalOrder} cannot downgrade cold failure`);
+}
+
+await fixture("normal", async f => {
+  await f.loop.runHead(N, observe());
+  let releaseIdle!: () => void, releaseActivity!: () => void;
+  const idle = new Promise<void>(resolve => { releaseIdle = resolve; });
+  const activityDrain = new Promise<void>(resolve => { releaseActivity = resolve; });
+  f.loop.waitForIdle = async () => { await idle; throw new Error("fixture steady idle join failed"); };
+  const finish = finiteWindowDrain(f, 1, { activityDrain });
+  finish.window.observe({ number: N + 1, source: "http", observedAtMs: Date.now(),
+    observedAtMonotonicMs: performance.now() }, () => {});
+  const joined = finish.finish();
+  // Avoid turning the intentional rejection into an unhandled test error while inspecting the drain.
+  void joined.catch(() => {});
+  try {
+    finish.signalShutdown();
+    await turn();
+    releaseIdle();
+    await until(() => finish.failures.length === 1, "idle error must latch while SIGTERM cleanup is held");
+    assert.deepEqual(finish.exitCodes, []);
+    assert.equal(finish.events.filter(e => e.event === "drain_failed").length, 1);
+    releaseActivity();
+    await assert.rejects(joined, /fixture steady idle join failed|live window drain failed/);
+    await until(() => finish.exitCodes.length === 1, "steady idle failure terminal exit");
+    assert.deepEqual(finish.exitCodes, [1]);
+    assert(!finish.events.some(e => e.event === "drained"));
+  } finally {
+    releaseIdle(); releaseActivity(); await joined.catch(() => {});
+  }
+}, "finite-window: steady idle rejection latches before concurrent SIGTERM drain");
