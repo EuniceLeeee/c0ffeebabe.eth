@@ -1,0 +1,903 @@
+{
+  "schema": "curve-lp-residual-source-identity-reviews-v1",
+  "scope": "Source-bound historical reverse identity only; neither LP execution nor original swap support proven.",
+  "reviews": [
+    {
+      "original": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-identity-audit/actual-read-review.json",
+        "sha256": "c0291e9330ab52fe57672f1c6c5d18858b341800a0e84cf28c0154519fbb2aac"
+      },
+      "review": {
+        "schema": "curve-lp187-swerve-bf-actual-read-review-v1",
+        "status": "raw-response-integrity-and-source-binding-recomputed",
+        "source": {
+          "chainId": 1,
+          "number": 26202387,
+          "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134"
+        },
+        "role": {
+          "reviewer": "/root/staked_split_refresh_tests",
+          "disclosure": "Author of the prepare-only read runner. This review independently parses raw response envelopes/code/words/receipts without importing its decoders; it is not a non-author approval of my own runner or a new RPC execution."
+        },
+        "inputs": [
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-bf01/result.json",
+            "sha256": "5600b267c7220d91dea388cb16bbb17d1b107df72ec0e724dbfd6eb97cf54774"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-bf01/exit.json",
+            "sha256": "d330372f4e212c0ab7e6c11d8c3b9ea7576ab8405e4de72ef343945464fd0077"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-bf01/read-swerve-bf.mjs",
+            "sha256": "e1836fe4f693df9136b961d348d83d6bef183a93dba52813875238dcaa3ce9db"
+          }
+        ],
+        "actualRunnerSha256": "e1836fe4f693df9136b961d348d83d6bef183a93dba52813875238dcaa3ce9db",
+        "localOfflineTestRunnerSha256": "d89630e22ab7029eec8cc1e241bc63d94c5d230e4614eef86141d0f6cbd651cf",
+        "runnerVersionBoundary": "Actual e1836fe4 source is self-consistent with result and exit. Local d89630e2 offline8 checks apply to that local version only; later robustness differences do not affect the all-success raw responses here. No re-read is required for the version difference.",
+        "requestIntegrity": {
+          "count": 26,
+          "byMethod": {
+            "eth_chainId": 1,
+            "eth_getBlockByNumber": 2,
+            "eth_getTransactionReceipt": 2,
+            "eth_getCode": 5,
+            "eth_getStorageAt": 3,
+            "eth_call": 13
+          },
+          "allHttp200": true,
+          "allJsonRpcIdsAndResultsMatch": true,
+          "errorCount": 0,
+          "pinnedStateRequests": 21,
+          "initialAndFinalCanonicalNumberHashMatch": true,
+          "exit": 1,
+          "exitMeaning": "The Swerve LP code class is unresolved; no HTTP/JSONRPC/transport request failed. Not a native/contract business failure."
+        },
+        "codeProofs": {
+          "swPool": {
+            "requestId": 4,
+            "codeHash": "0x0b9d9ea40f919c6eb23599cde43f5629d393b46a4fc56bab68388cb265f8191b",
+            "bytes": 1961,
+            "exactEqualsVerifiedRuntime": true,
+            "verifiedArtifact": "/Users/eunice/src/MEV/logs/curve-lp187-source-identity/0x329239599afb305da0a2ec69c58f8a6697f9f88d-sourcify.json",
+            "verifiedArtifactSha256": "42ccaaa83415b3f73bebdd28561949a413acc24fe3291672018575f3e0993325",
+            "compiler": "0.6.10+commit.00c0fcaf"
+          },
+          "swDelegate": {
+            "requestId": 5,
+            "codeHash": "0x106e99a4bbc1496b2de7bcd09b6db6343e2a1a67a646327528406a465c3f87b4",
+            "bytes": 22180,
+            "exactEqualsVerifiedRuntime": true,
+            "verifiedArtifact": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-identity-audit/swerve-delegate-sourcify.json",
+            "verifiedArtifactSha256": "5cb62b8b2b0b53aed956bad090d044a32afa070cc9a47b439d66534e77f5e49a",
+            "compiler": "0.1.0-beta.17+commit.0671b7b"
+          },
+          "swLp": {
+            "requestId": 11,
+            "codeHash": "0x57efd7b63979e3698bcf4771cbfe04e448cb83ce25b9934772489190f329ef1c",
+            "bytes": 2266
+          },
+          "bfPool": {
+            "requestId": 15,
+            "codeHash": "0x1c9ef83aa06749888443c788128efa773678f2cb201017788c3e462d346245ca",
+            "bytes": 22497,
+            "exactEqualsVerifiedRuntime": true,
+            "verifiedArtifact": "/Users/eunice/src/MEV/logs/curve-lp187-source-identity/0xbf4f7b242bd5fca9ea4b69c038aca3d479af8b05-sourcify.json",
+            "verifiedArtifactSha256": "5b3202d8297fb6a8783123d98f7d9b86e20172ad3fed8ed906fe7cbe3ac60fdd",
+            "compiler": "0.2.4+commit.7949850"
+          },
+          "bfLp": {
+            "requestId": 22,
+            "codeHash": "0xb731b7a9a74c6c60d715f0c791d663f1530743a48337e7fab9cf3481afdd9feb",
+            "bytes": 2276,
+            "exactEqualsVerifiedRuntime": true,
+            "verifiedArtifact": "/Users/eunice/src/MEV/logs/curve-lp187-source-identity/bf-lp-sourcify.json",
+            "verifiedArtifactSha256": "0c189f90accf42918cd44b189d6e4e7fdafc6fa03c60cc0c9d9535e200ab4044",
+            "compiler": "0.2.4+commit.7949850"
+          }
+        },
+        "swerve": {
+          "pool": "0x329239599afb305da0a2ec69c58f8a6697f9f88d",
+          "coins": [
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "0x0000000000085d4780b73119b644ae5ecd22b376"
+          ],
+          "currentPrivateTokenSlot": 7,
+          "currentLp": "0x77c6e4a580c0dce4e5c7a17d0bc077188a83a059",
+          "decimals": 18,
+          "totalSupply": "284914257245196369584766",
+          "lpCodeHash": "0x57efd7b63979e3698bcf4771cbfe04e448cb83ce25b9934772489190f329ef1c",
+          "reciprocalMinterProven": false,
+          "lpStorageReadCount": 0,
+          "conclusion": "Correctly unresolved: current LP code57efd7..ef1c matches neither reviewed private-minter class. Obtain public verified source/compiler-layout proof matching these exact bytes; never use b731/cb1d slot6 as a substitute. The pool wrapper/delegate and token-slot link are bound, but LP authority and current admission remain unproved."
+        },
+        "bf": {
+          "pool": "0xbf4f7b242bd5fca9ea4b69c038aca3d479af8b05",
+          "coins": [
+            "0x6b175474e89094c44da98b954eedeac495271d0f",
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "0x0000000000085d4780b73119b644ae5ecd22b376",
+            "0x8e870d67f660d95d5be530380d0ec0bd388289e1"
+          ],
+          "currentPrivateTokenSlot": 5,
+          "currentLp": "0xaa5caf1f258e2c7a0287d18c0799e896c20e9655",
+          "currentPrivateMinterSlot": 6,
+          "reciprocalMinter": "0xbf4f7b242bd5fca9ea4b69c038aca3d479af8b05",
+          "decimals": 18,
+          "totalSupply": "74555685668335859260",
+          "conclusion": "Source-derived reciprocal pool.token -> LP runtime -> LP.minter -> pool is now proved by pinned raw reads; all five actual coin getters agree. This completes the missing identity read evidence, not mint/redeem behavior/strict/Ready/quotes."
+        },
+        "originalTargetLegs": [
+          {
+            "requestId": 3,
+            "original": {
+              "transactionHash": "0x785cb2fc77f202503fcd948f7811e0e4e0182dc3b1c0339ca160ca16a2e956e2",
+              "number": 26200632,
+              "hash": "0x9334cb29b9ea8f723698da78e2110c72f0d0f7af6bb24a519af92a42ad8943a3",
+              "logIndex": 432
+            },
+            "poolLogCount": 1,
+            "targetPoolEvent": "TokenExchange(address,int128,uint256,int128,uint256)",
+            "buyer": "0x1f2f10d1c40777ae1da742455c65828ff36df387",
+            "i": 1,
+            "j": 3,
+            "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "tokenOut": "0x0000000000085d4780b73119b644ae5ecd22b376",
+            "eventAmountIn": "25944155",
+            "eventAmountOut": "25993555213988902178",
+            "matchingInputTransfer": {
+              "logIndex": 430,
+              "token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "from": "0x1f2f10d1c40777ae1da742455c65828ff36df387",
+              "to": "0x329239599afb305da0a2ec69c58f8a6697f9f88d",
+              "amount": "25944155"
+            },
+            "matchingOutputTransfer": {
+              "logIndex": 431,
+              "token": "0x0000000000085d4780b73119b644ae5ecd22b376",
+              "from": "0x329239599afb305da0a2ec69c58f8a6697f9f88d",
+              "to": "0x1f2f10d1c40777ae1da742455c65828ff36df387",
+              "amount": "25993555213988902178"
+            },
+            "targetLpTransferCount": 0,
+            "lpActionAtTargetPoolProvedByThisReceipt": false,
+            "evidenceBoundary": "Canonical deployed-ABI event and ERC20 Transfer chain agree. No new historical balance-snapshot execution, original state replay, or quote equality is asserted."
+          },
+          {
+            "requestId": 14,
+            "original": {
+              "transactionHash": "0x6755d402ece84086a3ced59de340c41cbc8dae1f98c2eff889b0cd66ea6fb1f8",
+              "number": 26195685,
+              "hash": "0x2bfc67cd2e15c24223c9b3b656d7c81407b876615de67b7f7baba5d7fb8b67bc",
+              "logIndex": 1909
+            },
+            "poolLogCount": 1,
+            "targetPoolEvent": "TokenExchange(address,int128,uint256,int128,uint256)",
+            "buyer": "0xebe0fa42523f69ea1e97f5b08282654c19c2c0ee",
+            "i": 2,
+            "j": 0,
+            "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+            "eventAmountIn": "2440615",
+            "eventAmountOut": "2438125029119604915",
+            "matchingInputTransfer": {
+              "logIndex": 1907,
+              "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+              "from": "0xebe0fa42523f69ea1e97f5b08282654c19c2c0ee",
+              "to": "0xbf4f7b242bd5fca9ea4b69c038aca3d479af8b05",
+              "amount": "2440615"
+            },
+            "matchingOutputTransfer": {
+              "logIndex": 1908,
+              "token": "0x6b175474e89094c44da98b954eedeac495271d0f",
+              "from": "0xbf4f7b242bd5fca9ea4b69c038aca3d479af8b05",
+              "to": "0xebe0fa42523f69ea1e97f5b08282654c19c2c0ee",
+              "amount": "2438125029119604915"
+            },
+            "targetLpTransferCount": 0,
+            "lpActionAtTargetPoolProvedByThisReceipt": false,
+            "evidenceBoundary": "Canonical deployed-ABI event and ERC20 Transfer chain agree. No new historical balance-snapshot execution, original state replay, or quote equality is asserted."
+          }
+        ],
+        "originalActionCorrection": "Both nominated target-pool legs are direct TokenExchange swaps, not LP mint/burn. Each target pool emits only that one event and its LP has zero Transfer logs in the receipt. Completing LP conversion support alone cannot be reported as closing either supplied original target leg.",
+        "nextMinimumWork": {
+          "actualOriginalBfLeg": "A source-bound reciprocal LP identity lineage for the existing curve-plain Swap Family is the action-aligned candidate. The current MetaRegistry path lacks membership. Verify direct exchange(int128,int128,uint256,uint256) quote/runtime semantics and true receipts at fixedN; do not route it as protocol LP mint/redeem.",
+          "adjacentBfLpCapability": [
+            "If continuing the authorized LP coverage scope, stay within protocol:curve-lp with a distinct source-derived reverse-LP binding (pool code class + token slot5 + LP code class + minter slot6 + five current coins). Do not label this missing registry membership as registry-proven or add a pool address allowlist.",
+            "Add fixed-array width5 to needed calldata/event/route domains, retaining per-direction actual behavior admission. Do not only widen2..4 to2..5.",
+            "Mint calc_token_amount is source-documented fee-inexact. Reuse the existing executor-program effect quote transport or an independently exact source model, preserving full payer debit, real receipt, LP supply, old inventory, native, and recipient/callback gates. Empty return is not an amount.",
+            "Bind current A()/ramp-time, private kill state, fee/admin fee and token code/decimals to this source class; optional absent A_precise must not silently justify fixed pricing. No weakened pool debit/supply rules.",
+            "Source LP methods credit msg.sender and have no direct recipient or callback parameter; retain honest capability declarations and default execution. Actual per-direction strict/Ready/quote+quoted/runtime and0/1 boundary evidence remains required."
+          ],
+          "bfSwapQuoteBoundary": "Verified get_dy converts normalized dy to token precision before fee; exchange subtracts fee before precision conversion. Their difference can be1raw unit for low-precision output. Check source/execution exactly or use actual-effect quotes; do not accept generic tolerance as an exactness proof.",
+          "swerve": "Only obtain a verified source/code-class proof for the actual57efd7 LP before issuing a minter storage request. No additional state read, guessed slot, candidate code, or other-LP class substitution was performed in this review."
+        },
+        "actionsThisReview": {
+          "rpc": 0,
+          "native": 0,
+          "evm": 0,
+          "cloudChanges": 0,
+          "productionEdits": 0,
+          "originalEvidenceOverwritten": false
+        }
+      }
+    },
+    {
+      "original": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-identity-audit/actual-read-review-v2.json",
+        "sha256": "640b75064ffb6810b7866aee45014a960b207cd41766710ec5eb6229607d6907"
+      },
+      "review": {
+        "schema": "curve-lp187-swerve-bf-actual-read-review-v2",
+        "status": "both-reciprocal-identity-evidence-chains-closed-not-admitted",
+        "source": {
+          "chainId": 1,
+          "number": 26202387,
+          "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134"
+        },
+        "supersedesForCurrentSwerveConclusionOnly": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-identity-audit/actual-read-review.json",
+          "sha256": "c0291e9330ab52fe57672f1c6c5d18858b341800a0e84cf28c0154519fbb2aac",
+          "note": "Prior26-request result/exit1 and the earlier correctly-unresolved Swerve assessment remain unchanged."
+        },
+        "reviewerRole": "Independent reconstruction of the non-author LP source proof and supplemental raw read; author of original prepare-only runner disclosed in prior review. No proof-builder or runner decoder was used here.",
+        "inputs": [
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-bf01/result.json",
+            "sha256": "5600b267c7220d91dea388cb16bbb17d1b107df72ec0e724dbfd6eb97cf54774"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/swerve-lp-source-proof.json",
+            "sha256": "36e342c7f2ebaef358f08ef47fd8078cd9e2746571389ae1f54902747bfb4261"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/swerve-current-minter01.json",
+            "sha256": "b4a2f27ae156a8c11ea02379ee63d1487c83767fef503f3f1d64a080a6860656"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/77c6-etherscan.html",
+            "sha256": "536b437b344d1760c99415a08f0acbe01eac34c7bac31884120dbd411b011bce"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/etherscan-creation-bytecode.txt",
+            "sha256": "007f9d9d4ee5fa9370b9d0805c268d72d14bc91e96992dee31bc05faad179ade"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/verified-ERC20LP.vy",
+            "sha256": "e58d5a9eecfd239aed9bb850818902787e382944ccf150315ff8c9124180815f"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/verified-ERC20LP-abi.json",
+            "sha256": "31048f3fcfbff5a543f4ac2235fea10f12e4bff006a7b2b0d1404e25accc7da8"
+          }
+        ],
+        "swerve": {
+          "pool": "0x329239599afb305da0a2ec69c58f8a6697f9f88d",
+          "lpDerivedFromCurrentPoolSlot7": "0x77c6e4a580c0dce4e5c7a17d0bc077188a83a059",
+          "lpRuntimeCodeHash": "0x57efd7b63979e3698bcf4771cbfe04e448cb83ce25b9934772489190f329ef1c",
+          "runtimeBytes": 2266,
+          "sourceBinding": {
+            "explorerVerifiedExactMatch": true,
+            "compiler": "Vyper0.2.4",
+            "evm": "petersburg",
+            "fullRuntimeEqualsPublishedCreationSection": true,
+            "offsetBytes": 595,
+            "occurrences": 1,
+            "independentRecompilationClaimed": false,
+            "officialSourceContentCorroborates": true
+          },
+          "privateMinterInterpretation": {
+            "slot": 6,
+            "compilerStorageLayoutClaimed": false,
+            "proof": "Instruction boundaries from exact actual runtime: selector-bounded private minter authorization loads and setter store.",
+            "sloadPcs": [
+              207,
+              716,
+              1086,
+              1505,
+              1700
+            ],
+            "sstorePcs": [
+              224
+            ],
+            "publicMinterGetter": false
+          },
+          "supplementalCurrentRead": {
+            "httpStatus": 200,
+            "sourceHashPinned": true,
+            "priorCodeHashBound": true,
+            "canonicalNonzeroAddressWord": true,
+            "minter": "0x329239599afb305da0a2ec69c58f8a6697f9f88d",
+            "reciprocalBindingMatches": true,
+            "retries": 0
+          },
+          "conclusion": "Current source-bound wrapper.token(slot7) -> LP exact runtime57efd7 -> LP.minter(slot6) -> same wrapper identity evidence is now closed. No substitute LP class, constructor assumption or instance whitelist was used.",
+          "remaining": "Not production admitted or LP quote/execution verified. Verified pool delegate still has no exact-input single-coin redeem; minter permission does not create that operation."
+        },
+        "bf": {
+          "status": "reciprocal-identity-evidence-closed",
+          "pool": "0xbf4f7b242bd5fca9ea4b69c038aca3d479af8b05",
+          "evidence": "Prior raw source/code/slot5->LP/LP.slot6->pool and five actual coins checks remain valid; LP supply74555685668335859260. Not admitted/LP quote/execution verified."
+        },
+        "originalTargetLegs": "Prior independently decoded target legs remain TokenExchange swaps (Swerve1->3, BF2->0), with matching asset Transfer chains and no target LP Transfer. LP conversion expansion is adjacent capability, not proof that these original swap gaps are fixed.",
+        "originalRunPreserved": {
+          "requests": 26,
+          "exit": 1,
+          "allHttp200": true,
+          "transportErrors": 0,
+          "reason": "At that time the Swerve LP class was unknown; new source-bound supplemental read closes only that identity evidence gap."
+        },
+        "safety": {
+          "rpcExecutedByReviewer": 0,
+          "nativeOrEvmRuns": 0,
+          "productionOrCloudEdits": 0,
+          "originalFilesOverwritten": false,
+          "guardRequirementForFutureAdapter": "Guard pool/delegate/LP code and reciprocal current slot at every required source; LP.set_minter is mutable. Identity evidence is not a permanent permission grant."
+        }
+      }
+    },
+    {
+      "original": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/swerve-lp-source-proof.json",
+        "sha256": "36e342c7f2ebaef358f08ef47fd8078cd9e2746571389ae1f54902747bfb4261"
+      },
+      "review": {
+        "schemaVersion": 1,
+        "status": "verified-source-and-full-runtime-bound-private-minter-slot",
+        "scope": "Read-only public verified source/ABI and preserved current-state bytecode analysis. No new RPC/native/EVM execution and no production/candidate/generated edits.",
+        "source": {
+          "chainId": 1,
+          "number": 26202387,
+          "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134"
+        },
+        "pool": "0x329239599afb305da0a2ec69c58f8a6697f9f88d",
+        "derivedCurrentLp": "0x77c6e4a580c0dce4e5c7a17d0bc077188a83a059",
+        "currentReadEvidence": {
+          "input": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-bf01/result.json",
+            "sha256": "5600b267c7220d91dea388cb16bbb17d1b107df72ec0e724dbfd6eb97cf54774"
+          },
+          "poolTokenRead": {
+            "id": 6,
+            "label": "sw-current-lp",
+            "slot": "0x0000000000000000000000000000000000000000000000000000000000000007",
+            "result": "0x00000000000000000000000077c6e4a580c0dce4e5c7a17d0bc077188a83a059"
+          },
+          "lpCodeRead": {
+            "id": 11,
+            "label": "sw-lp-code",
+            "requestBlock": {
+              "blockHash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+              "requireCanonical": true
+            },
+            "fullRuntimeCodeHash": "0x57efd7b63979e3698bcf4771cbfe04e448cb83ce25b9934772489190f329ef1c",
+            "bytes": 2266
+          }
+        },
+        "publicVerifiedEvidence": {
+          "url": "https://etherscan.io/address/0x77C6E4a580c0dCE4E5c7a17d0bc077188a83A059#code",
+          "html": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/77c6-etherscan.html",
+            "sha256": "536b437b344d1760c99415a08f0acbe01eac34c7bac31884120dbd411b011bce"
+          },
+          "verificationLabel": "Source Code Verified Exact Match",
+          "contract": "Vyper_contract",
+          "compiler": "vyper:0.2.4",
+          "evmVersion": "petersburg",
+          "source": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/verified-ERC20LP.vy",
+            "sha256": "e58d5a9eecfd239aed9bb850818902787e382944ccf150315ff8c9124180815f"
+          },
+          "sourceContainer": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/etherscan-sources.json",
+            "sha256": "f7b2c762fa0826c4b538721234d7e21ba9721122d1e953e01ea8485f3130ab92"
+          },
+          "abi": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/verified-ERC20LP-abi.json",
+            "sha256": "31048f3fcfbff5a543f4ac2235fea10f12e4bff006a7b2b0d1404e25accc7da8"
+          },
+          "creation": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/etherscan-creation-bytecode.txt",
+            "sha256": "007f9d9d4ee5fa9370b9d0805c268d72d14bc91e96992dee31bc05faad179ade"
+          },
+          "runtimeLocation": {
+            "kind": "contiguous full byte equality",
+            "creationOffsetBytes": 595,
+            "runtimeLengthBytes": 2266,
+            "runtimeHash": "0x57efd7b63979e3698bcf4771cbfe04e448cb83ce25b9934772489190f329ef1c",
+            "occurrences": 1,
+            "creationPrefixTailHex": "52ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef60206102c0a3610b2d56"
+          },
+          "officialCorroboration": {
+            "url": "https://raw.githubusercontent.com/SwerveFinance/SwerveContracts/master/ERC20LP.vy",
+            "source": {
+              "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/official-ERC20LP.vy",
+              "sha256": "8bdb29d91261589b3cb5ec3e1378b5cabdd642b073d7bd9fea971ed6bc00fcbe"
+            },
+            "contentSameAfterLineEndingAndTerminalWhitespaceNormalization": true
+          }
+        },
+        "abi": {
+          "functionSignatures": [
+            "set_minter(address)",
+            "totalSupply()",
+            "allowance(address,address)",
+            "transfer(address,uint256)",
+            "transferFrom(address,address,uint256)",
+            "approve(address,uint256)",
+            "mint(address,uint256)",
+            "burn(uint256)",
+            "burnFrom(address,uint256)",
+            "name()",
+            "symbol()",
+            "decimals()",
+            "balanceOf(address)"
+          ],
+          "publicMinterGetter": false,
+          "minterSelector": "0x07546172",
+          "selectorPresentAsPush4": false,
+          "setter": "set_minter(address)"
+        },
+        "storageLayout": {
+          "kind": "partial layout proven directly from exact deployed instruction boundaries, not a compiler-reported storageLayout export",
+          "compilerProvidedArtifactAvailable": false,
+          "minter": {
+            "slot": "0x0000000000000000000000000000000000000000000000000000000000000006",
+            "slotNumber": 6,
+            "sourceDeclarationLine": 30,
+            "type": "address",
+            "visibility": "private",
+            "sourceSelectedByFullRuntimeCodeHash": "0x57efd7b63979e3698bcf4771cbfe04e448cb83ce25b9934772489190f329ef1c",
+            "allDirectSloadPcs": [
+              207,
+              716,
+              1086,
+              1505,
+              1700
+            ],
+            "allDirectSstorePcs": [
+              224
+            ],
+            "setterStoreWindow": [
+              {
+                "pc": 217,
+                "opcode": 253,
+                "push": null,
+                "mnemonic": "REVERT"
+              },
+              {
+                "pc": 218,
+                "opcode": 91,
+                "push": null,
+                "mnemonic": "JUMPDEST"
+              },
+              {
+                "pc": 219,
+                "opcode": 96,
+                "push": "0x04",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 221,
+                "opcode": 53,
+                "push": null,
+                "mnemonic": "CALLDATALOAD"
+              },
+              {
+                "pc": 222,
+                "opcode": 96,
+                "push": "0x06",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 224,
+                "opcode": 85,
+                "push": null,
+                "mnemonic": "SSTORE"
+              },
+              {
+                "pc": 225,
+                "opcode": 0,
+                "push": null,
+                "mnemonic": "STOP"
+              },
+              {
+                "pc": 226,
+                "opcode": 91,
+                "push": null,
+                "mnemonic": "JUMPDEST"
+              }
+            ]
+          },
+          "noConstructorStateAssumption": true,
+          "explanation": "Source identifies private self.minter. Exact deployed set_minter selector branch reads slot6, checks CALLER equality, then stores its canonical ABI argument in slot6. All independent mint/burn/transferFrom authorization paths read the same slot6. This proves storage interpretation without guessing from declaration order or constructor arguments."
+        },
+        "permissions": [
+          {
+            "signature": "set_minter(address)",
+            "selector": "0x1652e9fc",
+            "selectorPc": 162,
+            "minterSloadPc": 207,
+            "permission": "only current minter may assign a new minter",
+            "instructionWindow": [
+              {
+                "pc": 204,
+                "opcode": 80,
+                "push": null,
+                "mnemonic": "POP"
+              },
+              {
+                "pc": 205,
+                "opcode": 96,
+                "push": "0x06",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 207,
+                "opcode": 84,
+                "push": null,
+                "mnemonic": "SLOAD"
+              },
+              {
+                "pc": 208,
+                "opcode": 51,
+                "push": null,
+                "mnemonic": "CALLER"
+              },
+              {
+                "pc": 209,
+                "opcode": 20,
+                "push": null,
+                "mnemonic": "EQ"
+              },
+              {
+                "pc": 210,
+                "opcode": 97,
+                "push": "0x00da",
+                "mnemonic": "PUSH2"
+              },
+              {
+                "pc": 213,
+                "opcode": 87,
+                "push": null,
+                "mnemonic": "JUMPI"
+              },
+              {
+                "pc": 214,
+                "opcode": 96,
+                "push": "0x00",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 216,
+                "opcode": 128,
+                "push": null,
+                "mnemonic": "0x80"
+              },
+              {
+                "pc": 217,
+                "opcode": 253,
+                "push": null,
+                "mnemonic": "REVERT"
+              }
+            ]
+          },
+          {
+            "signature": "transferFrom(address,address,uint256)",
+            "selector": "0x23b872dd",
+            "selectorPc": 563,
+            "minterSloadPc": 716,
+            "permission": "current minter bypasses allowance; others spend allowance",
+            "instructionWindow": [
+              {
+                "pc": 713,
+                "opcode": 80,
+                "push": null,
+                "mnemonic": "POP"
+              },
+              {
+                "pc": 714,
+                "opcode": 96,
+                "push": "0x06",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 716,
+                "opcode": 84,
+                "push": null,
+                "mnemonic": "SLOAD"
+              },
+              {
+                "pc": 717,
+                "opcode": 51,
+                "push": null,
+                "mnemonic": "CALLER"
+              },
+              {
+                "pc": 718,
+                "opcode": 24,
+                "push": null,
+                "mnemonic": "XOR"
+              },
+              {
+                "pc": 719,
+                "opcode": 21,
+                "push": null,
+                "mnemonic": "ISZERO"
+              },
+              {
+                "pc": 720,
+                "opcode": 97,
+                "push": "0x030c",
+                "mnemonic": "PUSH2"
+              },
+              {
+                "pc": 723,
+                "opcode": 87,
+                "push": null,
+                "mnemonic": "JUMPI"
+              },
+              {
+                "pc": 724,
+                "opcode": 96,
+                "push": "0x04",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 726,
+                "opcode": 96,
+                "push": "0x04",
+                "mnemonic": "PUSH1"
+              }
+            ]
+          },
+          {
+            "signature": "mint(address,uint256)",
+            "selector": "0x40c10f19",
+            "selectorPc": 1041,
+            "minterSloadPc": 1086,
+            "permission": "only current minter may mint, recipient must be nonzero",
+            "instructionWindow": [
+              {
+                "pc": 1083,
+                "opcode": 80,
+                "push": null,
+                "mnemonic": "POP"
+              },
+              {
+                "pc": 1084,
+                "opcode": 96,
+                "push": "0x06",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 1086,
+                "opcode": 84,
+                "push": null,
+                "mnemonic": "SLOAD"
+              },
+              {
+                "pc": 1087,
+                "opcode": 51,
+                "push": null,
+                "mnemonic": "CALLER"
+              },
+              {
+                "pc": 1088,
+                "opcode": 20,
+                "push": null,
+                "mnemonic": "EQ"
+              },
+              {
+                "pc": 1089,
+                "opcode": 97,
+                "push": "0x0449",
+                "mnemonic": "PUSH2"
+              },
+              {
+                "pc": 1092,
+                "opcode": 87,
+                "push": null,
+                "mnemonic": "JUMPI"
+              },
+              {
+                "pc": 1093,
+                "opcode": 96,
+                "push": "0x00",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 1095,
+                "opcode": 128,
+                "push": null,
+                "mnemonic": "0x80"
+              },
+              {
+                "pc": 1096,
+                "opcode": 253,
+                "push": null,
+                "mnemonic": "REVERT"
+              }
+            ]
+          },
+          {
+            "signature": "burn(uint256)",
+            "selector": "0x42966c68",
+            "selectorPc": 1416,
+            "minterSloadPc": 1505,
+            "permission": "only current minter may burn caller balance",
+            "instructionWindow": [
+              {
+                "pc": 1502,
+                "opcode": 80,
+                "push": null,
+                "mnemonic": "POP"
+              },
+              {
+                "pc": 1503,
+                "opcode": 96,
+                "push": "0x06",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 1505,
+                "opcode": 84,
+                "push": null,
+                "mnemonic": "SLOAD"
+              },
+              {
+                "pc": 1506,
+                "opcode": 51,
+                "push": null,
+                "mnemonic": "CALLER"
+              },
+              {
+                "pc": 1507,
+                "opcode": 20,
+                "push": null,
+                "mnemonic": "EQ"
+              },
+              {
+                "pc": 1508,
+                "opcode": 97,
+                "push": "0x05ee",
+                "mnemonic": "PUSH2"
+              },
+              {
+                "pc": 1511,
+                "opcode": 87,
+                "push": null,
+                "mnemonic": "JUMPI"
+              },
+              {
+                "pc": 1512,
+                "opcode": 96,
+                "push": "0x64",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 1514,
+                "opcode": 97,
+                "push": "0x015c",
+                "mnemonic": "PUSH2"
+              },
+              {
+                "pc": 1517,
+                "opcode": 253,
+                "push": null,
+                "mnemonic": "REVERT"
+              }
+            ]
+          },
+          {
+            "signature": "burnFrom(address,uint256)",
+            "selector": "0x79cc6790",
+            "selectorPc": 1593,
+            "minterSloadPc": 1700,
+            "permission": "only current minter may burn another account; no allowance guard",
+            "instructionWindow": [
+              {
+                "pc": 1697,
+                "opcode": 80,
+                "push": null,
+                "mnemonic": "POP"
+              },
+              {
+                "pc": 1698,
+                "opcode": 96,
+                "push": "0x06",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 1700,
+                "opcode": 84,
+                "push": null,
+                "mnemonic": "SLOAD"
+              },
+              {
+                "pc": 1701,
+                "opcode": 51,
+                "push": null,
+                "mnemonic": "CALLER"
+              },
+              {
+                "pc": 1702,
+                "opcode": 20,
+                "push": null,
+                "mnemonic": "EQ"
+              },
+              {
+                "pc": 1703,
+                "opcode": 97,
+                "push": "0x06b1",
+                "mnemonic": "PUSH2"
+              },
+              {
+                "pc": 1706,
+                "opcode": 87,
+                "push": null,
+                "mnemonic": "JUMPI"
+              },
+              {
+                "pc": 1707,
+                "opcode": 96,
+                "push": "0x64",
+                "mnemonic": "PUSH1"
+              },
+              {
+                "pc": 1709,
+                "opcode": 97,
+                "push": "0x015c",
+                "mnemonic": "PUSH2"
+              },
+              {
+                "pc": 1712,
+                "opcode": 253,
+                "push": null,
+                "mnemonic": "REVERT"
+              }
+            ]
+          }
+        ],
+        "sourcePermissionLines": {
+          "setMinter": 46,
+          "transferFrom": 88,
+          "mint": 127,
+          "burn": 157,
+          "burnFrom": 167,
+          "approve": 110
+        },
+        "minimumNextRead": {
+          "status": "prepared-not-executed-by-reviewer",
+          "method": "eth_getStorageAt",
+          "params": [
+            "0x77c6e4a580c0dce4e5c7a17d0bc077188a83a059",
+            "0x0000000000000000000000000000000000000000000000000000000000000006",
+            {
+              "blockHash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+              "requireCanonical": true
+            }
+          ],
+          "authority": "Interpret only after actual same-source LP runtime equals the full verified class. LP address must remain derived from source-bound current pool slot7.",
+          "canonicalDecode": "Exactly 32 bytes, upper 96 bits zero, nonzero address",
+          "expectedBinding": "0x329239599afb305da0a2ec69c58f8a6697f9f88d",
+          "comparisonReason": "The pool wrapper executes delegate code in its own context and calls external LP mint as the wrapper, so current LP minter must equal the derived current pool wrapper, not the fixed delegate implementation.",
+          "failure": "A different current minter is a current identity/permission mismatch; unknown runtime or transport error remains unresolved. Never fall back to the constructor/deployer or an address allowlist."
+        },
+        "limits": [
+          "This artifact proves the LP code class, ABI, private slot interpretation and permissions; it does not contain the current N slot6 value.",
+          "No identity verified or LP adaptation/Ready/quote/execution acceptance follows until the current reciprocal minter value and remaining production behavior requirements are checked.",
+          "Swerve pool single-coin redeem semantics are a separate source-level limitation and are not widened by finding the LP minter slot."
+        ],
+        "buildScript": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/build-source-proof.mjs",
+          "sha256": "c21b79fa18f2a28ec9f8373ee17d2801e0d327669c57d3f350dce5f05c73b1bd"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,576 @@
+{
+  "schema": "curve-lp187-sbtc-state-evidence-v1",
+  "scope": "Same historical state refusal; no new accepted direction, no protocol overrides, not permanent unsupported classification.",
+  "acceptedDirectionsIncrement": 0,
+  "reviews": [
+    {
+      "original": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/index3-causal-independent-review-v2.json",
+        "sha256": "6f716234f862fec22aba7b01d1d6f7e4d33495191dc4289f7e6fd4d5da401de0"
+      },
+      "review": {
+        "schemaVersion": 1,
+        "status": "current-state-inapplicable-for-positive-index3-transfers",
+        "reviewType": "independent non-author causal source and saved-native review",
+        "scope": "Two original zap candidates at fixed historical source N26202387; reviewer made no RPC/native/EVM call and changed no production/candidate/generated/cloud file",
+        "source": {
+          "number": 26202387,
+          "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+          "generation": 26202387
+        },
+        "sourceCommit": "2efc5871f87d59de2530d049ba454ec95fdabf39",
+        "firstRealBlocker": {
+          "asset": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+          "operation": "positive sBTC transfer/transferFrom",
+          "reason": "Synth is suspended. Operation prohibited",
+          "classification": "actual source-state permission refusal",
+          "observed": "Without synthetic funding or protocol overrides, actual basePool.transfer(1) and transfer(68499728347020) reach trusted main Revert with the same exact Synth suspension error. Approval succeeds and actual basePool balance exceeds both amounts.",
+          "rejectedAlternative": "External TokenState balance preparation is not the first blocker: source-bound funded executor balanceOf exactly returns the requested amount+111. Ready probes already completed setup and reached main execution."
+        },
+        "actualTargetBinding": {
+          "proxy": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+          "target": "0x1cb004a8e84a5ce95c1ff895ee603bac8ec506c7",
+          "tokenState": "0x4f6296455f8d754c19821cf1ec8febf2cd456e67",
+          "currencyKey": "0x7342544300000000000000000000000000000000000000000000000000000000",
+          "chainBindings": [
+            {
+              "address": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+              "runtimeCodeHash": "0x1df698740f2cff72e53dfcef6526a5a08beb21053af6d29ccd873cf342e80b87",
+              "runtimeBytes": 4160
+            },
+            {
+              "address": "0x1cb004a8e84a5ce95c1ff895ee603bac8ec506c7",
+              "runtimeCodeHash": "0x7face471b3a67a245b3899ee2f9109eb2ef42b61c48522fdaba4dc2d08c54ab2",
+              "runtimeBytes": 11876
+            }
+          ],
+          "publicVerifiedRuntimeByteExact": true,
+          "cachedSystemStatusAddressIndependentlyRead": false,
+          "note": "addressCache(bytes32) is private in verified source, so the diagnostic nonexistent getter Revert is not itself a protocol fault or a source binding. No claim is made about a decoded on-chain suspension storage flag."
+        },
+        "controlFacts": {
+          "actualBasePoolBalance": "136999456694041383370",
+          "basePoolApprovalReturnedTrue": true,
+          "syntheticExecutorInputBalance": "68499728347131",
+          "realTransfersHaveNoTokenDeals": true
+        },
+        "readyIdentityEvidence": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/ready-raw-review.json",
+          "sha256": "33ef0fb848fe326d88e88072d97cd4a95e84a38bfcc27c0e739fa9452f2d404b",
+          "native": 24,
+          "identitySuccess": 12,
+          "identityRevert": 4,
+          "originalReadyBytesPreserved": true
+        },
+        "directDiagnostic": {
+          "bundle": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-direct01-transfer.json",
+            "sha256": "195a9260d05c1cf2da6e6a139c6d194e813e304e0f01e080f9fa34ddf723fb75"
+          },
+          "originalDecompressed": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/direct-causal-native-original.json",
+            "sha256": "6a2bc776ce16e6de95114599a8e6545c93828157ec8546f65a51ffb9e218c01a"
+          },
+          "code": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-direct-diagnostic.mjs",
+            "sha256": "b19b2674655d04facbb35ffdebdade33a5f8b7ac271f945c9eaa2d44dab59b54"
+          },
+          "calls": 12,
+          "drained": true,
+          "signed": false,
+          "broadcast": false,
+          "review": "Original RevmSimClient at pinned executable/source. Bare sBTC transfers use real basePool caller and existing balance, with no tokenDeals/preCalls. Raw zap probes are isolated causal calls, not Family admission/execution acceptance."
+        },
+        "candidateConclusions": [
+          {
+            "pool": "0xaa82ca713d94bba7a89ceab55314f9effeddc78c",
+            "metaPool": "0xc25099792e9349c7dd09759744ea681c7de2cb66",
+            "basePool": "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+            "coin3": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "admittedDirections": [
+              {
+                "direction": "mint",
+                "index": 0
+              },
+              {
+                "direction": "mint",
+                "index": 1
+              },
+              {
+                "direction": "mint",
+                "index": 2
+              },
+              {
+                "direction": "redeem",
+                "index": 0
+              },
+              {
+                "direction": "redeem",
+                "index": 1
+              },
+              {
+                "direction": "redeem",
+                "index": 2
+              }
+            ],
+            "positiveIndex3Mint": "Source requires ordinary sBTC.transferFrom(executor,zap,amount) before any base/metapool deposit. Synth.transferFrom always calls _ensureCanTransfer; the same currency/status gate blocks positive mint input.",
+            "positiveIndex3Redeem": "Source withdraws base coin2 (zap index3) from the shared basePool via sBTC.transfer(zap,dy) before zap forwards output. The real basePool transfer control directly demonstrates this permission refusal.",
+            "evidenceKind": "direct Ready main reverts + bare token/raw zap causal controls + verified source"
+          },
+          {
+            "pool": "0xd5bcf53e2c81e1991570f33fa881c49eea570c8d",
+            "metaPool": "0xd81da8d904b52208541bade1bd6595d8a251f8dd",
+            "basePool": "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+            "coin3": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "admittedDirections": [
+              {
+                "direction": "mint",
+                "index": 0
+              },
+              {
+                "direction": "mint",
+                "index": 1
+              },
+              {
+                "direction": "mint",
+                "index": 2
+              },
+              {
+                "direction": "redeem",
+                "index": 0
+              },
+              {
+                "direction": "redeem",
+                "index": 1
+              },
+              {
+                "direction": "redeem",
+                "index": 2
+              }
+            ],
+            "positiveIndex3Mint": "Source requires ordinary sBTC.transferFrom(executor,zap,amount) before any base/metapool deposit. Synth.transferFrom always calls _ensureCanTransfer; the same currency/status gate blocks positive mint input.",
+            "positiveIndex3Redeem": "Source withdraws base coin2 (zap index3) from the shared basePool via sBTC.transfer(zap,dy) before zap forwards output. The real basePool transfer control directly demonstrates this permission refusal.",
+            "evidenceKind": "independent stored Ready binding + identical verified zap runtime/shared basePool/sBTC source-state gate; no new d5bc raw call claimed"
+          }
+        ],
+        "sourceCallPaths": [
+          {
+            "source": "committed-zap.ts",
+            "lines": [
+              89,
+              200,
+              212,
+              296
+            ],
+            "fact": "Enumerates all eight directions; index3 fails behavior evidence, with no hardcoded exclusion. Successful directions are retained."
+          },
+          {
+            "source": "/Users/eunice/src/MEV/logs/curve-lp187-source-identity/0xaa82ca713d94bba7a89ceab55314f9effeddc78c-Vyper_contract.vy",
+            "lines": [
+              120,
+              124,
+              223,
+              233
+            ],
+            "fact": "Input transferFrom or basePool one-coin withdrawal then output transfer."
+          },
+          {
+            "source": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-identity-verified/0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714-Vyper_contract.vy",
+            "lines": [
+              333,
+              614
+            ],
+            "fact": "Base pool uses underlying transferFrom and transfer normally; no index3 exception."
+          },
+          {
+            "source": "ProxyERC20.sol",
+            "lines": [
+              423,
+              451,
+              488
+            ],
+            "fact": "Proxy passes calls to the actual N-bound target with message sender context."
+          },
+          {
+            "source": "MultiCollateralSynth.sol",
+            "lines": [
+              1448,
+              1481,
+              1605,
+              1608
+            ],
+            "fact": "Both transfer methods enforce waiting period, transferable balance and shared SystemStatus.requireSynthActive(currencyKey)."
+          }
+        ],
+        "minimalDisposition": {
+          "productionPatchNeededForTheseFailures": false,
+          "action": "Keep the existing fail-closed behavior and record index3 mint/redeem as source-state unavailable at this source. Do not add an address allowlist, bypass suspension, force direction admission, or modify protocol account/storage to make it pass.",
+          "acceptanceBoundary": "Six admitted directions per zap retain their existing separate correctness evidence. The four missing directions are not added to accepted route counts. A later source where permissions differ requires a fresh production identity/current check; this evidence proves no permanent mathematical impossibility.",
+          "additionalChainCallsRequiredForCurrentDiagnosis": false
+        },
+        "rawEntries": [
+          {
+            "name": "sbtc-target-at-N",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "data": "0xd4b83992",
+            "tokenDeals": [],
+            "preCalls": [],
+            "outcome": "Success",
+            "phase": "main",
+            "output": "0x0000000000000000000000001cb004a8e84a5ce95c1ff895ee603bac8ec506c7",
+            "decodedError": null
+          },
+          {
+            "name": "target-tokenState",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0x1cB004a8e84a5CE95C1fF895EE603BaC8EC506c7",
+            "data": "0xe90dd9e2",
+            "tokenDeals": [],
+            "preCalls": [],
+            "outcome": "Success",
+            "phase": "main",
+            "output": "0x0000000000000000000000004f6296455f8d754c19821cf1ec8febf2cd456e67",
+            "decodedError": null
+          },
+          {
+            "name": "target-resolver",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0x1cB004a8e84a5CE95C1fF895EE603BaC8EC506c7",
+            "data": "0x04f3bcec",
+            "tokenDeals": [],
+            "preCalls": [],
+            "outcome": "Success",
+            "phase": "main",
+            "output": "0x0000000000000000000000004e3b31eb0e5cb73641ee1e65e7dcefe520ba3ef2",
+            "decodedError": null
+          },
+          {
+            "name": "target-currencyKey",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0x1cB004a8e84a5CE95C1fF895EE603BaC8EC506c7",
+            "data": "0xdbd06c85",
+            "tokenDeals": [],
+            "preCalls": [],
+            "outcome": "Success",
+            "phase": "main",
+            "output": "0x7342544300000000000000000000000000000000000000000000000000000000",
+            "decodedError": null
+          },
+          {
+            "name": "target-cached-SystemStatus",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0x1cB004a8e84a5CE95C1fF895EE603BaC8EC506c7",
+            "data": "0xdc675a6553797374656d5374617475730000000000000000000000000000000000000000",
+            "tokenDeals": [],
+            "preCalls": [],
+            "outcome": "Revert",
+            "phase": "main",
+            "output": "0x",
+            "decodedError": null
+          },
+          {
+            "name": "actual-basepool-sbtc-balance",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "data": "0x70a082310000000000000000000000007fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+            "tokenDeals": [],
+            "preCalls": [],
+            "outcome": "Success",
+            "phase": "main",
+            "output": "0x0000000000000000000000000000000000000000000000076d3fd8024dd911ca",
+            "decodedError": null
+          },
+          {
+            "name": "actual-basepool-approve-control",
+            "from": "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+            "to": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "data": "0x095ea7b3000000000000000000000000aa82ca713d94bba7a89ceab55314f9effeddc78c0000000000000000000000000000000000000000000000000000000000000001",
+            "tokenDeals": [],
+            "preCalls": [],
+            "outcome": "Success",
+            "phase": "main",
+            "output": "0x0000000000000000000000000000000000000000000000000000000000000001",
+            "decodedError": null
+          },
+          {
+            "name": "actual-basepool-transfer-1",
+            "from": "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+            "to": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "data": "0xa9059cbb00000000000000000000000010000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001",
+            "tokenDeals": [],
+            "preCalls": [],
+            "outcome": "Revert",
+            "phase": "main",
+            "output": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002853796e74682069732073757370656e6465642e204f7065726174696f6e2070726f68696269746564000000000000000000000000000000000000000000000000",
+            "decodedError": "Synth is suspended. Operation prohibited",
+            "amount": "1"
+          },
+          {
+            "name": "actual-basepool-transfer-68499728347020",
+            "from": "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
+            "to": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "data": "0xa9059cbb000000000000000000000000100000000000000000000000000000000000000200000000000000000000000000000000000000000000000000003e4cd5f9af8c",
+            "tokenDeals": [],
+            "preCalls": [],
+            "outcome": "Revert",
+            "phase": "main",
+            "output": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002853796e74682069732073757370656e6465642e204f7065726174696f6e2070726f68696269746564000000000000000000000000000000000000000000000000",
+            "decodedError": "Synth is suspended. Operation prohibited",
+            "amount": "68499728347020"
+          },
+          {
+            "name": "funded-sbtc-balance-control",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "data": "0x70a082310000000000000000000000001000000000000000000000000000000000000002",
+            "tokenDeals": [
+              {
+                "token": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+                "to": "0x1000000000000000000000000000000000000002",
+                "amount": "68499728347131"
+              }
+            ],
+            "preCalls": [],
+            "outcome": "Success",
+            "phase": "main",
+            "output": "0x00000000000000000000000000000000000000000000000000003e4cd5f9affb",
+            "decodedError": null
+          },
+          {
+            "name": "raw-zap-mint3",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0xaa82ca713d94bba7a89ceab55314f9effeddc78c",
+            "data": "0x029b2f3400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003e4cd5f9af8c0000000000000000000000000000000000000000000000000000000000000001",
+            "tokenDeals": [
+              {
+                "token": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+                "to": "0x1000000000000000000000000000000000000002",
+                "amount": "68499728347131"
+              }
+            ],
+            "preCalls": [
+              {
+                "from": "0x1000000000000000000000000000000000000002",
+                "to": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+                "calldata": "0x095ea7b3000000000000000000000000aa82ca713d94bba7a89ceab55314f9effeddc78c00000000000000000000000000000000000000000000000000003e4cd5f9af8c"
+              }
+            ],
+            "outcome": "Revert",
+            "phase": "main",
+            "output": "0x",
+            "decodedError": null
+          },
+          {
+            "name": "raw-zap-redeem3",
+            "from": "0x1000000000000000000000000000000000000002",
+            "to": "0xaa82ca713d94bba7a89ceab55314f9effeddc78c",
+            "data": "0x1a4d01d2000000000000000000000000000000000000000000000000000014dee4988c7f00000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000001",
+            "tokenDeals": [
+              {
+                "token": "0x64eda51d3ad40d56b9dfc5554e06f94e1dd786fd",
+                "to": "0x1000000000000000000000000000000000000002",
+                "amount": "22947550498030"
+              }
+            ],
+            "preCalls": [
+              {
+                "from": "0x1000000000000000000000000000000000000002",
+                "to": "0x64eda51d3ad40d56b9dfc5554e06f94e1dd786fd",
+                "calldata": "0x095ea7b3000000000000000000000000aa82ca713d94bba7a89ceab55314f9effeddc78c000000000000000000000000000000000000000000000000000014dee4988c7f"
+              }
+            ],
+            "outcome": "Revert",
+            "phase": "main",
+            "output": "0x",
+            "decodedError": null
+          }
+        ],
+        "evidencePins": [
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/source-path-review.json",
+            "sha256": "9573979e5242a69f5a0a8b2fba045a24ffc61291046da0859facfeb5312aaa1d"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/sbtc-proxy-sourcify.json",
+            "sha256": "bb00365f4aee8ec9a258ccd9a2c5a971ceca869f9848f184d3cb182c3eb2b194"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/sbtc-published-target-sourcify.json",
+            "sha256": "2c4e7a5bda37f5d7a1bd1e3f07b367e2b26ac033e4f7bed11526c5c156c40147"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/published-system-status-sourcify.json",
+            "sha256": "22497d8cd58f38714e91396340503abbf897ead8c38ef99c6d0bfb8fb702fda0"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/audit-ready-raw.mjs",
+            "sha256": "2f9f21dcbd532e528a3cc32ad6221f0e2f77d4ef7acc23e04ad20270f39f861d"
+          },
+          {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/audit-direct-cause.mjs",
+            "sha256": "299994403f7f5cbe5d4fcacda6e989234b19bb4e209ecdd36c24147e6edc4ce8"
+          }
+        ],
+        "limitations": [
+          "No new d5bc native execution was run or claimed by this reviewer. Its conclusion is source-derived from the shared actual source-state permission gate.",
+          "The public SystemStatus source explains the exact suspension error but its cached address/code and raw boolean flag were not independently fetched; actual token behavior and target code binding are observed.",
+          "This is historical token permission classification, not an accepted profitable opportunity, full route coverage, or live readiness claim."
+        ]
+      }
+    },
+    {
+      "original": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/d5bc-direct-supplement-independent-review.json",
+        "sha256": "a4a529e7cc9667c05e3ed4d4bfe5bff802b7f2ecfa4f642e1525a28dc39c2e4f"
+      },
+      "review": {
+        "schemaVersion": 1,
+        "status": "independent-d5bc-four-direct-diagnostics-verified",
+        "scope": "Read-only supplemental review of saved root-run native results and script; reviewer ran no RPC/native/EVM and changed no production/candidate/generated/cloud file",
+        "source": {
+          "number": 26202387,
+          "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+          "generation": 26202387
+        },
+        "input": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-d5bc-direct01/result.json",
+          "sha256": "78eff7f444506b6f24ba75745a49062e9fa4f19a40a424d6902194b2c4d8a165"
+        },
+        "diagnostic": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-d5bc-direct-diagnostic.mjs",
+          "sha256": "429e3b8c7f5a41d57c6ec5469fb26dbfe27a9c83899b4d88457d1053cbd4e496"
+        },
+        "diagnosticSelfHashMatches": true,
+        "scriptReview": "Calls pinned RevmSimClient directly with sourcePin, actor input-only tokenDeals and exactly one ordinary approval to the actual d5bc zap. The script neither replaces protocol code nor writes protocol state; serialization only redacts saved evidence. This is a causal diagnostic, not Family admission or dual-execution acceptance.",
+        "lifecycle": {
+          "drained": true,
+          "errorRecorded": false,
+          "exitCodeReportedByRoot": 0,
+          "exitCodeIndependentlyPresentInRaw": false,
+          "signed": false,
+          "broadcast": false
+        },
+        "independentChecks": [
+          "Each request and native attestation matches N26202387, the same source hash and attested state root.",
+          "Mint supplies only actor sBTC input; redeem supplies only actor actual d5bc metaLP input. No protocol account is given a balance, storage, code, or allowance override.",
+          "Both amounts are mechanically derived from the actual prior Ready snapshot and committed samples policy: floor(floor(balanceOrSupply/1000000)/2) times scale.",
+          "Approval uses tokenIn, actor, actual d5bc zap spender, and exact input amount. All four outcomes are main Revert rather than preCall/setup/transport error or nested halt.",
+          "The four raw revert bytes are empty; no new explicit suspension message is claimed."
+        ],
+        "rows": [
+          {
+            "name": "raw-zap-mint3-1",
+            "direction": "mint",
+            "index": 3,
+            "scale": "1",
+            "amount": "68499728347020",
+            "tokenIn": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "tokenOut": "0x2fe94ea3d5d4a175184081439753de15aef9d614",
+            "fundingAmount": "68499728347131",
+            "fundingAccount": "0x1000000000000000000000000000000000000002",
+            "approval": {
+              "token": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+              "spender": "0xd5bcf53e2c81e1991570f33fa881c49eea570c8d",
+              "amount": "68499728347020"
+            },
+            "inputOnly": true,
+            "protocolOverride": false,
+            "phase": "main",
+            "outcome": "Revert",
+            "output": "0x",
+            "explicitReason": null,
+            "executionGasUsed": "124982"
+          },
+          {
+            "name": "raw-zap-mint3-2",
+            "direction": "mint",
+            "index": 3,
+            "scale": "2",
+            "amount": "136999456694040",
+            "tokenIn": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "tokenOut": "0x2fe94ea3d5d4a175184081439753de15aef9d614",
+            "fundingAmount": "136999456694151",
+            "fundingAccount": "0x1000000000000000000000000000000000000002",
+            "approval": {
+              "token": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+              "spender": "0xd5bcf53e2c81e1991570f33fa881c49eea570c8d",
+              "amount": "136999456694040"
+            },
+            "inputOnly": true,
+            "protocolOverride": false,
+            "phase": "main",
+            "outcome": "Revert",
+            "output": "0x",
+            "explicitReason": null,
+            "executionGasUsed": "124982"
+          },
+          {
+            "name": "raw-zap-redeem3-1",
+            "direction": "redeem",
+            "index": 3,
+            "scale": "1",
+            "amount": "632570240131",
+            "tokenIn": "0x2fe94ea3d5d4a175184081439753de15aef9d614",
+            "tokenOut": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "fundingAmount": "632570240242",
+            "fundingAccount": "0x1000000000000000000000000000000000000002",
+            "approval": {
+              "token": "0x2fe94ea3d5d4a175184081439753de15aef9d614",
+              "spender": "0xd5bcf53e2c81e1991570f33fa881c49eea570c8d",
+              "amount": "632570240131"
+            },
+            "inputOnly": true,
+            "protocolOverride": false,
+            "phase": "main",
+            "outcome": "Revert",
+            "output": "0x",
+            "explicitReason": null,
+            "executionGasUsed": "446466"
+          },
+          {
+            "name": "raw-zap-redeem3-2",
+            "direction": "redeem",
+            "index": 3,
+            "scale": "2",
+            "amount": "1265140480262",
+            "tokenIn": "0x2fe94ea3d5d4a175184081439753de15aef9d614",
+            "tokenOut": "0xfe18be6b3bd88a2d2a7f928d00292e7a9963cfc6",
+            "fundingAmount": "1265140480373",
+            "fundingAccount": "0x1000000000000000000000000000000000000002",
+            "approval": {
+              "token": "0x2fe94ea3d5d4a175184081439753de15aef9d614",
+              "spender": "0xd5bcf53e2c81e1991570f33fa881c49eea570c8d",
+              "amount": "1265140480262"
+            },
+            "inputOnly": true,
+            "protocolOverride": false,
+            "phase": "main",
+            "outcome": "Revert",
+            "output": "0x",
+            "explicitReason": null,
+            "executionGasUsed": "446466"
+          }
+        ],
+        "causalAssociation": {
+          "priorReview": {
+            "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-investigation/index3-causal-independent-review-v2.json",
+            "sha256": "6f716234f862fec22aba7b01d1d6f7e4d33495191dc4289f7e6fd4d5da401de0"
+          },
+          "priorObservedMessage": "Synth is suspended. Operation prohibited",
+          "evidence": "The already independently reviewed actual sBTC bare transfer uses the same source and shared basePool/sBTC. Both verified zap classes require that positive sBTC transfer on index3; actual proxy target runtime is bound in the prior report. These four d5bc results are consistent direct confirmations of execution refusal, while their empty revert bytes do not identify a new inner reason or first opcode."
+        },
+        "acceptanceAccounting": {
+          "acceptedDirectionCountDelta": 0,
+          "newSuccessfulDirections": 0,
+          "existingDirectionsPerZap": 6,
+          "disposition": "Keep each zap's prior mint/redeem indices 0,1,2 and their existing acceptance evidence unchanged. Record index3 at this source as unavailable due to the separately established shared token permission blocker; do not force admission or count raw diagnostic failures as accepted execution."
+        },
+        "preservedEvidence": {
+          "priorReviewSha256": "6f716234f862fec22aba7b01d1d6f7e4d33495191dc4289f7e6fd4d5da401de0",
+          "oldArtifactsUnmodified": true
+        }
+      }
+    }
+  ]
+}

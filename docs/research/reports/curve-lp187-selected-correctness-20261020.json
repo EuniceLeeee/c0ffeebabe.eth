@@ -1,6 +1,6 @@
 {
-  "schema": "curve-lp-selected-correctness-delivery-v1",
-  "generatedAtUtc": "2026-10-20T06:41:24.398427+00:00",
+  "schema": "curve-lp-selected-correctness-delivery-v2",
+  "generatedAtUtc": "2026-10-20T07:16:40.598330+00:00",
   "status": "implemented-selected-correctness-verified-population-incomplete",
   "familyId": "protocol:curve-lp",
   "actualRoot": "/opt/mev-cloud/family-runtime-20261007",
@@ -232,7 +232,6 @@
     }
   },
   "executionSourceBoundary": {
-    "headAtExecution": "72019630c2d1cfc716754a99544794c406752a1d",
     "worktree": "actual shared dirty source, not a clean checkout",
     "sets": [
       {
@@ -241,7 +240,8 @@
           "sha256": "bf75348da54145894feed072dd297fa8f246e0c30c5172bc251d5f8e83de9717"
         },
         "nativeSourceTreeSha256": "ae8af3bd15b75f4a97ea069840af971fbf54e3ebe22fb65928bd689d6ab66444",
-        "rawNativeReceipts": 918
+        "rawNativeReceipts": 918,
+        "headAtExecution": "72019630c2d1cfc716754a99544794c406752a1d"
       },
       {
         "review": {
@@ -249,7 +249,8 @@
           "sha256": "bfc9c5a79cbbfdfcfc3821e572bfa7faab82eabc092131fac8a74b6180798b02"
         },
         "nativeSourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
-        "rawNativeReceipts": 270
+        "rawNativeReceipts": 270,
+        "headAtExecution": "72019630c2d1cfc716754a99544794c406752a1d"
       },
       {
         "review": {
@@ -257,11 +258,26 @@
           "sha256": "ba5d5303af988cb7c6899b554cdcebed4fb4a8d1d9c0e42d9062b3c9f76c5718"
         },
         "nativeSourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
-        "rawNativeReceipts": 270
+        "rawNativeReceipts": 270,
+        "headAtExecution": "72019630c2d1cfc716754a99544794c406752a1d"
+      },
+      {
+        "review": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-coverage-audit/ng-v6-meta-independent-review.json",
+          "sha256": "a20e950973d4a4cb16dec9cd4f3168cad46d717022c0cc945c4734e5a40850d9"
+        },
+        "headAtExecution": "2efc5871f87d59de2530d049ba454ec95fdabf39",
+        "nativeSourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
+        "rawNativeReceipts": 408
       }
     ],
     "retainedOriginalHashes": true,
-    "nativeBackendSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6"
+    "nativeBackendSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6",
+    "executionHeads": [
+      "72019630c2d1cfc716754a99544794c406752a1d",
+      "2efc5871f87d59de2530d049ba454ec95fdabf39"
+    ],
+    "scope": "Per-group historical source identity; no single HEAD applied to all results."
   },
   "state": {
     "number": 26202387,
@@ -319,21 +335,176 @@
       "originalTx": "0x93df8666c69d17a7a8815991e766e3e5fd752f2faafdbf46d4da922363180324",
       "originalBlock": 26200939,
       "directions": 4
+    },
+    {
+      "kind": "ng-v6-e080",
+      "pool": "0xe080027bd47353b5d1639772b4a75e9ed3658a0d",
+      "directions": 4,
+      "originalTx": "0xf5ad607267f50019a547dddbe83845f69f9f7c93402c4f00e214f22bc9ca52ec",
+      "originalBlock": 26200988,
+      "originalBlockHash": "0x867550484d07005f718e2a64ea59ad5638d5675f3abfb909b592e29cc099f10a",
+      "readySummarySha256": "bde0a59eee901e467bdc7418eaeaca3efb1d52a3a76827c8ba9e489fb6547b38",
+      "graphHash": "dc0ccab0d32555c2bfe364acfd4391b330568138c64e259f2460241facff178e",
+      "readyCheckpoint": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-v6-e080-ready/ready.json",
+        "sha256": "da36838cabd7bc584334fdeb2b63dc5babb4cff3b26d74d3f3399c33f8c9e254"
+      },
+      "dual": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-v6-e080-dual",
+        "sha256": "b9b60e6a334bdce9b886e44569101e43c87658507cd8c28f019ca00e4dd9b9e3"
+      },
+      "inputScope": "Fixed manual raw1e15 and2e15, decimals18; not original transaction quantities or natural production valuation.",
+      "code": {
+        "sourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
+        "harnessSha256": "ea1da25165ce4ca46cb5df5a379fddbba9922385d974543597f85bd22a1bbfd9",
+        "evidenceSha256": "e04b6406f70eafc2ba2c914ea5794bd085f321600274f020fd1327a70a3d2695",
+        "observationHelpers": [
+          {
+            "path": "./v4-native-settlement.ts",
+            "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+          },
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "counts": {
+        "positive": 64,
+        "faultReverted": 128,
+        "zeroInputReverted": 12,
+        "nativeQuote": 0,
+        "raw": 204
+      },
+      "naturallyDiscoveredAtTestedBlock": false
+    },
+    {
+      "kind": "ng-meta-v7-579a",
+      "pool": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+      "directions": 4,
+      "originalTx": "0x6780ef7ffacebcafb248114f49bf95fb65e227419bf97e268d72cd7c5f72333d",
+      "originalBlock": 26192964,
+      "originalBlockHash": "0x1ddfde0161ea6b7f8de505ab2cb05369760485a3894bb24f2d43dbbcc05b8c2b",
+      "readySummarySha256": "c7a89a6d1745644486eba7d8417c72c9e3b2a4bdbc2d1d49070a30a419f2ff86",
+      "graphHash": "aabd9f35e02a27181ea3f34916f1d840c584bab2d1434a6b3f604dd993de7bb0",
+      "readyCheckpoint": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-meta-v7-579a-ready/ready.json",
+        "sha256": "651f69546b3289d6d079a44f9ed41f1f96aa5db57b06ce6c09603a19255c32c6"
+      },
+      "dual": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-meta-v7-579a-dual",
+        "sha256": "d1c1a2351c6798d634e5e8134c04c792607f7f532758eb1d6bc2159f0bdd7f3b"
+      },
+      "inputScope": "Fixed manual raw1e15 and2e15, decimals18; not original transaction quantities or natural production valuation.",
+      "code": {
+        "sourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
+        "harnessSha256": "ea1da25165ce4ca46cb5df5a379fddbba9922385d974543597f85bd22a1bbfd9",
+        "evidenceSha256": "e04b6406f70eafc2ba2c914ea5794bd085f321600274f020fd1327a70a3d2695",
+        "observationHelpers": [
+          {
+            "path": "./v4-native-settlement.ts",
+            "sha256": "a12bf0f92a006a594cbec2caf5ba4cfa0a31faea28a912c7701b54e71be1c664"
+          },
+          {
+            "path": "../three-family/historical-input-observations.ts",
+            "sha256": "9315579d996c23d42857df9226e86d5385c95a14e6b4b6083c4cdb4b3008cb30"
+          },
+          {
+            "path": "../../../venues/swaps/ekubo-family/test/history-evidence.ts",
+            "sha256": "f462474db748fc494f0429eb3ed73d618fe2658417613b56ae3d385f972a40c3"
+          },
+          {
+            "path": "../../../venues/swaps/univ4-family/test/history-evidence.ts",
+            "sha256": "c5d3cc451e15f2a0a5b32f85e0a7387588a74104865303b662d82f8d21a6bb43"
+          },
+          {
+            "path": "../../../venues/protocols/token-conversion-family/test/history-evidence.ts",
+            "sha256": "6f0b87118734c9755ba80221fb6678c4653afa3a202963830fda442a8198e5e5"
+          },
+          {
+            "path": "../../../venues/protocols/erc4626-family/test/history-evidence.ts",
+            "sha256": "e5bccfa8ff258ad14cd6ee3063ae166c365f960a2f32f8c05f659db1a445f98a"
+          },
+          {
+            "path": "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.ts",
+            "sha256": "3a45b7e84aefbdda2755396b3356a0454fc146bb60e885a0a8dec11c3e35b2cc"
+          },
+          {
+            "path": "../../../venues/protocols/ethertoken-native-redeem-family/test/history-evidence.ts",
+            "sha256": "3b25a747a45f8b71ee378b9812f04d6f0a924003b2656f49c34846e8e56282bc"
+          },
+          {
+            "path": "../../../venues/protocols/self-burn-native-family/test/history-evidence.ts",
+            "sha256": "09bcd098d9a3f4ff6bfd43ab337b3a9567c6f4c90b23e2272cb68007555b62eb"
+          },
+          {
+            "path": "../../../venues/protocols/compound-ctoken-family/test/history-evidence.ts",
+            "sha256": "b259be6ece0f6dc338f846fb2432ab6f3ab0fdd263de289c206258790ff298c5"
+          }
+        ]
+      },
+      "counts": {
+        "positive": 64,
+        "faultReverted": 128,
+        "zeroInputReverted": 12,
+        "nativeQuote": 0,
+        "raw": 204
+      },
+      "naturallyDiscoveredAtTestedBlock": false
     }
   ],
   "counts": {
-    "instanceCount": 6,
-    "directionCount": 34,
-    "positive": 448,
-    "faultReverted": 896,
-    "zeroInputReverted": 78,
+    "instanceCount": 8,
+    "directionCount": 42,
+    "positive": 576,
+    "faultReverted": 1152,
+    "zeroInputReverted": 102,
     "nativeSpecifiedQuotes": 36,
-    "allNativeReceipts": 1458,
-    "qualification": "918 earlier NG source ae8af3bd plus540 zap/crypto source d03c638e, kept separate. Physical raw count includes36 distinct native quote simulations; positive execution count excludes those quotes. Not all187 or all125NG."
+    "allNativeReceipts": 1866,
+    "qualification": "Prior1458 plus new408; 918 old NG source ae8af3bd plus948 source d03c638e. Diagnostic sBTC results are not counted as accepted directions or re-counted positive receipts; not all187."
   },
   "independentCertificate": {
-    "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/selected-six-instances-cumulative-independent-summary.json",
-    "sha256": "82e61a89b5fcbb220d2b0eea75669b18404a874bfa73dfcf8e3d2dcfb6567070"
+    "previous": {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/selected-six-instances-cumulative-independent-summary.json",
+      "sha256": "82e61a89b5fcbb220d2b0eea75669b18404a874bfa73dfcf8e3d2dcfb6567070"
+    },
+    "increment": {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-coverage-audit/ng-v6-meta-independent-review.json",
+      "sha256": "a20e950973d4a4cb16dec9cd4f3168cad46d717022c0cc945c4734e5a40850d9"
+    },
+    "scope": "Existing six/34 plus two new/8; original fingerprints unchanged."
   },
   "readyEvidence": [
     {
@@ -924,11 +1095,11 @@
     }
   ],
   "remainingCoverage": [
-    "187 population not fully attested/executed; actual six instances only.",
-    "Only three NG examples from125 registry NG candidates; no population-wide conclusion.",
-    "Two zap mint/redeem index3 directions each remain unadmitted; cause unresolved.",
-    "Only source-matched TwoCrypto6dc actually dual tested; other56generic classes/instances, V1/factory and remaining3 provenance cases not blanket accepted.",
-    "No new natural valuation/effective-sized production input, original pre-call/output/whole-opportunity parity, representative performance or live evidence."
+    "187 population remains incomplete; eight actual instances, not blanket125NG or56generic acceptance.",
+    "Selected NG2/3/4-v7 plus v6 and meta-v7 do not cover all oracle/rebasing/rate/fee variants.",
+    "Two zap index3 mint/redeem remain unavailable at testedN because shared sBTC transfers are suspended; aa82 strict and both raw zap diagnostics refuse; no forced success required at that state.",
+    "Other generic classes, V1/factory, five-coin implementation and unresolved lineage/source cases remain; BF reverse identity is read-confirmed but not implemented or executed.",
+    "No new natural effective/production-reference-input, original precall parity/full opportunity, representative performance or live evidence."
   ],
   "negativeEvidenceBoundary": "Trusted main-phase EVM revert and empty effects/logs only; not independently observed per-slot post-rollback balances/storage diffs.",
   "discoveryBoundary": "Saved real candidates re-attested through production strict/memo/Ready/Graph at N. Not natural N discovery or natural valuation.",
@@ -944,9 +1115,147 @@
     "changedLines": [
       27
     ],
+    "beforeSha256": "440715468e1627e95e8f07bd3f4b379dc895427a1b384f625136483e931507af",
+    "afterSha256": "d5039335ada94f47030407e3718145a3ce2f4309ae1673afae55885a7dda32cd",
+    "otherLinesBytewisePreserved": true,
+    "sourceCommit": "78f4bbbc6f6bc77992fab639eef56502fd4bc7f5",
+    "executionHead": "2efc5871f87d59de2530d049ba454ec95fdabf39",
+    "intermediateDraftSha256": "fb89301f7940d0948f3baab7b3dbc9e0a0706ccaebdb93af0fd85ea79ece851c"
+  },
+  "previousCounts": {
+    "instanceCount": 6,
+    "directionCount": 34,
+    "positive": 448,
+    "faultReverted": 896,
+    "zeroInputReverted": 78,
+    "nativeSpecifiedQuotes": 36,
+    "allNativeReceipts": 1458,
+    "qualification": "918 earlier NG source ae8af3bd plus540 zap/crypto source d03c638e, kept separate. Physical raw count includes36 distinct native quote simulations; positive execution count excludes those quotes. Not all187 or all125NG."
+  },
+  "previousIndependentCertificate": {
+    "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/selected-six-instances-cumulative-independent-summary.json",
+    "sha256": "82e61a89b5fcbb220d2b0eea75669b18404a874bfa73dfcf8e3d2dcfb6567070"
+  },
+  "latestIncrement": {
+    "sourceHead": "2efc5871f87d59de2530d049ba454ec95fdabf39",
+    "sourceChanged": false,
+    "actualSourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
+    "sourceInventory": {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/current-production-source-inventory.json",
+      "sha256": "c90fda1fd4811bb62b7c6e1062436b9a4fb64a13966a15a9f644d2c50ae045fa"
+    },
+    "runPreflight": {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/preflight.json",
+      "sha256": "193481fb0067193d3887bfce23384b8240512511fdb13c08cf365505b1c49e3d"
+    },
+    "runExit": {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/exit.json",
+      "sha256": "e9eac5b3afcd800796edea184246b472f50bc78a9386e0b9c42fd600a65a0dcb"
+    },
+    "plan": {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/plan.json",
+      "sha256": "663d9c463645f0877ba9397b54682f0e7da448137dedd60814cc74796615a79f"
+    },
+    "independentReview": "curve-lp187-ng-v6-meta-independent-20261020.json",
+    "stateRejectionReview": "curve-lp187-sbtc-state-rejection-20261020.json",
+    "newDirectionCount": 8,
+    "nativeReceipts": 408,
+    "buildAndOfflineContracts": "Prior source-matching85/85,311/311 and production build reused; no source edits or repeat build in this increment.",
+    "toolReconciliation": {
+      "query": [
+        "curve",
+        "lp"
+      ],
+      "manifest": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/tool-selection.json",
+        "sha256": "3879de3fd718a2b77d8ec5efb3742c311f6cb97994ec06a9668d6305a1dcbcbe"
+      },
+      "executedTools": [
+        "listener:searcher:curve-lp-historical-ready",
+        "listener:searcher:curve-lp-historical-dual"
+      ],
+      "actualInvocations": 4,
+      "allExitZero": true
+    },
+    "originalTransactions": "e080 original is TokenExchange, meta original includes AddLiquidity index1. Manual trials are not original-amount/precall-output or opportunity reproduction.",
+    "diagnosticNoNewAcceptance": {
+      "aa82ObservedStrict": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-probe01/exit.json",
+        "sha256": "27d5c88b270702c110b0ae546d10e39b2875c740ec5857b0b13bd8dcf62f3ed9"
+      },
+      "aa82Direct": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-direct01/result.json",
+        "sha256": "6a2bc776ce16e6de95114599a8e6545c93828157ec8546f65a51ffb9e218c01a"
+      },
+      "d5bcDirect": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/index3-d5bc-direct01/result.json",
+        "sha256": "78eff7f444506b6f24ba75745a49062e9fa4f19a40a424d6902194b2c4d8a165"
+      }
+    },
+    "residualIdentityRead": {
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-bf01/result.json",
+        "sha256": "5600b267c7220d91dea388cb16bbb17d1b107df72ec0e724dbfd6eb97cf54774"
+      },
+      "exit": 1,
+      "status": "read-plan-complete-with-unresolved",
+      "requests": 26,
+      "bf": "Five-coin pool runtime + private current token slot5 + verified LP runtime + LP minter slot6 reversely match; identity evidence only, not admitted or dual-tested.",
+      "swerve": "Initial26-read run kept unknown LP class and did not guess minter slot. Subsequently obtained exact verified LP runtime57efd7 and source/bytecode-bound private minter slot6; one new pinned state read reversely matches the derived pool. Identity evidence only, no admitted/quote/LP execution claim.",
+      "sourceTransactions": "Both source receipts are TokenExchange, so LP extension alone does not close the original swap leg.",
+      "swerveSourceProof": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-swerve-lp-source/swerve-lp-source-proof.json",
+        "sha256": "36e342c7f2ebaef358f08ef47fd8078cd9e2746571389ae1f54902747bfb4261"
+      },
+      "swerveCurrentMinter": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/swerve-current-minter01.json",
+        "sha256": "b4a2f27ae156a8c11ea02379ee63d1487c83767fef503f3f1d64a080a6860656"
+      },
+      "requestsIncludingFollowup": 27,
+      "independentReview": "curve-lp187-residual-identity-20261020.json"
+    }
+  },
+  "previousImplUpdate": {
+    "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "changedLines": [
+      27
+    ],
     "beforeSha256": "a90efda323410665ff77cd5c2cb1061a7c2c5ed5446e976daf38f91a99b070d9",
     "afterSha256": "440715468e1627e95e8f07bd3f4b379dc895427a1b384f625136483e931507af",
     "otherLinesBytewisePreserved": true,
     "sourceCommit": "78f4bbbc6f6bc77992fab639eef56502fd4bc7f5"
-  }
+  },
+  "previousExecutionSourceBoundary": {
+    "headAtExecution": "72019630c2d1cfc716754a99544794c406752a1d",
+    "worktree": "actual shared dirty source, not a clean checkout",
+    "sets": [
+      {
+        "review": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-first-three-independent-summary.json",
+          "sha256": "bf75348da54145894feed072dd297fa8f246e0c30c5172bc251d5f8e83de9717"
+        },
+        "nativeSourceTreeSha256": "ae8af3bd15b75f4a97ea069840af971fbf54e3ebe22fb65928bd689d6ab66444",
+        "rawNativeReceipts": 918
+      },
+      {
+        "review": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-crypto-first-directions-independent-review.json",
+          "sha256": "bfc9c5a79cbbfdfcfc3821e572bfa7faab82eabc092131fac8a74b6180798b02"
+        },
+        "nativeSourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
+        "rawNativeReceipts": 270
+      },
+      {
+        "review": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-remaining-directions-independent-review.json",
+          "sha256": "ba5d5303af988cb7c6899b554cdcebed4fb4a8d1d9c0e42d9062b3c9f76c5718"
+        },
+        "nativeSourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
+        "rawNativeReceipts": 270
+      }
+    ],
+    "retainedOriginalHashes": true,
+    "nativeBackendSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6"
+  },
+  "readyEvidenceScope": "Previous two zap plus TwoCrypto subset only. Earlier NG Ready is in previous certificate; new two NG Ready is pinned in samples and latestIncrement independent certificate. Not a full-eight Ready array."
 }

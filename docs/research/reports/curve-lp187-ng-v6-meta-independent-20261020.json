@@ -1,0 +1,448 @@
+{
+  "schema": "curve-lp-independent-actual-evidence-review-v1",
+  "reviewer": "/root/staked_split_acceptance",
+  "verdict": "pass-for-selected-eight-new-directions-current-state-evidence",
+  "scope": "Independent static parsing and arithmetic over saved actual native strict receipts, request bytes, token effects, Transfer/Approval/action logs and Ready summary; no new EVM/RPC/cloud execution.",
+  "source": {
+    "number": 26202387,
+    "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+    "generation": 26202387
+  },
+  "poolCount": 2,
+  "directionCount": 8,
+  "results": [
+    {
+      "name": "ng-v6-e080",
+      "pool": "0xe080027bd47353b5d1639772b4a75e9ed3658a0d",
+      "directions": 4,
+      "readySummary": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-v6-e080-ready/ready-summary.json",
+        "sha256": "bde0a59eee901e467bdc7418eaeaca3efb1d52a3a76827c8ba9e489fb6547b38",
+        "graphHash": "dc0ccab0d32555c2bfe364acfd4391b330568138c64e259f2460241facff178e",
+        "checkpoint": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-v6-e080-ready/ready.json",
+          "sha256": "da36838cabd7bc584334fdeb2b63dc5babb4cff3b26d74d3f3399c33f8c9e254"
+        },
+        "baselineSupply": "5206367245614188158512"
+      },
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-v6-e080-dual",
+      "sha256": "b9b60e6a334bdce9b886e44569101e43c87658507cd8c28f019ca00e4dd9b9e3",
+      "counts": {
+        "positive": 64,
+        "faultReverted": 128,
+        "zeroInputReverted": 12
+      },
+      "quoteAmounts": {
+        "protocol:curve-lp:0xe080027bd47353b5d1639772b4a75e9ed3658a0d:mint:0:1000000000000000": "999484256637934",
+        "protocol:curve-lp:0xe080027bd47353b5d1639772b4a75e9ed3658a0d:mint:0:2000000000000000": "1998968511416314",
+        "protocol:curve-lp:0xe080027bd47353b5d1639772b4a75e9ed3658a0d:mint:1:1000000000000000": "1085496808344332",
+        "protocol:curve-lp:0xe080027bd47353b5d1639772b4a75e9ed3658a0d:mint:1:2000000000000000": "2170993614395708",
+        "protocol:curve-lp:0xe080027bd47353b5d1639772b4a75e9ed3658a0d:redeem:0:1000000000000000": "1000318135241608",
+        "protocol:curve-lp:0xe080027bd47353b5d1639772b4a75e9ed3658a0d:redeem:0:2000000000000000": "2000636268621897",
+        "protocol:curve-lp:0xe080027bd47353b5d1639772b4a75e9ed3658a0d:redeem:1:1000000000000000": "921050877925097",
+        "protocol:curve-lp:0xe080027bd47353b5d1639772b4a75e9ed3658a0d:redeem:1:2000000000000000": "1842101754058560"
+      },
+      "typedRevertSelectors": {
+        "0x4e487b71": 108,
+        "0x08c379a0": 32
+      },
+      "matchingStages": 204,
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "sourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966"
+    },
+    {
+      "name": "ng-meta-v7-579a",
+      "pool": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+      "directions": 4,
+      "readySummary": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-meta-v7-579a-ready/ready-summary.json",
+        "sha256": "c7a89a6d1745644486eba7d8417c72c9e3b2a4bdbc2d1d49070a30a419f2ff86",
+        "graphHash": "aabd9f35e02a27181ea3f34916f1d840c584bab2d1434a6b3f604dd993de7bb0",
+        "checkpoint": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-meta-v7-579a-ready/ready.json",
+          "sha256": "651f69546b3289d6d079a44f9ed41f1f96aa5db57b06ce6c09603a19255c32c6"
+        },
+        "baselineSupply": "691899627671352301370358"
+      },
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-meta-v7-579a-dual",
+      "sha256": "d1c1a2351c6798d634e5e8134c04c792607f7f532758eb1d6bc2159f0bdd7f3b",
+      "counts": {
+        "positive": 64,
+        "faultReverted": 128,
+        "zeroInputReverted": 12
+      },
+      "quoteAmounts": {
+        "protocol:curve-lp:0x579a9a9d43f9c112dee359e09a87a44f2718a483:mint:0:1000000000000000": "905360404248113",
+        "protocol:curve-lp:0x579a9a9d43f9c112dee359e09a87a44f2718a483:mint:0:2000000000000000": "1810720808394538",
+        "protocol:curve-lp:0x579a9a9d43f9c112dee359e09a87a44f2718a483:mint:1:1000000000000000": "20736983207436407",
+        "protocol:curve-lp:0x579a9a9d43f9c112dee359e09a87a44f2718a483:mint:1:2000000000000000": "41473944445716008",
+        "protocol:curve-lp:0x579a9a9d43f9c112dee359e09a87a44f2718a483:redeem:0:1000000000000000": "1104413668056398",
+        "protocol:curve-lp:0x579a9a9d43f9c112dee359e09a87a44f2718a483:redeem:0:2000000000000000": "2208827335976375",
+        "protocol:curve-lp:0x579a9a9d43f9c112dee359e09a87a44f2718a483:redeem:1:1000000000000000": "48117643063917",
+        "protocol:curve-lp:0x579a9a9d43f9c112dee359e09a87a44f2718a483:redeem:1:2000000000000000": "96235283669958"
+      },
+      "typedRevertSelectors": {
+        "0x4e487b71": 108,
+        "0x08c379a0": 32
+      },
+      "matchingStages": 204,
+      "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+      "sourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966"
+    }
+  ],
+  "totals": {
+    "positive": 128,
+    "faultReverted": 256,
+    "zeroInputReverted": 24
+  },
+  "checks": {
+    "Ready source pin": 2,
+    "Ready all routes and edges": 2,
+    "Ready direction matrix": 2,
+    "Ready edge route ownership": 8,
+    "unique raw stage records": 2,
+    "unique node receipt IDs": 2,
+    "node receipt ID sequence": 2,
+    "dual source pin": 2,
+    "strict session drained": 2,
+    "dual descriptor equals Ready": 2,
+    "dual definition equals Ready": 2,
+    "dual memo equals Ready": 2,
+    "runtime construction counters": 2,
+    "reported safety scope": 2,
+    "quote source and amount": 48,
+    "NG chain amount method": 48,
+    "no callback continuation claim": 48,
+    "raw node source attestation": 408,
+    "raw executor code pin": 408,
+    "real main execution receipt": 408,
+    "transport value source pin": 408,
+    "issued evidence agrees with transported value": 408,
+    "raw output equals trusted output": 408,
+    "raw effects equal trusted effects": 1224,
+    "raw native effects equal trusted effects": 408,
+    "executor request ownership": 408,
+    "executor-only funding override": 408,
+    "exact input and old output funding": 408,
+    "native inventory funded 17": 408,
+    "full six balance observation matrix": 408,
+    "LP supply observation request": 408,
+    "actual requested amount encoded in first script": 408,
+    "primary input r0 not overwritten": 408,
+    "one pool mutation in primary program": 408,
+    "NG mint exact ABI template": 102,
+    "NG mint actual input patch": 102,
+    "mint minimum and recipient": 102,
+    "pool call has no native value": 408,
+    "program calls only declared pool and route tokens": 408,
+    "positive real EVM success": 128,
+    "all six exact token deltas conserve requested input and actual output": 128,
+    "native inventory independently preserved": 128,
+    "LP supply exact mint or burn": 128,
+    "independent Transfer flows match every observed token balance": 128,
+    "Transfer zero-address flow equals LP supply delta": 128,
+    "pool action event ownership": 128,
+    "AddLiquidity event actual indexed input": 64,
+    "input approval reset grant cleanup logs": 64,
+    "action event total supply agrees with Ready baseline and observed supply delta": 128,
+    "reported actual independently recomputed": 128,
+    "old output and quote difference report agrees": 128,
+    "typed EVM revert rather than transport or resource failure": 280,
+    "revert has no committed observed effects": 280,
+    "negative postcondition reads intended account": 128,
+    "negative required receipt postcondition": 128,
+    "explicit post-operation revert guard": 64,
+    "NG redeem exact ABI template": 204,
+    "NG redeem actual input patch": 204,
+    "redeem minimum and recipient": 204,
+    "RemoveLiquidityOne event index burn and output": 64,
+    "redeem does not grant token allowance": 64,
+    "every raw receipt matched exactly once": 2,
+    "independently recomputed coverage counts": 2,
+    "meta fixed2 mint exact ABI template": 102,
+    "meta fixed2 mint actual input patch": 102,
+    "meta mint minimum and recipient": 102,
+    "frozen manual plan byte equality": 1,
+    "original187 source candidates hash": 1,
+    "actual runner exits and tracked source unchanged": 1,
+    "owned source equals committed reviewed bytes in actual preflight": 15,
+    "full production fingerprint independently reproduced with one untracked file": 1,
+    "summary memo is exact published checkpoint memo": 2,
+    "checkpoint source and graph hash": 2,
+    "one-block lifecycle range": 2,
+    "independent actual checkpoint SHA": 2,
+    "dual consumed exact local checkpoint bytes": 2,
+    "exact candidate snapshot across source plan memo and actual admission": 2,
+    "fresh proof source and published direction ownership": 2,
+    "distinct actual NG class and all receiver capabilities": 2,
+    "manual rather than natural valuation scope": 2,
+    "Exact quotes separated from runtime construction zero": 2,
+    "current source tree fingerprint matches prior zap crypto group": 2,
+    "CLI and direct helper pins match committed bytes and preflight": 6,
+    "shared production helper actual preflight pin": 4,
+    "all sourcePin observation helpers match actual preflight": 20,
+    "manual amount exactly frozen seed or2x": 48,
+    "per-input provenance exact frozen plan": 48,
+    "actual original canonical successful receipt": 2,
+    "actual receipt contains nominated pool logs": 2,
+    "actual original nominated log belongs to pool": 1,
+    "original e080 TokenExchange semantics independently decoded": 1,
+    "original e080 actual incoming and outgoing Transfer amounts": 1,
+    "original meta fixed2 LP mint amounts independently decoded": 1,
+    "original meta actual baseLP deposit and metaLP mint Transfer": 1,
+    "new batch exact receipt totals": 1
+  },
+  "checkInvocations": 12567,
+  "errors": [],
+  "qualifications": [
+    "Same fixed source block; all three recipient modes, two amounts, quoted/default and runtime construction plus old executor output inventory 0/103 covered.",
+    "Minimum-plus-one and wrong-receiver negatives are post-operation receipt guards in appended programs, not altered pool calldata or a claim that the Curve contract itself enforces those synthetic conditions.",
+    "Reverts are node MainRevert receipts with empty committed observations. This is not an independent full storage-diff proof.",
+    "Only actor input/output/native holdings are funded in request overrideIntent. The harness counterfactual executor code is explicitly attested; this is not historical on-chain executor runtime.",
+    "Raw strict rows do not embed request bytes. Stage association and trusted result linkage are supplied by the hash-pinned harness; this review checks all saved links and contents, not a new signature or node response authenticity proof.",
+    "Actual Ready checkpoint bytes, summaries and dual memo/definition/descriptor pins are cross-checked locally in the supplement.",
+    "Quote raw eth-call payload results are not retained in this dual JSON. Current issued chain-method quote amounts are independently corroborated by every successful native execution receipt.",
+    "Nomination used saved real candidate plus one-block production discovery. naturallyDiscoveredAtTestedBlock=false; manual/receipt amounts, no natural valuation/performance/full conserving-loop/PnL or all-187 acceptance claim."
+  ],
+  "productionWrites": false,
+  "networkOrNativeExecutions": 0,
+  "supplement": {
+    "actualSourceHead": "2efc5871f87d59de2530d049ba454ec95fdabf39",
+    "sourceCommit": "78f4bbbc6f6bc77992fab639eef56502fd4bc7f5",
+    "trackedBytesUnchangedThroughRun": true,
+    "sourcePinQualification": "Executed sourceTree d03 matches prior zap/crypto group and current owned/helper hashes. Complete1266-file production inventory independently reproduced using JS directory localeCompare DFS and JSON.stringify;1265 tracked files equal preflight and one extra untracked ready-transaction-input.ts is explicitly pinned. Tracked-only partial calculation is retained as incomplete-scope evidence, not drift.",
+    "completeSourceFingerprintReview": {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/residual-coverage-audit/ng-v6-meta-complete-source-fingerprint-check.json",
+      "sha256": "7c624ef5847189743de014bbf1fec3e8c17adf860558e8a7792b6691c8968a4b"
+    },
+    "newNativeReceiptCount": 408,
+    "newNativeQuoteReceipts": 0,
+    "originalReceiptsAndFreshReady": [
+      {
+        "name": "ng-v6-e080",
+        "checkpoint": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-v6-e080-ready/ready.json",
+          "sha256": "da36838cabd7bc584334fdeb2b63dc5babb4cff3b26d74d3f3399c33f8c9e254"
+        },
+        "readyInputProvenance": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-v6-e080-ready/input-provenance.json",
+          "sha256": "6274203cd67fe5632625f9153d91a7b75907fd16541f5329157568390c5f314a"
+        },
+        "candidate": {
+          "adapter": "curve-lp",
+          "address": "0xe080027bd47353b5d1639772b4a75e9ed3658a0d",
+          "blockHash": "0x867550484d07005f718e2a64ea59ad5638d5675f3abfb909b592e29cc099f10a",
+          "blockNumber": 26200988,
+          "candidateKind": "curve-lp",
+          "familyId": "protocol:curve-lp",
+          "logIndex": 105,
+          "pluginCandidateKey": "0xe080027bd47353b5d1639772b4a75e9ed3658a0d",
+          "pool": "0xe080027bd47353b5d1639772b4a75e9ed3658a0d",
+          "transactionHash": "0xf5ad607267f50019a547dddbe83845f69f9f7c93402c4f00e214f22bc9ca52ec"
+        },
+        "originalReceipt": {
+          "embeddedIn": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-v6-e080-dual",
+          "canonicalDataSha256": "5e60c1fe05794179926e0ecdc5291bad62cdc82bc02a88f1e11936f0e61b26cf",
+          "actualPoolLogIndices": [
+            105
+          ],
+          "poolActionLogs": [
+            {
+              "logIndex": 105,
+              "topic0": "0x8b3e96f2b889fa771c53c981b40daf005f63f637f1869f707052d15a3dd97140",
+              "provider": "0x00000000fd3a7b3fa5bcfa843c648714b11e089b",
+              "words": [
+                "0",
+                "1",
+                "1",
+                "1664987259325095"
+              ]
+            }
+          ],
+          "tokenTransfers": [
+            {
+              "logIndex": 101,
+              "token": "0xf1c9acdc66974dfb6decb12aa385b9cd01190e38",
+              "from": "0xc2a6798447bb70e5abcf1b0d6aeec90bc14fca55",
+              "to": "0xe080027bd47353b5d1639772b4a75e9ed3658a0d",
+              "amount": "1808655893112638"
+            },
+            {
+              "logIndex": 104,
+              "token": "0xae78736cd615f374d3085123a210448e74fc6393",
+              "from": "0xe080027bd47353b5d1639772b4a75e9ed3658a0d",
+              "to": "0x000000000004444c5dc75cb358380d2e3de08a90",
+              "amount": "1664987259325095"
+            }
+          ],
+          "interpretation": {
+            "kind": "swap; not LP mint or redeem",
+            "eventTokensSoldNominal": "1",
+            "coin0ActualTransferToPool": "1808655893112638",
+            "coin1ActualTransferOut": "1664987259325095",
+            "qualification": "Nominal event sold quantity differs from token transfer amount. No transaction calldata/tracing claim, no original pre-call reproduction or borrowing this amount into current expected result."
+          }
+        }
+      },
+      {
+        "name": "ng-meta-v7-579a",
+        "checkpoint": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-meta-v7-579a-ready/ready.json",
+          "sha256": "651f69546b3289d6d079a44f9ed41f1f96aa5db57b06ce6c09603a19255c32c6"
+        },
+        "readyInputProvenance": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-meta-v7-579a-ready/input-provenance.json",
+          "sha256": "94a5b03115b619baf9c0ee872e16141f6392076bc8aef00ae1ceaeebe6f05d2e"
+        },
+        "candidate": {
+          "adapter": "curve-lp",
+          "address": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+          "blockHash": "0x1ddfde0161ea6b7f8de505ab2cb05369760485a3894bb24f2d43dbbcc05b8c2b",
+          "blockNumber": 26192964,
+          "candidateKind": "curve-lp",
+          "familyId": "protocol:curve-lp",
+          "pluginCandidateKey": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+          "pool": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+          "transactionHash": "0x6780ef7ffacebcafb248114f49bf95fb65e227419bf97e268d72cd7c5f72333d"
+        },
+        "originalReceipt": {
+          "embeddedIn": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/ng-meta-v7-579a-dual",
+          "canonicalDataSha256": "8b641536023ef763b59607c2f33570834a77586bb0f82c1ab2ddadd8cfaade4a",
+          "actualPoolLogIndices": [
+            131,
+            132,
+            133,
+            134,
+            135,
+            137,
+            182
+          ],
+          "poolActionLogs": [
+            {
+              "logIndex": 132,
+              "topic0": "0x189c623b666b1b45b83d7178f39b8c087cb09774317ca2f53c2d3c3726f222a2",
+              "provider": "0xcc4c947e0398baead5a420604fdbc7a02b77b162",
+              "words": [
+                "128",
+                "224",
+                "694240389013090038687553",
+                "691899627671352301370358",
+                "2",
+                "0",
+                "4904477361100453947",
+                "2",
+                "12216605548952658",
+                "4835016619501678"
+              ]
+            }
+          ],
+          "tokenTransfers": [
+            {
+              "logIndex": 126,
+              "token": "0x4f493b7de8aac7d55f71853688b1f7c8f0243c85",
+              "from": "0x0000000000000000000000000000000000000000",
+              "to": "0xcc4c947e0398baead5a420604fdbc7a02b77b162",
+              "amount": "4909377182895514133"
+            },
+            {
+              "logIndex": 129,
+              "token": "0x4f493b7de8aac7d55f71853688b1f7c8f0243c85",
+              "from": "0xcc4c947e0398baead5a420604fdbc7a02b77b162",
+              "to": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+              "amount": "4904477361100453947"
+            },
+            {
+              "logIndex": 131,
+              "token": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+              "from": "0x0000000000000000000000000000000000000000",
+              "to": "0xcc4c947e0398baead5a420604fdbc7a02b77b162",
+              "amount": "102490843111614666134"
+            },
+            {
+              "logIndex": 134,
+              "token": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+              "from": "0xcc4c947e0398baead5a420604fdbc7a02b77b162",
+              "to": "0x52f541764e6e90eebc5c21ff570de0e2d63766b6",
+              "amount": "102490576096269144652"
+            },
+            {
+              "logIndex": 137,
+              "token": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+              "from": "0x52f541764e6e90eebc5c21ff570de0e2d63766b6",
+              "to": "0xea1bcd7ef2b067fecd0bc6dbb4e09d6b1a684f4d",
+              "amount": "102490576096269144652"
+            },
+            {
+              "logIndex": 181,
+              "token": "0x4f493b7de8aac7d55f71853688b1f7c8f0243c85",
+              "from": "0xcc4c947e0398baead5a420604fdbc7a02b77b162",
+              "to": "0x151e8469dcdebbc42a9dccfc22df8052ccb10a84",
+              "amount": "4899821795060186"
+            },
+            {
+              "logIndex": 182,
+              "token": "0x579a9a9d43f9c112dee359e09a87a44f2718a483",
+              "from": "0xcc4c947e0398baead5a420604fdbc7a02b77b162",
+              "to": "0x151e8469dcdebbc42a9dccfc22df8052ccb10a84",
+              "amount": "267015345521482"
+            }
+          ],
+          "interpretation": {
+            "kind": "actual LP mint index1",
+            "coin1Deposit": "4904477361100453947",
+            "metaLpMint": "102490843111614666134",
+            "qualification": "Historical fact only. Current fixed manual1e15/2e15 differs and is not original action replay."
+          }
+        }
+      }
+    ],
+    "priorCounts": {
+      "instances": 6,
+      "directions": 34,
+      "nativeReceipts": 1458,
+      "positive": 448,
+      "faultReverted": 896,
+      "zeroInputReverted": 78,
+      "nativeSpecifiedQuotes": 36
+    },
+    "cumulative": {
+      "instances": 8,
+      "directions": 42,
+      "nativeReceipts": 1866,
+      "positive": 576,
+      "faultReverted": 1152,
+      "zeroInputReverted": 102,
+      "nativeSpecifiedQuotes": 36
+    },
+    "fingerprintGroups": [
+      {
+        "sourceTreeSha256": "ae8af3bd15b75f4a97ea069840af971fbf54e3ebe22fb65928bd689d6ab66444",
+        "nativeReceipts": 918,
+        "scope": "previous three plain v7 NG; old original source/head labels retained"
+      },
+      {
+        "sourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
+        "nativeReceipts": 948,
+        "scope": "previous540 zap/crypto plus fresh408 NGv6/meta; no old-head relabeling"
+      }
+    ],
+    "inputPins": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/plan.json",
+        "sha256": "663d9c463645f0877ba9397b54682f0e7da448137dedd60814cc74796615a79f"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/preflight.json",
+        "sha256": "193481fb0067193d3887bfce23384b8240512511fdb13c08cf365505b1c49e3d"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/exit.json",
+        "sha256": "e9eac5b3afcd800796edea184246b472f50bc78a9386e0b9c42fd600a65a0dcb"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-v6-meta-acceptance01/tool-selection.json",
+        "sha256": "3879de3fd718a2b77d8ec5efb3742c311f6cb97994ec06a9668d6305a1dcbcbe"
+      }
+    ]
+  }
+}
