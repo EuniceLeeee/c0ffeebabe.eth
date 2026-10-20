@@ -7,9 +7,13 @@ import {
 import type { Erc4626Descriptor, Erc4626Route } from "./types.js";
 import { infinifiProjection, INFINIFI_GATEWAY } from "./infinifi.js";
 import { CUSTODIAN_LINEAGE_ID, ERC4626_LINEAGE_ID, INFINIFI_LINEAGE_ID } from "./manifest.js";
+import { STAKED_USDAT_FAMILY_ID, STAKED_USDAT_LINEAGE_ID } from "../staked-usdat-family/manifest.js";
 
 export function erc4626StaticProjection(descriptor: Erc4626Descriptor) {
   return {
+    ...(descriptor.stakedUsdat === undefined ? {} : { stakedUsdat: {
+      ...descriptor.stakedUsdat, proofSource: { ...descriptor.stakedUsdat.proofSource },
+    } }),
     ...(descriptor.infinifi === undefined ? {} : { infinifi: infinifiProjection(descriptor.infinifi) }),
     ...(descriptor.custodian === undefined ? {} : { custodian: { ...descriptor.custodian, proofSource: { ...descriptor.custodian.proofSource } } }),
     vault: lowerAddress(descriptor.vault),
@@ -24,7 +28,14 @@ export function assertErc4626Invocation(
   descriptor: Erc4626Descriptor,
   route: Erc4626Route,
 ): void {
-  if (descriptor.infinifi !== undefined) {
+  if (route.familyId !== descriptor.familyId) throw new Error("ERC4626 route Family mismatch");
+  if (descriptor.stakedUsdat !== undefined) {
+    if (descriptor.familyId !== STAKED_USDAT_FAMILY_ID || descriptor.lineageId !== STAKED_USDAT_LINEAGE_ID ||
+        route.lineageId !== STAKED_USDAT_LINEAGE_ID || descriptor.infinifi !== undefined || descriptor.custodian !== undefined ||
+        !sameAddress(descriptor.share, descriptor.vault) || !sameAddress(descriptor.asset, descriptor.stakedUsdat.asset) ||
+        route.direction !== "deposit" || descriptor.verifiedDirections.redeem)
+      throw new Error("StakedUSDat deposit binding mismatch");
+  } else if (descriptor.infinifi !== undefined) {
     const b = descriptor.infinifi;
     if (descriptor.custodian !== undefined || descriptor.lineageId !== INFINIFI_LINEAGE_ID || route.lineageId !== INFINIFI_LINEAGE_ID ||
         !sameAddress(b.gateway, INFINIFI_GATEWAY) || !sameAddress(b.vault, descriptor.vault) ||
@@ -49,7 +60,7 @@ export function assertErc4626Invocation(
     ? [
         descriptor.asset,
         descriptor.share,
-        "erc4626-deposit",
+        descriptor.stakedUsdat === undefined ? "erc4626-deposit" : "staked-usdat-deposit",
         descriptor.verifiedDirections.deposit,
       ] as const
     : [

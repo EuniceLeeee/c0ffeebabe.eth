@@ -4,10 +4,12 @@ import { ERC4626_INTERFACE as EVENTS } from "../abi.js";
 const same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase();
 const WETH="0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const WRAP=new ethers.Interface(["event Deposit(address indexed dst,uint256 wad)","event Transfer(address indexed from,address indexed to,uint256 value)"]);
-export function assertRecipientEvent(logs:readonly any[],c:{deposit:boolean;vault:string;asset:string;executor:string;recipient:string;amount:bigint;output:bigint;assetSupplyDelta:bigint}) {
+export function assertRecipientEvent(logs:readonly any[],c:{deposit:boolean;vault:string;asset:string;executor:string;recipient:string;amount:bigint;output:bigint;assetSupplyDelta:bigint;expectedEventAssets?:bigint}) {
+ assert(c.expectedEventAssets===undefined||c.deposit,"event-asset override is deposit-only");
+ if(c.expectedEventAssets!==undefined)assert(c.expectedEventAssets>=0n&&c.expectedEventAssets<=c.amount);
  const events=logs.map((log,index)=>({log,index})).filter(x=>same(x.log.address,c.vault)&&same(x.log.topics[0],EVENTS.getEvent(c.deposit?"Deposit":"Withdraw")!.topicHash));assert.equal(events.length,1);
  const {log,index}=events[0]!,e=EVENTS.parseLog(log)!.args;
- assert(same(e.sender,c.executor));assert.equal(e.assets,c.deposit?c.amount:c.output);assert.equal(e.shares,c.deposit?c.output:c.amount);
+ assert(same(e.sender,c.executor));assert.equal(e.assets,c.deposit?(c.expectedEventAssets??c.amount):c.output);assert.equal(e.shares,c.deposit?c.output:c.amount);
  if(c.deposit){assert(same(e.owner,c.recipient));return {kind:"deposit-final-owner",receiver:c.recipient};}
  assert(same(e.owner,c.executor));
  if(same(e.receiver,c.recipient))return {kind:"withdraw-final-receiver",receiver:c.recipient};

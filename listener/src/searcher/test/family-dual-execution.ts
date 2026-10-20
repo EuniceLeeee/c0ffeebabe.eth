@@ -36,6 +36,7 @@ import { setup as yearnAuctionFixture } from "../venues/protocols/yearn-auction-
 import { setup as curveLpFixture } from "../venues/protocols/curve-lp-family/test/fixtures.js";
 import { descriptor as fewWrappedFixture } from "../venues/protocols/few-wrapped-family/test/fixtures.js";
 import { descriptor as vaultSpotFixture } from "../venues/swaps/vault-spot-family/test/fixtures.js";
+import { STAKED_USDAT_PROXY_HASH, STAKED_USDAT_IMPLEMENTATION_HASH } from "../venues/protocols/staked-usdat-family/identity-proof.js";
 
 
 const executor = ethers.getAddress("0x1000000000000000000000000000000000000002");
@@ -138,6 +139,13 @@ fixtures.push({ ...fluidBase, rawToken0: fluidNative, token0: ADDR.WETH, rawToke
   token0Decimals: 18, token1Decimals: 18 });
 // Additional synthetic direction/variant fixtures are never written back to Ready.
 synthetic("protocol:erc4626", { asset: ADDR.USDC, verifiedDirections: { deposit: true, redeem: true } });
+// Source-bound shape for emitter/selector coverage only. This synthetic fixture
+// never replaces the new Family's real strict, Ready or historical execution.
+synthetic("protocol:staked-usdat", { asset: "0x23238f20b894f29041f48d88ee91131c395aaa71",
+  verifiedDirections: { deposit: true, redeem: false }, stakedUsdat: { proofSource: source,
+    proxyCodeHash: STAKED_USDAT_PROXY_HASH, implementation: "0x2005e0ca201a37694125ff267ae57872bea0a0ce",
+    implementationCodeHash: STAKED_USDAT_IMPLEMENTATION_HASH, asset: "0x23238f20b894f29041f48d88ee91131c395aaa71",
+    oracle: "0x5f7ecd0d045c393da6cb6c933c671ac305a871bf", withdrawalQueue: "0x4bc9fec04f0f95e9b42a3ef18f3c96fb57923d2e" } });
 const sat1Fixture = dFor("univ4-fee-hook");
 const tieredKey = { ...sat1Fixture.poolKey, hooks: UNIV4_FEE_HOOK_ADDRESS };
 synthetic("univ4-fee-hook", { facts: { poolId: v4PoolId(tieredKey), poolKey: tieredKey,
@@ -290,20 +298,33 @@ test(id + ": runtime ABI uses actual input for each direction and keeps approval
   }
 });
 
-for (const id of ["protocol:erc4626", "protocol:wsteth", "protocol:token-conversion"])
-test(id + ": both amount directions preserve method, recipient and temporary allowance semantics", () => {
+for (const id of ["protocol:erc4626", "protocol:staked-usdat", "protocol:wsteth", "protocol:token-conversion"])
+test(id + ": supported amount directions preserve method, recipient and temporary allowance semantics", () => {
   for (const d of fixtures.filter(d => d.familyId === id)) for (const r of routes(d)) for (const amount of [19n, 123456789n]) {
-    const abi = new ethers.Interface(id === "protocol:erc4626"
+    const abi = new ethers.Interface(id === "protocol:erc4626" || id === "protocol:staked-usdat"
       ? ["function deposit(uint256,address)", "function redeem(uint256,address,address)"]
       : id === "protocol:wsteth" ? ["function wrap(uint256)", "function unwrap(uint256)"]
       : d.variant === "btb-bear-v1" ? ["function mint(uint256)", "function redeem(uint256)"]
       : ["function deposit(uint256,uint32)", "function withdraw(uint256,uint32)"]);
     const method = id !== "protocol:token-conversion" || d.variant === "btb-bear-v1" ? r.direction : r.direction === "mint" ? "deposit" : "withdraw";
-    const trace = inspectRuntime(build(d, r).program, amount);
+    let deposited = false;
+    const trace = inspectRuntime(build(d, r).program, amount, id === "protocol:staked-usdat" ? {
+      nativeBalance: () => 17n,
+      call(c) {
+        if (c.static && c.data.startsWith(erc20.getFunction("balanceOf")!.selector))
+          return word(same(c.target, d.asset) ? (deposited ? 101n : amount + 101n) : (deposited ? 150n : 103n));
+        for (const [name, address] of [["asset", d.asset], ["getStrcOracle", d.stakedUsdat.oracle],
+          ["getWithdrawalQueue", d.stakedUsdat.withdrawalQueue]] as const) {
+          if (c.data === ethers.id(`${name}()`).slice(0, 10)) return word(BigInt(address));
+        }
+        if (!c.static && c.data.startsWith(abi.getFunction("deposit")!.selector)) { deposited = true; return word(47n); }
+        return word(1n);
+      },
+    } : undefined);
     const calls = trace.calls.filter(c => c.data.slice(0, 10) === abi.getFunction(method)!.selector);
     assert.equal(calls.length, 1); const args = abi.decodeFunctionData(method, calls[0].data);
     assert.equal(args[0], amount);
-    if (id === "protocol:erc4626") { assert.equal(args[1], executor); if (r.direction === "redeem") assert.equal(args[2], executor); }
+    if (id === "protocol:erc4626" || id === "protocol:staked-usdat") { assert.equal(args[1], executor); if (r.direction === "redeem") assert.equal(args[2], executor); }
     if (d.variant === "xwin-allocations-v1") assert.equal(args[1], 0n);
     const approves = trace.calls.filter(c => c.data.startsWith(erc20.getFunction("approve")!.selector));
     if (id === "protocol:token-conversion" && r.direction === "mint")
@@ -506,7 +527,7 @@ test("V4 fee hook executes the shared actual-debt callback with Family hookData,
 
 test("settlement: all installed domains remain covered by their existing fixtures", () => {
   assert.deepEqual([...new Set(fixtures.map(d => d.familyId))].sort(), priced.map(x => x.familyId).sort());
-  assert.equal(installed.length, 48, "update the audit deliberately when the installed set changes");
+  assert.equal(installed.length, 49, "update the audit deliberately when the installed set changes");
   for (const entry of installed.filter(x => !priced.includes(x))) {
     assert(["funding", "credit"].includes(entry.plugin.manifest.domain));
     assert((entry.plugin as any)[entry.plugin.manifest.domain], "funding/credit keeps its own contract");

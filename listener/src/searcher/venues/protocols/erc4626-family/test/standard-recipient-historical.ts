@@ -21,7 +21,7 @@ import { createRebuildWiring } from "../../../../universe-rebuild-production.js"
 import { planFragmentNodes } from "../../../../solver/plan-fragment-requirements.js";
 import { assertIssuedPreparedFamilyInstance, buildFamilyExecutionFragment, buildFamilyRuntimeAmountLeg,
   executeFamilyExactQuote, type PreparedFamilyInstance } from "../../../adapter-family-runtime.js";
-import type { AdapterRequest, AdapterRequestResult, ObservedEffects } from "../../../adapter-request-program.js";
+import type { AdapterRequest, AdapterRequestResult, CanonicalSource, ObservedEffects } from "../../../adapter-request-program.js";
 import { asPricedFamily } from "../../../family-capability-catalog.js";
 import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
@@ -31,7 +31,9 @@ import { assertPriceInput, constructionGuard, assertExecutorCode, assertOriginAc
 import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integration/three-family/historical-input-observations.js";
 import { assertRecipientEvent, savedExecutionReplay } from "./standard-recipient-observations.js";
 import { createInsufficientFork, restoreSavedEffects } from "./standard-insufficient-evidence.js";
-import { ERC4626_FAMILY_ID as FAMILY } from "../manifest.js";
+import { assertHistoricalPriceRowSource, assertHistoricalPriceState } from "./standard-price-state.js";
+import { ERC4626_FAMILY_ID } from "../manifest.js";
+import type { FamilyId } from "../../../adapter-family-identifiers.js";
 const ABI=new ethers.Interface(["function previewDeposit(uint256) view returns(uint256)","function previewRedeem(uint256) view returns(uint256)"]);
 const IMPLEMENTATION_SLOT="0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 const BEACON_SLOT="0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50";
@@ -42,8 +44,19 @@ const TOKEN=new ethers.Interface(["function balanceOf(address) view returns(uint
 const effects=["return-data","revert-data","token-delta","total-supply-delta","native-delta","logs"] as const;
 const requirements={transports:["effect-delta-simulation"] as const,caller:"executor" as const,effects};
 export function recipientContinuation(){return new RuntimeAmountProgram().constant(1,0n);}
-async function main(){
-  const names=["--ready","--plan","--rpc-file","--revm-bin","--out"],args=new Map<string,string>();
+export async function runStandardRecipientHistorical(options: {
+  readonly familyId?: FamilyId;
+  readonly depositOnly?: boolean;
+  readonly requireEffectivePrice?: boolean;
+  readonly manualInputs?: boolean;
+  readonly evidencePaths?: readonly string[];
+  readonly depositEventObserver?: (input: { readonly source: CanonicalSource; readonly vault: string;
+    readonly executor: string; readonly owner: string; readonly call: (data: string) => Promise<string> }) => Promise<{
+      readonly evidence: unknown; readonly expectedAssets: (grossAssets: bigint) => bigint;
+    }>;
+} = {}){
+  const FAMILY=options.familyId??ERC4626_FAMILY_ID;
+  const names=["--ready","--plan","--rpc-file","--revm-bin","--out",...(options.requireEffectivePrice?["--prices"]:[])],args=new Map<string,string>();
   for(let i=2;i<process.argv.length;i+=2){assert([...names,"--port","--resume-evidence"].includes(process.argv[i]!)&&!args.has(process.argv[i]!)&&process.argv[i+1]);args.set(process.argv[i]!,process.argv[i+1]!);}
   assert(names.every(n=>args.has(n)));
   const planPath=realpathSync(args.get("--plan")!),plan=JSON.parse(readFileSync(planPath,"utf8"));
@@ -52,6 +65,10 @@ async function main(){
   const port=Number(args.get("--port")??"18965");assert(Number.isInteger(port)&&port>=1024&&port<=65535);
   const fd=openSync(args.get("--out")!,"wx",0o600),report:any={result:"failed",samples:[],roundTrips:[],tx:TX,source:{number:N,hash:HASH},signing:false,broadcast:false,
     scope:"Current standard ERC4626 quoted/default runtime and direct self/external receiver execution. Original real candidate event supplies assets/shares as input only; current production identity and output are independently obtained at this candidate block. Old Ready cutoff may differ. No natural valuation, opportunity or performance claim."};
+  report.familyId=FAMILY;
+  report.acceptanceOptions={depositOnly:options.depositOnly??false,requireEffectivePrice:options.requireEffectivePrice??false,manualInputs:options.manualInputs??false,depositEventObserver:options.depositEventObserver!==undefined};
+  if(options.depositOnly)report.scope="Current StakedUSDat new-Family deposit-only quote, quoted/runtime and self/external receipt at N-end. Input provenance is explicit; manual transaction amounts do not establish natural valuation. Queued exits, original pre-call replay, opportunity and performance are outside this check.";
+  if(options.manualInputs){assert(!options.requireEffectivePrice);report.priceSource="explicit-manual-original-transaction-assets-and-twice-assets";report.naturalValuation=false;}
   const abort=new AbortController(),deadlineAtMs=Date.now()+600000,timer=setTimeout(()=>abort.abort(new Error("standard ERC4626 recipient deadline")),600000);
   const guard=constructionGuard();let reads=0,rpcUrl="",stage="inputs",simulation:ReturnType<typeof createRevmStrictSourceSimulation>|undefined;
   let fork:Awaited<ReturnType<typeof createInsufficientFork>>|undefined;
@@ -59,7 +76,7 @@ async function main(){
   const redact=(s:unknown)=>String(s).split(rpcUrl||"\0").join("[REDACTED]").replace(/https?:\/\/[^\s"<>]+/g,"[REDACTED_URL]");
   try{
     const readyPath=realpathSync(args.get("--ready")!);
-    const paths=[readyPath,planPath,fileURLToPath(import.meta.url),realpathSync(args.get("--revm-bin")!),fileURLToPath(new URL("./standard-recipient-observations.ts",import.meta.url)),fileURLToPath(new URL("./standard-insufficient-evidence.ts",import.meta.url)),...(args.has("--resume-evidence")?[realpathSync(args.get("--resume-evidence")!)]:[])];
+    const paths=[readyPath,planPath,fileURLToPath(import.meta.url),...(options.familyId?[realpathSync(process.argv[1]!)]:[]),...(options.evidencePaths??[]).map(path=>realpathSync(path)),realpathSync(args.get("--revm-bin")!),fileURLToPath(new URL("./standard-recipient-observations.ts",import.meta.url)),fileURLToPath(new URL("./standard-insufficient-evidence.ts",import.meta.url)),...(args.has("--prices")?[realpathSync(args.get("--prices")!)]:[]),...(args.has("--resume-evidence")?[realpathSync(args.get("--resume-evidence")!)]:[])];
     const pins=()=>paths.map(path=>({path,sha256:sha(readFileSync(path))}));report.inputs=pins();report.code=sourcePin();report.revmSha256=sha(readFileSync(args.get("--revm-bin")!));
     const prior=args.has("--resume-evidence")?JSON.parse(readFileSync(args.get("--resume-evidence")!,"utf8")):undefined;
     if(prior){assert(prior.drained&&prior.code.sourceTreeSha256===report.code.sourceTreeSha256);assert.equal(prior.result,"failed");const legacy=prior.inputs.some((x:any)=>x.path.endsWith("/standard-recipient-historical.ts")&&x.sha256==="325b8658c9a01107688665eefdfe38be443f3255dd8c6af8058087679b786cbd");if(legacy){assert.equal(prior.samples.length,1);assert.equal(prior.samples[0].executions.length,1);assert.equal(prior.samples[0].executions[0].status,"pass");}else assert(prior.inputs.some((x:any)=>x.path.endsWith("/standard-recipient-historical.ts")&&x.sha256==="f38c967b783c412de6c3136c483ff5eaf1bd02fe97c802f6a7796b2e83ed018a"));assert.equal(prior.source.number,N);assert.equal(prior.source.hash,HASH);assert.equal(prior.tx,TX);report.resume={file:args.get("--resume-evidence"),sha256:sha(readFileSync(args.get("--resume-evidence")!)),scope:"current construction must match old request byte-for-byte; no old positive or resource-limited strict call repeated"};}
@@ -97,6 +114,7 @@ async function main(){
     const memos=activeReadyMemos(envelope).filter(m=>m.familyId===FAMILY&&same(m.instanceKey,TARGET));assert.equal(memos.length,1);const memo=memos[0]!;assert(wiring.isReadyMemoDefinitionCurrent?.(memo));
     const instance=wiring.rehydrateVerifiedInstance({memo,cutoff:source}) as PreparedFamilyInstance;assertIssuedPreparedFamilyInstance({family,instance,source,generation:source.generation});
     const d=instance.descriptor as Descriptor;assert(same(d.vault,TARGET)&&!d.custodian&&!d.infinifi);assert(same(d.share,TARGET));assert(instance.routes.length>0);
+    if(options.depositOnly){assert(d.stakedUsdat);assert.deepEqual(d.verifiedDirections,{deposit:true,redeem:false});assert(instance.routes.every(r=>(r as Route).direction==="deposit"));}
     assert(new Set([executor,owner,TARGET,d.asset].map(x=>x.toLowerCase())).size===4);
     const bindings=[];const bind=async(role:string,address:string)=>{const code=await rpc("eth_getCode",[address,pin]);assert(code!=="0x");bindings.push({role,address,codeHash:ethers.keccak256(code),code});};
     for(const [role,address]of [["vault",TARGET],["asset",d.asset]]as const)await bind(role,address);
@@ -104,6 +122,9 @@ async function main(){
     const beacon=proxySlots.find(x=>x.role==="beacon");
     if(beacon&&BigInt(beacon.word)!==0n){const beaconAddress=ethers.getAddress("0x"+beacon.word.slice(-40));const data=await rpc("eth_call",[{to:beaconAddress,data:"0x5c60da1b"},pin]);assert(ethers.dataLength(data)===32&&BigInt(data)>0n&&BigInt(data)<(1n<<160n));await bind("beacon-implementation",ethers.getAddress("0x"+data.slice(-40)));}
     report.admission={memoFingerprint:memo.memoFingerprint,familyDefinitionHash:memo.familyDefinitionHash,candidate:memo.candidateSnapshot,descriptor:d,proxySlots,bindings};
+    const depositEventObserver=await options.depositEventObserver?.({source,vault:TARGET,executor,owner,
+      call:async data=>rpc("eth_call",[{to:TARGET,data},pin])});
+    if(depositEventObserver)report.depositEventAssets=depositEventObserver.evidence;
     const receipt=await rpc("eth_getTransactionReceipt",[TX]);assertHistoricalDiscoveryReceipt(receipt,{transactionHash:TX,blockNumber:N,blockHash:HASH},source);
     const nominated=receipt.logs.filter((x:any)=>Number(BigInt(x.logIndex))===plan.candidate.logIndex&&same(x.address,TARGET));assert.equal(nominated.length,1);
     const nominatedEvent=EVENTS.parseLog(nominated[0]);assert(nominatedEvent&&["Deposit","Withdraw"].includes(nominatedEvent.name));
@@ -111,6 +132,23 @@ async function main(){
     report.originalEvent={transactionHash:TX,blockNumber:N,blockHash:HASH,log:nominated[0],event:nominatedEvent.name,assets:nominatedEvent.args.assets,shares:nominatedEvent.args.shares,claim:"input denomination only; original output is never borrowed as current quote or receipt"};
     const candidate:any=memo.candidateSnapshot;assertHistoricalDiscoveryReceipt(same(candidate.transactionHash,TX)?receipt:await rpc("eth_getTransactionReceipt",[candidate.transactionHash]),candidate,source);
     const routes=instance.routes as readonly Route[],handles=routes.map(r=>instance.routeHandles.find(h=>h.routeKey===r.routeKey)!);assert(handles.every(Boolean));
+    const effectiveByRoute=new Map<string,{amount:bigint;amountOut:bigint;donorRow:unknown}>();
+    if(options.requireEffectivePrice){
+      const path=realpathSync(args.get("--prices")!),bytes=readFileSync(path),saved=parseAtBlockJson(bytes.toString());
+      const {pricing,priceSource}=assertHistoricalPriceState(saved,sha(readFileSync(readyPath)),source);
+      const effective=pricing.effectiveMids;
+      for(const route of routes){
+        const edges=graph.filter(e=>e.instanceKey!==undefined&&same(e.instanceKey,TARGET)&&same(e.tokenIn,route.tokenIn)&&same(e.tokenOut,route.tokenOut));assert.equal(edges.length,1);
+        const key=blockScanEdgeKey(edges[0]!),row=effective.rows.get(key),raw=pricing.mids.get(key);
+        assert(row&&row.status==="quoted",`production effective row unavailable: ${row?.status??"missing"}`);
+        assert.equal(row.edgeId,key);assert(same(row.tokenIn,route.tokenIn)&&same(row.tokenOut,route.tokenOut));
+        assert(typeof row.amountIn==="bigint"&&row.amountIn>0n&&typeof row.amountOut==="bigint"&&row.amountOut>0n);
+        assertHistoricalPriceRowSource(row,priceSource);assert(raw&&Number.isFinite(raw.mid)&&raw.mid>0);
+        effectiveByRoute.set(route.routeKey,{amount:row.amountIn,amountOut:row.amountOut,donorRow:{kind:"production-effective-row",path,sha256:sha(bytes),edgeId:key,reference:effective.reference,referenceWethInput:effective.referenceWethInput}});
+      }
+      report.productionPrices={path,sha256:sha(bytes),priceSource,executionSource:source,scope:"Same historical number/hash with separate pricing and Ready lifecycle fences; reference amount not replaced by transaction or point samples"};
+      report.priceSource="production-effective-row";report.naturalValuation=true;
+    }
     const build=(index:number,settlement:any)=>guard.build(()=>buildFamilyRuntimeAmountLeg({family,route:handles[index],source,executor,runtime:guard.runtime(runtime),runtimeEvidence:[],actionOwnership:catalog,settlement}));
     const adapters=[...family.plugin.actionAdapters,...PRODUCTION_INFRA_ACTION_ADAPTERS];
     const compile=(node:ResolvedPlanNode):Uint8Array=>{const adapter=adapters.find(a=>a.id===node.adapterId);assert(adapter);return adapter.encode(node,executor,concatBytes(...node.children.map(compile)));};
@@ -148,7 +186,8 @@ async function main(){
       const edges=graph.filter(e=>e.instanceKey!==undefined&&same(e.instanceKey,TARGET)&&same(e.tokenIn,route.tokenIn)&&same(e.tokenOut,route.tokenOut));assert.equal(edges.length,1);
       const deposit=route.direction==="deposit";
       const originalInput=deposit?nominatedEvent.args.assets:nominatedEvent.args.shares;
-      const trials=[1n,2n].map(multiplier=>({label:multiplier===1n?"original-event-input":"twice-original-event-input",amount:originalInput*multiplier,donorRow:{transactionHash:TX,logIndex:plan.candidate.logIndex,tokenIn:route.tokenIn,multiplier}}));
+      const trials:{label:string;amount:bigint;donorRow:unknown}[]=[1n,2n].map(multiplier=>({label:multiplier===1n?"original-event-input":"twice-original-event-input",amount:originalInput*multiplier,donorRow:{transactionHash:TX,logIndex:plan.candidate.logIndex,tokenIn:route.tokenIn,multiplier}}));
+      const effective=effectiveByRoute.get(route.routeKey);if(effective)trials.push({label:"production-effective-input",amount:effective.amount,donorRow:effective.donorRow});
       for(const mode of ["default","direct-self","direct-external"]){
         const recipient=mode==="direct-external"?owner:executor;
         const request=mode==="default"?undefined:{kind:"direct-output",recipient},leg=build(index,request);assert(leg);assert.deepEqual(leg.settlementRequest,request);if(request)assert.equal(leg.settlement?.directOutput,true);assert.equal(leg.inputMode,undefined);
@@ -159,6 +198,7 @@ async function main(){
           const quote=await guard.exact(()=>executeFamilyExactQuote({family,route:handles[index]!,amountIn:amount,source,generation:source.generation,executor,runtimeEvidence:[],runtime,control:{signal:abort.signal,deadlineAtMs}}));trial.quote=quote;
           assert.equal(quote.status,"resolved");if(quote.status!=="resolved")throw new Error("Exact unresolved");assert.equal(quote.amountIn,amount);assert.deepEqual(quote.source,source);
           const output=quote.amountOut,cost=amount;assert(output>0n&&amount>0n);
+          if(label==="production-effective-input")assert.equal(output,effective!.amountOut,"explicit Exact must agree with the same production effective quote");
           const preview=BigInt(ABI.decodeFunctionResult(deposit?"previewDeposit":"previewRedeem",await rpc("eth_call",[{to:TARGET,data:ABI.encodeFunctionData(deposit?"previewDeposit":"previewRedeem",[amount])},pin]))[0]);assert.equal(output,preview);
           trial.inputBudget={requested:amount,cost,unspent:0n,inputMode:"exact",roundingToleranceRawUnits:0n};
           const scripts:[string,Uint8Array][]=[[mode==="default"?"runtime":mode,runtimeProgramScript(ethers.getBytes(leg.program),amount)]];
@@ -193,7 +233,8 @@ async function main(){
               const outputFlow=transfers.filter(x=>same(x.token,route.tokenOut)).reduce((n,x)=>n+(same(x.args.to,recipient)?x.args.value:0n)-(same(x.args.from,recipient)?x.args.value:0n),0n);
               assert.equal(inputFlow,amount);assert.equal(outputFlow,output);
               const supplies=e.totalSupplyDeltas!.filter(x=>same(x.token,d.asset));assert.equal(supplies.length,1);
-              record.recipientEvent=assertRecipientEvent(e.logs!,{deposit,vault:TARGET,asset:d.asset,executor,recipient,amount,output,assetSupplyDelta:supplies[0]!.delta});
+              record.recipientEvent=assertRecipientEvent(e.logs!,{deposit,vault:TARGET,asset:d.asset,executor,recipient,amount,output,assetSupplyDelta:supplies[0]!.delta,
+                ...(depositEventObserver?{expectedEventAssets:depositEventObserver.expectedAssets(amount)}:{})});
 
             }
             Object.assign(record,{status:fault==="none"?"pass":run.resourceLimited?"independent-insufficient-input-rejection-strict-resource-limited":"correctly-rejected",rollbackEvidence:fault==="none"?undefined:run.resourceLimited?"Independent same-N Anvil actual full-A transferFrom INVALID and contract storage/native rollback; strict resource classification retained":"Trusted production MainRevert; effects omitted on rollback, no independent storageDiff claim"});
@@ -204,10 +245,10 @@ async function main(){
       }
     }
     if(saved)report.reusedRawCount=saved.done();
-    assert.equal(report.samples.length,routes.length*6);assert(report.samples.every((s:any)=>s.status==="pass"));assert.equal(report.roundTrips.length,routes.length*2);
-    assert.equal(guard.counts.forbiddenDuringBuild,0);report.runtimeConstruction={rpc:0,exact:0,quotedFallback:false,scope:"real production issuer; selector throwing-stub coverage in shared dual suite"};report.result="same-N-standard-erc4626-dual-and-direct-pass";
+    assert.equal(report.samples.length,routes.length*(options.requireEffectivePrice?9:6));assert(report.samples.every((s:any)=>s.status==="pass"));assert.equal(report.roundTrips.length,routes.length*2);
+    assert.equal(guard.counts.forbiddenDuringBuild,0);report.runtimeConstruction={rpc:0,exact:0,quotedFallback:false,scope:"real production issuer; selector throwing-stub coverage in shared dual suite"};report.result=options.depositOnly?"same-N-staked-usdat-dual-and-direct-pass":"same-N-standard-erc4626-dual-and-direct-pass";
   }catch(e){report.error={stage,message:redact(e instanceof Error?e.stack:e)};process.exitCode=1;}
   finally{try{await finalPins?.();await simulation?.closeAndDrain();await fork?.close();report.drained=true;report.forkDrained=fork!==undefined;}catch(e){report.finalError=redact(e);report.result="failed";process.exitCode=1;await simulation?.closeAndDrain().catch(()=>{});await fork?.close().catch(()=>{});}
     clearTimeout(timer);report.directReads=reads;report.invocationCounts=guard.counts;writeFileSync(fd,redact(json(report))+"\n");closeSync(fd);console.log(json({result:report.result,error:report.error,samples:report.samples.length,out:args.get("--out")}));}
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)main().catch(()=>{console.error("invalid standard ERC4626 recipient historical input; existing files preserved");process.exitCode=1;});
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)runStandardRecipientHistorical().catch(()=>{console.error("invalid standard ERC4626 recipient historical input; existing files preserved");process.exitCode=1;});

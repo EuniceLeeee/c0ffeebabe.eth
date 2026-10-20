@@ -320,7 +320,7 @@ test("production sim selector constructs both Gateway directions without Exact o
       { adapterId: "fixture-return", target: executor, tokenIn: route.tokenOut, tokenOut: route.tokenIn }];
     let exact = 0, quoted = 0, rpc = 0, simulated = 0;
     const events: any[] = [], amounts = new Set<bigint>();
-    const session: any = { source, fundingActionIds: () => ["fixture-funding"],
+    const session: any = { source, fundingActionIds: () => ["fixture-funding"], blocksPrefixInversion: () => false,
       buildRuntimeAmountLeg({ edge }: any) { return edge === edges[0] ? build() :
         { actionAdapterId: "fixture-return", program: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()) }; },
       issueExact() { exact++; throw new Error("unexpected external Exact"); },

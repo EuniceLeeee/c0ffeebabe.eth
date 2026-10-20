@@ -34,10 +34,11 @@ export const erc4626Pricing: PricingSemantics<
   Erc4626PricingDraft,
   { readonly oneAsset: bigint; readonly oneShare: bigint }
 > = {
-  // ERC4626 previews may depend on elapsed time, remote oracles or strategies
-  // without a vault log. Refresh through the shared per-block effective lane;
-  // the coordinator retains bootstrap raw mids and unrelated on-touch rows.
-  refreshPolicyForInstance: () => "each-block",
+  // Ordinary vaults use the shared touched-state reuse path. Variants with
+  // mutable permissions or external strategies retain their per-block guards;
+  // StakedUSDat's timestamp/oracle-dependent pricing belongs to its own Family.
+  refreshPolicyForInstance: ({ descriptor }) =>
+    descriptor.custodian === undefined && descriptor.infinifi === undefined ? "on-touch" : "each-block",
   stateKey: (route) => route.instanceKey,
   staticBindingProjection: ({ descriptor }) =>
     erc4626StaticProjection(descriptor),

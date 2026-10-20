@@ -12,6 +12,7 @@ import type {
 import type { CanonicalSource } from "../../adapter-request-program.js";
 import type { CustodianBinding } from "./custodian.js";
 import type { InfiniFiBinding } from "./infinifi.js";
+import type { StakedUsdatBinding, StakedUsdatExclusionCheck } from "../staked-usdat-family/identity-proof.js";
 
 export interface Erc4626Candidate extends FamilyCandidate {
   readonly candidateKind: "erc4626-vault";
@@ -38,6 +39,7 @@ export interface Erc4626BaseEvidence {
   readonly custodianCheck?: "slot" | "code";
   readonly custodianImplementation?: string;
   readonly custodianCheckSource?: CanonicalSource;
+  readonly stakedUsdatCheck?: StakedUsdatExclusionCheck;
 }
 
 export interface Erc4626ActiveEvidence
@@ -56,6 +58,7 @@ export type Erc4626IdentityEvidence =
   | Erc4626ActiveEvidence;
 
 export interface Erc4626Identity extends VerifiedIdentity {
+  readonly stakedUsdat?: StakedUsdatBinding;
   readonly infinifi?: InfiniFiBinding;
   readonly custodian?: CustodianBinding;
   readonly familyId: FamilyId;
@@ -68,6 +71,7 @@ export interface Erc4626Identity extends VerifiedIdentity {
 }
 
 export interface Erc4626Descriptor extends CompiledInstanceDescriptor {
+  readonly stakedUsdat?: StakedUsdatBinding;
   readonly infinifi?: InfiniFiBinding;
   readonly custodian?: CustodianBinding;
   readonly vault: string;
@@ -79,10 +83,11 @@ export interface Erc4626Descriptor extends CompiledInstanceDescriptor {
 export interface Erc4626Route extends FamilyRouteDescriptor {
   readonly target: string;
   readonly direction: "deposit" | "redeem";
-  readonly adapterId: "erc4626-deposit" | "erc4626-redeem";
+  readonly adapterId: "erc4626-deposit" | "erc4626-redeem" | "staked-usdat-deposit";
 }
 
 export interface Erc4626PricingDraft {
+  readonly stakedUsdat?: StakedUsdatBinding;
   readonly infinifi?: InfiniFiBinding;
   readonly custodian?: CustodianBinding;
   readonly instanceKey: InstanceKey;

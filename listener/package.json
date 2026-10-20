@@ -472,7 +472,12 @@
     "searcher:live-counterfactual-code-override-integration": "SEARCHER_TEST_DISABLE_DOTENV=1 tsx src/searcher/test/live-counterfactual-code-override-integration.ts",
     "searcher:catalog-log-accumulator": "node --import tsx --test src/searcher/test/catalog-log-accumulator.ts",
     "searcher:peapods-debond-family": "tsx --test src/searcher/venues/protocols/peapods-debond-family/test/contract.ts",
-    "searcher:ready-activity-archive": "node --import tsx --test src/searcher/test/ready-activity-archive.ts"
+    "searcher:ready-activity-archive": "node --import tsx --test src/searcher/test/ready-activity-archive.ts",
+    "test:staked-usdat:refresh": "tsx src/searcher/venues/protocols/staked-usdat-family/test/refresh.ts",
+    "test:staked-usdat:historical-ready": "tsx src/searcher/venues/protocols/staked-usdat-family/test/historical-ready.ts",
+    "test:staked-usdat:historical-dual": "tsx src/searcher/venues/protocols/staked-usdat-family/test/historical-dual.ts",
+    "test:staked-usdat:observations": "tsx --test src/searcher/venues/protocols/staked-usdat-family/test/observations.test.ts",
+    "test:erc4626-family:standard-price-state": "tsx --test src/searcher/venues/protocols/erc4626-family/test/standard-price-state.test.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

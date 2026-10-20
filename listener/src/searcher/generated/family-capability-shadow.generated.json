@@ -8269,7 +8269,7 @@
         "familyId": "protocol:erc4626",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "36b9f68d9eec0c702367e95df256934ef9f6118518c15c0536b168dd1eb0e335",
+        "contentHash": "de77a7140289a00d22aac629f45d38828cd48047a796c118c4917e3f77b95945",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -8287,6 +8287,7 @@
           "src/searcher/venues/protocols/erc4626-family/custodian.ts",
           "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
           "src/searcher/venues/runtime-execution.ts",
           "src/shared/executor/amount-rounding.ts"
@@ -8309,7 +8310,7 @@
         "familyId": "protocol:erc4626",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "d9624c45f2d46fe18cc85843c392c663ee3fd9179aa971098ae6741a1ebc50e6",
+        "contentHash": "b3b7d1d7fb09d53fdf90808d90e53fc138468cbbbd98c4c4564b929310fd24a1",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -8329,6 +8330,7 @@
           "src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
           "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts",
           "src/searcher/venues/runtime-execution.ts",
           "src/shared/executor/amount-rounding.ts"
@@ -8372,7 +8374,7 @@
         "familyId": "protocol:erc4626",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "71f05145ce5c0ef14eeb9c4bb3c4d158d93aefd1a344509052361ba1393daffe",
+        "contentHash": "d4d363388f46cf478a74d666553863758ca100438ee579f40dfe5a2a5c550f27",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -8389,6 +8391,7 @@
           "src/searcher/venues/protocols/erc4626-family/infinifi-identity.ts",
           "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts",
           "src/searcher/venues/protocols/standard-family/common.ts"
         ],
         "provenanceCommit": null
@@ -8409,7 +8412,7 @@
         "familyId": "protocol:erc4626",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "0debe28b19a153862cebb543b0a10148eb1b254be30269292562dfb680793c2a",
+        "contentHash": "14926c9f1b08201ade11fe46f5a0c3c75e32a2b64d2205640a883cd41a6c56da",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -8422,6 +8425,7 @@
           "src/searcher/venues/protocols/erc4626-family/binding.ts",
           "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts"
         ],
         "provenanceCommit": null
@@ -8442,7 +8446,7 @@
         "familyId": "protocol:erc4626",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "524adc727608c14aa5776eef59ac8f2b12812b10e8945615cf65d62dfe935c46",
+        "contentHash": "09c9bac61889e87fc1a489d979b5e4656bb20e103bdf6635a396cb3006a8416a",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -8458,6 +8462,7 @@
           "src/searcher/venues/protocols/erc4626-family/custodian.ts",
           "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts"
         ],
         "provenanceCommit": null
@@ -8478,7 +8483,7 @@
         "familyId": "protocol:erc4626",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "52a8d9618352e5d1de678ba1b6e2856beeede7b6e2b129bf984175f71b58636a",
+        "contentHash": "29fba8977c5ccefce7569bc9a1a748e54051d759561b3ba4a2ca69364752b7f7",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -8491,6 +8496,7 @@
           "src/searcher/venues/protocols/erc4626-family/binding.ts",
           "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
           "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
           "src/searcher/venues/protocols/standard-family/common.ts"
         ],
         "provenanceCommit": null
@@ -12631,6 +12637,376 @@
     {
       "precision": "capability-exact",
       "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "capture",
+        "contractVersion": "s1-capture-v1",
+        "contentHash": "264a715301656962d2abad3cb50d0d741f1a940f69cbe17de4831c3434af46ea",
+        "semanticDependencies": [
+          "contract:adapter-family/capture@s1-capture-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/capture-materialization.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/erc4626-family/abi.ts",
+          "src/searcher/venues/protocols/erc4626-family/discovery.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/discovery.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "capture",
+        "entrySourceFile": "src/searcher/venues/protocols/staked-usdat-family/capture.ts",
+        "entryExport": "stakedUsdatCapture",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "credit",
+        "contractVersion": "s1-credit-v1",
+        "contentHash": "c7b0053ca9a0ec9237c4805fb9aa049ef3f087c93fc22adccc7f767d8cde4cde",
+        "semanticDependencies": [
+          "contract:adapter-family/credit@s1-credit-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "credit",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "discovery",
+        "contractVersion": "s1-discovery-v1",
+        "contentHash": "76c01aa20af52bca46986bb8b35987f7bef54c09be6240815fd0affe2b2bdce4",
+        "semanticDependencies": [
+          "contract:adapter-family/discovery@s1-discovery-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/address-surface-nomination.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/erc4626-family/abi.ts",
+          "src/searcher/venues/protocols/erc4626-family/discovery.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "discovery",
+        "entrySourceFile": "src/searcher/venues/protocols/staked-usdat-family/discovery.ts",
+        "entryExport": "stakedUsdatDiscovery",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "exact",
+        "contractVersion": "s1-exact-v2",
+        "contentHash": "dd526c28d7145050ef4d270be567ebbedc0bb8cf06a525ea4f0bfc487affe58b",
+        "semanticDependencies": [
+          "contract:adapter-family/exact@s1-exact-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/erc4626-family/abi.ts",
+          "src/searcher/venues/protocols/erc4626-family/binding.ts",
+          "src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
+          "src/searcher/venues/protocols/erc4626-family/custodian.ts",
+          "src/searcher/venues/protocols/erc4626-family/exact.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+          "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "exact",
+        "entrySourceFile": "src/searcher/venues/protocols/staked-usdat-family/exact.ts",
+        "entryExport": "stakedUsdatExact",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "execution",
+        "contractVersion": "s1-execution-v2",
+        "contentHash": "06d117b6cc64f609fa9342f9be45479b1d2575c54eece5da384df05b377170b2",
+        "semanticDependencies": [
+          "contract:action-adapter@s1-action-adapter-v1",
+          "contract:adapter-family/execution@s1-execution-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/adapters/runtime-amount-program.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-family-plugin.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/erc4626-family/binding.ts",
+          "src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
+          "src/searcher/venues/protocols/erc4626-family/custodian.ts",
+          "src/searcher/venues/protocols/erc4626-family/execution.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+          "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/action.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts",
+          "src/searcher/venues/runtime-execution.ts",
+          "src/shared/executor/amount-rounding.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "execution",
+        "entrySourceFile": "src/searcher/venues/protocols/staked-usdat-family/execution.ts",
+        "entryExport": "stakedUsdatExecution",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/staked-usdat-family/action.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "funding",
+        "contractVersion": "s1-funding-v1",
+        "contentHash": "8b575a912e9a8c194b0370c31f2d62948833d705a1dbacef3dd79821c86f9d86",
+        "semanticDependencies": [
+          "contract:adapter-family/funding@s1-funding-v1"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "funding",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "identity",
+        "contractVersion": "s1-identity-v1",
+        "contentHash": "fa052a52f8a2577fb09711f68e3bd99b90d323a2df9fd213f43673be61f3e733",
+        "semanticDependencies": [
+          "contract:adapter-family/identity@s1-identity-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/adapter-request-failure.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/erc4626-family/abi.ts",
+          "src/searcher/venues/protocols/erc4626-family/custodian-identity.ts",
+          "src/searcher/venues/protocols/erc4626-family/custodian.ts",
+          "src/searcher/venues/protocols/erc4626-family/identity.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi-identity.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+          "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "identity",
+        "entrySourceFile": "src/searcher/venues/protocols/staked-usdat-family/identity.ts",
+        "entryExport": "stakedUsdatIdentity",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "instance",
+        "contractVersion": "s1-instance-v1",
+        "contentHash": "abd6abb393bd83fbaad9684bcaf631c9670fe00214926b8726f210eb2205e666",
+        "semanticDependencies": [
+          "contract:adapter-family/instance@s1-instance-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/erc4626-family/binding.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+          "src/searcher/venues/protocols/erc4626-family/instance.ts",
+          "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "instance",
+        "entrySourceFile": "src/searcher/venues/protocols/staked-usdat-family/instance.ts",
+        "entryExport": "stakedUsdatInstance",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "pricing",
+        "contractVersion": "s1-pricing-v1",
+        "contentHash": "ab7e47ebbe9f6992f12db9daec547eeef2b838bcf69927e646257318aa55c348",
+        "semanticDependencies": [
+          "contract:adapter-family/pricing@s1-pricing-v1",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/mutation-index.ts",
+          "src/searcher/venues/protocols/erc4626-family/abi.ts",
+          "src/searcher/venues/protocols/erc4626-family/binding.ts",
+          "src/searcher/venues/protocols/erc4626-family/custodian.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+          "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/erc4626-family/pricing.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "pricing",
+        "entrySourceFile": "src/searcher/venues/protocols/staked-usdat-family/pricing.ts",
+        "entryExport": "stakedUsdatPricing",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "routes",
+        "contractVersion": "s1-routes-v2",
+        "contentHash": "99fa4eda55841de0e05a3d6844d95201241b7d992e4a93ca459ad14825050253",
+        "semanticDependencies": [
+          "contract:adapter-family/routes@s1-routes-v2",
+          "package:ethers@6.16.0",
+          "runtime:node:crypto@node-es2022-v1",
+          "src/adapters/protocol-legs.ts",
+          "src/encoder.ts",
+          "src/searcher/venues/adapter-family-identifiers.ts",
+          "src/searcher/venues/canonical-value.ts",
+          "src/searcher/venues/family-owned-action.ts",
+          "src/searcher/venues/protocols/erc4626-family/binding.ts",
+          "src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+          "src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "src/searcher/venues/protocols/erc4626-family/routes.ts",
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+          "src/searcher/venues/protocols/standard-family/common.ts"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "routes",
+        "entrySourceFile": "src/searcher/venues/protocols/staked-usdat-family/routes.ts",
+        "entryExport": "stakedUsdatRoutes",
+        "additionalSourceFiles": [
+          "src/searcher/venues/protocols/staked-usdat-family/manifest.ts"
+        ],
+        "absence": null
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
+        "familyId": "protocol:staked-usdat",
+        "capability": "victim",
+        "contractVersion": "s1-victim-v2",
+        "contentHash": "abfd24bb4384bfcb32fd9c525b3cf9deb4bcbdea9f31b8e5a08d9dbc72c69718",
+        "semanticDependencies": [
+          "contract:adapter-family/victim@s1-victim-v2"
+        ],
+        "provenanceCommit": null
+      },
+      "root": {
+        "capability": "victim",
+        "entrySourceFile": null,
+        "entryExport": null,
+        "additionalSourceFiles": [],
+        "absence": "declared-absent"
+      }
+    },
+    {
+      "precision": "capability-exact",
+      "identity": {
         "familyId": "protocol:token-conversion",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
@@ -16573,5 +16949,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "eb1626bbfeb78e3302d10553c9fcb595796672f5bd6418143770c88b4023f843"
+  "artifactHash": "a04e2d41dad5972687083bc523d1955b9a88850f0c3ef51e1266c80813914948"
 }

@@ -21,7 +21,7 @@ import { ERC4626_SILO_INTERFACE, ERC4626_SILO_PAYOUT_INTERFACE } from "../../erc
 
 // Offline transport fixtures exercise the unchanged production lifecycle,
 // Family, Exact, coordinator and publication. No RPC, EVM or pricing formula claim.
-for (const silo of [false, true]) test(`${silo ? "Silo" : "standard ERC4626"} quiet effective refresh, bounded failure withdrawal/recovery and unrelated carry`, async () => {
+for (const silo of [false, true]) test(`${silo ? "Silo each-block" : "standard ERC4626 on-touch"} effective refresh, bounded failure withdrawal/recovery and unrelated carry`, async () => {
   const vault = silo ? ERC4626_SILO_FIXTURE_VAULT : ERC4626_FIXTURE_VAULT;
   const asset = silo ? ERC4626_SILO_FIXTURE_PAYOUT : ERC4626_FIXTURE_ASSET;
   const familyId = silo ? ERC4626_SILO_REDEEM_FAMILY_ID : ERC4626_FAMILY_ID;
@@ -81,9 +81,12 @@ for (const silo of [false, true]) test(`${silo ? "Silo" : "standard ERC4626"} qu
   const ownKeys = edges.map(blockScanEdgeKey).filter(key => root.pricingIndex().familyIdByEdgeKey.get(key) === familyId);
   const otherKeys = edges.map(blockScanEdgeKey).filter(k => !ownKeys.includes(k));
   assert.equal(ownKeys.length, silo ? 1 : 2); assert.equal(otherKeys.length, 4);
-  assert.deepEqual(root.pricingIndex().perBlockRefreshStateKeys,
-    [root.pricingIndex().stateKeyByEdgeKey.get(ownKeys[0]!)!]);
+  const stateKey = root.pricingIndex().stateKeyByEdgeKey.get(ownKeys[0]!)!;
+  assert(ownKeys.every(key => root.pricingIndex().stateKeyByEdgeKey.get(key) === stateKey));
+  assert.deepEqual(root.pricingIndex().perBlockRefreshStateKeys, silo ? [stateKey] : []);
   let failed = false;
+  let transportCalls = 0, quoteCalls = 0;
+  const preparations: string[][] = [];
   const reads: { lane: string; method: string; tick: number }[] = [];
   function runtime(tick: number, lane: string) {
     const current = at(tick);
@@ -93,6 +96,7 @@ for (const silo of [false, true]) test(`${silo ? "Silo" : "standard ERC4626"} qu
         async getCode() { throw new Error("unexpected refresh code read"); },
         async getStorage() { throw new Error("unexpected refresh storage read"); },
         async call(request, block) {
+          transportCalls++;
           assert.equal(block, current.number);
           const target = request.to.toLowerCase(), selector = request.data.slice(0, 10);
           if (pools.includes(target)) {
@@ -116,10 +120,12 @@ for (const silo of [false, true]) test(`${silo ? "Silo" : "standard ERC4626"} qu
           const call = ERC4626_INTERFACE.parseTransaction({ data: request.data }); assert(call);
           assert(["previewDeposit", "previewRedeem"].includes(call.name));
           reads.push({ lane, method: call.name, tick });
-          if (failed) throw new Error("synthetic external dependency unavailable");
-          // Deliberately canned response drift without any vault activity.
-          // Tick 5 retains tick 4 output as the unchanged-state control.
-          return ERC4626_INTERFACE.encodeFunctionResult(call.name, [BigInt(call.args[0]) + BigInt(Math.min(tick, 4))]);
+          if (failed && (silo || call.name === "previewDeposit"))
+            throw new Error("synthetic external dependency unavailable");
+          // Canned drift is observable only when the production scheduler reads.
+          // The last quiet block preserves the previous successful response.
+          return ERC4626_INTERFACE.encodeFunctionResult(call.name,
+            [BigInt(call.args[0]) + BigInt(Math.min(tick, silo ? 4 : 7))]);
         },
       },
     });
@@ -135,15 +141,19 @@ for (const silo of [false, true]) test(`${silo ? "Silo" : "standard ERC4626"} qu
     return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, previous: reuse?.previous,
       touchedStateKeys: reuse?.touchedStateKeys, disabledEdgeIds: reuse?.disabledEdgeIds, control,
       weth: ADDR.WETH, gasCostWei: null, enumerationSpreadBps: 50, concurrency: 2,
-      prepareQuote: async requiredEdgeIds => { exact = await root.createSession({ source: requested,
+      prepareQuote: async requiredEdgeIds => { preparations.push([...requiredEdgeIds].sort()); exact = await root.createSession({ source: requested,
         runtime: runtime(requested.number - source.number, "exact"), fundingAssets: [], kind: "exact", requiredEdgeIds, control }); },
-      quote: async request => { assert(exact); const q = await exact.issueExact({ ...request, executor, runtimeEvidence: [] });
+      quote: async request => { quoteCalls++; assert(exact); const q = await exact.issueExact({ ...request, executor, runtimeEvidence: [] });
         assert("amountIn" in q); return q; },
     });
   });
-  async function step(tick: number) {
-    reads.length = 0;
-    const current = at(tick), touched = new Set<string>();
+  async function step(tick: number, touch = false) {
+    reads.length = 0; transportCalls = 0; quoteCalls = 0; preparations.length = 0;
+    const current = at(tick);
+    const event = ERC4626_INTERFACE.encodeEventLog(ERC4626_INTERFACE.getEvent("Deposit")!,
+      [executor, executor, unit, unit]);
+    const touched = new Set(touch ? root.resolveBlockTouchedStateKeys({ kind: "log", address: vault, ...event }, current) : []);
+    assert.deepEqual([...touched], touch ? [stateKey] : [], "vault log resolves through the production mutation index");
     const graph = createVerifiedGraphView({ id: "standard-refresh-" + tick, edges, generation: current.generation,
       sourceBlock: current.number, sourceBlockHash: current.hash, completenessWatermark: current.number,
       familyIdForEdge: e => root.pricingIndex().familyIdByEdgeKey.get(blockScanEdgeKey(e))!,
@@ -153,24 +163,94 @@ for (const silo of [false, true]) test(`${silo ? "Silo" : "standard ERC4626"} qu
     await coordinator.prepareCoarsePricing({ graph, deadlineAtMs: Date.now() + 10000, touchedPools: touched,
       canonicalActivity: { source: current, parentHash: tick === 0 ? ethers.ZeroHash : at(tick - 1).hash,
         touchedStateKeys: touched, complete: true } });
-    assert.equal(touched.size, 0);
+    assert.deepEqual([...touched], touch ? [stateKey] : [], "preparation must not mutate canonical activity");
     const snapshot = coordinator.latestPricingSnapshot()!;
+    assert.equal(snapshot.sourceBlock, current.number); assert.equal(snapshot.sourceBlockHash, current.hash);
+    assert.equal(snapshot.generation, current.generation);
+    assert.deepEqual(snapshot.effectiveMids!.source, current); assert(snapshot.effectiveMids!.complete);
     if (tick > 0) {
       assert(!reads.some(r => r.lane === "raw"), "no bootstrap raw reread");
       assert(!reads.some(r => r.method === "getReserves"), "unrelated on-touch pools remain carried");
-      assert.equal(reads.length, failed ? (silo ? 2 : 4) : 2, "only selected effective directions/dependent rounds; existing bounded retry only");
     }
     return snapshot;
   }
   const baseline = await step(0);
-  let recovered: ReturnType<typeof coordinator.latestPricingSnapshot>;
-  for (const [tick, fail] of [[1, false], [2, true], [3, true], [4, false], [5, false]] as const) {
-    failed = fail; const snapshot = await step(tick);
+  assert.equal(baseline.mids.size, silo ? 5 : 6);
+  assert([...baseline.effectiveMids!.rows.values()].every(row => row.status === "quoted"));
+  type Snapshot = typeof baseline;
+  function assertRawAndBackgroundCarried(snapshot: Snapshot) {
     assert.strictEqual(snapshot.mids, baseline.mids); assert.deepEqual(snapshot.rawMidSource, source);
     for (const key of otherKeys) {
       assert.strictEqual(snapshot.effectiveMids!.rows.get(key), baseline.effectiveMids!.rows.get(key));
+      assert.deepEqual(snapshot.effectiveMids!.rows.get(key)!.quotedAt, source);
       assert.equal(snapshot.pricingProvenanceByEdgeKey!.get(key), "carried");
+      assert(snapshot.coverage.carriedEdgeKeys.includes(key));
     }
+  }
+  function assertOwnCarried(snapshot: Snapshot, previous: Snapshot) {
+    assertRawAndBackgroundCarried(snapshot);
+    assert.equal(transportCalls, 0, "a quiet on-touch block makes no transport calls");
+    assert.equal(quoteCalls, 0, "a quiet on-touch block must not issue Exact");
+    assert.equal(preparations.length, 0, "a quiet on-touch block must not prepare an Exact session");
+    for (const key of ownKeys) {
+      const row = snapshot.effectiveMids!.rows.get(key)!;
+      assert.strictEqual(row, previous.effectiveMids!.rows.get(key), "carry preserves the original row and amount lineage");
+      assert.deepEqual(row.quotedAt, previous.effectiveMids!.rows.get(key)!.quotedAt);
+      assert.equal(snapshot.pricingProvenanceByEdgeKey!.get(key), "carried");
+      assert(snapshot.coverage.resolvedEdgeKeys.includes(key)); assert(snapshot.coverage.carriedEdgeKeys.includes(key));
+    }
+  }
+  if (!silo) {
+    for (const tick of [1, 2]) assertOwnCarried(await step(tick), baseline);
+    const changed = await step(3, true);
+    assertRawAndBackgroundCarried(changed);
+    assert.equal(quoteCalls, 2); assert.deepEqual(preparations, [[...ownKeys].sort()]);
+    assert.deepEqual(reads.map(read => read.method).sort(), ["previewDeposit", "previewRedeem"]);
+    for (const key of ownKeys) {
+      const row = changed.effectiveMids!.rows.get(key)!;
+      assert.equal(row.status, "quoted"); assert.notEqual(row.amountOut, baseline.effectiveMids!.rows.get(key)!.amountOut);
+      assert.deepEqual(row.quotedAt, at(3)); assert.equal(changed.pricingProvenanceByEdgeKey!.get(key), "refreshed");
+      assert(changed.coverage.refreshedEdgeKeys.includes(key));
+    }
+    assertOwnCarried(await step(4), changed);
+    // Preserve the existing on-touch run policy: an all-direction failure retires
+    // an instance for the run. A healthy reverse keeps this instance retryable.
+    failed = true;
+    for (const tick of [5, 6]) {
+      const snapshot = await step(tick, true); assertRawAndBackgroundCarried(snapshot);
+      assert.equal(quoteCalls, 2); assert.deepEqual(preparations, [[...ownKeys].sort()]);
+      assert.equal(reads.filter(read => read.method === "previewDeposit").length, 2, "existing bounded transport retry");
+      assert.equal(reads.filter(read => read.method === "previewRedeem").length, 1);
+      for (const key of ownKeys) {
+        const row = snapshot.effectiveMids!.rows.get(key)!;
+        const deposit = row.tokenIn.toLowerCase() === asset.toLowerCase();
+        assert.equal(row.status, deposit ? "quote-failed" : "quoted");
+        if (deposit) {
+          assert.equal(row.amountOut, null); assert.equal(row.effectiveMid, null); assert.equal(row.quotedAt, undefined);
+          assert(snapshot.coverage.unresolvedEdgeKeys.includes(key)); assert(!snapshot.coverage.resolvedEdgeKeys.includes(key));
+        } else {
+          assert.deepEqual(row.quotedAt, at(tick)); assert(snapshot.coverage.resolvedEdgeKeys.includes(key));
+        }
+      }
+    }
+    failed = false;
+    const recovered = await step(7, true); assertRawAndBackgroundCarried(recovered);
+    assert.equal(quoteCalls, 2); assert.deepEqual(preparations, [[...ownKeys].sort()]);
+    for (const key of ownKeys) {
+      const row = recovered.effectiveMids!.rows.get(key)!;
+      assert.equal(row.status, "quoted"); assert.deepEqual(row.quotedAt, at(7));
+      assert.notEqual(row.amountOut, changed.effectiveMids!.rows.get(key)!.amountOut);
+      assert(recovered.coverage.resolvedEdgeKeys.includes(key)); assert(!recovered.coverage.unresolvedEdgeKeys.includes(key));
+    }
+    assertOwnCarried(await step(8), recovered);
+    return;
+  }
+  let recovered: ReturnType<typeof coordinator.latestPricingSnapshot>;
+  for (const [tick, fail] of [[1, false], [2, true], [3, true], [4, false], [5, false]] as const) {
+    failed = fail; const snapshot = await step(tick);
+    assertRawAndBackgroundCarried(snapshot);
+    assert.equal(quoteCalls, 1); assert.deepEqual(preparations, [[...ownKeys].sort()]);
+    assert.equal(reads.length, 2, "Silo keeps its each-block preview/dependent rounds and existing bounded retry");
     for (const key of ownKeys) {
       const row = snapshot.effectiveMids!.rows.get(key)!;
       assert.equal(row.status, fail ? "quote-failed" : "quoted");
