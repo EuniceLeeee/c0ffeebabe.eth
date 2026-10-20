@@ -1,0 +1,1235 @@
+{
+  "kind": "family-current-source-compatibility-review-v1",
+  "result": "pass-retained-erc4626-settlement-compatibility",
+  "verdict": "Selected fourteen remaining ERC4626 variants may use immutable old actual execution evidence plus this current compatibility proof. No all-target re-admission or fresh old-variant EVM claim.",
+  "reviewer": "Non-author of production Family changes; local evidence/source reader. Historical harness author, no RPC or execution rerun for this compatibility review.",
+  "families": [
+    {
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "coverage": "complete",
+      "source": [
+        {
+          "path": "listener/src/adapters/protocol-legs.ts",
+          "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+        },
+        {
+          "path": "listener/src/adapters/runtime-amount-program.ts",
+          "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+        },
+        {
+          "path": "listener/src/encoder.ts",
+          "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+          "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+          "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+          "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+        },
+        {
+          "path": "listener/src/searcher/venues/canonical-value.ts",
+          "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+        },
+        {
+          "path": "listener/src/searcher/venues/family-owned-action.ts",
+          "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+        },
+        {
+          "path": "listener/src/searcher/venues/production-families/erc4626.production.ts",
+          "sha256": "3a6d4a395d2961a1b387b94904cd51b1c3fd6e4276658561ae0c92d71e7b63a7"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/abi.ts",
+          "sha256": "947cd09e9876b001ec16ec07afbb5320000d301c06b184d63bbbd662c8c6fa96"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/action.ts",
+          "sha256": "51d0789b45ca22ab71602552b04a629c6b922ece97fc77f08834756ca3f823ef"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/binding.ts",
+          "sha256": "2666be5b1223be8755c2df6c43c0137f2b3aaaf4c630eea56a6d566fe1120489"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
+          "sha256": "2e7bcb43dee7f332e2cedce6e4a4bf9301013f11d2d92601e04a8ba2fd25f0e1"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-identity.ts",
+          "sha256": "2784df27012996ea329ac9736f1782269d2da3f00485da59ec694af5b8064379"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian.ts",
+          "sha256": "0d5c0806203c498836853282676a736084bdce0be1a782971389eeefd21730cc"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+          "sha256": "04b818ef65ecffe236377424ba9a6e481141d9de349a35656be08281d10066b8"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
+          "sha256": "b353c3d32852863ac28b4a95408ba8e5ede0aea3f5b08884936c302d4c2f078b"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+          "sha256": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-identity.ts",
+          "sha256": "d6984ad533dc4a2df85db1bdc9d1041b5d7b49479b41a5407238fc21ae646da4"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+          "sha256": "56559ed4ed13939d32553cd37492be7f71a1e1e7c71e811f59dd985bfebcef3f"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/manifest.ts",
+          "sha256": "a92b6d40fee10678191e81da14a9c123ee6665ef5e561735e015fd783ab218af"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/routes.ts",
+          "sha256": "7a46ee97f8acf0b2d21312a55908133ee741b25f1c4d417d9d185373f816ef7a"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts",
+          "sha256": "64521a8156ce0538fa5e610fcb967ce9b940de726b5ddb6a97217b8c8ce3b6b7"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+          "sha256": "8e6b3b47b53dd2a1148f5f0a9b42143af0f6966e368297b8235051a005568618"
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+          "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+        },
+        {
+          "path": "listener/src/searcher/venues/runtime-execution.ts",
+          "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+        },
+        {
+          "path": "listener/src/shared/executor/amount-rounding.ts",
+          "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+        }
+      ],
+      "variants": [
+        {
+          "id": "standard/Morpho VaultV2 v1",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "conditional",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d 25887366 deposit/redeem, 0x55c1b6e461a6334b567baf0feb5d728715446f05 25887363 deposit/redeem, 0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf 25887366 deposit/redeem, 0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f 25887356 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/Morpho VaultV2 v2",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "conditional",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0xe05fadf242331808f504661bea65972594869826 25887369 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/MetaMorphoV1_1",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0x812b2c6ab3f4471c0e43d4bb61098a9211017427 25887369 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/SavingsUsdd",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0xc5d6a7b61d18afa11435a889557b068bb9f29930 25887370 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/Sky SUsds",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0xa3931d71877c0e7a3148cb7eb4463524fec27fbd 25898023 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/GenericVaultBridgeToken",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0x2c24b57e2ccd1f273045af6a5f632504c432374f 25887369 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim. Current admitted local deposit/redeem; depositAndBridge is outside scope.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/UsdcVault",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe 25898023 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/Strata standard tranche (new exit-mode version)",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "conditional",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066 25462190 deposit. Source/interface/implementation and dependencies bound independently. No additional variant claim. Only admitted deposit; lock/cooldown/other-token payout is not generic synchronous redeem.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/Strata USDe tranche pair",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "conditional",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003 25462190 deposit, 0xc58d044404d8b14e953c115e67823784dea53d8f 26130609 deposit. Source/interface/implementation and dependencies bound independently. No additional variant claim. Only admitted deposit; lock/cooldown/other-token payout is not generic synchronous redeem.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/Euler EVault beacon instances",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "conditional",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0x9bd52f2805c6af014132874124686e7b248c2cbb 25887369 deposit/redeem, 0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2 25887356 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/Fluid fToken ERC20 underlying",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "input-first",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0x2411802d8bea09be0af8fd8d08314a63e706b29c 26030897 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "standard/Fluid fTokenNativeUnderlying ERC20-WETH entry",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-standard-current-behavior-20261016.json",
+            "sha256": "51238c633c33e76fc6999e826cf4d6c4ba8213cee4f05f8c882edb314a5945f5"
+          },
+          "currentScope": "Actual same-N targets/directions only: 0x90551c1795392094fe6d29b758eccd233cfaa260 26030897 deposit/redeem. Source/interface/implementation and dependencies bound independently. No additional variant claim. ERC20-WETH entry only. Redeem internal Withdraw receiver is vault, followed by ordered WETH Deposit and final Transfer; vault native balance not directly observed, protocol native semantics/event join recorded separately.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "frax-custodian-usdc-0.2.8",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "none",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-frax-custodian-usdc-0.2.8-after-standard-compatible-20261016.json",
+            "sha256": "b9fd080b4829b224ad7bb727476d8dd643d9cc57eb348c46d30744c628fb469b"
+          },
+          "currentScope": "One synchronous external-frxUSD Custodian; deposit/redeem, default and direct self/external. 32 historical positives, 80 declared fault reverts plus6zero/dust; omitted historical effects are not independent storageDiff, rollback verified in separate current BotVM synthetic safety suite. Exact/runtime construction0, no fallback. Borrowed amountIn only; no natural valuation, original opportunity or performance claim.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        },
+        {
+          "id": "infinifi-gateway",
+          "interface": "verified",
+          "identity": "verified",
+          "callback": "internal-only",
+          "recipient": "yes",
+          "wiring": "verified",
+          "execution": "verified",
+          "gaps": [],
+          "executionMode": "old-actual-execution-plus-current-source-compatibility",
+          "oldExecutionEvidence": {
+            "path": "docs/research/reports/erc4626-silo-refresh-erc4626-infinifi-gateway-after-standard-compatible-20261016.json",
+            "sha256": "f08bb1738ae0c5101c223016c399cb80f07d1666244c8ab1e230cdab4276276a"
+          },
+          "currentScope": "Actual iUSD/staked-iUSD Gateway stake/unstake, self/external direct at N25944594 and N25944595. Other ERC4626 variants unchanged.",
+          "freshEvmExecutionsForRetainedVariantInThisRound": 0,
+          "compatibilityBasis": "Unchanged execution/quote/action/ABI; old descriptor is ordinary with absent Staked binding and unchanged Family ID/key/action. Current guards/contracts and source closure are separately bound."
+        }
+      ]
+    }
+  ],
+  "commonSource": [
+    {
+      "path": "listener/src/adapters/registry.ts",
+      "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+    },
+    {
+      "path": "listener/src/adapters/runtime-amount-program.ts",
+      "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+    },
+    {
+      "path": "listener/src/compiler.ts",
+      "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+    },
+    {
+      "path": "listener/src/encoder.ts",
+      "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-credit-runtime.ts",
+      "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+      "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+      "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+    },
+    {
+      "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+      "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+    },
+    {
+      "path": "listener/src/searcher/adapter-funding-runtime.ts",
+      "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+    },
+    {
+      "path": "listener/src/searcher/adapter-work-intent.ts",
+      "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+    },
+    {
+      "path": "listener/src/searcher/amount-quote-continuity.ts",
+      "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-route-identity.ts",
+      "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+    },
+    {
+      "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+      "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+    },
+    {
+      "path": "listener/src/searcher/exact-prefix-plan.ts",
+      "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+    },
+    {
+      "path": "listener/src/searcher/exact-trial-state.ts",
+      "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+    },
+    {
+      "path": "listener/src/searcher/execution-asset-boundary.ts",
+      "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
+    },
+    {
+      "path": "listener/src/searcher/identity-asset-metadata.ts",
+      "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+    },
+    {
+      "path": "listener/src/searcher/runtime-evidence.ts",
+      "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+    },
+    {
+      "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+      "sha256": "97224ba04620fa9a602065906d2859ef070f2d9f9168cfed9ae450deba59946b"
+    },
+    {
+      "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+      "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+      "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+    },
+    {
+      "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+      "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-bounds.ts",
+      "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-propagation.ts",
+      "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+    },
+    {
+      "path": "listener/src/searcher/solver/amount-rejection.ts",
+      "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-builder.ts",
+      "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+    },
+    {
+      "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+      "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+    },
+    {
+      "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+      "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+    },
+    {
+      "path": "listener/src/searcher/strategy-taxonomy.ts",
+      "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+    },
+    {
+      "path": "listener/src/searcher/strict-production-runtime-session.ts",
+      "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+      "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+      "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+      "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+      "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+      "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+    },
+    {
+      "path": "listener/src/searcher/venues/adapter-request-program.ts",
+      "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+    },
+    {
+      "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+      "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+    },
+    {
+      "path": "listener/src/searcher/venues/canonical-value.ts",
+      "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+      "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+    },
+    {
+      "path": "listener/src/searcher/venues/family-owned-action.ts",
+      "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+      "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+    },
+    {
+      "path": "listener/src/searcher/venues/route-instance-identity.ts",
+      "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+    },
+    {
+      "path": "listener/src/searcher/venues/runtime-execution.ts",
+      "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+    },
+    {
+      "path": "listener/src/shared/constants/addresses.ts",
+      "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+    },
+    {
+      "path": "listener/src/shared/executor/amount-rounding.ts",
+      "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+    },
+    {
+      "path": "listener/src/shared/executor/botvm-program-entry.ts",
+      "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+    },
+    {
+      "path": "listener/src/shared/state/state-backend.ts",
+      "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+    },
+    {
+      "path": "src/BotVM.sol",
+      "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+    },
+    {
+      "path": "src/BotVMEncoder.sol",
+      "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+    },
+    {
+      "path": "src/BotVMScriptBuilder.sol",
+      "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+    },
+    {
+      "path": "src/Constants.sol",
+      "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+    },
+    {
+      "path": "src/FlashArb.sol",
+      "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+    },
+    {
+      "path": "src/RuntimeAmountVM.sol",
+      "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+    },
+    {
+      "path": "src/interfaces/IERC20.sol",
+      "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+    },
+    {
+      "path": "src/interfaces/IFluidVault.sol",
+      "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+    },
+    {
+      "path": "src/interfaces/IMorpho.sol",
+      "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+    },
+    {
+      "path": "src/interfaces/ISwap.sol",
+      "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+    }
+  ],
+  "currentPinsEvidence": {
+    "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/current-settlement-source-pins.json",
+    "sha256": "7cf66ae49d9d5d3b186e79ee7215b8357888633b043d58a4f7e7e0b739c1ac44"
+  },
+  "sourceFreezeEvidence": {
+    "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/fresh-historical/historical-source-freeze-v2.json",
+    "sha256": "d3ec1c68a8ae4944edfa20ce6fa87c8cc971c55f7fac0321eafea82973050d03"
+  },
+  "sourceClosureChecks": {
+    "familySourcePaths": 27,
+    "commonSourcePaths": 57,
+    "allCurrentPinsMatchFrozenExecutedSnapshot": true,
+    "currentVsOldInventoryCommonMatches": 56,
+    "currentVsOldInventoryCommonDifferences": 1
+  },
+  "inventoryBaseline": {
+    "path": "docs/research/reports/family-settlement-interface-review-20261014.json",
+    "gitCommit": "159f6adf8a08a642fe8cb12393b217c5b879f81a",
+    "sha256": "24271c69bb9681719211ec90d4a20f15cd5bbbb788ece5ac09112bdf984d2654"
+  },
+  "retainedStandardHistory": {
+    "targets": 17,
+    "directions": 31,
+    "variantLabels": 12,
+    "positives": 496,
+    "declaredRejections": 1224,
+    "zeroInput": 62,
+    "independentInsufficientCostResourceLimited": 16,
+    "freshEvmCountClaimed": 0,
+    "facts": [
+      {
+        "target": "0x2411802d8bea09be0af8fd8d08314a63e706b29c",
+        "variant": "standard/Fluid fToken ERC20 underlying",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x2411802d8bea09be0af8fd8d08314a63e706b29c-recipient96.json",
+          "sha256": "d00cbe1910f7029c494d759ed014afc22852b9e535cfde1c9132bc9a844c42cd"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xe0afde0ba74402463ee8406452ff34d0285f13fa3c8aa9e6f7368e9c098a79e5",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d",
+        "variant": "standard/Morpho VaultV2 v1",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence94/0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d-recipient94.json",
+          "sha256": "3aa74f73f4a55aeb37ff13cc4ed52a6ddc6f90732118b2abaaae69b2bea84629"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xd3e8fb4da2e312d233b8bf884a7e5f4f4fa8bdd4531dcaa4448791251a1b1f5a",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "independent-insufficient-input-rejection-strict-resource-limited": 16,
+          "correctly-rejected": 64,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0x2c24b57e2ccd1f273045af6a5f632504c432374f",
+        "variant": "standard/GenericVaultBridgeToken",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x2c24b57e2ccd1f273045af6a5f632504c432374f-recipient96.json",
+          "sha256": "80a3b741e6adfc39d26debb614a2ee2dbb02259b05157a3c111a8320b4740f7d"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0x7be240c3bc49eeee8a9ddd3e767501e276858bbe905cb52e4323634fd8f9d477",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
+        "variant": "standard/Strata USDe tranche pair",
+        "directions": [
+          "deposit"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003-recipient92.json",
+          "sha256": "7b7aeaab0dda71f725031e48ecb16ad8c5a1d6318f714d7575596782d037d647"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0x75048f76f2a781e59c38a91ecc029726cd7327670b01af86966ea8eb0e3a5eb0",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 16,
+          "correctly-rejected": 40,
+          "zero-input": 2
+        }
+      },
+      {
+        "target": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+        "variant": "standard/Morpho VaultV2 v1",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0x55c1b6e461a6334b567baf0feb5d728715446f05-recipient92.json",
+          "sha256": "3f82516205401b78e9ab954da6113b6d15e918c1e2592afaecb1b678712ee4ea"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xb87264448eb495fa597c09eb4a576b7d6f029cb98957d3cb2491904a39abd8e9",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf",
+        "variant": "standard/Morpho VaultV2 v1",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf-recipient96.json",
+          "sha256": "28543989287b1f7d50be31c272c01ee1598b9c70d498fc80f0b13bef3cee6b70"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xb87264448eb495fa597c09eb4a576b7d6f029cb98957d3cb2491904a39abd8e9",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0x812b2c6ab3f4471c0e43d4bb61098a9211017427",
+        "variant": "standard/MetaMorphoV1_1",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x812b2c6ab3f4471c0e43d4bb61098a9211017427-recipient96.json",
+          "sha256": "fb1a13e84f315452262f71c7de165de5fb422b6158544ca5128748c60cd9466d"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xf6833def11231d82414df84e8fda799029c5d209699411b4455e6e0d3a3a8a9d",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0x90551c1795392094fe6d29b758eccd233cfaa260",
+        "variant": "standard/Fluid fTokenNativeUnderlying ERC20-WETH entry",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0x90551c1795392094fe6d29b758eccd233cfaa260-recipient97.json",
+          "sha256": "69723da5dc70c3475d96654c7ea1e42f0355f6364f53a5397a980a01e0f513c8"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0x22f5fcde01d5702c916f85fff3958152ecb7fd03612e5600b1e72d1536ec2097",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+        "variant": "standard/Euler EVault beacon instances",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0x9bd52f2805c6af014132874124686e7b248c2cbb-recipient96.json",
+          "sha256": "cae4d4dbfec2794b66176b14c46ddccd21b8bad16003df53500bc6817484bdf6"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0x6c65345a1ee3b33339bed9839015bae58dfadd05bb912e1c3f1715c3b2053d8c",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0xa3931d71877c0e7a3148cb7eb4463524fec27fbd",
+        "variant": "standard/Sky SUsds",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xa3931d71877c0e7a3148cb7eb4463524fec27fbd-recipient96.json",
+          "sha256": "592c656fed00eed3ef52d46b8e13aca897e3e213db45ba8e558e037c62485678"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xa55c01da656c715cec222ea8fbd63256eb3ca6cbb7236071f2bcbff927f6e35b",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2",
+        "variant": "standard/Euler EVault beacon instances",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xaf5372792a29dc6b296d6ffd4aa3386aff8f9bb2-recipient92.json",
+          "sha256": "1b04ee0e37e8693ae2e4169ec24a117de16cfaaf8806ed4897a50ec51713c624"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xa90c89d959a1317764066af32d83244155dcfda568080584e6d746569f81f3f6",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe",
+        "variant": "standard/UsdcVault",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe-recipient96.json",
+          "sha256": "47d51259f69d2a2c963c5847351efd703919eedb77dcdd8b3f008323d970785d"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xbe9b8e94d668710d7f221060210f6432bcc39a509505efd2cfd672a7d8a402e3",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+        "variant": "standard/Morpho VaultV2 v1",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f-recipient92.json",
+          "sha256": "c50f82848539920be0b177d02657311294f6c113f9fb4c80d20acb83a7f6a219"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0x2e630a46febc2ccfef2b5c23cba80915a1972d8600157dd860402dd43482a6aa",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0xc58d044404d8b14e953c115e67823784dea53d8f",
+        "variant": "standard/Strata USDe tranche pair",
+        "directions": [
+          "deposit"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence97/0xc58d044404d8b14e953c115e67823784dea53d8f-recipient97.json",
+          "sha256": "1d738c09a22da78df66dc4d797d39b255046026974d4222f955e2818c4a5872f"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0x5b0e439fb0a0a92b1bf954173ae0448302fac6a1387441ec83ab818b1e679763",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 16,
+          "correctly-rejected": 40,
+          "zero-input": 2
+        }
+      },
+      {
+        "target": "0xc5d6a7b61d18afa11435a889557b068bb9f29930",
+        "variant": "standard/SavingsUsdd",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xc5d6a7b61d18afa11435a889557b068bb9f29930-recipient96.json",
+          "sha256": "20f6c577a6ce0acd847581b6cafb6da296cc6aa345bbb29e7219eb1caf6f717b"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xdbe06e06c41bb904f8516c1a2e9fdcf65d494f68fcf56656c0ee90613a9da235",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0xe05fadf242331808f504661bea65972594869826",
+        "variant": "standard/Morpho VaultV2 v2",
+        "directions": [
+          "deposit",
+          "redeem"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence96/0xe05fadf242331808f504661bea65972594869826-recipient96.json",
+          "sha256": "31813bc7fb255210de1a0df49ec985f8d8d736dc797d5a84187dad233d626fd7"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0xb87264448eb495fa597c09eb4a576b7d6f029cb98957d3cb2491904a39abd8e9",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 32,
+          "correctly-rejected": 80,
+          "zero-input": 4
+        }
+      },
+      {
+        "target": "0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066",
+        "variant": "standard/Strata standard tranche (new exit-mode version)",
+        "directions": [
+          "deposit"
+        ],
+        "raw": {
+          "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/evidence92/0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066-recipient92.json",
+          "sha256": "ccc92419d5302d07e4c45be61979b887175976ee99161d48ec801993dc093b14"
+        },
+        "descriptorFamilyId": "protocol:erc4626",
+        "lineageId": "erc4626:standalone-standard-behavior",
+        "stakedBindingAbsent": true,
+        "vaultCodeHash": "0x2e072440842b0ec478814bbe3ef70888f3801ab0bd2254a795b118447b3a0aef",
+        "specializationBranchApplied": false,
+        "counts": {
+          "pass": 16,
+          "correctly-rejected": 40,
+          "zero-input": 2
+        }
+      }
+    ]
+  },
+  "specialHistory": {
+    "frax": {
+      "variant": "frax-custodian-usdc-0.2.8",
+      "positives": 32,
+      "reportRejectionsIncludingZeroDust": 86,
+      "freshEvmCountClaimed": 0
+    },
+    "infinifi": {
+      "variant": "infinifi-gateway",
+      "positives": 22,
+      "rejections": 44,
+      "separatelyRetainedQuotedDefaultReuses": 11,
+      "freshEvmCountClaimed": 0
+    }
+  },
+  "sourceAnalysis": {
+    "unchangedExecutionAndQuoteModules": [
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+        "sha256": "04b818ef65ecffe236377424ba9a6e481141d9de349a35656be08281d10066b8"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/action.ts",
+        "sha256": "51d0789b45ca22ab71602552b04a629c6b922ece97fc77f08834756ca3f823ef"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/exact.ts",
+        "sha256": "f212054cb66eed928d7d76281e75c3bc498d8c1090f9917d818e1cc5bc092346"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/abi.ts",
+        "sha256": "947cd09e9876b001ec16ec07afbb5320000d301c06b184d63bbbd662c8c6fa96"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
+        "sha256": "2e7bcb43dee7f332e2cedce6e4a4bf9301013f11d2d92601e04a8ba2fd25f0e1"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-identity.ts",
+        "sha256": "2784df27012996ea329ac9736f1782269d2da3f00485da59ec694af5b8064379"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian.ts",
+        "sha256": "0d5c0806203c498836853282676a736084bdce0be1a782971389eeefd21730cc"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+        "sha256": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-identity.ts",
+        "sha256": "d6984ad533dc4a2df85db1bdc9d1041b5d7b49479b41a5407238fc21ae646da4"
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+        "sha256": "56559ed4ed13939d32553cd37492be7f71a1e1e7c71e811f59dd985bfebcef3f"
+      }
+    ],
+    "ordinaryIdentity": "The seventeen actual saved vault runtime hashes all differ from the specialized Staked proxy hash, so new specialization exclusion does not run for these saved states. Default profile keeps old Family/lineage and gross Deposit event proof. This does not pre-attest a future upgraded state.",
+    "optionalTypes": "Staked fields are absent in every retained actual descriptor; the optional type additions do not add serialized data or change old behavior.",
+    "binding": "Old valid descriptor and quote/route Family IDs agree. Added equality guard passes; absent Staked binding preserves old static projection. No guard is disabled.",
+    "instanceAndRoutes": "For retained ordinary and special identities, identity/descriptor Family ID remains protocol:erc4626. Opaque IDs/route keys and erc4626-deposit/redeem action IDs remain unchanged. The new action is used only with a Staked binding.",
+    "scheduling": "Ordinary on-touch behavior is tested in the production coordinator; existing Frax/InfiniFi each-block policy is retained. Scheduling changes do not retroactively make old same-N execution prove quiet-block refresh.",
+    "scope": "Compatibility covers old tested amounts/directions/variants and primitive execution settlement, not full funding/root selection, natural opportunity, EV or latency."
+  },
+  "selectorInventoryDrift": {
+    "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+    "oldRecordedAndOldExecutionSourceSha256": "8fe8a6fec1d30ac14fa68c3a9813ee315f233848fdfb67097b96e0a75d664261",
+    "currentSha256": "97224ba04620fa9a602065906d2859ef070f2d9f9168cfed9ae450deba59946b",
+    "currentEqualsTaskBaselineGitSource": true,
+    "changedByThisTask": false,
+    "inspectedDiff": "2ef3215b to159f6adf adds optional source-pinned fundingActionId and blocksPrefixInversion prevention of a callback settlement root. Family emitter and amount quote/encode are unchanged.",
+    "currentRegression": "Current canonical shared production sim selector fixture receipt passes (real emitters, Exact/quoted throwing stubs); VM artifact/runtime bytes match old. This is construction regression, not a repeated historical full-bundle funding proof.",
+    "handling": "Keep old reports/source hashes unchanged. A separately named current compatibility behavior wrapper may pin actual current57 common files and cite the old report plus this proof. Correct the selected current inventory reference; do not silently rewrite old evidence or trigger all-family replay."
+  },
+  "currentExecutedChecks": {
+    "pins": [
+      {
+        "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/fresh-historical/pre-historical-verified-checks.json",
+        "sha256": "cb2ae00d802e658f545ca90d7480d66b62fb11d4ea18bf181d85e01b059e2acf"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/fresh-historical/nested-container-checks.json",
+        "sha256": "44c3ee88ed87b81b46c880bf93c7dfd615e5be697a4d0e3378067234903d735f"
+      },
+      {
+        "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/fresh-historical/historical-canonical-checks-v2.json",
+        "sha256": "74451a25c5adbf8bcf93d9b104f0deb76020e8db7cc6d14815c33734f083eb5f"
+      }
+    ],
+    "selectedPassingReceipts": [
+      {
+        "name": "dual-execution",
+        "args": [
+          "npm",
+          "run",
+          "searcher:family-dual-execution"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 10072.823286056519,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/dual-execution-identity-and-fixtures.log",
+        "sha256": "7f7be70aad81d8a7ff7ccd9be0bc98457ea68a9ae18cb6c6e9f8d0e90c93077a"
+      },
+      {
+        "name": "infinifi-contract",
+        "args": [
+          "node",
+          "--import",
+          "tsx",
+          "--test",
+          "src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 4138.100147247314,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/infinifi-contract-identity-and-fixtures.log",
+        "sha256": "507c41aa317d023720798e2985fb7aae94fdf3f0786aba72866fc3a327df9ab0"
+      },
+      {
+        "name": "build-live",
+        "args": [
+          "npm",
+          "run",
+          "build:live"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 9230.805397033691,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/build-live-identity-and-fixtures.log",
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      },
+      {
+        "name": "production-composition",
+        "args": [
+          "npm",
+          "run",
+          "searcher:production-family-composition"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 1932.0905208587646,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/production-composition-identity-and-fixtures.log",
+        "sha256": "363291d1ed20b72f377013fdcf589b3048b6e31559748172f54cb72f773314ea"
+      },
+      {
+        "name": "production-declarations",
+        "args": [
+          "npm",
+          "run",
+          "searcher:strict-production-family-declarations"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 1876.5969276428223,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/production-declarations-identity-and-fixtures.log",
+        "sha256": "116c154208b1ee31e557be02138d0c4ac2fb7e5987d8b83ea522880daaca846c"
+      },
+      {
+        "name": "ordinary-refresh",
+        "args": [
+          "npm",
+          "run",
+          "test:erc4626-family:standard-refresh"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 2329.0717601776123,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/ordinary-refresh-nested-container.log",
+        "sha256": "049251dfdbfe650b61c732a3393b4296fab153ce0a8b52bea902ed61fda8a033"
+      },
+      {
+        "name": "custodian-contract",
+        "args": [
+          "node",
+          "--import",
+          "tsx",
+          "--test",
+          "src/searcher/venues/protocols/erc4626-family/test/custodian-contract.ts"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 2784.5234870910645,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/custodian-contract-nested-container.log",
+        "sha256": "fd22cde549d0d91164bd30f0083a4e8d82730a57c684bd357deee9e4d0abee3e"
+      }
+    ],
+    "caseCountBoundary": "Root reported shared311 and InfiniFi14 cases; this reader validated the stored exit0 receipt and its log pin, not a newly executed suite or a full TAP-log recount. Earlier failures remain preserved in prior receipts."
+  },
+  "freshOrdinaryAdmission": {
+    "readyEvidence": {
+      "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/fresh-historical/new-family-ready/ready.json",
+      "sha256": "e7ce3ff33a41ae30aa299caa3366e00f31a62980ae316e21f031b05a3e50d2b1"
+    },
+    "targets": [
+      {
+        "target": "0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066",
+        "memoFingerprint": "bd0aa4aec287bd70e87c413f4d7d419b442c76bbbf475474b48587f0d45e95be",
+        "familyDefinitionHash": "700d1ef17e13407d816e97289bfd6b558749729964f3d841ab93a2b3d69fb36e"
+      },
+      {
+        "target": "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003",
+        "memoFingerprint": "aa083e381e513b8fbd7a9cb9589264857b7b307f8ff0b66c5f26d73875a0bca4",
+        "familyDefinitionHash": "700d1ef17e13407d816e97289bfd6b558749729964f3d841ab93a2b3d69fb36e"
+      }
+    ],
+    "count": 2,
+    "stakedExcludedFromOrdinary": true,
+    "claim": "Only these two natural same-N ordinary instances are freshly admitted here; not all17 retained targets."
+  },
+  "newStakedSeparated": {
+    "familyId": "protocol:staked-usdat",
+    "review": {
+      "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/independent-native-review.json",
+      "sha256": "5c90272fbaadcd5e39ded03c2b2dbe0dc72031c0f6a06492b53ccab74e614d32"
+    },
+    "oldStakedExecutionsRemainOldFamilyHistory": true
+  },
+  "minimumFurtherComparisonRequired": [],
+  "limits": [
+    "This certifies current source compatibility of retained actual executions, not17 new admissions or EVM runs.",
+    "Old source/common hashes and raw report scopes remain immutable; current wrappers must cite them as old evidence.",
+    "Current selector drift predates the task and is explicitly bounded; no complete historical funding/opportunity/EV claim follows.",
+    "Representative performance/live acceptance and natural valuation remain separate.",
+    "Any later change to actual emitter/quote/executor semantics needs its own targeted comparison or native run; this proof cannot cover it automatically."
+  ],
+  "scopedCodeCommit": {
+    "sha": "54731933633994f11f0a45620abf4c868027f0e4",
+    "source": "Root-reported scoped commit after the recorded execution; the original frozen dirty159f6adf source record and per-file hashes remain unchanged.",
+    "pushedAtReview": false
+  }
+}

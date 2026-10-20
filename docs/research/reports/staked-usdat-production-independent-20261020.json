@@ -1,0 +1,301 @@
+{
+  "schema": "independent-production-review-v1",
+  "at": "2026-10-20T04:43:08.849295+00:00",
+  "round": 3,
+  "maximum_rounds": 3,
+  "reviewer_role": {
+    "agent": "staked_split_refresh_tests",
+    "independent_for": "production implementation only",
+    "authored": [
+      "erc4626-family/test/standard-refresh.ts",
+      "staked-usdat-family/test/refresh.ts"
+    ],
+    "excluded_own_tests": true,
+    "production_files_authored": false
+  },
+  "workspace_anchor": {
+    "root": "/opt/mev-cloud/family-runtime-20261007",
+    "baseline_head": "159f6adf8a08a642fe8cb12393b217c5b879f81a",
+    "candidate_is_partial_local_copy": true,
+    "cloud_mutations_by_reviewer": false
+  },
+  "verdict": "production_source_review_pass_with_offline_validation",
+  "findings": [
+    {
+      "id": "STAKED-FEE-DEPOSIT-EVENT",
+      "priority": "P1",
+      "blocking": false,
+      "status": "closed",
+      "title": "Nonzero deposit fees make strict admission permanently reject a valid StakedUSDat deposit",
+      "production_locations": [
+        {
+          "path": "listener/src/searcher/venues/protocols/staked-usdat-family/identity.ts",
+          "symbols": [
+            "standard",
+            "variant.decode",
+            "variant.decide"
+          ]
+        },
+        {
+          "path": "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
+          "symbols": [
+            "verifiedDeposit",
+            "lifecycleEventMatches",
+            "createErc4626StandardIdentityVariant.decide"
+          ]
+        }
+      ],
+      "trigger": "depositFeeBps > 0 and feeRecipient != zero at the pinned identity source, with an otherwise valid positive deposit",
+      "evidence": [
+        "The verified StakedUSDat _deposit transfers ceil(assets*depositFeeBps/10000) separately to feeRecipient, then invokes super._deposit(caller,receiver,netAssets,shares).",
+        "The superclass Deposit event records netAssets, while the admitted call input and total caller debit remain assets.",
+        "The new Family reuses the standard verifiedDeposit predicate, whose lifecycleEventMatches call requires Deposit.assets == base.sampleAssets (the total call input).",
+        "Therefore depositVerified is false whenever a positive fee is charged. Standard redeem is always reverted by this implementation, so standard.decide emits chain-proven-rejected / erc4626_execution_surfaces_failed."
+      ],
+      "required_fix": "Add Staked-owned fee-aware event proof at the same source, preserving full total-input debit, share receipt and supply-delta checks; keep the ordinary ERC4626 event equality strict. Verify nonzero-fee and zero-fee cases through the production identity lifecycle.",
+      "validation_needed": [
+        "Positive nonzero-fee deposit must admit exactly the deposit direction.",
+        "Incorrect event net assets, missing fee/input debit, false shares and mixed-source fee evidence must fail.",
+        "Existing ordinary, Custodian and InfiniFi identity/refresh contracts must retain their semantics."
+      ],
+      "actual_source_location": {
+        "path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/interface-review97/StakedUSDat.sol",
+        "lines": [
+          397,
+          410,
+          416,
+          507,
+          513
+        ]
+      },
+      "resolution": {
+        "source_fix": "The Staked-only standard profile captures an immutable per-Proof source-bound fee witness; event net assets are recomputed for each active/fallback gross amount. Gross payer debit, preview return, share receipt and supply delta remain required. Ordinary profiles retain gross-event equality. Mutable fees are not persisted in the static binding.",
+        "execution_evidence": "Final root-executed Staked refresh fixture f0e07dac5e6945b1062fe3788d4b43c4b6c6cc5619b6b886b3376cbc1018caaa passes 2/2, including nonzero/zero fee, wrong-net event and insufficient gross debit identity cases.",
+        "test_authorship_caveat": "The reviewer authored the fixture; root executed it. This is independent production-code review, not independent authorship or execution of that fixture."
+      }
+    },
+    {
+      "id": "STAKED-SHARED-FROZEN-STATIC-EVIDENCE",
+      "priority": "P1",
+      "blocking": false,
+      "status": "closed",
+      "title": "Reusing the already defined ERC4626 staticEvidence container prevents the new Family from loading",
+      "origin": "Root-executed fee-candidate suite; independently traced by reviewer to shallow container reuse.",
+      "location": "listener/src/searcher/venues/protocols/staked-usdat-family/pricing.ts",
+      "resolution": "Staked pricing now owns fresh staticEvidence and reusePolicy method containers; their semantics remain shared. The central definition guards were retained. Root-executed composition, declarations, dual-execution and refresh suites now load and pass."
+    },
+    {
+      "id": "STAKED-PROXY-PHASE-TRANSPORT-DECLARATION",
+      "priority": "P1",
+      "blocking": false,
+      "status": "closed",
+      "title": "Declaring an unused eth-call transport makes the proxy-code identity phase invalid",
+      "origin": "Root-executed nested-container Staked test; source correction reviewed independently.",
+      "location": "listener/src/searcher/venues/protocols/staked-usdat-family/identity.ts",
+      "resolution": "Requirements now follow the exact phase: initial get-code/get-storage, proxy get-code, binding get-code/eth-call and shared behavior requirements. Healthy strict admission and quiet refresh pass under the actual central transport validator."
+    }
+  ],
+  "observations_without_blocking_findings": [
+    "Identity uses source-bound proxy code, reverse implementation slot, exact implementation code identity, UUPS self immutable, oracle/queue immutable agreement and getters; no vault-address admission allowlist.",
+    "Known Staked implementation is excluded from ordinary standard identity only after reverse verification; unrelated proxy implementations return to standard behavior checks.",
+    "Family/lineage binding, deposit-only verifiedDirections, route action ID staked-usdat-deposit, action ownership and protocol wrap taxonomy are consistent.",
+    "Pricing and Exact guards reject proxy/implementation/getter changes, malformed permission booleans, pause and executor blacklist under a common source. Each-block policy and derived dependency mapping remain Family-owned.",
+    "The verified source checks caller and receiver blacklist, debits the caller before minting shares and has no deferred-input settlement callback. Standard withdraw/redeem always revert; queue request/claim flows are not projected.",
+    "Runtime accepts direct-output settlement and returns null for unsupported settlement kinds. Shared receipt program enforces positive input/output, exact payer debit, recipient fresh receipt matching the protocol return, and unchanged protected old balances/native balance.",
+    "Appended getter checks use registers 13/14 and do not modify input register 0. The common runtime flow carries explicit token-in/token-out receipt boundaries; no concrete last-return-buffer defect was found.",
+    "Prefix requests are uniformly delegated through simulatePrefix, including guard requests; no source-mixed prefix/guard issue was established.",
+    "New behavior remains in Family directories and its production descriptor; no central protocol branch was found in the reviewed change set."
+  ],
+  "limits": [
+    "This is non-author production source review. Reviewer-authored tests are explicitly excluded from independent test review; root executed their final versions.",
+    "Reviewer performed local read-only production inspection and syntax checks only; no cloud process, RPC or EVM execution was performed by this reviewer.",
+    "Offline checks establish implementation/contract behavior. Historical single-block natural Ready/Graph, amount quote versus EVM execution, final simulation, EV and representative latency are separate acceptance work; their running state is not promoted to pass here.",
+    "Runtime construction intentionally performs no off-chain Exact/guard reads; its program checks getters but does not independently read another contract implementation slot/code on-chain. Current effective/Exact source guards and mandatory final simulation remain required boundaries.",
+    "Source approval applies only to the final production hashes recorded here; later production changes require scoped review."
+  ],
+  "actual_source_sha256": "2dabe54020a1ed25a61f165a2a81bbfda9b2c2702194a8a9f2c61a45d18f17bc",
+  "reviewed_file_sha256": {
+    "listener/src/searcher/venues/production-families/staked-usdat.production.ts": "653d7fa465eadc7e0b3ff816846358022cb8cb3f97cba3f5b33c0ef880500be0",
+    "listener/src/searcher/venues/protocols/erc4626-family/binding.ts": "2666be5b1223be8755c2df6c43c0137f2b3aaaf4c630eea56a6d566fe1120489",
+    "listener/src/searcher/venues/protocols/erc4626-family/exact.ts": "f212054cb66eed928d7d76281e75c3bc498d8c1090f9917d818e1cc5bc092346",
+    "listener/src/searcher/venues/protocols/erc4626-family/execution.ts": "04b818ef65ecffe236377424ba9a6e481141d9de349a35656be08281d10066b8",
+    "listener/src/searcher/venues/protocols/erc4626-family/identity.ts": "4891dbce653f2b32aa727cf1f2ff901d09d3b05eda67b5c242d49ccf5324a9a3",
+    "listener/src/searcher/venues/protocols/erc4626-family/instance.ts": "2ef82320d2955997be0cc5bb351e77fc4e631b5a995c81df2c962c74cc4f1521",
+    "listener/src/searcher/venues/protocols/erc4626-family/pricing.ts": "84ff3a5dcea170087e5da71a8148039780afede5702975d353b8b4889eb706db",
+    "listener/src/searcher/venues/protocols/erc4626-family/routes.ts": "7a46ee97f8acf0b2d21312a55908133ee741b25f1c4d417d9d185373f816ef7a",
+    "listener/src/searcher/venues/protocols/erc4626-family/types.ts": "10eeefe534e860f224946745bc3ab34dbc8c852c8135c03906d71ba2e011cc94",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/action.ts": "cd7d2e3c349229dc56a52ce381f0576e692d44932d7efd2170172a24174d43f5",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/capture.ts": "099994de38193f09a2051737be04581e1e559b5f2bd4769426c28e831155096e",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/discovery.ts": "414c17e2636a1f2a9e48f2949ea05da8c42edd0d4d95efecda1a28a78c17da84",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/exact.ts": "c37471c72b3d7484960f30f9cfc8342475f6bdf939d1278185e7ba0918267f68",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/execution.ts": "090be2bed81156d32ce0bfcd2061bc138de67b24c3c7dc3b4ea9ab471c705ec9",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts": "b5c960f712dcd4367a8cef3a50827b79967d54999ec40ec876c52f1c9cb6bc1b",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/identity.ts": "cc1ec87e0230529ef2cc079d3ff7ca7cf53137582699d9c2c6dbbfedb271cd68",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/instance.ts": "9dea411a3519e34781a426eb45f06ff5701cc3be9ee74bc3f461433b7c163c50",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/manifest.ts": "8e6b3b47b53dd2a1148f5f0a9b42143af0f6966e368297b8235051a005568618",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/pricing.ts": "0110f805c78689c5f0f948d18ce89961f75bb7cd83d36d0033ddabb623ca9570",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/protocol.ts": "56b64db46500a25668f92a0d3b9d68fb994baa181bd2b48aeeecc9423e25882a",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/routes.ts": "2eccda248c68345a09beed42f390545b77d02877437627af0d442d9edfec9bba",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/types.ts": "24af6c2424912af862f53ada051e4f51490969ff43d99f448935c11f2a55f7b4"
+  },
+  "resolution_rounds": [
+    {
+      "round": 1,
+      "status": "request_changes",
+      "finding": "STAKED-FEE-DEPOSIT-EVENT",
+      "production_code_changed_by_reviewer": false
+    },
+    {
+      "round": 2,
+      "status": "request_changes",
+      "findings": [
+        "STAKED-SHARED-FROZEN-STATIC-EVIDENCE",
+        "STAKED-PROXY-PHASE-TRANSPORT-DECLARATION"
+      ],
+      "additional_compatibility_repairs": [
+        "Generator-resolvable direct capability roots replaced alias re-exports.",
+        "The action legacy descriptor uses existing erc4626 Lineage while new opaque Family/lineage/action identifiers remain unchanged."
+      ],
+      "production_code_changed_by_reviewer": false
+    },
+    {
+      "round": 3,
+      "status": "production_source_review_pass_with_offline_validation",
+      "production_code_changed_by_reviewer": false,
+      "evidence_names": [
+        "generate",
+        "build-live",
+        "ordinary-refresh",
+        "custodian-contract",
+        "production-composition",
+        "production-declarations",
+        "infinifi-contract",
+        "dual-execution",
+        "staked-refresh"
+      ]
+    }
+  ],
+  "open_findings": 0,
+  "offline_execution_evidence": {
+    "generate": {
+      "recorded_by": "root cloud runner",
+      "local_receipt": "identity-and-fixtures-checks.log",
+      "remote_log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/generate-identity-and-fixtures.log",
+      "remote_log_sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c",
+      "exit_code": 0,
+      "elapsed_ms": 49684.42630767822
+    },
+    "build-live": {
+      "recorded_by": "root cloud runner",
+      "local_receipt": "identity-and-fixtures-checks.log",
+      "remote_log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/build-live-identity-and-fixtures.log",
+      "remote_log_sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933",
+      "exit_code": 0,
+      "elapsed_ms": 9230.805397033691
+    },
+    "ordinary-refresh": {
+      "recorded_by": "root cloud runner",
+      "local_receipt": "nested-container-checks-v2.log",
+      "remote_log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/ordinary-refresh-nested-container.log",
+      "remote_log_sha256": "049251dfdbfe650b61c732a3393b4296fab153ce0a8b52bea902ed61fda8a033",
+      "exit_code": 0,
+      "elapsed_ms": 2329.0717601776123
+    },
+    "custodian-contract": {
+      "recorded_by": "root cloud runner",
+      "local_receipt": "nested-container-checks-v2.log",
+      "remote_log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/custodian-contract-nested-container.log",
+      "remote_log_sha256": "fd22cde549d0d91164bd30f0083a4e8d82730a57c684bd357deee9e4d0abee3e",
+      "exit_code": 0,
+      "elapsed_ms": 2784.5234870910645
+    },
+    "production-composition": {
+      "recorded_by": "root cloud runner",
+      "local_receipt": "identity-and-fixtures-checks.log",
+      "remote_log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/production-composition-identity-and-fixtures.log",
+      "remote_log_sha256": "363291d1ed20b72f377013fdcf589b3048b6e31559748172f54cb72f773314ea",
+      "exit_code": 0,
+      "elapsed_ms": 1932.0905208587646
+    },
+    "production-declarations": {
+      "recorded_by": "root cloud runner",
+      "local_receipt": "identity-and-fixtures-checks.log",
+      "remote_log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/production-declarations-identity-and-fixtures.log",
+      "remote_log_sha256": "116c154208b1ee31e557be02138d0c4ac2fb7e5987d8b83ea522880daaca846c",
+      "exit_code": 0,
+      "elapsed_ms": 1876.5969276428223
+    },
+    "infinifi-contract": {
+      "recorded_by": "root cloud runner",
+      "local_receipt": "identity-and-fixtures-checks.log",
+      "remote_log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/infinifi-contract-identity-and-fixtures.log",
+      "remote_log_sha256": "507c41aa317d023720798e2985fb7aae94fdf3f0786aba72866fc3a327df9ab0",
+      "exit_code": 0,
+      "elapsed_ms": 4138.100147247314,
+      "root_reported_test_count": "14/14"
+    },
+    "dual-execution": {
+      "recorded_by": "root cloud runner",
+      "local_receipt": "identity-and-fixtures-checks.log",
+      "remote_log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/dual-execution-identity-and-fixtures.log",
+      "remote_log_sha256": "7f7be70aad81d8a7ff7ccd9be0bc98457ea68a9ae18cb6c6e9f8d0e90c93077a",
+      "exit_code": 0,
+      "elapsed_ms": 10072.823286056519,
+      "root_reported_test_count": "311/311"
+    },
+    "staked-refresh": {
+      "recorded_by": "root cloud runner",
+      "local_receipt": "staked-refresh-final-offline.log",
+      "remote_log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/staked-refresh-final-offline.log",
+      "remote_log_sha256": "c3c1d6470c02e04ba77d32daeae8e284052cd9f97631b98a302e45cceacc13c6",
+      "exit_code": 0,
+      "elapsed_ms": 2348.6275672912598,
+      "fixture_sha256": "f0e07dac5e6945b1062fe3788d4b43c4b6c6cc5619b6b886b3376cbc1018caaa",
+      "root_reported_test_count": "2/2"
+    }
+  },
+  "reviewed_final_file_sha256": {
+    "listener/src/searcher/venues/production-families/staked-usdat.production.ts": "653d7fa465eadc7e0b3ff816846358022cb8cb3f97cba3f5b33c0ef880500be0",
+    "listener/src/searcher/venues/protocols/erc4626-family/binding.ts": "2666be5b1223be8755c2df6c43c0137f2b3aaaf4c630eea56a6d566fe1120489",
+    "listener/src/searcher/venues/protocols/erc4626-family/exact.ts": "f212054cb66eed928d7d76281e75c3bc498d8c1090f9917d818e1cc5bc092346",
+    "listener/src/searcher/venues/protocols/erc4626-family/execution.ts": "04b818ef65ecffe236377424ba9a6e481141d9de349a35656be08281d10066b8",
+    "listener/src/searcher/venues/protocols/erc4626-family/identity.ts": "b353c3d32852863ac28b4a95408ba8e5ede0aea3f5b08884936c302d4c2f078b",
+    "listener/src/searcher/venues/protocols/erc4626-family/instance.ts": "2ef82320d2955997be0cc5bb351e77fc4e631b5a995c81df2c962c74cc4f1521",
+    "listener/src/searcher/venues/protocols/erc4626-family/pricing.ts": "84ff3a5dcea170087e5da71a8148039780afede5702975d353b8b4889eb706db",
+    "listener/src/searcher/venues/protocols/erc4626-family/routes.ts": "7a46ee97f8acf0b2d21312a55908133ee741b25f1c4d417d9d185373f816ef7a",
+    "listener/src/searcher/venues/protocols/erc4626-family/types.ts": "10eeefe534e860f224946745bc3ab34dbc8c852c8135c03906d71ba2e011cc94",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/action.ts": "f3bd0cfd44893bf0ec92384db7a754926acd97643493d2a292de1562c799a492",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/capture.ts": "099994de38193f09a2051737be04581e1e559b5f2bd4769426c28e831155096e",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/discovery.ts": "414c17e2636a1f2a9e48f2949ea05da8c42edd0d4d95efecda1a28a78c17da84",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/exact.ts": "c37471c72b3d7484960f30f9cfc8342475f6bdf939d1278185e7ba0918267f68",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/execution.ts": "090be2bed81156d32ce0bfcd2061bc138de67b24c3c7dc3b4ea9ab471c705ec9",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts": "64521a8156ce0538fa5e610fcb967ce9b940de726b5ddb6a97217b8c8ce3b6b7",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/identity.ts": "9024a6e914272f3e7d766a102a0b0fffac82cd58adf44676bc63c66234b72027",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/instance.ts": "9dea411a3519e34781a426eb45f06ff5701cc3be9ee74bc3f461433b7c163c50",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/manifest.ts": "8e6b3b47b53dd2a1148f5f0a9b42143af0f6966e368297b8235051a005568618",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/pricing.ts": "fff2016caa78cf282e14c581727768ad2e26b1a6a3d381ea7ec3bde0f2876c6f",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/protocol.ts": "56b64db46500a25668f92a0d3b9d68fb994baa181bd2b48aeeecc9423e25882a",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/routes.ts": "2eccda248c68345a09beed42f390545b77d02877437627af0d442d9edfec9bba",
+    "listener/src/searcher/venues/protocols/staked-usdat-family/types.ts": "24af6c2424912af862f53ada051e4f51490969ff43d99f448935c11f2a55f7b4"
+  },
+  "receipt_file_sha256": {
+    "fee-candidate-checks.log": "123f68d4e7b3a439a7c394ef45587c4b6e132977745cc51175d9a5f27b13bc44",
+    "nested-container-checks-v2.log": "a3f16b8d0b6487dc2623887558d5b02a0851a9ec5e52d63624c75c57f0f0b1c6",
+    "identity-and-fixtures-checks.log": "9aeca88392f01ad12fa92baf47631e7388120453c09c26dcf758f3a37cb1babb",
+    "staked-refresh-final-offline.log": "828d493414f629d391ff0dcdf9772f4cdce4fe310d5926aa505c30c5d58c1c57"
+  },
+  "source_authentication_checked": {
+    "sourcify_path": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/erc4626-standard89/interface-review97/staked-current-sourcify.json",
+    "sha256": "b9adc04b01ad001cf616f3414a9b335101ba5367b2e515c48be715e38ddb4254",
+    "observed_metadata": {
+      "chain_id": "1",
+      "implementation": "0x2005E0CA201a37694125fF267ae57872bEA0a0Ce",
+      "runtime_match": "exact_match"
+    },
+    "local_verified_comparisons": [
+      "Saved StakedUSDat.sol exactly matches stdJsonInput.sources[src/StakedUSDat.sol].content.",
+      "Implementation-bytecode fixture exactly matches runtimeBytecode.onchainBytecode.",
+      "The bundled ERC4626Upgradeable dependency transfers its assets argument before minting and emits that same assets argument in Deposit."
+    ]
+  }
+}

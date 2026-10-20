@@ -1,0 +1,3800 @@
+{
+  "kind": "erc4626-staked-usdat-split-correctness-v1",
+  "codeCommit": "54731933633994f11f0a45620abf4c868027f0e4",
+  "result": "sample-adaptation-correctness-pass",
+  "scope": {
+    "host": "mev-impl-c4d-20261002",
+    "root": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "testedParentHead": "159f6adf8a08a642fe8cb12393b217c5b879f81a",
+    "actualDirtyPreserved": true,
+    "newBranchOrWorktree": false,
+    "signing": false,
+    "broadcast": false,
+    "liveRestarted": false
+  },
+  "implementation": {
+    "ordinaryErc4626": "on-touch",
+    "stakedUsdat": "independent protocol:staked-usdat; each-block",
+    "fraxCustodian": "each-block unchanged",
+    "infiniFiGateway": "each-block unchanged",
+    "silo": "on-touch unchanged",
+    "installedFamilies": 49,
+    "domains": {
+      "swap": 22,
+      "protocol": 24,
+      "funding": 2,
+      "credit": 1
+    },
+    "old48FamilyReadyCountUnchanged": true,
+    "queuedWithdrawOrRedeemSupported": false,
+    "callback": "none",
+    "directRecipient": true
+  },
+  "source": {
+    "familyClosures": {
+      "protocol:erc4626": {
+        "familyId": "protocol:erc4626",
+        "domain": "protocol",
+        "sourceFile": "erc4626.production.ts",
+        "source": [
+          {
+            "path": "listener/src/adapters/protocol-legs.ts",
+            "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+          },
+          {
+            "path": "listener/src/adapters/runtime-amount-program.ts",
+            "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+          },
+          {
+            "path": "listener/src/encoder.ts",
+            "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+          },
+          {
+            "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+            "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+          },
+          {
+            "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+            "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+          },
+          {
+            "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+            "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+          },
+          {
+            "path": "listener/src/searcher/venues/canonical-value.ts",
+            "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+          },
+          {
+            "path": "listener/src/searcher/venues/family-owned-action.ts",
+            "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+          },
+          {
+            "path": "listener/src/searcher/venues/production-families/erc4626.production.ts",
+            "sha256": "3a6d4a395d2961a1b387b94904cd51b1c3fd6e4276658561ae0c92d71e7b63a7"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/abi.ts",
+            "sha256": "947cd09e9876b001ec16ec07afbb5320000d301c06b184d63bbbd662c8c6fa96"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/action.ts",
+            "sha256": "51d0789b45ca22ab71602552b04a629c6b922ece97fc77f08834756ca3f823ef"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/binding.ts",
+            "sha256": "2666be5b1223be8755c2df6c43c0137f2b3aaaf4c630eea56a6d566fe1120489"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
+            "sha256": "2e7bcb43dee7f332e2cedce6e4a4bf9301013f11d2d92601e04a8ba2fd25f0e1"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-identity.ts",
+            "sha256": "2784df27012996ea329ac9736f1782269d2da3f00485da59ec694af5b8064379"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian.ts",
+            "sha256": "0d5c0806203c498836853282676a736084bdce0be1a782971389eeefd21730cc"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+            "sha256": "04b818ef65ecffe236377424ba9a6e481141d9de349a35656be08281d10066b8"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
+            "sha256": "b353c3d32852863ac28b4a95408ba8e5ede0aea3f5b08884936c302d4c2f078b"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+            "sha256": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-identity.ts",
+            "sha256": "d6984ad533dc4a2df85db1bdc9d1041b5d7b49479b41a5407238fc21ae646da4"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+            "sha256": "56559ed4ed13939d32553cd37492be7f71a1e1e7c71e811f59dd985bfebcef3f"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/manifest.ts",
+            "sha256": "a92b6d40fee10678191e81da14a9c123ee6665ef5e561735e015fd783ab218af"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/routes.ts",
+            "sha256": "7a46ee97f8acf0b2d21312a55908133ee741b25f1c4d417d9d185373f816ef7a"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts",
+            "sha256": "64521a8156ce0538fa5e610fcb967ce9b940de726b5ddb6a97217b8c8ce3b6b7"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+            "sha256": "8e6b3b47b53dd2a1148f5f0a9b42143af0f6966e368297b8235051a005568618"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+            "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+          },
+          {
+            "path": "listener/src/searcher/venues/runtime-execution.ts",
+            "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+          },
+          {
+            "path": "listener/src/shared/executor/amount-rounding.ts",
+            "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+          }
+        ]
+      },
+      "protocol:staked-usdat": {
+        "familyId": "protocol:staked-usdat",
+        "domain": "protocol",
+        "sourceFile": "staked-usdat.production.ts",
+        "source": [
+          {
+            "path": "listener/src/adapters/protocol-legs.ts",
+            "sha256": "bf64e26f2a63e49df5db1eb2d1eab05c6d1535520d713da47937ba3af105c8b7"
+          },
+          {
+            "path": "listener/src/adapters/runtime-amount-program.ts",
+            "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+          },
+          {
+            "path": "listener/src/encoder.ts",
+            "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+          },
+          {
+            "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+            "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+          },
+          {
+            "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+            "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+          },
+          {
+            "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+            "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+          },
+          {
+            "path": "listener/src/searcher/venues/canonical-value.ts",
+            "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+          },
+          {
+            "path": "listener/src/searcher/venues/family-owned-action.ts",
+            "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+          },
+          {
+            "path": "listener/src/searcher/venues/production-families/staked-usdat.production.ts",
+            "sha256": "653d7fa465eadc7e0b3ff816846358022cb8cb3f97cba3f5b33c0ef880500be0"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/abi.ts",
+            "sha256": "947cd09e9876b001ec16ec07afbb5320000d301c06b184d63bbbd662c8c6fa96"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/binding.ts",
+            "sha256": "2666be5b1223be8755c2df6c43c0137f2b3aaaf4c630eea56a6d566fe1120489"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-execution.ts",
+            "sha256": "2e7bcb43dee7f332e2cedce6e4a4bf9301013f11d2d92601e04a8ba2fd25f0e1"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian-identity.ts",
+            "sha256": "2784df27012996ea329ac9736f1782269d2da3f00485da59ec694af5b8064379"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/custodian.ts",
+            "sha256": "0d5c0806203c498836853282676a736084bdce0be1a782971389eeefd21730cc"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/execution.ts",
+            "sha256": "04b818ef65ecffe236377424ba9a6e481141d9de349a35656be08281d10066b8"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/identity.ts",
+            "sha256": "b353c3d32852863ac28b4a95408ba8e5ede0aea3f5b08884936c302d4c2f078b"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-execution.ts",
+            "sha256": "18f472bdc8ea14762195b84f4881d4514f8f52116abe5095e0ffc86c2c0d5d36"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi-identity.ts",
+            "sha256": "d6984ad533dc4a2df85db1bdc9d1041b5d7b49479b41a5407238fc21ae646da4"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/infinifi.ts",
+            "sha256": "56559ed4ed13939d32553cd37492be7f71a1e1e7c71e811f59dd985bfebcef3f"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/manifest.ts",
+            "sha256": "a92b6d40fee10678191e81da14a9c123ee6665ef5e561735e015fd783ab218af"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/erc4626-family/routes.ts",
+            "sha256": "7a46ee97f8acf0b2d21312a55908133ee741b25f1c4d417d9d185373f816ef7a"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/staked-usdat-family/action.ts",
+            "sha256": "f3bd0cfd44893bf0ec92384db7a754926acd97643493d2a292de1562c799a492"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/staked-usdat-family/execution.ts",
+            "sha256": "090be2bed81156d32ce0bfcd2061bc138de67b24c3c7dc3b4ea9ab471c705ec9"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/staked-usdat-family/identity-proof.ts",
+            "sha256": "64521a8156ce0538fa5e610fcb967ce9b940de726b5ddb6a97217b8c8ce3b6b7"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/staked-usdat-family/identity.ts",
+            "sha256": "9024a6e914272f3e7d766a102a0b0fffac82cd58adf44676bc63c66234b72027"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/staked-usdat-family/manifest.ts",
+            "sha256": "8e6b3b47b53dd2a1148f5f0a9b42143af0f6966e368297b8235051a005568618"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/staked-usdat-family/routes.ts",
+            "sha256": "2eccda248c68345a09beed42f390545b77d02877437627af0d442d9edfec9bba"
+          },
+          {
+            "path": "listener/src/searcher/venues/protocols/standard-family/common.ts",
+            "sha256": "fcefae97eacade06216fe6d260a56794d59a485d71b045b982b1b300e7c3059f"
+          },
+          {
+            "path": "listener/src/searcher/venues/runtime-execution.ts",
+            "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+          },
+          {
+            "path": "listener/src/shared/executor/amount-rounding.ts",
+            "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+          }
+        ]
+      }
+    },
+    "commonSource": [
+      {
+        "path": "listener/src/adapters/registry.ts",
+        "sha256": "e96abe3c9bdc17249688c5bc45c76d3e976b7f2c3c7a20c59e03984f977c10c0"
+      },
+      {
+        "path": "listener/src/adapters/runtime-amount-program.ts",
+        "sha256": "ee3e8617ea3b222fb8e31446258465da535fa4b4aa30c264943a38d50aea88dd"
+      },
+      {
+        "path": "listener/src/compiler.ts",
+        "sha256": "9494c35b4a952b2b4139c21f4bb26936e0288c96e973c0ba93ce6eb310140d08"
+      },
+      {
+        "path": "listener/src/encoder.ts",
+        "sha256": "6d6885510005d7082617e4f5c315514d4c6ca9b7cb347bc7006eb3bea6d1f09a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-credit-runtime.ts",
+        "sha256": "70e9158363ab5f1fc12ffb8f490e7cc1a806d416a6979fdcc3264d1fd4556d4a"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-exact-quote-cache.ts",
+        "sha256": "0b669c1d2d3f390793907e62e3e3cb2c834a14105b5690d12022cb4cec8e4b10"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-graph-runtime.ts",
+        "sha256": "da6e3c3a9db0ea2a170f119368a09dc2c572a9635f164f425429553afb93c9ad"
+      },
+      {
+        "path": "listener/src/searcher/adapter-family-lifecycle-content-cache.ts",
+        "sha256": "e534dd466667e86a570ffb877517512490612fb996274a18b36d59a4331ccba7"
+      },
+      {
+        "path": "listener/src/searcher/adapter-funding-runtime.ts",
+        "sha256": "1ded0c65a3f7903237285d9613e52dbf07a201e19b1754518ed6e81accc4ca29"
+      },
+      {
+        "path": "listener/src/searcher/adapter-work-intent.ts",
+        "sha256": "8334d33433eb75b3c0ed0c211aeb0a85fe8e2a69ce2739b9683d70669c861eb6"
+      },
+      {
+        "path": "listener/src/searcher/amount-quote-continuity.ts",
+        "sha256": "a45e074cd393d7044f26a568eb558a5c66ee5c68830f7a06c0c5a0e2d78505a5"
+      },
+      {
+        "path": "listener/src/searcher/blockscan-route-identity.ts",
+        "sha256": "3a2995dfd347fd8671d1d918555a853dc186cf7c5e19abc34c07f2427accf5be"
+      },
+      {
+        "path": "listener/src/searcher/detector/blockscan-family-budget.ts",
+        "sha256": "01c8fb5919fb3b5c6e530f49505e0273ceeafd3a307ae498510e4d61ce9c9330"
+      },
+      {
+        "path": "listener/src/searcher/exact-prefix-plan.ts",
+        "sha256": "8b5151a4ad494dbbfb0f1703f044a6ad53e3dd76756bea4139d9a46e3d5c9dd1"
+      },
+      {
+        "path": "listener/src/searcher/exact-trial-state.ts",
+        "sha256": "944e697fcdd33ea7d0f3764670938d20cc0ef813f9b74bb3df6ad92e90c515c5"
+      },
+      {
+        "path": "listener/src/searcher/execution-asset-boundary.ts",
+        "sha256": "e94c001a4efcb1d18a6e448089705f463090cee218320c185a9e1d43af3e64f4"
+      },
+      {
+        "path": "listener/src/searcher/identity-asset-metadata.ts",
+        "sha256": "f8be4beba0a4a25e08acdc506087066d627dabf974c003ad062c1c40b2d29878"
+      },
+      {
+        "path": "listener/src/searcher/runtime-evidence.ts",
+        "sha256": "2b9fc4b31c58b103af4e709e724bc2b42ca3412a3aa15b3c7283ec0662157b24"
+      },
+      {
+        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "sha256": "97224ba04620fa9a602065906d2859ef070f2d9f9168cfed9ae450deba59946b"
+      },
+      {
+        "path": "listener/src/searcher/simulator/runtime-settlement.ts",
+        "sha256": "d335a6ef98bb43579ee68ed1fcfa879c027a2219513942cd7f6f70052d39e5d5"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-search.ts",
+        "sha256": "ac2edd049558390eb54fe0c4d43936913cc6a24440d5dd21e71a429d9bced8a4"
+      },
+      {
+        "path": "listener/src/searcher/simulator/sim-amount-selector.ts",
+        "sha256": "cd635e34da4863d1a46b0249796c4598edec060d67ef60b63eb0cf42a1eb6aa1"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-bounds.ts",
+        "sha256": "0ddad5587574a5c7898bcdb058bf9d49fe8738b9646289168173bf4ec60203a0"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-propagation.ts",
+        "sha256": "461953d92ecd7f75c20dd419085adc502fcca0cfd150cb5304c98f9ff53ba280"
+      },
+      {
+        "path": "listener/src/searcher/solver/amount-rejection.ts",
+        "sha256": "4074df2ebb855dcd1f68f401355a189989d372180c2bdfd6bc21a2122599cd95"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-builder.ts",
+        "sha256": "828e3677ab93f2da198e54997cdd05271766a3ddd31906f2ece458195fe6f525"
+      },
+      {
+        "path": "listener/src/searcher/solver/plan-fragment-requirements.ts",
+        "sha256": "882e70c3d997c306492e9b9786cc6058ab1238e9cc47e5d7c976eabe8a4e6fe7"
+      },
+      {
+        "path": "listener/src/searcher/solver/sequential-quote-error.ts",
+        "sha256": "fca605b1f171f9161937b13b80ecd8367fdbc6bba5fe6e5caad95af44585727d"
+      },
+      {
+        "path": "listener/src/searcher/strategy-taxonomy.ts",
+        "sha256": "e5fca609303450425ddb2b35e61d573e078a63c92b92d87f16d514e4f722fb83"
+      },
+      {
+        "path": "listener/src/searcher/strict-production-runtime-session.ts",
+        "sha256": "35aeeb4b7be48a6a82808bf40f578ae732e3fbeefa0ff861f35f8fece5f53f19"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-amount-rejection.ts",
+        "sha256": "7a94aa53315c06e1f2af1413136625990fe5949b0dd0cbea380e2380d48c5b12"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-identifiers.ts",
+        "sha256": "693c1ab2a8d09690cbae68e542b948579f8398f3a4be8b295e710997412defb5"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "sha256": "5bc3219e4482dbd59aa2d72702d591d588e47ba23778c33a9cda847b4cb27cf2"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+        "sha256": "2ff85c336455db5ab248bfc2ecc5fe0133efe43a71c428ae8eb93e65935e77dd"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-failure.ts",
+        "sha256": "f4b865efe2c63e7f4e3cb65995b7b8dbc8c1545e8b7d1c8b538f067c01b4e633"
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "sha256": "ef4411656cb49cc3e8dd0c820fe13738e844dd71400aa95971ba6fe0175edaab"
+      },
+      {
+        "path": "listener/src/searcher/venues/blockscan-state-capability.ts",
+        "sha256": "80183420fded2eb100a13d35c4dbc1daaf153442e50fe6812f499b4be52e7e8c"
+      },
+      {
+        "path": "listener/src/searcher/venues/canonical-value.ts",
+        "sha256": "7cc916a3aff05b15c7ec04d2a313fa5f8fd25a4e6e6ccd570614eac594bf4961"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-capability-catalog.ts",
+        "sha256": "9831212a5308194bd15e7d2bbb295cb6a5200da44463253a4dcc3d8d50b4948d"
+      },
+      {
+        "path": "listener/src/searcher/venues/family-owned-action.ts",
+        "sha256": "5cdf9f5ed9f289ec839d634ca7d2bb78385261cf68484b41370d9b502ab1cff2"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-immutable-binding.ts",
+        "sha256": "64e70620885d52024fde5357e1db761e48788a60598dc961528058a1c0812292"
+      },
+      {
+        "path": "listener/src/searcher/venues/route-instance-identity.ts",
+        "sha256": "9f7fb47eddab7355f935c04630eccc3a6a7b63fcb416a58e3f91a28a477e14d3"
+      },
+      {
+        "path": "listener/src/searcher/venues/runtime-execution.ts",
+        "sha256": "4da2f1b2992012307dabac9437cf165c58817261fcf09ccb2a3a75028d21585d"
+      },
+      {
+        "path": "listener/src/shared/constants/addresses.ts",
+        "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3"
+      },
+      {
+        "path": "listener/src/shared/executor/amount-rounding.ts",
+        "sha256": "36298b44649de36e9cd1593bf0be1b2fe8c5fb7533a4d05e5d3368fc01875ac8"
+      },
+      {
+        "path": "listener/src/shared/executor/botvm-program-entry.ts",
+        "sha256": "98b5b185bbc19a07e75a4ebd36b65487d791b341394c0c5d50593d346b9a6bb0"
+      },
+      {
+        "path": "listener/src/shared/state/state-backend.ts",
+        "sha256": "37bc8a8eaaa2c3c1065995d951d9ebeb8de69923fe60f51ec6b24bcffe166f15"
+      },
+      {
+        "path": "src/BotVM.sol",
+        "sha256": "6bef7d106439501e9108e2d79c8cb70f5e59997c113729011365a9dde7f7d86d"
+      },
+      {
+        "path": "src/BotVMEncoder.sol",
+        "sha256": "31f2c1131ce2f0aa67ddded5c249dc9cd330da76c5ed34b5d3193d1211e5f6c8"
+      },
+      {
+        "path": "src/BotVMScriptBuilder.sol",
+        "sha256": "17cdd88c0f4431a8caf9f018ba52898e22ad5f3a5c7415b6aa42fe59584033ec"
+      },
+      {
+        "path": "src/Constants.sol",
+        "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283"
+      },
+      {
+        "path": "src/FlashArb.sol",
+        "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8"
+      },
+      {
+        "path": "src/RuntimeAmountVM.sol",
+        "sha256": "b2404a32c2eeee8878ec7e0e8f2cd0dcf50d69c6e69ce258caca4da1c9df7f01"
+      },
+      {
+        "path": "src/interfaces/IERC20.sol",
+        "sha256": "dae579db98cab3781f959fe527c3ecba0f850732dbcb8e5ef102c932aaebb513"
+      },
+      {
+        "path": "src/interfaces/IFluidVault.sol",
+        "sha256": "ecd40071892611196fc064718af03ebd0f1e9542fa522451812b783d657c1d91"
+      },
+      {
+        "path": "src/interfaces/IMorpho.sol",
+        "sha256": "25e7c6610ef642559b4c7f16fca2bd94a42160b26944f2fe98d2de60fe5dae01"
+      },
+      {
+        "path": "src/interfaces/ISwap.sol",
+        "sha256": "fdb1f9db7f3c94c0906361a72aa9febbcdea76b6a6b9846cafcb38b3b405a866"
+      }
+    ],
+    "nativeFreezeSha256": "d3ec1c68a8ae4944edfa20ce6fa87c8cc971c55f7fac0321eafea82973050d03",
+    "nativeSourcePinsSha256": "8cdb71cefb322e3f31667f7132410afbccea2fa4320102e17bc4092c019dc235",
+    "allRequiredProductionPinsMatchFrozenNativeRun": true,
+    "helperOnlyPostRunChange": "Optional --prices source-session validation and its tests changed after native acceptance; production source and manual execution path unchanged. Original native harness hash 3fac011fde189160502f6bf4222e7cb88a88dc3bf35a2928114f54b290f64605 is retained in raw inputs.",
+    "preexistingSelectorInventoryDrift": [
+      {
+        "path": "listener/src/searcher/simulator/blockscan-sim-amount-selector.ts",
+        "sha256": "97224ba04620fa9a602065906d2859ef070f2d9f9168cfed9ae450deba59946b"
+      }
+    ]
+  },
+  "historicalSample": {
+    "transaction": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+    "source": {
+      "number": 25462190,
+      "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+    },
+    "inputProvenance": "Original successful transaction Deposit.assets at logIndex 234 and twice that amount, used only as input. No original output, identity or admission borrowed.",
+    "amounts": [
+      "1012540431",
+      "2025080862"
+    ],
+    "outputs": [
+      "1132489085731117035645",
+      "2264978171462234071291"
+    ],
+    "counts": {
+      "freshSuccessfulExecutions": 16,
+      "freshDeclaredRejections": 40,
+      "freshZeroInputRejections": 2,
+      "freshRawStrictResults": 58,
+      "reusedRawResults": 0
+    },
+    "runtimeConstruction": {
+      "rpc": 0,
+      "exact": 0,
+      "quotedFallback": false,
+      "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+    },
+    "drained": true,
+    "executorArtifactSha256": "6a8295cc2a410df3043e8c80dba3e9a50e6c60df7bfdcbc7d581d9611b855ef7",
+    "executorCodeHash": "0xdbebd1470308de068f9831725364786bfee9b69cc0286c172a7fed368d4341fe",
+    "rawEvidence": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/new-family-manual-dual.json",
+      "sha256": "2752ba8323cb1006ec67ee68f12be34d580aa1dcfc0b12b2d9505d161b8f838e"
+    },
+    "proofs": [
+      {
+        "mode": "default",
+        "direction": "deposit",
+        "amountIn": "1012540431",
+        "quotedOut": "1132489085731117035645",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "executions": [
+          {
+            "mode": "quoted",
+            "fault": "none",
+            "oldOutput": "0",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1012540431"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "1132489085731117035645"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000003d64717749c221707d"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f00000000000000000000000000000000000000000000003d64717749c221707d"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "quoted",
+            "fault": "insufficient-cost",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "quoted",
+            "fault": "none",
+            "oldOutput": "103",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1012540431"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "1132489085731117035645"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000003d64717749c221707d"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f00000000000000000000000000000000000000000000003d64717749c221707d"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "quoted",
+            "fault": "insufficient-cost",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "runtime",
+            "fault": "none",
+            "oldOutput": "0",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1012540431"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "1132489085731117035645"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000003d64717749c221707d"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f00000000000000000000000000000000000000000000003d64717749c221707d"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "runtime",
+            "fault": "insufficient-cost",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "runtime",
+            "fault": "none",
+            "oldOutput": "103",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1012540431"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "1132489085731117035645"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000003d64717749c221707d"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f00000000000000000000000000000000000000000000003d64717749c221707d"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "runtime",
+            "fault": "insufficient-cost",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          }
+        ]
+      },
+      {
+        "mode": "default",
+        "direction": "deposit",
+        "amountIn": "2025080862",
+        "quotedOut": "2264978171462234071291",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "executions": [
+          {
+            "mode": "quoted",
+            "fault": "none",
+            "oldOutput": "0",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-2025080862"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "2264978171462234071291"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "quoted",
+            "fault": "insufficient-cost",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "quoted",
+            "fault": "none",
+            "oldOutput": "103",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-2025080862"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "2264978171462234071291"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "quoted",
+            "fault": "insufficient-cost",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "runtime",
+            "fault": "none",
+            "oldOutput": "0",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-2025080862"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "2264978171462234071291"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "runtime",
+            "fault": "insufficient-cost",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "runtime",
+            "fault": "none",
+            "oldOutput": "103",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-2025080862"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "2264978171462234071291"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "runtime",
+            "fault": "insufficient-cost",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          }
+        ]
+      },
+      {
+        "mode": "direct-self",
+        "direction": "deposit",
+        "amountIn": "1012540431",
+        "quotedOut": "1132489085731117035645",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "executions": [
+          {
+            "mode": "direct-self",
+            "fault": "none",
+            "oldOutput": "0",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1012540431"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "1132489085731117035645"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000003d64717749c221707d"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f00000000000000000000000000000000000000000000003d64717749c221707d"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "insufficient-cost",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "minimum-plus-one",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "wrong-receiver-postcondition",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "post-revert",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "none",
+            "oldOutput": "103",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1012540431"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "1132489085731117035645"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000003d64717749c221707d"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f00000000000000000000000000000000000000000000003d64717749c221707d"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "insufficient-cost",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "minimum-plus-one",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "wrong-receiver-postcondition",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "post-revert",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          }
+        ]
+      },
+      {
+        "mode": "direct-self",
+        "direction": "deposit",
+        "amountIn": "2025080862",
+        "quotedOut": "2264978171462234071291",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "executions": [
+          {
+            "mode": "direct-self",
+            "fault": "none",
+            "oldOutput": "0",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-2025080862"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "2264978171462234071291"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "insufficient-cost",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "minimum-plus-one",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "wrong-receiver-postcondition",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "post-revert",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "none",
+            "oldOutput": "103",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-2025080862"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "2264978171462234071291"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "insufficient-cost",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "minimum-plus-one",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "wrong-receiver-postcondition",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-self",
+            "fault": "post-revert",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          }
+        ]
+      },
+      {
+        "mode": "direct-external",
+        "direction": "deposit",
+        "amountIn": "1012540431",
+        "quotedOut": "1132489085731117035645",
+        "recipient": "0x1000000000000000000000000000000000000001",
+        "executions": [
+          {
+            "mode": "direct-external",
+            "fault": "none",
+            "oldOutput": "0",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1012540431"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000003d64717749c221707d"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f00000000000000000000000000000000000000000000003d64717749c221707d"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "insufficient-cost",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "minimum-plus-one",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "wrong-receiver-postcondition",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "post-revert",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "none",
+            "oldOutput": "103",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-1012540431"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "1132489085731117035645"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000003d64717749c221707d"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x000000000000000000000000000000000000000000000000000000003c5a240f00000000000000000000000000000000000000000000003d64717749c221707d"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "insufficient-cost",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "minimum-plus-one",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "wrong-receiver-postcondition",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "post-revert",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          }
+        ]
+      },
+      {
+        "mode": "direct-external",
+        "direction": "deposit",
+        "amountIn": "2025080862",
+        "quotedOut": "2264978171462234071291",
+        "recipient": "0x1000000000000000000000000000000000000001",
+        "executions": [
+          {
+            "mode": "direct-external",
+            "fault": "none",
+            "oldOutput": "0",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-2025080862"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "insufficient-cost",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "minimum-plus-one",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "wrong-receiver-postcondition",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "post-revert",
+            "oldOutput": "0",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "none",
+            "oldOutput": "103",
+            "status": "pass",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "returned",
+            "effects": {
+              "tokenDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "-2025080862"
+                },
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "account": "0x1000000000000000000000000000000000000001",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "nativeDeltas": [
+                {
+                  "account": "0x1000000000000000000000000000000000000002",
+                  "delta": "0"
+                }
+              ],
+              "totalSupplyDeltas": [
+                {
+                  "token": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "delta": "0"
+                },
+                {
+                  "token": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "delta": "2264978171462234071291"
+                }
+              ],
+              "logs": [
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+                },
+                {
+                  "address": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x000000000000000000000000d166337499e176bbc38a1fbd113ab144e5bd2df7"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                },
+                {
+                  "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "topics": [
+                    "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7",
+                    "0x0000000000000000000000001000000000000000000000000000000000000002",
+                    "0x0000000000000000000000001000000000000000000000000000000000000001"
+                  ],
+                  "data": "0x0000000000000000000000000000000000000000000000000000000078b4481e00000000000000000000000000000000000000000000007ac8e2ee938442e0fb"
+                }
+              ]
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "insufficient-cost",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "minimum-plus-one",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "wrong-receiver-postcondition",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          },
+          {
+            "mode": "direct-external",
+            "fault": "post-revert",
+            "oldOutput": "103",
+            "status": "correctly-rejected",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "completion": "reverted-as-declared",
+            "effects": {
+              "tokenDeltas": [],
+              "nativeDeltas": [],
+              "totalSupplyDeltas": [],
+              "logs": []
+            },
+            "executionOrigin": "new-strict-execution"
+          }
+        ]
+      }
+    ],
+    "zeroInput": [
+      {
+        "kind": "zero-input",
+        "direction": "deposit",
+        "recipient": "0x1000000000000000000000000000000000000002",
+        "amount": "0",
+        "request": {
+          "id": "standard-erc4626-execution",
+          "required": false,
+          "kind": "effect-delta-simulation",
+          "call": {
+            "caller": {
+              "kind": "executor"
+            },
+            "executionMode": "executor-program",
+            "to": "0x1000000000000000000000000000000000000002",
+            "data": "0xb699a475000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000003350e000000000000000000000000000000000000000000000000000000000000000000031101000f000000000000000000000000000000000000000000000000000000000000000102010c000f05090123238f20b894f29041f48d88ee91131c395aaa7101ff0000000000000000002470a082310000000000000000000000001000000000000000000000000000000000000002060100000001d166337499e176bbc38a1fbd113ab144e5bd2df701ff0000000000000000002470a08231000000000000000000000000100000000000000000000000000000000000000206020000000423238f20b894f29041f48d88ee91131c395aaa71d166337499e176bbc38a1fbd113ab144e5bd2df700ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01d166337499e176bbc38a1fbd113ab144e5bd2df700ff00000000000001000004000000446e553f650000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000206030000000123238f20b894f29041f48d88ee91131c395aaa7101ff0000000000000000002470a0823100000000000000000000000010000000000000000000000000000000000000020604000000020104010403040001d166337499e176bbc38a1fbd113ab144e5bd2df701ff0000000000000000002470a0823100000000000000000000000010000000000000000000000000000000000000020604000000020104040203040302010c040f050403040901d166337499e176bbc38a1fbd113ab144e5bd2df701ff0000000000000000000438d52e0f060d000000000e00000000000000000000000023238f20b894f29041f48d88ee91131c395aaa71030d0e01d166337499e176bbc38a1fbd113ab144e5bd2df701ff00000000000000000004fd94f126060d000000000e0000000000000000000000005f7ecd0d045c393da6cb6c933c671ac305a871bf030d0e01d166337499e176bbc38a1fbd113ab144e5bd2df701ff000000000000000000040e73ecef060d000000000e0000000000000000000000004bc9fec04f0f95e9b42a3ef18f3c96fb57923d2e030d0e0000000000000000000000"
+          },
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+                "amount": "101"
+              },
+              {
+                "token": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+                "amount": "103"
+              }
+            ]
+          },
+          "observeTokenBalances": [
+            {
+              "token": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+              "account": {
+                "kind": "executor"
+              }
+            },
+            {
+              "token": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+              "account": "0x1000000000000000000000000000000000000001"
+            },
+            {
+              "token": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+              "account": {
+                "kind": "executor"
+              }
+            },
+            {
+              "token": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+              "account": "0x1000000000000000000000000000000000000001"
+            }
+          ],
+          "observeTotalSupplies": [
+            "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+            "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+          ],
+          "observe": [
+            "return-data",
+            "revert-data",
+            "token-delta",
+            "total-supply-delta",
+            "native-delta",
+            "logs"
+          ]
+        },
+        "outcome": {
+          "status": "resolved",
+          "executed": {
+            "evidence": [
+              {
+                "id": "standard-erc4626-execution",
+                "ok": true,
+                "source": {
+                  "number": 25462190,
+                  "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+                  "generation": 25462190
+                },
+                "provenance": {
+                  "kind": "strict-simulation-transport",
+                  "fingerprint": "a14fe196739688017ca3e152867c1432ac030eec3b476c3a1b347277400f3964"
+                },
+                "completion": "reverted-as-declared",
+                "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "effects": {
+                  "tokenDeltas": [],
+                  "nativeDeltas": [],
+                  "totalSupplyDeltas": [],
+                  "logs": []
+                }
+              }
+            ],
+            "trustedResultsFingerprint": "18807bda6a89a1a3294fbe2d4f3969ef7e6923613ceea0bda9b2a49adaa6c24d",
+            "trustedResults": [
+              {
+                "id": "standard-erc4626-execution",
+                "ok": true,
+                "source": {
+                  "number": 25462190,
+                  "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+                  "generation": 25462190
+                },
+                "provenance": {
+                  "kind": "strict-simulation-transport",
+                  "fingerprint": "a14fe196739688017ca3e152867c1432ac030eec3b476c3a1b347277400f3964"
+                },
+                "completion": "reverted-as-declared",
+                "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "effects": {
+                  "tokenDeltas": [],
+                  "nativeDeltas": [],
+                  "totalSupplyDeltas": [],
+                  "logs": []
+                }
+              }
+            ]
+          },
+          "receipt": {
+            "workClass": "foreground",
+            "stage": "exact-refine",
+            "familyId": "protocol:staked-usdat",
+            "subject": {
+              "familyId": "protocol:staked-usdat"
+            },
+            "subjectKey": "adapter-subject:30d73ab51b888340c785cd7020f1c1a47fbab03b984ad878290788a6a1ca7459",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "generation": 25462190,
+            "schedule": {
+              "lane": "background",
+              "deadlineAtMs": 100000,
+              "maxAttempts": 1,
+              "transportPool": "state-read",
+              "fairnessKey": "adapter-subject:30d73ab51b888340c785cd7020f1c1a47fbab03b984ad878290788a6a1ca7459",
+              "rethLane": "exact"
+            },
+            "dedupeKey": "adapter-work:938537a0a466dbd617ff8b96cb851d1bbbbf68ad939222fb1b00ea485a8fe253",
+            "timing": {
+              "startedAtMs": 1792471381642,
+              "completedAtMs": 1792471381653,
+              "declarationWallMs": 2,
+              "policyWallMs": 1,
+              "admissionWallMs": 1,
+              "queueWaitMs": 173,
+              "transportWallMs": 173,
+              "decodeWallMs": 1,
+              "totalWallMs": 11,
+              "attempts": 1
+            },
+            "failureStage": null
+          }
+        },
+        "value": {
+          "id": "standard-erc4626-execution",
+          "ok": true,
+          "source": {
+            "number": 25462190,
+            "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+            "generation": 25462190
+          },
+          "provenance": {
+            "kind": "strict-simulation-transport",
+            "fingerprint": "a14fe196739688017ca3e152867c1432ac030eec3b476c3a1b347277400f3964"
+          },
+          "completion": "reverted-as-declared",
+          "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+          "effects": {
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "totalSupplyDeltas": [],
+            "logs": []
+          }
+        },
+        "executionOrigin": "new-strict-execution"
+      },
+      {
+        "kind": "zero-input",
+        "direction": "deposit",
+        "recipient": "0x1000000000000000000000000000000000000001",
+        "amount": "0",
+        "request": {
+          "id": "standard-erc4626-execution",
+          "required": false,
+          "kind": "effect-delta-simulation",
+          "call": {
+            "caller": {
+              "kind": "executor"
+            },
+            "executionMode": "executor-program",
+            "to": "0x1000000000000000000000000000000000000002",
+            "data": "0xb699a475000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004630e000000000000000000000000000000000000000000000000000000000000000000043f01000f000000000000000000000000000000000000000000000000000000000000000102010c000f05090123238f20b894f29041f48d88ee91131c395aaa7101ff0000000000000000002470a082310000000000000000000000001000000000000000000000000000000000000002060100000001d166337499e176bbc38a1fbd113ab144e5bd2df701ff0000000000000000002470a082310000000000000000000000001000000000000000000000000000000000000001060200000001d166337499e176bbc38a1fbd113ab144e5bd2df701ff0000000000000000002470a082310000000000000000000000001000000000000000000000000000000000000002060b0000000123238f20b894f29041f48d88ee91131c395aaa7101ff0000000000000000002470a082310000000000000000000000001000000000000000000000000000000000000001060a0000000423238f20b894f29041f48d88ee91131c395aaa71d166337499e176bbc38a1fbd113ab144e5bd2df700ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01d166337499e176bbc38a1fbd113ab144e5bd2df700ff00000000000001000004000000446e553f650000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000106030000000123238f20b894f29041f48d88ee91131c395aaa7101ff0000000000000000002470a0823100000000000000000000000010000000000000000000000000000000000000020604000000020104010403040001d166337499e176bbc38a1fbd113ab144e5bd2df701ff0000000000000000002470a0823100000000000000000000000010000000000000000000000000000000000000010604000000020104040203040302010c040f050403040901d166337499e176bbc38a1fbd113ab144e5bd2df701ff0000000000000000002470a082310000000000000000000000001000000000000000000000000000000000000002060400000003040b0123238f20b894f29041f48d88ee91131c395aaa7101ff0000000000000000002470a082310000000000000000000000001000000000000000000000000000000000000001060400000003040a01d166337499e176bbc38a1fbd113ab144e5bd2df701ff0000000000000000000438d52e0f060d000000000e00000000000000000000000023238f20b894f29041f48d88ee91131c395aaa71030d0e01d166337499e176bbc38a1fbd113ab144e5bd2df701ff00000000000000000004fd94f126060d000000000e0000000000000000000000005f7ecd0d045c393da6cb6c933c671ac305a871bf030d0e01d166337499e176bbc38a1fbd113ab144e5bd2df701ff000000000000000000040e73ecef060d000000000e0000000000000000000000004bc9fec04f0f95e9b42a3ef18f3c96fb57923d2e030d0e0000000000000000000000000000000000000000000000000000000000"
+          },
+          "overrideIntent": {
+            "caller": {
+              "kind": "executor"
+            },
+            "nativeBalanceWei": "17",
+            "tokenBalances": [
+              {
+                "token": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+                "amount": "101"
+              },
+              {
+                "token": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+                "amount": "103"
+              }
+            ]
+          },
+          "observeTokenBalances": [
+            {
+              "token": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+              "account": {
+                "kind": "executor"
+              }
+            },
+            {
+              "token": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+              "account": "0x1000000000000000000000000000000000000001"
+            },
+            {
+              "token": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+              "account": {
+                "kind": "executor"
+              }
+            },
+            {
+              "token": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+              "account": "0x1000000000000000000000000000000000000001"
+            }
+          ],
+          "observeTotalSupplies": [
+            "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+            "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+          ],
+          "observe": [
+            "return-data",
+            "revert-data",
+            "token-delta",
+            "total-supply-delta",
+            "native-delta",
+            "logs"
+          ]
+        },
+        "outcome": {
+          "status": "resolved",
+          "executed": {
+            "evidence": [
+              {
+                "id": "standard-erc4626-execution",
+                "ok": true,
+                "source": {
+                  "number": 25462190,
+                  "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+                  "generation": 25462190
+                },
+                "provenance": {
+                  "kind": "strict-simulation-transport",
+                  "fingerprint": "2dff331340fdf6519f9edc1716c37d8c240f75943820540ab84b2b9460340f94"
+                },
+                "completion": "reverted-as-declared",
+                "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "effects": {
+                  "tokenDeltas": [],
+                  "nativeDeltas": [],
+                  "totalSupplyDeltas": [],
+                  "logs": []
+                }
+              }
+            ],
+            "trustedResultsFingerprint": "6df204bf8179b1ecf2439178ed658b5963e5fd3d4da776b810c195aedc4baa46",
+            "trustedResults": [
+              {
+                "id": "standard-erc4626-execution",
+                "ok": true,
+                "source": {
+                  "number": 25462190,
+                  "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+                  "generation": 25462190
+                },
+                "provenance": {
+                  "kind": "strict-simulation-transport",
+                  "fingerprint": "2dff331340fdf6519f9edc1716c37d8c240f75943820540ab84b2b9460340f94"
+                },
+                "completion": "reverted-as-declared",
+                "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+                "effects": {
+                  "tokenDeltas": [],
+                  "nativeDeltas": [],
+                  "totalSupplyDeltas": [],
+                  "logs": []
+                }
+              }
+            ]
+          },
+          "receipt": {
+            "workClass": "foreground",
+            "stage": "exact-refine",
+            "familyId": "protocol:staked-usdat",
+            "subject": {
+              "familyId": "protocol:staked-usdat"
+            },
+            "subjectKey": "adapter-subject:30d73ab51b888340c785cd7020f1c1a47fbab03b984ad878290788a6a1ca7459",
+            "source": {
+              "number": 25462190,
+              "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+              "generation": 25462190
+            },
+            "generation": 25462190,
+            "schedule": {
+              "lane": "background",
+              "deadlineAtMs": 100000,
+              "maxAttempts": 1,
+              "transportPool": "state-read",
+              "fairnessKey": "adapter-subject:30d73ab51b888340c785cd7020f1c1a47fbab03b984ad878290788a6a1ca7459",
+              "rethLane": "exact"
+            },
+            "dedupeKey": "adapter-work:1957b5e4aa01b794233a41377a6c963ee72737effcdc42f491e3dc73a96221ee",
+            "timing": {
+              "startedAtMs": 1792471381941,
+              "completedAtMs": 1792471381952,
+              "declarationWallMs": 2,
+              "policyWallMs": 1,
+              "admissionWallMs": 1,
+              "queueWaitMs": 143,
+              "transportWallMs": 143,
+              "decodeWallMs": 1,
+              "totalWallMs": 11,
+              "attempts": 1
+            },
+            "failureStage": null
+          }
+        },
+        "value": {
+          "id": "standard-erc4626-execution",
+          "ok": true,
+          "source": {
+            "number": 25462190,
+            "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+            "generation": 25462190
+          },
+          "provenance": {
+            "kind": "strict-simulation-transport",
+            "fingerprint": "2dff331340fdf6519f9edc1716c37d8c240f75943820540ab84b2b9460340f94"
+          },
+          "completion": "reverted-as-declared",
+          "data": "0x4e487b710000000000000000000000000000000000000000000000000000000000000011",
+          "effects": {
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "totalSupplyDeltas": [],
+            "logs": []
+          }
+        },
+        "executionOrigin": "new-strict-execution"
+      }
+    ],
+    "feeBpsAtSample": "0",
+    "nonzeroFeeCoverage": "Verified source semantics and production identity fixtures; not claimed as a new historical nonzero-fee EVM execution.",
+    "rollbackScope": "Typed trusted native main EVM Revert and empty post-rollback effects; no independent storageDiff claim."
+  },
+  "naturalIntegration": {
+    "newIdReadyAndGraph": "pass",
+    "oldGenericMemoCurrent": false,
+    "targetMemo": {
+      "familyCandidateKey": "0462f7515caa89f014464da21402d7116556f6d936508fa7b39b0373ff795b92",
+      "familyInstanceKey": "7ba1fd2ce683c80c347ba831665fed5c7fb6535c64af35d7cc4cda55f8cf649a",
+      "familyId": "protocol:staked-usdat",
+      "candidateKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+      "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+      "candidateFingerprint": "220a7e15a004ef8580ba8cbde9583a5913eddf8784b9360cd469b52f53cd2233",
+      "familyDefinitionHash": "ccc855aed39c88bf4b6013f799f0469f0782b0a8773c0f44d8ee43dab2e87086",
+      "validity": {
+        "policy": "immutable-code",
+        "authorityFingerprint": "7bccd7bb329857009bf4e51b21414467c063b22aaf13d44d5527ee5659a0bd8b",
+        "proofSource": {
+          "number": 25462190,
+          "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+        }
+      },
+      "verifiedIdentity": {
+        "familyId": "protocol:staked-usdat",
+        "lineageId": "staked-usdat:source-bound-deposit",
+        "source": {
+          "generation": 25462190,
+          "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+          "number": 25462190
+        },
+        "subject": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+      },
+      "compiledDescriptor": {
+        "asset": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+        "familyId": "protocol:staked-usdat",
+        "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+        "lineageId": "staked-usdat:source-bound-deposit",
+        "provenance": [
+          {
+            "evidenceHash": "90956ed4b86a9f28dd5a2f07f8d527823512f4a0f2020105a11cb0212967d699",
+            "kind": "erc4626-standard-active-proof",
+            "subject": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+          },
+          {
+            "evidenceHash": "365a892b8b8f424f8e8bd3e60dedac61453ff8492c44bb708d89136e310f5663",
+            "kind": "staked-usdat-source-fee-event-proof",
+            "subject": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+          },
+          {
+            "evidenceHash": "6e529c35af8d87fc9a594c88421219c8a07d4d1af331877dbed2bdd867caae82",
+            "kind": "staked-usdat-proxy-implementation-getter-proof",
+            "subject": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+          }
+        ],
+        "runtimeRequirements": [
+          {
+            "freshness": "pinned-block",
+            "kind": "source-state"
+          }
+        ],
+        "share": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+        "stakedUsdat": {
+          "asset": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+          "implementation": "0x2005E0CA201a37694125fF267ae57872bEA0a0Ce",
+          "implementationCodeHash": "0x555fcdfcc7e072b39cb27f6a0f4619c376a0d6b1f6d2b8d60216d5beaca8d2a2",
+          "oracle": "0x5f7eCD0D045c393da6cb6c933c671AC305A871BF",
+          "proofSource": {
+            "generation": 25462190,
+            "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+            "number": 25462190
+          },
+          "proxyCodeHash": "0x145bff91aef4f63089cb6e628ab5fca4daf8e51619106333ceb291ccf406cd86",
+          "withdrawalQueue": "0x4Bc9FEC04F0F95e9b42a3EF18F3C96fB57923D2e"
+        },
+        "vault": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+        "verifiedDirections": {
+          "deposit": true,
+          "redeem": false
+        }
+      },
+      "staticProjection": {
+        "evidenceRefs": [
+          "transport:11f190d671597f91a6194d40de5130f3d0e167e90298ec0e7fbf3108a9f38202",
+          "transport:25d5ab9183c64a5f4c7598ef55fe8df7b5b50a1743eeced9cc9d335fee7ae587",
+          "transport:304487b223a3a2a66017ab90e177be6fd72c670471fa8242a4e81491325a4185",
+          "transport:a6dc6dcca66d0b50268711bf67ed721e65fb4a04658b4bb8c8501cefa2517a5f",
+          "transport:d1721a3fd82e41470cf03b1eeb4ca74cb8b1bdd0b6862fdee2eadd2f6ed4c73d",
+          "transport:e218e050994b34efe1f06d9e3838afe1b937916054f467f653815a97fc49c1a6",
+          "transport:f29a644b8aaeff73004c44772ec73a3a75a5eb6e687b78175579539b17ee29cc"
+        ],
+        "format": "prepared-family-instance-v1",
+        "pricingInstances": [
+          {
+            "currentEvidenceFingerprint": "9809d38a1cf289540e242249d4e8faa5b0a50cb5111d2050a6e41165e69dc958",
+            "dependencies": [
+              "0x2005e0ca201a37694125ff267ae57872bea0a0ce",
+              "0x23238f20b894f29041f48d88ee91131c395aaa71",
+              "0x4bc9fec04f0f95e9b42a3ef18f3c96fb57923d2e",
+              "0x5f7ecd0d045c393da6cb6c933c671ac305a871bf",
+              "0xd166337499e176bbc38a1fbd113ab144e5bd2df7"
+            ],
+            "evidenceRefs": [
+              "transport:11f190d671597f91a6194d40de5130f3d0e167e90298ec0e7fbf3108a9f38202",
+              "transport:25d5ab9183c64a5f4c7598ef55fe8df7b5b50a1743eeced9cc9d335fee7ae587",
+              "transport:304487b223a3a2a66017ab90e177be6fd72c670471fa8242a4e81491325a4185",
+              "transport:a6dc6dcca66d0b50268711bf67ed721e65fb4a04658b4bb8c8501cefa2517a5f",
+              "transport:d1721a3fd82e41470cf03b1eeb4ca74cb8b1bdd0b6862fdee2eadd2f6ed4c73d",
+              "transport:e218e050994b34efe1f06d9e3838afe1b937916054f467f653815a97fc49c1a6",
+              "transport:f29a644b8aaeff73004c44772ec73a3a75a5eb6e687b78175579539b17ee29cc"
+            ],
+            "familyId": "protocol:staked-usdat",
+            "groupBindingFingerprint": "867a307a8857113a4d4fcbdc3b2e88775cdd2a9278ce25bf112cb0b85222f15a",
+            "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+            "lineageId": "staked-usdat:source-bound-deposit",
+            "mids": {
+              "$durableType": "map",
+              "entries": [
+                [
+                  "protocol:staked-usdat\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001fdeposit",
+                  {
+                    "depthProxy": 10000000000,
+                    "edges": [
+                      {
+                        "adapterId": "staked-usdat-deposit",
+                        "edgeKind": "protocol",
+                        "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                        "leavesStandingPosition": false,
+                        "protocolAction": "wrap",
+                        "slotKind": "protocol",
+                        "target": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+                        "tokenIn": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+                        "tokenOut": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+                      }
+                    ],
+                    "feeBps": 0,
+                    "kind": "protocol",
+                    "mid": 1118463076691.8157,
+                    "pool": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+                    "reserveA": {
+                      "$durableType": "bigint",
+                      "value": "10000000000"
+                    },
+                    "reserveB": {
+                      "$durableType": "bigint",
+                      "value": "11184630766918156130000"
+                    }
+                  }
+                ]
+              ]
+            },
+            "pricingDescriptor": {
+              "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+              "oneAsset": {
+                "$durableType": "bigint",
+                "value": "1000000"
+              },
+              "oneShare": {
+                "$durableType": "bigint",
+                "value": "1000000000000000000"
+              },
+              "routes": [
+                {
+                  "adapterId": "staked-usdat-deposit",
+                  "bindingRef": {
+                    "bindingKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                    "fingerprint": "7087ec58a031984cababbd4d8a55d869ceb5994005c2c10b07135301505a7574"
+                  },
+                  "direction": "deposit",
+                  "familyId": "protocol:staked-usdat",
+                  "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "lineageId": "staked-usdat:source-bound-deposit",
+                  "routeKey": "protocol:staked-usdat\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001fdeposit",
+                  "runtimeRequirements": [
+                    {
+                      "freshness": "pinned-block",
+                      "kind": "source-state"
+                    }
+                  ],
+                  "target": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+                  "taxonomy": {
+                    "protocolAction": "wrap",
+                    "slotKind": "protocol"
+                  },
+                  "tokenIn": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+                  "tokenOut": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+                }
+              ],
+              "stakedUsdat": {
+                "asset": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+                "implementation": "0x2005E0CA201a37694125fF267ae57872bEA0a0Ce",
+                "implementationCodeHash": "0x555fcdfcc7e072b39cb27f6a0f4619c376a0d6b1f6d2b8d60216d5beaca8d2a2",
+                "oracle": "0x5f7eCD0D045c393da6cb6c933c671AC305A871BF",
+                "proofSource": {
+                  "generation": 25462190,
+                  "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+                  "number": 25462190
+                },
+                "proxyCodeHash": "0x145bff91aef4f63089cb6e628ab5fca4daf8e51619106333ceb291ccf406cd86",
+                "withdrawalQueue": "0x4Bc9FEC04F0F95e9b42a3EF18F3C96fB57923D2e"
+              },
+              "vault": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+            },
+            "routes": [
+              {
+                "adapterId": "staked-usdat-deposit",
+                "bindingRef": {
+                  "bindingKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                  "fingerprint": "7087ec58a031984cababbd4d8a55d869ceb5994005c2c10b07135301505a7574"
+                },
+                "direction": "deposit",
+                "familyId": "protocol:staked-usdat",
+                "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+                "lineageId": "staked-usdat:source-bound-deposit",
+                "routeKey": "protocol:staked-usdat\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001fdeposit",
+                "runtimeRequirements": [
+                  {
+                    "freshness": "pinned-block",
+                    "kind": "source-state"
+                  }
+                ],
+                "target": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+                "taxonomy": {
+                  "protocolAction": "wrap",
+                  "slotKind": "protocol"
+                },
+                "tokenIn": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+                "tokenOut": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+              }
+            ],
+            "snapshot": {
+              "quotes": {
+                "protocol:staked-usdat\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001fdeposit": {
+                  "amountIn": {
+                    "$durableType": "bigint",
+                    "value": "1000000"
+                  },
+                  "amountOut": {
+                    "$durableType": "bigint",
+                    "value": "1118463076691815613"
+                  }
+                }
+              },
+              "source": {
+                "generation": 25462190,
+                "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+                "number": 25462190
+              }
+            },
+            "snapshotCompatibilityFingerprint": "67a2dd27b417da5cfe2c9e72a0b421ec092466ec27da6172650dd6db3ac90596",
+            "stateInstanceKey": "state-instance:e738438b0322b391ab42236d68baf2e6b3456ce22d41efa2e081f49f42f5e444",
+            "stateKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+            "staticBindingFingerprint": "946e578c247d92ea57c811feb840dab807baccccd5fde326d9b6fbb2956f6b9d",
+            "staticEvidenceFingerprint": "25d5ab9183c64a5f4c7598ef55fe8df7b5b50a1743eeced9cc9d335fee7ae587",
+            "unavailable": {
+              "$durableType": "map",
+              "entries": []
+            }
+          }
+        ],
+        "routes": [
+          {
+            "adapterId": "staked-usdat-deposit",
+            "bindingRef": {
+              "bindingKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+              "fingerprint": "7087ec58a031984cababbd4d8a55d869ceb5994005c2c10b07135301505a7574"
+            },
+            "direction": "deposit",
+            "familyId": "protocol:staked-usdat",
+            "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+            "lineageId": "staked-usdat:source-bound-deposit",
+            "routeKey": "protocol:staked-usdat\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001fdeposit",
+            "runtimeRequirements": [
+              {
+                "freshness": "pinned-block",
+                "kind": "source-state"
+              }
+            ],
+            "target": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+            "taxonomy": {
+              "protocolAction": "wrap",
+              "slotKind": "protocol"
+            },
+            "tokenIn": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+            "tokenOut": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+          }
+        ],
+        "staticBindingFingerprint": "ccbb9642c9fa430d02604758983566f7526c22dab874b66ab265136c1c411180",
+        "staticEvidenceFingerprint": "377a0f672f66d9c1f778275404da357c06dc59f7c06c3f31d82b864cd366bdb8"
+      },
+      "evidenceFingerprint": "6449eace49cd1cb8d171a5735da269c1376235266f6575712fede3aafe91e1d7",
+      "candidateSnapshot": {
+        "adapter": "staked-usdat",
+        "address": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+        "blockHash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+        "blockNumber": 25462190,
+        "candidateKind": "erc4626-vault",
+        "familyId": "protocol:staked-usdat",
+        "logIndex": 234,
+        "pluginCandidateKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+        "transactionHash": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+        "vault": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7"
+      },
+      "memoFingerprint": "7539ab3a8e5e0e37c6365e48a48d33206f6190388ff46b7868f2419536441a26"
+    },
+    "targetEdges": [
+      {
+        "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+        "executionVariantKey": "3e49671cd1888114a7afa1f2e733fab481f0069ca52b8f85ed68fae516de6b8b",
+        "adapterId": "staked-usdat-deposit",
+        "target": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+        "tokenIn": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+        "tokenOut": "0xD166337499E176bbC38a1FBd113Ab144e5bd2Df7",
+        "slotKind": "protocol",
+        "protocolAction": "wrap",
+        "edgeKind": "protocol",
+        "leavesStandingPosition": false,
+        "score": 0,
+        "canonicalEdgeId": "protocol:staked-usdat\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f0x23238f20b894f29041f48d88ee91131c395aaa71>0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f3e49671cd1888114a7afa1f2e733fab481f0069ca52b8f85ed68fae516de6b8b"
+      }
+    ],
+    "priorReadyPreserved": {
+      "priorReady": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/inputs/prior-ready-N25462190.json",
+      "sha256": "de5ce64da73cec0eb8c7e8a2c72841356a68d9a7aface37abad1f7d1a0833183",
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+        "generation": 25462190
+      },
+      "oldMemoFingerprint": "2dfcd3b59764d9c657ed42d21bb43e1f21805e33a9e4f0d7f0f5c96434897220",
+      "oldMemoDefinitionCurrent": false,
+      "familyIds": [
+        "protocol:erc4626",
+        "protocol:staked-usdat"
+      ],
+      "discoveryMode": "fresh-production-single-block-discovery",
+      "preservedOriginal": true,
+      "scope": "Prior evidence remains immutable. Both current Families independently consume the same real block; no memo/descriptor/hash remapping."
+    },
+    "priceSessionGeneration": 1,
+    "readyIssuanceGeneration": 25462190,
+    "targetEffectiveRows": [
+      {
+        "edgeId": "protocol:staked-usdat\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f0x23238f20b894f29041f48d88ee91131c395aaa71>0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f3e49671cd1888114a7afa1f2e733fab481f0069ca52b8f85ed68fae516de6b8b",
+        "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+        "tokenIn": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+        "tokenOut": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+        "amountIn": null,
+        "status": "missing-valuation",
+        "amountOut": null,
+        "effectiveMid": null
+      }
+    ],
+    "naturalValuation": "not-passed: small two-family graph has no inbound USDat valuation path",
+    "manualAmountsDidNotModifyPrices": true
+  },
+  "validation": {
+    "currentOffline": {
+      "current": [
+        {
+          "name": "generate",
+          "args": [
+            "npm",
+            "run",
+            "family-capability-manifest:generate"
+          ],
+          "exitCode": 0,
+          "elapsedMs": 49684.42630767822,
+          "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/generate-identity-and-fixtures.log",
+          "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+        },
+        {
+          "name": "build-live",
+          "args": [
+            "npm",
+            "run",
+            "build:live"
+          ],
+          "exitCode": 0,
+          "elapsedMs": 9230.805397033691,
+          "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/build-live-identity-and-fixtures.log",
+          "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+        },
+        {
+          "name": "infinifi-contract",
+          "args": [
+            "node",
+            "--import",
+            "tsx",
+            "--test",
+            "src/searcher/venues/protocols/erc4626-family/test/infinifi-contract.ts"
+          ],
+          "exitCode": 0,
+          "elapsedMs": 4138.100147247314,
+          "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/infinifi-contract-identity-and-fixtures.log",
+          "sha256": "507c41aa317d023720798e2985fb7aae94fdf3f0786aba72866fc3a327df9ab0"
+        },
+        {
+          "name": "dual-execution",
+          "args": [
+            "npm",
+            "run",
+            "searcher:family-dual-execution"
+          ],
+          "exitCode": 0,
+          "elapsedMs": 10072.823286056519,
+          "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/dual-execution-identity-and-fixtures.log",
+          "sha256": "7f7be70aad81d8a7ff7ccd9be0bc98457ea68a9ae18cb6c6e9f8d0e90c93077a"
+        },
+        {
+          "name": "production-composition",
+          "args": [
+            "npm",
+            "run",
+            "searcher:production-family-composition"
+          ],
+          "exitCode": 0,
+          "elapsedMs": 1932.0905208587646,
+          "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/production-composition-identity-and-fixtures.log",
+          "sha256": "363291d1ed20b72f377013fdcf589b3048b6e31559748172f54cb72f773314ea"
+        },
+        {
+          "name": "production-declarations",
+          "args": [
+            "npm",
+            "run",
+            "searcher:strict-production-family-declarations"
+          ],
+          "exitCode": 0,
+          "elapsedMs": 1876.5969276428223,
+          "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/production-declarations-identity-and-fixtures.log",
+          "sha256": "116c154208b1ee31e557be02138d0c4ac2fb7e5987d8b83ea522880daaca846c"
+        },
+        {
+          "name": "staked-refresh",
+          "exitCode": 0,
+          "elapsedMs": 2348.6275672912598,
+          "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/staked-refresh-final-offline.log",
+          "sha256": "c3c1d6470c02e04ba77d32daeae8e284052cd9f97631b98a302e45cceacc13c6",
+          "fixtureSha256": "f0e07dac5e6945b1062fe3788d4b43c4b6c6cc5619b6b886b3376cbc1018caaa"
+        }
+      ],
+      "preservedPreviousReceipt": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/identity-and-fixtures-checks.json",
+        "sha256": "b311b6c648b5ca6bbd8118ea4c621764116f30b40b001f3847c18d6243769e97",
+        "excludedFailedAttempt": [
+          {
+            "name": "staked-refresh",
+            "args": [
+              "npm",
+              "run",
+              "test:staked-usdat:refresh"
+            ],
+            "exitCode": 1,
+            "elapsedMs": 2226.5005111694336,
+            "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/staked-refresh-identity-and-fixtures.log",
+            "sha256": "641a0adeea8d2198a8d76a8c1f33af730c2b08ffaeb5b12dfdcb01cf0e568052"
+          }
+        ]
+      },
+      "change": "Only the expected rejection assertion was corrected; production/source capability artifact remained unchanged."
+    },
+    "ordinaryAndCustodianPasses": [
+      {
+        "name": "ordinary-refresh",
+        "args": [
+          "npm",
+          "run",
+          "test:erc4626-family:standard-refresh"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 2329.0717601776123,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/ordinary-refresh-nested-container.log",
+        "sha256": "049251dfdbfe650b61c732a3393b4296fab153ce0a8b52bea902ed61fda8a033"
+      },
+      {
+        "name": "custodian-contract",
+        "args": [
+          "node",
+          "--import",
+          "tsx",
+          "--test",
+          "src/searcher/venues/protocols/erc4626-family/test/custodian-contract.ts"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 2784.5234870910645,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/custodian-contract-nested-container.log",
+        "sha256": "fd22cde549d0d91164bd30f0083a4e8d82730a57c684bd357deee9e4d0abee3e"
+      }
+    ],
+    "feeAndLegacyContractPasses": [
+      {
+        "name": "fee-observations",
+        "args": [
+          "npm",
+          "run",
+          "test:staked-usdat:observations"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 669.6014404296875,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/fee-observations-fee-candidate.log",
+        "sha256": "31df6e1df4487e125a255689a958ede62af0bfb6521f513fbb0b7cf75583ba98"
+      },
+      {
+        "name": "erc4626-contract",
+        "args": [
+          "npm",
+          "run",
+          "searcher:erc4626-family-plugin"
+        ],
+        "exitCode": 0,
+        "elapsedMs": 769.6306705474854,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/erc4626-contract-fee-candidate.log",
+        "sha256": "813321d5adaf95ebde92d326bf913d5b3c094af3763420aa8022ff6aeb52105e"
+      }
+    ],
+    "familyDualTests": 311,
+    "infiniFiTests": 14,
+    "ordinaryBaselineRedSha256": "bb6f697ea7c3d9d3da4d035454856eb093c2df556f2e1ba9100dfd09b5900da7",
+    "historicalCanonical": [
+      {
+        "stage": "ordinary-reconcile",
+        "exitCode": 0,
+        "elapsedMs": 2382.908582687378,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/ordinary-reconcile-canonical-v2.log",
+        "sha256": "3a0d765fa8d6a80cbd1a4e8a4c87884f8ce542c712844a733275cdc14a42d82e"
+      },
+      {
+        "stage": "recipient-reconcile",
+        "exitCode": 0,
+        "elapsedMs": 1197.3397731781006,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/recipient-reconcile-canonical-v2.log",
+        "sha256": "9d3b8941d855a274c0635080c08f150096fd4f80a4e7732c11a26f9e3b7be6b0"
+      },
+      {
+        "stage": "new-family-ready",
+        "exitCode": 0,
+        "elapsedMs": 10965.337038040161,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/new-family-ready-canonical-v2.log",
+        "sha256": "910d0ac169cb8a00c153507d7674e40ded206ab0e9c8e859008f6e3de570bdf6"
+      },
+      {
+        "stage": "new-family-dual",
+        "exitCode": 0,
+        "elapsedMs": 12448.32181930542,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/new-family-dual-canonical-v2.log",
+        "sha256": "c1cd8c59cd7c87e23a4da2fbfa66e7b597ce9746666e0b70db3cf199f27dce6c"
+      }
+    ],
+    "canonicalManifest": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/historical-tool-selection.json",
+      "sha256AtNativeCompletion": "5ceccca5bdf55ebb5fac356788fb7b3ad268ae9db6e8f451f3498458c3e1d205",
+      "requestedCapabilities": [
+        "erc4626",
+        "recipient",
+        "historical",
+        "ready"
+      ],
+      "toolIds": [
+        "listener:test:erc4626-family:standard-refresh",
+        "listener:searcher:family-direct-recipient",
+        "listener:test:staked-usdat:historical-ready",
+        "listener:test:staked-usdat:historical-dual"
+      ],
+      "scope": "Historical CLIs bind source N/hash and input artifacts themselves; no unsupported generic --window flag. Initial wrapper misuse was preserved before any Ready/native execution."
+    }
+  },
+  "independentReviews": [
+    {
+      "path": "docs/research/reports/staked-usdat-production-independent-20261020.json",
+      "sha256": "83c8e614677863b5acbbac93ef1132a06cc394197f45067a91d7a15d7ca9bf2b"
+    },
+    {
+      "path": "docs/research/reports/staked-usdat-native-independent-20261020.json",
+      "sha256": "5c90272fbaadcd5e39ded03c2b2dbe0dc72031c0f6a06492b53ccab74e614d32"
+    },
+    {
+      "path": "docs/research/reports/erc4626-retained-compatibility-independent-20261020.json",
+      "sha256": "bd16f42d571a0b75f2f4141b643b645d72f0686339cd8b46ddafaf1991a16500"
+    },
+    {
+      "path": "docs/research/reports/erc4626-price-session-independent-20261020.json",
+      "sha256": "10a5bf5fe7a5dabbcca6319dd5400c61bc5aa8e8eb2ebac8c46517e5dd3930d8"
+    }
+  ],
+  "retainedHistory": {
+    "ordinaryStandard": {
+      "targets": 17,
+      "directions": 31,
+      "positiveExecutions": 496,
+      "declaredRejections": 1224,
+      "zeroInputRejections": 62,
+      "additionalIndependentInsufficientInputStrictResourceLimited": 16
+    },
+    "oldStaked": {
+      "positiveExecutions": 16,
+      "declaredRejections": 40,
+      "zeroInputRejections": 2,
+      "ownership": "Original protocol:erc4626 historical proof remains immutable; not counted as new-Family execution."
+    },
+    "fraxAndInfiniFi": "Unchanged execution code, current contract regression and independently reviewed receipt/source compatibility; see separate compatibility review."
+  },
+  "notClaimed": [
+    "formal Adapter Replay fixed/merge-ready",
+    "original-transaction pre-call or opportunity replay",
+    "natural reference valuation for Staked",
+    "new full 49-family Ready acceptance",
+    "4A or 4B performance",
+    "250-block or long-term live performance",
+    "deployment or realized profit"
+  ]
+}

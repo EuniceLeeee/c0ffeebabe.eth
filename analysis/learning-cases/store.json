@@ -2383,6 +2383,71 @@
       },
       "created_at": "2026-10-16T09:04:07.247535+00:00",
       "updated_at": "2026-10-16T09:07:13.982970+00:00"
+    },
+    {
+      "learning_case_id": "tooling-defect-standard-price-session-generation-20261020",
+      "status": "applied",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [],
+      "trigger": "competitor_not_seen",
+      "target_block": 25462190,
+      "comparable": false,
+      "primary_gap": "quote_failed",
+      "gap_detail": "Family historical acceptance tooling false rejection, not an opportunity or competitor-coverage conclusion. Ready issuance and production price runs are distinct lifecycle generations at the same canonical state.",
+      "our_stage": "family-acceptance-price-input-validation",
+      "evidence": {
+        "scope": "Tooling only; no missing competitor or failed profitable execution claimed.",
+        "transaction": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+        "historicalHash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+        "readyGeneration": 25462190,
+        "priceGeneration": 1,
+        "independentReview": "docs/research/reports/erc4626-price-session-independent-20261020.json",
+        "regressionReceipts": [
+          {
+            "name": "price-state-red",
+            "exitCode": 1,
+            "elapsedMs": 464.54691886901855,
+            "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/price-state-red.log",
+            "sha256": "9672a28055868d0edb41256e4e6861ee45e5dd378a697a77ab6d554ac26ac9d3"
+          },
+          {
+            "name": "price-state-green",
+            "exitCode": 0,
+            "elapsedMs": 739.9857044219971,
+            "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/price-state-green.log",
+            "sha256": "0480544c9a64347d60b1e75dfa5cbac6c4d827ba24427da86ba229986d42ae3b"
+          },
+          {
+            "name": "price-state-real-missing-valuation",
+            "exitCode": 1,
+            "elapsedMs": 3147.637128829956,
+            "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/erc4626-staked-split-20261020/price-state-real-missing-valuation.log",
+            "sha256": "4b629dd83752406a87b1489aeefcb4d5666eb361308b57bb1ef08f23960cef2d"
+          }
+        ],
+        "realNegative": "After the fix the real same-N artifact still correctly rejects missing-valuation. No amount was invented and no new native execution was run.",
+        "preservedManualNativeSha256": "2752ba8323cb1006ec67ee68f12be34d580aa1dcfc0b12b2d9505d161b8f838e"
+      },
+      "tooling_defect": {
+        "tool": "listener:test:staked-usdat:historical-dual optional --prices / shared standard-recipient-historical.ts",
+        "issue": "Incorrect cross-session equality of pricing/effective/quotedAt generation and Ready issuance generation rejected valid same-N/hash provenance before inspecting valuation.",
+        "evidence": "Real Ready generation25462190 and actual production price generation1 share N25462190/hash3b02 and exact readySha256. Non-author review confirms; extracted wrong equality red exit1 to fixed boundary suite exit0.",
+        "codify_target": "standard-price-state.ts and standard-price-state.test.ts; retain Ready artifact hash, canonical number/hash, internal price fences, and exact quote row source.",
+        "codify_commit": "54731933633994f11f0a45620abf4c868027f0e4",
+        "status": "codified"
+      },
+      "close_action": {
+        "kind": "tooling-defect-codified",
+        "target_file": "listener/src/searcher/venues/protocols/erc4626-family/test/standard-price-state.ts"
+      },
+      "replay_gate": {
+        "command": "cd listener && npm run test:erc4626-family:standard-price-state",
+        "expected_transition": "Same N/hash with distinct sessions accepted; cross-N/hash/Ready hash/internal price session mismatches remain rejected; real missing valuation remains rejected.",
+        "before": "wrong generation equality: red exit1",
+        "after": "five boundary tests: green exit0"
+      },
+      "created_at": "2026-10-20T05:00:25.641054+00:00",
+      "updated_at": "2026-10-20T05:00:25.641065+00:00"
     }
   ]
 }

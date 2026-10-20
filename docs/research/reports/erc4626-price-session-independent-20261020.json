@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "reviewedAtUtc": "2026-10-20T04:50:58.575014+00:00",
+  "reviewer": "/root/staked_split_refresh_tests",
+  "independence": {
+    "historicalRunnerAuthor": false,
+    "productionSourceAuthor": false,
+    "otherAuthorship": "Reviewer authored ordinary and Staked refresh tests, which are outside this tool-defect review."
+  },
+  "scope": "Read-only independent adjudication of optional production --prices source binding in the shared Family historical runner. No source/test edits, RPC, cloud commands, native simulations, or acceptance reruns.",
+  "verdict": "confirmed_tooling_false_rejection_cross_session_generation_equality",
+  "sourceArtifacts": {
+    "prices": {
+      "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/fresh-historical/new-family-ready/prices/prices.json",
+      "sha256": "ae4cce68cbd6c52e6eed68ce0c6d0b70a77a06348da8361558dc532a795dfbb1",
+      "schemaVersion": 1,
+      "readySha256": "e7ce3ff33a41ae30aa299caa3366e00f31a62980ae316e21f031b05a3e50d2b1"
+    },
+    "ready": {
+      "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/fresh-historical/new-family-ready/ready.json",
+      "sha256": "e7ce3ff33a41ae30aa299caa3366e00f31a62980ae316e21f031b05a3e50d2b1",
+      "readyPublicationGeneration": 1,
+      "executionSource": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+        "generation": 25462190
+      }
+    },
+    "runnerReviewed": {
+      "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/candidate/listener/src/searcher/venues/protocols/erc4626-family/test/standard-recipient-historical.ts",
+      "sha256AtInspection": "3fac011fde189160502f6bf4222e7cb88a88dc3bf35a2928114f54b290f64605",
+      "lines": [
+        138,
+        139,
+        146,
+        149
+      ]
+    }
+  },
+  "observedPrices": {
+    "runtimeSource": {
+      "sourceBlock": 25462190,
+      "sourceBlockHash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+      "generation": 1
+    },
+    "runtimeGraphSource": {
+      "sourceBlock": 25462190,
+      "sourceBlockHash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+      "generation": 1
+    },
+    "pricingSource": {
+      "number": 25462190,
+      "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+      "generation": 1
+    },
+    "pricingGraphSource": {
+      "sourceBlock": 25462190,
+      "sourceBlockHash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+      "generation": 1
+    },
+    "rawMidSource": {
+      "number": 25462190,
+      "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+      "generation": 1
+    },
+    "effectiveSource": {
+      "number": 25462190,
+      "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13",
+      "generation": 1
+    },
+    "effectiveComplete": true,
+    "totalRows": 3,
+    "quotedRows": 0,
+    "stakedRows": [
+      {
+        "key": "protocol:staked-usdat\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f0x23238f20b894f29041f48d88ee91131c395aaa71>0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f3e49671cd1888114a7afa1f2e733fab481f0069ca52b8f85ed68fae516de6b8b",
+        "row": {
+          "edgeId": "protocol:staked-usdat\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f0x23238f20b894f29041f48d88ee91131c395aaa71>0xd166337499e176bbc38a1fbd113ab144e5bd2df7\u001f3e49671cd1888114a7afa1f2e733fab481f0069ca52b8f85ed68fae516de6b8b",
+          "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+          "tokenIn": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+          "tokenOut": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+          "amountIn": null,
+          "status": "missing-valuation",
+          "amountOut": null,
+          "effectiveMid": null
+        }
+      }
+    ]
+  },
+  "findings": [
+    {
+      "id": "historical-prices-cross-session-generation",
+      "severity": "P1",
+      "kind": "tooling_defect",
+      "status": "confirmed",
+      "cause": "The --prices branch compares generation identifiers from independent price-runtime and Ready/execution lifecycle sessions as though they shared an identifier domain. Same canonical N/hash and exact readySha256 do not imply equal session generations.",
+      "actualTrigger": "pricing.generation=1 and Ready.cutoff.generation=25462190 at the same number and block hash. line138 rejects before inspecting the target row.",
+      "affectedAssertions": [
+        {
+          "line": 138,
+          "assertion": "pricing.generation === source.generation",
+          "correction": "Price runtime/pricing generations must agree internally; do not compare this value to Ready.cutoff.generation."
+        },
+        {
+          "line": 139,
+          "assertion": "effective.source deepEquals Ready.cutoff",
+          "correction": "effective.source must fully equal the pricing source; its number/hash must equal the requested Ready/test chain state."
+        },
+        {
+          "line": 146,
+          "assertion": "row.quotedAt deepEquals Ready.cutoff",
+          "correction": "The required fresh target quote must be issued at effective.source, including the price session generation."
+        },
+        {
+          "line": 149,
+          "assertion": "report.productionPrices.source = Ready.cutoff",
+          "correction": "Report actual priceSource and executionSource separately; never relabel the donor generation."
+        }
+      ]
+    },
+    {
+      "id": "actual-donor-missing-valuation",
+      "severity": "acceptance_limit",
+      "status": "observed_not_a_new_production_bug_claim",
+      "fact": "The inspected fresh prices file contains zero quoted rows. The Staked route row status is missing-valuation with null amountIn/amountOut and no quotedAt.",
+      "consequence": "Correcting the session-generation false rejection must still reject this file as a usable natural effective-price donor. The correction does not itself establish production natural-valuation acceptance."
+    }
+  ],
+  "minimumCorrectBinding": [
+    "Preserve schemaVersion and exact current readySha256 checks.",
+    "Derive the price-source triple from the runtime/pricing snapshot; require runtime, pricing and effective source number/hash/generation to agree internally. If graph source fields are validated, bind each to this price source too.",
+    "Require canonical number and hash of the price source to equal the requested tested state and Ready cutoff. A different N or hash must fail even if all price fields agree with one another.",
+    "Do not compare the price session generation to the Ready issuance/execution session generation, and do not rewrite either source.",
+    "Preserve exact target route/edge/token identity, complete=true, quoted row status, positive bigint input/output, positive finite raw mid, and fresh row.quotedAt equal to effective.source.",
+    "Keep execution source, generation fence, issued Family handles and Exact construction bound to the Ready cutoff. Saved prices are data donors and do not confer issuer authority.",
+    "Record actual priceSource and executionSource, including their distinct generations, in the report.",
+    "Do not globally require rawMidSource to equal current effective source: raw bootstrap/carry lineage can be older by design. The inspected file happens to match."
+  ],
+  "minimumBoundaryRegressionExpectations": [
+    "Accept source binding for same number/hash and matching Ready bytes despite price generation1 versus Ready cutoff generation25462190, without normalizing either source.",
+    "Reject different canonical block number even when price-runtime components agree internally.",
+    "Reject different block hash even at the same number and with internally consistent pricing.",
+    "Reject internal runtime/pricing/effective generation mismatch and a target quote issued at a different price source.",
+    "Retain exact Ready hash/schema and quoted-row/positive-amount gates; actual missing-valuation rows remain unusable."
+  ],
+  "productionReferences": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/reference/listener/src/searcher/blockscan-effective-mid.ts",
+      "lines": [
+        98,
+        104
+      ],
+      "observation": "Production checks effective source against its own pricing source triple."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/reference/listener/src/searcher/strict-current-runtime-coordinator.ts",
+      "lines": [
+        536,
+        540
+      ],
+      "observation": "Production publication binds effective source to current graph/session source triple."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/erc4626-staked-split-20261020/reference/listener/src/searcher/blockscan-at-block-cli.ts",
+      "lines": [
+        609,
+        620
+      ],
+      "observation": "prices.json serializes the runtime snapshot and binds its exact Ready input with readySha256."
+    }
+  ],
+  "existingManualEvidence": {
+    "parentReported": {
+      "positive": 16,
+      "rejection": 40,
+      "zeroBalance": 2,
+      "rawTotal": 58,
+      "drained": true
+    },
+    "independentlyReexecuted": false,
+    "impact": "No change to prior manual simulation evidence or production source is implied by this tool-only finding."
+  },
+  "closureOwner": "Parent owns the minimal helper fix, meaningful boundary regression, tooling_defect capture and final validation. This report confirms the defect but does not claim the proposed fix has been implemented or run."
+}
