@@ -59,6 +59,7 @@ export async function main(argv = process.argv.slice(2)) {
   } });
   assert(args.out && args.out.startsWith('/'), '--out must be an absolute dedicated run directory');
   const out = resolve(args.out), tokenFile = out + '/bigquery-auth.json';
+  mkdirSync(out, { recursive: true });
   if (args['token-stdin']) {
     assert(existsSync(out), 'Run directory missing');
     let token = ''; for await (const chunk of process.stdin) token += chunk;

@@ -476,3 +476,15 @@ test('canonical hash changing between import preflight and production strict fre
     assert(!existsSync(f.out+'/result.json'));assert(!existsSync(f.root+'/profile.json.latest-ready.json'));
   } finally {rmSync(f.root,{recursive:true});}
 });
+
+test('SQL entry point creates a new absolute output directory before writing its first pin', async () => {
+  const f = sqlFixture();
+  try {
+    rmSync(f.out, { recursive: true });
+    assert(!existsSync(f.out));
+    await main(f.sqlArgv);
+    assert(existsSync(f.out + '/input-pin.json'));
+    assert.equal(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
+    assert.deepEqual(JSON.parse(readFileSync(f.out + '/checkpoint.json')).range, { fromBlock: 123, toBlock: 123 });
+  } finally { rmSync(f.root, { recursive: true }); }
+});

@@ -22,7 +22,7 @@ SQL successful-call ancestry filtering differs from the currently more inclusive
 ## Validation and limitations
 
 - Existing production `npm run build:live`: PASS after the final API change.
-- Importer offline regression suite: 27/27 PASS, including fixed cutoff and a changed canonical hash at the production boundary.
+- Importer offline regression suite: 28/28 PASS, including fixed cutoff and a changed canonical hash at the production boundary.
 - Checkpoint focused and complete suites: PASS; independent focused execution and source review completed. The final test-only CanonicalSource annotation addresses two newly exposed type-inference diagnostics.
 - Independent real-input preflight receipt SHA256: `547f7e542c4b190db9248f02701bb31bb1a3a993fac96c7503dbf12c6853268b`.
 - The initial broad `npm run build` failed because rustc was absent from PATH. The existing Rust 1.96 toolchain was then located and native enumeration built successfully. Broad all-test TypeScript checking also exposed pre-existing family test errors; these are retained and are not represented as a passing full test build. The actual existing production build is `build:live`.
@@ -32,3 +32,9 @@ SQL successful-call ancestry filtering differs from the currently more inclusive
 At this record, SQL input and local correctness are validated. Real proof inheritance, strict/Ready completion, and the authorized subsequent 250-block dry-run live are pending. No overall adaptation, Ready, opportunity-replay or timing acceptance is claimed. Live remains unsigned and non-broadcasting, with formal head counting only after successful price publication and startup drain.
 
 Evidence is retained under `logs/family-implementation-20261015.0exjskqq/live250-staked-no-moon-20261020/sql-input-current-source/`; raw input, runtime logs and configuration secrets are not committed.
+
+## First-start recovery
+
+The first SQL worker exited before strict admission because the new output directory did not yet exist when writing `input-pin.json.tmp`. No checkpoint was created and original checkpoints were unchanged. The importer now creates its output directory before the first write. A real-entry-point missing-directory regression passes; the complete offline suite is 28/28 PASS and an independent focused run is 1/1 PASS. The original failure and freeze are retained; a separately frozen attempt will resume with concurrency one. This does not claim real strict or live completion.
+
+Independent repair receipt SHA256: `8e5f2832520407c53b9d810f8c2907d6174b3fdf14975a430fe3d088897a3caa`.
