@@ -2448,6 +2448,200 @@
       },
       "created_at": "2026-10-20T05:00:25.641054+00:00",
       "updated_at": "2026-10-20T05:00:25.641065+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261020-curve-lp-historical-tool-cost",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "protocol"
+      ],
+      "trigger": "tooling_defect",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "curve_lp_historical_acceptance_cli_rpc_cost_and_kind_misclassified",
+      "evidence": {
+        "scope": "Family-adaptation tool metadata audit only; no competitor-loss, original-transaction replay or production-opportunity claim.",
+        "parent_manual_observation": "Root executed actual cloud tool-index --select curve,lp and observed replay/zero-cu for both new searcher:curve-lp-historical-{ready,dual} entries.",
+        "independent_actual_source_read": {
+          "machine": "mev-impl-c4d-20261002",
+          "root": "/opt/mev-cloud/family-runtime-20261007",
+          "head": "72019630c2d1cfc716754a99544794c406752a1d",
+          "file": "analysis/src/tool-index.ts",
+          "sha256": "f1223380728ab1876401c6241a307299f6997bec54c2c01cb04db41051e6db85",
+          "capture": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/tool-metadata-candidate/actual-cloud-source.json",
+          "captureSha256": "9e3e09bbf3032ea3e11d3e9a430744c51e091d5f514faf301b283ba3c9f22a77"
+        },
+        "actual_runner_source_pins": {
+          "historicalReadySha256": "e74fef6d8b295a1809f7fe85154813073dc7b6ffd426ec64682ee9e3ed4e0c85",
+          "frozenNgHistoricalDualSha256": "85742a98feac748a4a04a953a280135fabdeeaa111acc249dfaebb9833a1b290",
+          "listenerPackageSha256": "41532b93be502adb69ef48f79561d49d1f6a1090322f4826efbcb9f4b650fdc8"
+        },
+        "actual_operations": {
+          "ready": "Read historical headers and retained candidates; actual production strict uses local REVM, then seals memos and publishes production Ready/Graph.",
+          "dual": "Read historical RPC and run local REVM quote/quoted/runtime actual debit/receipt checks."
+        },
+        "cost_semantics": "zero-cu is valid for local synthetic EVM contracts with no chain RPC (actual CURATED contains such examples). Here it is false because the selected scripts explicitly perform historical RPC. fork is the existing aggregate cost class chosen to expose their historical-source/native execution posture.",
+        "independent_review": "Parent manual observation and separate reading of exact actual generator agree: no Family-side metadata loader; two uncurated names fall through cost inference to zero-cu and searcher:* kind inference to replay.",
+        "candidate_validation": "Actual source build/import, indexed Family contract and saved historical execution completed; exact scoped fix bytes resolve in codify_commit.",
+        "actualClosure": {
+          "files": [
+            {
+              "path": "analysis/src/tool-index.ts",
+              "sha256": "a99ca02de00cb37f77d5e6cc178ed100d5ed733b85767895c79cbe3c7e2a5187"
+            },
+            {
+              "path": "analysis/src/test/tool-index.ts",
+              "sha256": "d4c66585e72cd3d237b10a18b9cad8e7f16f3ec8551ef90af8347bd26dc11729"
+            }
+          ],
+          "checks": [
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/metadata-checks.json",
+              "sha256": "dde9cd036ec6f48db15b877cf41cec176358620d94817c27b5eebdd6bb6f2e8e"
+            },
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/acceptance-helper-checks.json",
+              "sha256": "6345e3ef27fa66eaac4b37915d38fe4d8460bef68d084f207b584ec412250de2"
+            }
+          ],
+          "indexedManifest": {
+            "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/tool-selection-v6.json",
+            "sha256": "3d279477ef0ac1332a503ef1b588d792f15f201aa4abf7fad4ee5fa81b3da095"
+          },
+          "selectedHistoricalResults": [
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/crypto6dc-effects-all-dual01.json",
+              "sha256": "05ae33f295885ce0a4e21c1610fe920c69fc1faea609b4e94585587f4550e6cd"
+            }
+          ],
+          "independentReviews": [
+            "full-cli-fee-effects-independent-review:f950755fae79c741056fa134bbf712937f0321b40650d7c80548a466798ecfe5",
+            "zap-crypto-first-directions-independent-review:bfc9c5a79cbbfdfcfc3821e572bfa7faab82eabc092131fac8a74b6180798b02"
+          ],
+          "scope": "Tool defect closure and selected Family correctness only; not a full Hermes or original opportunity acceptance."
+        }
+      },
+      "tooling_defect": {
+        "tool": "analysis/src/tool-index.ts metadata for listener:searcher:curve-lp-historical-ready and listener:searcher:curve-lp-historical-dual",
+        "issue": "Two real historical RPC/local-native Family acceptance scripts are mislabeled zero-cu/replay by name-only default inference.",
+        "evidence": "Actual generator SHA f1223380728ab1876401c6241a307299f6997bec54c2c01cb04db41051e6db85 has no exact CURATED entries and falls back to zero-cu; actual package SHA 41532b93be502adb69ef48f79561d49d1f6a1090322f4826efbcb9f4b650fdc8 registers both historical commands, whose pinned implementations read historical RPC and invoke Strict native simulation.",
+        "codify_target": "Add only two exact CURATED overrides: kind test, cost fork, accurate Curve/LP + historical-RPC/native-EVM capabilities and same-state scope; add real package-command discoverToolIndex regression and retain zero-cu contract-fixture control.",
+        "status": "codified",
+        "codify_commit": "78f4bbbc6f6bc77992fab639eef56502fd4bc7f5"
+      },
+      "created_at": "2026-10-20T05:46:03.583875+00:00",
+      "updated_at": "2026-10-20T06:30:28.634Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261020-curve-lp-historical-rpc-error-fidelity",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "protocol"
+      ],
+      "trigger": "tooling_defect",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "curve_lp_historical_dual_drops_optional_eth_call_revert_identity",
+      "evidence": {
+        "scope": "Family historical tool defect, independent of protocol coverage or prior tool-cost metadata case. No competitor-gap/production-profitability claim.",
+        "baseCli": {
+          "path": "logs/curve-lp187-resume-20261020/acceptance-candidate/listener/src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
+          "sha256": "1345b91dbb878504ac0715fc2eff4c24a5684b868bd15176f569372054c06e1e"
+        },
+        "actualRootEvidence": {
+          "cliSha256": "1345b91dbb878504ac0715fc2eff4c24a5684b868bd15176f569372054c06e1e",
+          "files": [
+            "D/crypto6dc-baseline-mint0-dual01.json",
+            "D/crypto6dc-real-gamp-read01.json"
+          ],
+          "expected": "Two preserved original CLI failures at g-amp/rpc with zero native; independent same-N A_precise response HTTP200 code3 execution reverted without data. Do not replace old failures.",
+          "doNotClaim": "Earlier A() success was a different method and not recovery.",
+          "secondFailure": "Root confirmed a second real g-amp/rpc failure; its exact output path is root-owned and not guessed here."
+        },
+        "originalResponse": {
+          "httpStatus": 200,
+          "method": "eth_call",
+          "function": "A_precise()",
+          "error": {
+            "code": 3,
+            "message": "execution reverted"
+          },
+          "dataPresent": false,
+          "status": "Root-measured same-N artifact; original source artifacts not overwritten."
+        },
+        "centralContract": "isCallException requires CALL_EXCEPTION and inspects original info.error; code3/explicit execution revert is chain evidence, provider capacity/unknown/HTTP failures remain rpc. Existing central is unchanged.",
+        "candidateManifest": {
+          "path": "logs/curve-lp187-resume-20261020/generic-effects-acceptance-candidate/full-acceptance-manifest.json",
+          "sha256": "b6edb7b8cb69591838a10285f478526957196d9ab97d1d5f4a8f792df4fafbee"
+        },
+        "regression": {
+          "path": "logs/curve-lp187-resume-20261020/generic-effects-acceptance-candidate/acceptance-helpers-contract.tap",
+          "sha256": "fed8293e30b00a8bf2370034861c888231ccb8c329687cee08b5dd4bfdeeb367",
+          "tests": 13,
+          "pass": 13,
+          "newNative": 0,
+          "newRpc": 0
+        },
+        "nonAuthorReview": {
+          "path": "logs/curve-lp187-resume-20261020/rpc-error-fidelity-independent-review.json",
+          "sha256": "7d9bd3c8a01e97765d2d9f4dbe9faa6b863423e0c383fc786e8a511417b3d6bb"
+        },
+        "validationStatus": "Offline13/13; actual cloud green not yet run by this author; root will record fresh outcome and real commit.",
+        "candidate_validation": "Actual source build/import, indexed Family contract and saved historical execution completed; exact scoped fix bytes resolve in codify_commit.",
+        "actualClosure": {
+          "files": [
+            {
+              "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
+              "sha256": "bb1e0dd0fdb61d7ea3deff51b32b4ce7538c3aaf3d62767fe8e270ccc578fca6"
+            },
+            {
+              "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-rpc-response.ts",
+              "sha256": "eecd3e272886ef8f30a30d41c723275e2224548696370afeae4d648d334e7f04"
+            },
+            {
+              "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-rpc-response-contract.ts",
+              "sha256": "8c4db2fb736d6e3ce50a516787a8e83f6b9fe2a4595589c715299b8aa36fb46f"
+            }
+          ],
+          "checks": [
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/metadata-checks.json",
+              "sha256": "dde9cd036ec6f48db15b877cf41cec176358620d94817c27b5eebdd6bb6f2e8e"
+            },
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/acceptance-helper-checks.json",
+              "sha256": "6345e3ef27fa66eaac4b37915d38fe4d8460bef68d084f207b584ec412250de2"
+            }
+          ],
+          "indexedManifest": {
+            "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/tool-selection-v6.json",
+            "sha256": "3d279477ef0ac1332a503ef1b588d792f15f201aa4abf7fad4ee5fa81b3da095"
+          },
+          "selectedHistoricalResults": [
+            {
+              "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/crypto6dc-effects-all-dual01.json",
+              "sha256": "05ae33f295885ce0a4e21c1610fe920c69fc1faea609b4e94585587f4550e6cd"
+            }
+          ],
+          "independentReviews": [
+            "full-cli-fee-effects-independent-review:f950755fae79c741056fa134bbf712937f0321b40650d7c80548a466798ecfe5",
+            "zap-crypto-first-directions-independent-review:bfc9c5a79cbbfdfcfc3821e572bfa7faab82eabc092131fac8a74b6180798b02"
+          ],
+          "scope": "Tool defect closure and selected Family correctness only; not a full Hermes or original opportunity acceptance."
+        }
+      },
+      "tooling_defect": {
+        "tool": "listener:searcher:curve-lp-historical-dual / curve-lp-family/test/historical-dual.ts rpc()",
+        "issue": "Plain assert(!body.error) destroys JSONRPC error identity, turning genuine optional eth_call reverts into transport failures and falsely aborting historical Exact before native execution.",
+        "evidence": "Root two real mint0 trials failed g-amp/rpc with zero native; fixed-N direct A_precise returns HTTP200 code3 execution reverted without data. Original CLI SHA1345b91d replaced it with generic assertion; this is not a protocol failure.",
+        "codify_target": "Use ethers JsonRpcProvider.getRpcError only as a parser; preserve RPC code/data/message and request id/method/http status; explicitly pin helper source; add actual-central regression for code3/no-data, revert bytes, HTTP failures and nonrevert node errors with0x data.",
+        "status": "codified",
+        "codify_commit": "78f4bbbc6f6bc77992fab639eef56502fd4bc7f5"
+      },
+      "created_at": "2026-10-20T06:16:26.921284+00:00",
+      "updated_at": "2026-10-20T06:30:28.642Z"
     }
   ]
 }

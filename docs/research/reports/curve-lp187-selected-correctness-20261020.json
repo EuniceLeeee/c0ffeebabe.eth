@@ -1,0 +1,952 @@
+{
+  "schema": "curve-lp-selected-correctness-delivery-v1",
+  "generatedAtUtc": "2026-10-20T06:41:24.398427+00:00",
+  "status": "implemented-selected-correctness-verified-population-incomplete",
+  "familyId": "protocol:curve-lp",
+  "actualRoot": "/opt/mev-cloud/family-runtime-20261007",
+  "sourceCommit": "78f4bbbc6f6bc77992fab639eef56502fd4bc7f5",
+  "sourceCommitReceipt": {
+    "base": "72019630c2d1cfc716754a99544794c406752a1d",
+    "commit": "78f4bbbc6f6bc77992fab639eef56502fd4bc7f5",
+    "paths": [
+      "analysis/src/test/tool-index.ts",
+      "analysis/src/tool-index.ts",
+      "listener/package.json",
+      "listener/src/searcher/generated/family-capability-shadow.generated.json",
+      "listener/src/searcher/venues/protocols/curve-lp-family/action.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/discovery.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/exact.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/execution.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/generic-effects.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/generic.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/identity.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/instance.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/manifest.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/model.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/ng-source.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/ng.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/pricing.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/routes.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/contract.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/generic-contract.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/generic-effects-contract.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/generic-effects-source-runtime.json",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/generic-verified-fixtures.json",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-preclaim-effects-contract.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-preclaim-effects.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-ready.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-rpc-response-contract.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-rpc-response.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/legacy-private-minter-runtime.json",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/ng-contract.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/ng-source-runtime.json",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/zap-contract.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/test/zap-source-runtime.json",
+      "listener/src/searcher/venues/protocols/curve-lp-family/types.ts",
+      "listener/src/searcher/venues/protocols/curve-lp-family/zap.ts"
+    ],
+    "ownedSourceHashes": [
+      {
+        "path": "analysis/src/test/tool-index.ts",
+        "sha256": "d4c66585e72cd3d237b10a18b9cad8e7f16f3ec8551ef90af8347bd26dc11729",
+        "bytes": 17417
+      },
+      {
+        "path": "analysis/src/tool-index.ts",
+        "sha256": "a99ca02de00cb37f77d5e6cc178ed100d5ed733b85767895c79cbe3c7e2a5187",
+        "bytes": 39354
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/action.ts",
+        "sha256": "916453f2aca289c31f4c22ce232ab4ed5e95c8282ee522c3076796558ff2ad54",
+        "bytes": 1319
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/discovery.ts",
+        "sha256": "9eb62a072fb0ae5d2c7aeaca5941e6edaa8bd8c6a469eff9fbb15b2cf1d6dc94",
+        "bytes": 5663
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/exact.ts",
+        "sha256": "47dc96ab4b350ee61a038142ef07d48c8433083e81d61813c45fa42ed463068d",
+        "bytes": 5793
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/execution.ts",
+        "sha256": "16a161d68e372929fea7af530a46bb28c857d3e406b34428b3b90feb8d639927",
+        "bytes": 4660
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/generic-effects.ts",
+        "sha256": "a3edae5028b2ade659753e1913466ffdb03f77a72984ea5691ef9560a77fcb60",
+        "bytes": 21884
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/generic.ts",
+        "sha256": "9ac9476428b33451738a6cfcbb7bdcfa61f8a0abec832f362acaaf3a854f1518",
+        "bytes": 43899
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/identity.ts",
+        "sha256": "8ba76e1a6247cb7f50e5da610b7c887096f78c2257c0af3cec0d202a3660ec54",
+        "bytes": 8679
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/instance.ts",
+        "sha256": "54a980daf27160aec0920181e226097dd86e81a8a57738347e4244c62574fa59",
+        "bytes": 1207
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/manifest.ts",
+        "sha256": "40d8f01f21567c5208b463a648bf54e804fc66122425bbd0774116a874b2de0e",
+        "bytes": 927
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/model.ts",
+        "sha256": "500d19e8afa096106d45fe5d93be854d0507ebce80fd2cb02a1304e4cae3080a",
+        "bytes": 3081
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/ng-source.ts",
+        "sha256": "b52687186f3867cac501aa4f409deef0b09725cf10c9194d1f164fba3f2e8946",
+        "bytes": 3976
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/ng.ts",
+        "sha256": "72765867df00d9a78be9e1495043723f1f6a9234dd810f01a208ba6b790f6da2",
+        "bytes": 28757
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/pricing.ts",
+        "sha256": "87ed5d4bb239b8a6cd777a07c93073ecc3f956229400db54f4029bee31672848",
+        "bytes": 11238
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/routes.ts",
+        "sha256": "394ea72d53e9b6055f64eaad56f0425583fa93ddc904237d954755afa3d89e73",
+        "bytes": 3019
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/contract.ts",
+        "sha256": "f0faec12846b03fa404cdf64a019c9d5b3db002f2dc39a149d09318a733a58cc",
+        "bytes": 11108
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/generic-contract.ts",
+        "sha256": "c596949acfd14764af27e30f97dbe189d4875bd680a1f3aae621985961fbed59",
+        "bytes": 26001
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/generic-effects-contract.ts",
+        "sha256": "c47e85142ffcca9b5b5ad456f553334a570e22c319109b7b16c380c46f6ba286",
+        "bytes": 31243
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/generic-effects-source-runtime.json",
+        "sha256": "ffc7e7cfa3fd8798a17a7ea78622455605ca37b8152dc51d3dbd5826906fb88e",
+        "bytes": 39007
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/generic-verified-fixtures.json",
+        "sha256": "1c38d50215ca12ab7b1e53ce5904ff3eebca207c1c3828b67776a8064d33d2c3",
+        "bytes": 104929
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
+        "sha256": "bb1e0dd0fdb61d7ea3deff51b32b4ce7538c3aaf3d62767fe8e270ccc578fca6",
+        "bytes": 37305
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-preclaim-effects-contract.ts",
+        "sha256": "9e386e9840a16da2e0aaac54c2ad5544e3d47f20a45de118c2760b117a4bd066",
+        "bytes": 6018
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-preclaim-effects.ts",
+        "sha256": "0a9466b1ed5eee03f320a43b0b75ffe5d2129f9d7f21fef0ede2dcb3cb926346",
+        "bytes": 7537
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-ready.ts",
+        "sha256": "e74fef6d8b295a1809f7fe85154813073dc7b6ffd426ec64682ee9e3ed4e0c85",
+        "bytes": 8621
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-rpc-response-contract.ts",
+        "sha256": "8c4db2fb736d6e3ce50a516787a8e83f6b9fe2a4595589c715299b8aa36fb46f",
+        "bytes": 3785
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/historical-rpc-response.ts",
+        "sha256": "eecd3e272886ef8f30a30d41c723275e2224548696370afeae4d648d334e7f04",
+        "bytes": 1053
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/legacy-private-minter-runtime.json",
+        "sha256": "b4b925de0dff17ba1114cbc2b4491007eb072ddd149246dc4f012d991f9fa3be",
+        "bytes": 10492
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/ng-contract.ts",
+        "sha256": "0bc308006444231b9e9c9d590b3e715de46e8e40f125b299d6bb6d61c7113701",
+        "bytes": 17951
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/ng-source-runtime.json",
+        "sha256": "d76ab8362ed6150a948db116ad345f69ec5b170cc23349dd60d56584f36e4292",
+        "bytes": 163092
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/zap-contract.ts",
+        "sha256": "96123015769a5f9255f25e42465540338733b57872cae162e0fa61d81b257a9c",
+        "bytes": 29087
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/test/zap-source-runtime.json",
+        "sha256": "c7256e5296dddc60e60bdf9c5711360ef07596a52bbb851aee9631f1512fed50",
+        "bytes": 12935
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/types.ts",
+        "sha256": "34c63f1920356f77840284cc365db0e7173e2b85a54d58ffb8b72f631118d285",
+        "bytes": 1899
+      },
+      {
+        "path": "listener/src/searcher/venues/protocols/curve-lp-family/zap.ts",
+        "sha256": "c361faf2b5106fec921ac8b46e367d96741918da067a6d9bad12f7f3f7524d93",
+        "bytes": 29776
+      }
+    ],
+    "otherWorkingChangesPreserved": true,
+    "packageKeys": [
+      "searcher:curve-lp-family",
+      "searcher:curve-lp-historical-ready",
+      "searcher:curve-lp-historical-dual"
+    ],
+    "shadow": {
+      "exactRows": 539,
+      "ownedRows": 11,
+      "artifactHash": "177afbcce157a74c594e5b112281af121ec2dda48e6df55b8020b5c688a01c71",
+      "otherFamiliesFromHead": true
+    }
+  },
+  "executionSourceBoundary": {
+    "headAtExecution": "72019630c2d1cfc716754a99544794c406752a1d",
+    "worktree": "actual shared dirty source, not a clean checkout",
+    "sets": [
+      {
+        "review": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-first-three-independent-summary.json",
+          "sha256": "bf75348da54145894feed072dd297fa8f246e0c30c5172bc251d5f8e83de9717"
+        },
+        "nativeSourceTreeSha256": "ae8af3bd15b75f4a97ea069840af971fbf54e3ebe22fb65928bd689d6ab66444",
+        "rawNativeReceipts": 918
+      },
+      {
+        "review": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-crypto-first-directions-independent-review.json",
+          "sha256": "bfc9c5a79cbbfdfcfc3821e572bfa7faab82eabc092131fac8a74b6180798b02"
+        },
+        "nativeSourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
+        "rawNativeReceipts": 270
+      },
+      {
+        "review": {
+          "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-remaining-directions-independent-review.json",
+          "sha256": "ba5d5303af988cb7c6899b554cdcebed4fb4a8d1d9c0e42d9062b3c9f76c5718"
+        },
+        "nativeSourceTreeSha256": "d03c638e428d41b328d7036e5afd0c9278ef838250c714d7d7ccea0c62908966",
+        "rawNativeReceipts": 270
+      }
+    ],
+    "retainedOriginalHashes": true,
+    "nativeBackendSha256": "e5cbce3521fd98d7e59d3de80cca4fa0c3ec94c5cdfb1e74bbae4d6d7c7588c6"
+  },
+  "state": {
+    "number": 26202387,
+    "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+    "generation": 26202387
+  },
+  "samples": [
+    {
+      "kind": "ng2",
+      "pool": "0x08bfa22bb3e024cdfeb3eca53c0cb93bf59c4147",
+      "directions": 4,
+      "originalTx": "0x525415040ec79f8d5b5d8b6da98ec33fda621a5b741299582019f9a0e0508f8d",
+      "originalBlock": 26202356,
+      "readySummarySha256": "e1b95b1f70f02c280f58c91f3ebdc842a260329f05e6dbbd6037beab7ceec367",
+      "graphHash": "7ef173350c053879e3bbb1c219811ea1dccb91254014ab83b34e9893469de2c3",
+      "inputScope": "Original swap receipt/manual quantities only; LP action is not original-transaction replay."
+    },
+    {
+      "kind": "ng3",
+      "pool": "0x66039342c66760874047c36943b1e2d8300363bb",
+      "directions": 6,
+      "originalTx": "0x9cbd83fea2b46bc9420a42d65d93bea6c37f119c510169783b15fc4dd203a7c1",
+      "originalBlock": 26201295,
+      "readySummarySha256": "4683acb41b4f9746ed058b4a159582202967cd8dc6f4eee6bbda059ad09c7626",
+      "graphHash": "6c8b3dfbde8c0ee467a431a018eef01e14ce3eff619837eca3c3b9d2589cad06",
+      "inputScope": "Original swap receipt/manual quantities only; LP action is not original-transaction replay."
+    },
+    {
+      "kind": "ng4",
+      "pool": "0x06936efcaaab49af1c8b9ce3ac8bd85aabef3a3e",
+      "directions": 8,
+      "originalTx": "0x97eb88a5f8c3746aa83b9b99e1528e429db0eead16e8d237478188df88feb56c",
+      "originalBlock": 26197276,
+      "readySummarySha256": "7c7430c3a56ac599d992a01af8a0de019368312190c39f6ed466d7888b40f159",
+      "graphHash": "2cdcff4e61088ba27c3ce8743e7b9f73026dd05de94aa86f6871b47e7cdc6823",
+      "inputScope": "Original swap receipt/manual quantities only; LP action is not original-transaction replay."
+    },
+    {
+      "kind": "underlying zap aa82",
+      "pool": "0xaa82ca713d94bba7a89ceab55314f9effeddc78c",
+      "originalTx": "0x6cb7c6c0c6d869076daf2d08a6e804fa606b7b38d7cfceffb424d246fb7591bf",
+      "originalBlock": 26191200,
+      "directions": 6
+    },
+    {
+      "kind": "underlying zap d5bc",
+      "pool": "0xd5bcf53e2c81e1991570f33fa881c49eea570c8d",
+      "originalTx": "0x054947a1c0215608291e51691b7c8964dbd1a2b4a9deab259348a1ade6943c48",
+      "originalBlock": 26190204,
+      "directions": 6
+    },
+    {
+      "kind": "TwoCrypto 6dc",
+      "pool": "0x6dc8de7343d2e3b4e5ef9a196e946ae4d460e2d0",
+      "originalTx": "0x93df8666c69d17a7a8815991e766e3e5fd752f2faafdbf46d4da922363180324",
+      "originalBlock": 26200939,
+      "directions": 4
+    }
+  ],
+  "counts": {
+    "instanceCount": 6,
+    "directionCount": 34,
+    "positive": 448,
+    "faultReverted": 896,
+    "zeroInputReverted": 78,
+    "nativeSpecifiedQuotes": 36,
+    "allNativeReceipts": 1458,
+    "qualification": "918 earlier NG source ae8af3bd plus540 zap/crypto source d03c638e, kept separate. Physical raw count includes36 distinct native quote simulations; positive execution count excludes those quotes. Not all187 or all125NG."
+  },
+  "independentCertificate": {
+    "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/selected-six-instances-cumulative-independent-summary.json",
+    "sha256": "82e61a89b5fcbb220d2b0eea75669b18404a874bfa73dfcf8e3d2dcfb6567070"
+  },
+  "readyEvidence": [
+    {
+      "name": "zap-aa82-ready02",
+      "pool": "0xaa82ca713d94bba7a89ceab55314f9effeddc78c",
+      "lineageId": "curve-lp:registry-underlying-zap",
+      "summaryCloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/zap-aa82-ready02/ready-summary.json",
+      "summarySha256": "d6720afcc5f2a7605794c76745e1d2740e041bc0b1c5a8f76c604f45c15397c8",
+      "checkpoint": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/zap-aa82-ready02/ready.json",
+        "sha256": "5722febd744aaeadee86ee4237476e5a733550bf8a7e9c969c167c3be8f54ab5"
+      },
+      "graphHash": "135bedeeb8202c0acf1c2bc95730181c5e897d04467cc3b9bfa6c24d093b1a15",
+      "familyDefinitionHash": "246bf472c846a065588ac7705c46f84d9904add83e7cfd311b7053796c803c2e",
+      "source": {
+        "number": 26202387,
+        "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+        "generation": 26202387
+      },
+      "strictGraphStatus": "selected-production-strict-ready-pass",
+      "admittedDirections": [
+        {
+          "direction": "mint",
+          "index": 0
+        },
+        {
+          "direction": "mint",
+          "index": 1
+        },
+        {
+          "direction": "mint",
+          "index": 2
+        },
+        {
+          "direction": "redeem",
+          "index": 0
+        },
+        {
+          "direction": "redeem",
+          "index": 1
+        },
+        {
+          "direction": "redeem",
+          "index": 2
+        }
+      ],
+      "directionCount": 6,
+      "naturallyDiscoveredAtTestedBlock": false,
+      "dualExecutionStatus": "all-currently-admitted-directions-pass",
+      "dualCounts": {
+        "positive": 48,
+        "faultReverted": 96,
+        "nativeQuote": 12,
+        "zeroInputReverted": 6
+      },
+      "unadmittedDirections": [
+        {
+          "direction": "mint",
+          "index": 3
+        },
+        {
+          "direction": "redeem",
+          "index": 3
+        }
+      ],
+      "qualification": "All currently admitted directions executed. Index3 remains absent for zaps; other instances/population not inferred.",
+      "selectedDualPassed": true,
+      "allAdmittedDirectionsDualPassed": true,
+      "actualDualDirectionIds": [
+        "protocol:curve-lp:0xaa82ca713d94bba7a89ceab55314f9effeddc78c:mint:0",
+        "protocol:curve-lp:0xaa82ca713d94bba7a89ceab55314f9effeddc78c:mint:1",
+        "protocol:curve-lp:0xaa82ca713d94bba7a89ceab55314f9effeddc78c:mint:2",
+        "protocol:curve-lp:0xaa82ca713d94bba7a89ceab55314f9effeddc78c:redeem:0",
+        "protocol:curve-lp:0xaa82ca713d94bba7a89ceab55314f9effeddc78c:redeem:1",
+        "protocol:curve-lp:0xaa82ca713d94bba7a89ceab55314f9effeddc78c:redeem:2"
+      ],
+      "untestedAdmittedDirections": []
+    },
+    {
+      "name": "zap-d5bc-ready01",
+      "pool": "0xd5bcf53e2c81e1991570f33fa881c49eea570c8d",
+      "lineageId": "curve-lp:registry-underlying-zap",
+      "summaryCloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/zap-d5bc-ready01/ready-summary.json",
+      "summarySha256": "d57b89bb031a4bd52f316bc71411c0cb82338160f19d7a66146161ca60712f23",
+      "checkpoint": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/zap-d5bc-ready01/ready.json",
+        "sha256": "3c0a5ca3197c17537a2076d4edd036751a5d2dbbcd22f34cb12e3382eaddd9a7"
+      },
+      "graphHash": "b1f38e9c2e6504cab12855f25fa26cdf5ae7ef33c49ec02a527b73cefc37ddc7",
+      "familyDefinitionHash": "246bf472c846a065588ac7705c46f84d9904add83e7cfd311b7053796c803c2e",
+      "source": {
+        "number": 26202387,
+        "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+        "generation": 26202387
+      },
+      "strictGraphStatus": "selected-production-strict-ready-pass",
+      "admittedDirections": [
+        {
+          "direction": "mint",
+          "index": 0
+        },
+        {
+          "direction": "mint",
+          "index": 1
+        },
+        {
+          "direction": "mint",
+          "index": 2
+        },
+        {
+          "direction": "redeem",
+          "index": 0
+        },
+        {
+          "direction": "redeem",
+          "index": 1
+        },
+        {
+          "direction": "redeem",
+          "index": 2
+        }
+      ],
+      "directionCount": 6,
+      "naturallyDiscoveredAtTestedBlock": false,
+      "dualExecutionStatus": "all-currently-admitted-directions-pass",
+      "dualCounts": {
+        "positive": 48,
+        "faultReverted": 96,
+        "nativeQuote": 12,
+        "zeroInputReverted": 6
+      },
+      "unadmittedDirections": [
+        {
+          "direction": "mint",
+          "index": 3
+        },
+        {
+          "direction": "redeem",
+          "index": 3
+        }
+      ],
+      "qualification": "All currently admitted directions executed. Index3 remains absent for zaps; other instances/population not inferred.",
+      "selectedDualPassed": true,
+      "allAdmittedDirectionsDualPassed": true,
+      "actualDualDirectionIds": [
+        "protocol:curve-lp:0xd5bcf53e2c81e1991570f33fa881c49eea570c8d:mint:0",
+        "protocol:curve-lp:0xd5bcf53e2c81e1991570f33fa881c49eea570c8d:mint:1",
+        "protocol:curve-lp:0xd5bcf53e2c81e1991570f33fa881c49eea570c8d:mint:2",
+        "protocol:curve-lp:0xd5bcf53e2c81e1991570f33fa881c49eea570c8d:redeem:0",
+        "protocol:curve-lp:0xd5bcf53e2c81e1991570f33fa881c49eea570c8d:redeem:1",
+        "protocol:curve-lp:0xd5bcf53e2c81e1991570f33fa881c49eea570c8d:redeem:2"
+      ],
+      "untestedAdmittedDirections": []
+    },
+    {
+      "name": "crypto6dc-effects-ready01",
+      "pool": "0x6dc8de7343d2e3b4e5ef9a196e946ae4d460e2d0",
+      "lineageId": "curve-lp:registry-fixed-array",
+      "summaryCloudPath": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/crypto6dc-effects-ready01/ready-summary.json",
+      "summarySha256": "739d10d80cad33e80d6e0ff1191c48d1a032bf8f279e887596732e7844aa84b0",
+      "checkpoint": {
+        "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/crypto6dc-effects-ready01/ready.json",
+        "sha256": "270897f2d9dee2388ece87b391b16c71495107adf98631d4e868a3f0b792fd32"
+      },
+      "graphHash": "277206ac52d4c83046b05dcf65d2184d692f647741934e2f24029ffc63856ae7",
+      "familyDefinitionHash": "246bf472c846a065588ac7705c46f84d9904add83e7cfd311b7053796c803c2e",
+      "source": {
+        "number": 26202387,
+        "hash": "0xa1039f363d8d34e4941dd912bb1caeb8d602f951e1dc4ba0ebee7a592406b134",
+        "generation": 26202387
+      },
+      "strictGraphStatus": "selected-production-strict-ready-pass",
+      "admittedDirections": [
+        {
+          "direction": "mint",
+          "index": 0
+        },
+        {
+          "direction": "mint",
+          "index": 1
+        },
+        {
+          "direction": "redeem",
+          "index": 0
+        },
+        {
+          "direction": "redeem",
+          "index": 1
+        }
+      ],
+      "directionCount": 4,
+      "naturallyDiscoveredAtTestedBlock": false,
+      "dualExecutionStatus": "all-currently-admitted-directions-pass",
+      "dualCounts": {
+        "positive": 64,
+        "faultReverted": 128,
+        "nativeQuote": 12,
+        "zeroInputReverted": 12
+      },
+      "unadmittedDirections": [],
+      "qualification": "All currently admitted directions executed. Index3 remains absent for zaps; other instances/population not inferred.",
+      "selectedDualPassed": true,
+      "allAdmittedDirectionsDualPassed": true,
+      "actualDualDirectionIds": [
+        "protocol:curve-lp:0x6dc8de7343d2e3b4e5ef9a196e946ae4d460e2d0:mint:0",
+        "protocol:curve-lp:0x6dc8de7343d2e3b4e5ef9a196e946ae4d460e2d0:mint:1",
+        "protocol:curve-lp:0x6dc8de7343d2e3b4e5ef9a196e946ae4d460e2d0:redeem:0",
+        "protocol:curve-lp:0x6dc8de7343d2e3b4e5ef9a196e946ae4d460e2d0:redeem:1"
+      ],
+      "untestedAdmittedDirections": []
+    }
+  ],
+  "checks": {
+    "latest": [
+      {
+        "name": "acceptance-build",
+        "exitCode": 0,
+        "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+      },
+      {
+        "name": "acceptance-import",
+        "exitCode": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "acceptance-index-v6",
+        "exitCode": 0,
+        "sha256": "33ee6eb836e52184c0641f59c00fad8de05b0765f8cbe6509bc6267d7676f547"
+      },
+      {
+        "name": "acceptance-contract",
+        "exitCode": 0,
+        "sha256": "383bc69dc7e64c519aee7df52ecad1da08849e54ba66a2e1e23ce6661c968d9c"
+      },
+      {
+        "name": "learning-case-contract",
+        "exitCode": 0,
+        "sha256": "871c516b0664bc1d10cb212e57847d49cb5dac17d4b732e537c315f3dcd80510"
+      },
+      {
+        "name": "learning-tooling-contract",
+        "exitCode": 0,
+        "sha256": "88bac3342d698312c1f268e31640d8a53bd1b569a437fcf6f7dbe50d4405e882"
+      }
+    ],
+    "metadata": [
+      {
+        "name": "tool-metadata-red",
+        "argv": [
+          "node",
+          "--import",
+          "tsx",
+          "--test",
+          "--test-name-pattern=Curve LP historical acceptance",
+          "src/test/tool-index.ts"
+        ],
+        "exitCode": 1,
+        "expected": 1,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/tool-metadata-red.log",
+        "sha256": "a0e6818220f27da94610f58999e262bc7a9909943b7e7bd9ec94e5b539e974a8"
+      },
+      {
+        "name": "tool-metadata-green",
+        "argv": [
+          "npm",
+          "run",
+          "test:tool-index"
+        ],
+        "exitCode": 0,
+        "expected": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/tool-metadata-green.log",
+        "sha256": "96c8b7dd8ce5f2defe671c3dfa3632551c18cd692febad5584d4ad779f5dbd44"
+      },
+      {
+        "name": "tool-metadata-index-check",
+        "argv": [
+          "npm",
+          "run",
+          "tool-index",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "expected": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/tool-metadata-index-check.log",
+        "sha256": "015ab189f80ebe1697edccca6b2ef1a74687966ba9ad1c1a243ffdf36b950a38"
+      },
+      {
+        "name": "tool-metadata-index-v4",
+        "argv": [
+          "npm",
+          "run",
+          "tool-index",
+          "--",
+          "--select",
+          "curve,lp",
+          "--out",
+          "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/tool-selection-v4.json"
+        ],
+        "exitCode": 0,
+        "expected": 0,
+        "log": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/tool-metadata-index-v4.log",
+        "sha256": "ee682d2b105ff32d55ba48d459d5bb6dcf66a8cd80c87a4089d177ffe60f0b6e"
+      }
+    ],
+    "contractCounts": {
+      "combined-contract": [
+        "ℹ tests 21",
+        "ℹ pass 21",
+        "ℹ fail 0",
+        "ℹ tests 51",
+        "ℹ pass 51",
+        "ℹ fail 0"
+      ],
+      "acceptance-contract": [
+        "ℹ tests 21",
+        "ℹ pass 21",
+        "ℹ fail 0",
+        "ℹ tests 64",
+        "ℹ pass 64",
+        "ℹ fail 0"
+      ],
+      "combined-family-dual": [
+        "ℹ tests 311",
+        "ℹ pass 311",
+        "ℹ fail 0"
+      ],
+      "learning-case-contract": [
+        "ℹ tests 16",
+        "ℹ pass 16",
+        "ℹ fail 0"
+      ],
+      "learning-tooling-contract": [
+        "ℹ tests 1",
+        "ℹ pass 1",
+        "ℹ fail 0"
+      ]
+    },
+    "combined": {
+      "evidence": {
+        "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/combined-checks-actual.json",
+        "sha256": "f265fc7d0d84a48326ade4da36f42cb50b958a57fd7cd0331a8fae8456d7345b"
+      },
+      "checks": [
+        {
+          "name": "combined-generate",
+          "exitCode": 0,
+          "sha256": "bf7f672a05ca3fb8837c9d0aa82eeef227c1569ea18f3cbbe047aea41598fd7c"
+        },
+        {
+          "name": "combined-build",
+          "exitCode": 0,
+          "sha256": "092c1e99d477aab4f1d0f4f34f75c61054593eb74084a502f87f546fc4e04933"
+        },
+        {
+          "name": "combined-index-v5",
+          "exitCode": 0,
+          "sha256": "c5dcd3ec308c45386feb0d905dcb81cc3e3a707f0513fb5c4200f50c936972bd"
+        },
+        {
+          "name": "combined-contract",
+          "exitCode": 0,
+          "sha256": "947d905c27f8a8967acf2fb1e2795c63078d43481a2dd289731871b24b5ad85e"
+        },
+        {
+          "name": "combined-family-dual",
+          "exitCode": 0,
+          "sha256": "6ea6bb559bcc0f43199894aa66698bb830ce99936ac501765bb13a1457583257"
+        },
+        {
+          "name": "combined-composition",
+          "exitCode": 0,
+          "sha256": "363291d1ed20b72f377013fdcf589b3048b6e31559748172f54cb72f773314ea"
+        },
+        {
+          "name": "combined-declarations",
+          "exitCode": 0,
+          "sha256": "116c154208b1ee31e557be02138d0c4ac2fb7e5987d8b83ea522880daaca846c"
+        }
+      ],
+      "manifestV5Sha256": "701a9bee0c8f5134487cd5613d5907268520669b0fa97675a12ac64f04629a1f",
+      "tailVerifiedCounts": {
+        "familyContractLastProcess": {
+          "tests": 51,
+          "pass": 51,
+          "fail": 0
+        },
+        "sharedFamilyDual": {
+          "tests": 311,
+          "pass": 311,
+          "fail": 0
+        }
+      },
+      "scope": "Actual generation/build/index/Family-contract/shared-dual/composition/declarations checks. Synthetic contract counts are not historical EVM counts."
+    },
+    "qualification": "Production build passed; no clean full-repository TypeScript build or original opportunity claim."
+  },
+  "toolReconciliation": {
+    "query": [
+      "curve",
+      "lp"
+    ],
+    "toolIds": [
+      "listener:searcher:curve-lp-family",
+      "listener:searcher:curve-lp-historical-ready",
+      "listener:searcher:curve-lp-historical-dual"
+    ],
+    "v5ManifestSha256": "701a9bee0c8f5134487cd5613d5907268520669b0fa97675a12ac64f04629a1f",
+    "v6ManifestSha256": "3d279477ef0ac1332a503ef1b588d792f15f201aa4abf7fad4ee5fa81b3da095",
+    "v6ManifestPath": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/tool-selection-v6.json",
+    "closure": {
+      "codifyCommit": "78f4bbbc6f6bc77992fab639eef56502fd4bc7f5",
+      "cases": [
+        {
+          "id": "tooldef-20261020-curve-lp-historical-tool-cost",
+          "topStatus": "manual_required",
+          "toolingStatus": "codified"
+        },
+        {
+          "id": "tooldef-20261020-curve-lp-historical-rpc-error-fidelity",
+          "topStatus": "manual_required",
+          "toolingStatus": "codified"
+        }
+      ],
+      "validatorMessages": [],
+      "otherCasesPreserved": 73
+    },
+    "closureReceipt": {
+      "path": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/curve-lp187-resume-20261020/tooling-closure-validation.json",
+      "sha256": "6b241b38f3e183fb32eb89b7a9b49b433c350364cdd19579a8c0b84cb5655f6c"
+    }
+  },
+  "evidence": [
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng-first-three-independent-summary.json",
+      "sha256": "bf75348da54145894feed072dd297fa8f246e0c30c5172bc251d5f8e83de9717",
+      "role": "completed selected NG native evidence and qualifications"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng2-all-directions-independent-review.json",
+      "sha256": "60186d9beec8c6768ffb93c39ab80691482c291c412f12225f5061c7b2cece61"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/ng34-all-directions-independent-review.json",
+      "sha256": "9f12bd05a08c520d09072101b1a3a99580c506456a46c7fa6bc06ff4d3fa852d"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/combined-checks-actual.json",
+      "sha256": "f265fc7d0d84a48326ade4da36f42cb50b958a57fd7cd0331a8fae8456d7345b",
+      "role": "seven actual zero-exit checks, log tails, source installation receipts and manifest v5 hash"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/minter-effects-ready-actual.json",
+      "sha256": "195f6b971e67990eb8cb41a722d06770a69562b684ed858f1cad445c686cb2a1",
+      "role": "Three actual strict/Graph summaries; dual results are independently linked separately."
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/combined-minter-effects/manifest.json",
+      "sha256": "dac40adb0453cc07f2bf3fb177f9f46adb9a33573747fff979f206876063123e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/combined-minter-effects-independent-merge-review.json",
+      "sha256": "a0b23ee296f8e8dfdaa6be4282df8e78c9b300ac16ba4d5d515d554e4927dc1b"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-private-minter-independent-review.json",
+      "sha256": "cc480b75470d54b99874f365dee3572e30a22dbec66595ebaaf76b246d629cc0"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-minter-independent-review.json",
+      "sha256": "12bbd89976952f3d123ad0b786d1fd70b2e8d2db99e703acec1b187898e9e598"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/generic-effects-independent-review.json",
+      "sha256": "05f1ef1a72a8345aa6e67b161c11e7b6fe9da92d0ec07ceaed63d245489a1822"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/rpc-error-fidelity-independent-review.json",
+      "sha256": "7d9bd3c8a01e97765d2d9f4dbe9faa6b863423e0c383fc786e8a511417b3d6bb"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/tool-metadata-candidate/handoff.json",
+      "sha256": "a2c81c973a279f8afa00e496ce6e44c1e0077c17eb6d9b1eb944f31257de4323"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/source-candidates.json",
+      "sha256": "65e3cd4f105c14f20534e256687a53c8a3dedc76698d4b8717da37aa5847ec3f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-candidate/classification-evidence-v2.json",
+      "sha256": "356a21fa1636887a0dc3c6f317a5bb84898b9d9c5fce4f3ebf8b98074486e649"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/acceptance-candidate/crypto6dc-four-direction-plan.json",
+      "sha256": "d557e2080ea3c95e2d22fbc5ae01a46e269a24ad6b9f8979bec489525d350222"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/acceptance-candidate/zap-first-directions-plan.json",
+      "sha256": "3ccf3418b442d5295c7153dbd8c8a2c4254472a4c93c1dac1b094c94df96902f"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-crypto-first-directions-independent-review.json",
+      "sha256": "bfc9c5a79cbbfdfcfc3821e572bfa7faab82eabc092131fac8a74b6180798b02"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/acceptance-helper-checks.json",
+      "sha256": "6345e3ef27fa66eaac4b37915d38fe4d8460bef68d084f207b584ec412250de2"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/acceptance-helpers-install.json",
+      "sha256": "e79534e6c93be02fcea9eb6e0dc096a1c49b6f7c60ab82e48ac206bae42073db"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-aa82-redeem1-dual01.json",
+      "sha256": "41ed26e6ee804713768b0b13592c3a932633bcbedff77bb7228a65f8b8e378d4"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-d5bc-redeem2-dual01.json",
+      "sha256": "5693014966c4eab786c10d0e025733670ad9f81e572eb43e4a47fa7b23a1bb6d"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/crypto6dc-effects-all-dual01.json",
+      "sha256": "05ae33f295885ce0a4e21c1610fe920c69fc1faea609b4e94585587f4550e6cd"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-remaining-directions-independent-review.json",
+      "sha256": "ba5d5303af988cb7c6899b554cdcebed4fb4a8d1d9c0e42d9062b3c9f76c5718"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/zap-remaining-manual-plan.json",
+      "sha256": "1858ad26c6badbd0a46de3293d12bcf786da400f377f6da6ab86614c7e69bb14"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-exits.json",
+      "sha256": "7da59a138b7e559ab6df8182ca839120843bcf4169151b95f8209b62a6f74972"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-aa82-mint0-dual01.json",
+      "sha256": "47c867cce4a18f65c7283ebffd2279ece377a6c7e9bd18e1dcadcc27643b3487"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-aa82-mint1-dual01.json",
+      "sha256": "de96628288c8fcc0b04aad69eadebc3570c56e8f62b781f223f643d5b85b7d84"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-aa82-mint2-dual01.json",
+      "sha256": "89da5972973557b6e78d3f1f390f1889caa894d864c4b69ab5e29de99e55e68e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-aa82-redeem0-dual01.json",
+      "sha256": "8a4a8c6c8e3b18e032100c0500b5548e084f892ca5ef3e07b6999245dcffcdac"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-aa82-redeem2-dual01.json",
+      "sha256": "04b92ef631a8ea211013371d8cdc9f425b7f90a1bfd4dddcc9bccfcdd13505ac"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-d5bc-mint0-dual01.json",
+      "sha256": "66fcb1fae42c99168c77477939adc00315052be648d9ca7a6878ab5e513dcfe1"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-d5bc-mint1-dual01.json",
+      "sha256": "3ae30098453c30818a7e9b93ffbe2c2a5a02d4f50c1a92ddf3cdb96cbbcdf197"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-d5bc-mint2-dual01.json",
+      "sha256": "cae282dcbb4fc452ba07b3c4863e876f6670fd79f2381d50b507c99005c3ae3e"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-d5bc-redeem0-dual01.json",
+      "sha256": "0012fa2188b2e3d325dd9d7ae1d8c84e546c724c393b5a22f30f87da442ae05c"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/actual-runs/zap-remaining-d5bc-redeem1-dual01.json",
+      "sha256": "76ce545531df4557c6387c6a01745a11adb7615b9deab1cb3e247f9926edca00"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/scoped-commit-head-dependency-independent-review.json",
+      "sha256": "bf1e5ce47de1df9bbe6045d5bd5d926cf97abc3150cb0611cd6a5c1c7267cee6"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/full-cli-fee-effects-independent-review.json",
+      "sha256": "f950755fae79c741056fa134bbf712937f0321b40650d7c80548a466798ecfe5"
+    },
+    {
+      "path": "/Users/eunice/src/MEV/logs/curve-lp187-resume-20261020/final-cloud-state.json",
+      "sha256": "185579c829343e5cbfa6901db25a6c543415232d6ae59562680b043d5b8dceb1"
+    }
+  ],
+  "remainingCoverage": [
+    "187 population not fully attested/executed; actual six instances only.",
+    "Only three NG examples from125 registry NG candidates; no population-wide conclusion.",
+    "Two zap mint/redeem index3 directions each remain unadmitted; cause unresolved.",
+    "Only source-matched TwoCrypto6dc actually dual tested; other56generic classes/instances, V1/factory and remaining3 provenance cases not blanket accepted.",
+    "No new natural valuation/effective-sized production input, original pre-call/output/whole-opportunity parity, representative performance or live evidence."
+  ],
+  "negativeEvidenceBoundary": "Trusted main-phase EVM revert and empty effects/logs only; not independently observed per-slot post-rollback balances/storage diffs.",
+  "discoveryBoundary": "Saved real candidates re-attested through production strict/memo/Ready/Graph at N. Not natural N discovery or natural valuation.",
+  "originalReadyUnchanged": {
+    "oldCandidates": 344,
+    "oldAdmitted": 1,
+    "oldRetryable": 343
+  },
+  "liveRestarted": false,
+  "goalComplete": false,
+  "implUpdate": {
+    "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "changedLines": [
+      27
+    ],
+    "beforeSha256": "a90efda323410665ff77cd5c2cb1061a7c2c5ed5446e976daf38f91a99b070d9",
+    "afterSha256": "440715468e1627e95e8f07bd3f4b379dc895427a1b384f625136483e931507af",
+    "otherLinesBytewisePreserved": true,
+    "sourceCommit": "78f4bbbc6f6bc77992fab639eef56502fd4bc7f5"
+  }
+}
