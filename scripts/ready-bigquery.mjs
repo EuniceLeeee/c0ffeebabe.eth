@@ -16,6 +16,15 @@ function rememberReady(profilePath, out) {
   renameSync(temporary, path);
 }
 
+export async function assertReadyPublication(root, checkpoint, generation) {
+  assert(checkpoint?.readyGeneration && checkpoint.inProgressRun === null, 'SQL Ready requires a committed completed checkpoint');
+  assert.equal(checkpoint.readyGeneration.generation, generation, 'SQL Ready generation changed before publication');
+  const { assertReadyCheckpointPublicationCurrent } = await import(pathToFileURL(root + '/listener/src/searcher/strict-ready-runtime.ts'));
+  const { PRODUCTION_FAMILY_ACTIVATIONS } = await import(pathToFileURL(root + '/listener/src/searcher/venues/production-family-composition.ts'));
+  const activation = new Map(PRODUCTION_FAMILY_ACTIVATIONS.map(({ familyId, enabled }) => [familyId, enabled]));
+  assertReadyCheckpointPublicationCurrent(checkpoint, familyId => activation.get(familyId));
+}
+
 function selectCheckpointReuse(args, out, profile) {
   assert(!(args['no-reuse-checkpoint'] && (args['reuse-checkpoint'] !== undefined || args['reuse-proofs-checkpoint'] !== undefined)), 'Checkpoint reuse options conflict');
   assert(!(args['reuse-proofs-checkpoint'] && args['reuse-checkpoint']), 'Choose completed Ready or proof-only inheritance');
@@ -59,6 +68,7 @@ export async function main(argv = process.argv.slice(2)) {
   } });
   assert(args.out && args.out.startsWith('/'), '--out must be an absolute dedicated run directory');
   const out = resolve(args.out), tokenFile = out + '/bigquery-auth.json';
+  const root = resolve(args.root ?? dirname(import.meta.dirname));
   mkdirSync(out, { recursive: true });
   if (args['token-stdin']) {
     assert(existsSync(out), 'Run directory missing');
@@ -82,13 +92,20 @@ export async function main(argv = process.argv.slice(2)) {
     const result = JSON.parse(readFileSync(out + '/result.json', 'utf8'));
     const saved = JSON.parse(readFileSync(out + '/run-identity.json', 'utf8'));
     assert.equal(saved.profilePath, resolve(args.profile), 'Completed Ready belongs to a different profile');
+    assert(existsSync(out + '/checkpoint.json'), 'Completed Ready checkpoint is missing; refusing to publish reference');
+    if (saved.publicEnvPath) {
+      assert.equal(digest(JSON.parse(readFileSync(saved.publicEnvPath, 'utf8'))), saved.publicEnvHash, 'Completed Ready public configuration changed');
+    }
+    for (const [key, value] of saved.activations) process.env[key] = value;
+    const { UniverseRebuildCheckpointStore } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-checkpoint.ts'));
+    const store = new UniverseRebuildCheckpointStore({ path: out + '/checkpoint.json' });
+    await assertReadyPublication(root, await store.load(), result.generation);
     rememberReady(args.profile, out);
     saveJson(out + '/status.json', { phase: 'ready', rows: result.read.rows, pages: result.read.pages,
       cutoff: result.cutoff, accounting: result.accounting, updatedAt: new Date().toISOString() });
     if (existsSync(tokenFile)) unlinkSync(tokenFile);
     console.log('Completed Ready publication recovered; no additional strict run started'); return;
   }
-  const root = resolve(args.root ?? dirname(import.meta.dirname));
   const profile = JSON.parse(readFileSync(args.profile, 'utf8'));
   const reuse = selectCheckpointReuse(args, out, profile);
   const reuseCheckpoint = reuse.checkpoint;
@@ -329,6 +346,7 @@ export async function main(argv = process.argv.slice(2)) {
     attestationConcurrency: concurrency,
     resumeCompletedOutcomes: args.resume === true && prior?.inProgressRun?.runId === runId,
     log: text => console.log(text) });
+  await assertReadyPublication(root, await store.load(), ready.generation);
   saveJson(out + '/result.json', { input: pin, inputRange: sqlResults ? pin.blockRange : { fromBlock: state.minBlock, toBlock: state.maxBlock },
     observedInputRange: { fromBlock: state.minBlock, toBlock: state.maxBlock }, productionActivityCoverage: { fromBlock: cutoff.number, toBlock: cutoff.number }, read: state,
     nominatedCandidates: candidates.length, cutoff: ready.cutoff, generation: ready.generation, accounting: ready.candidateAccounting, codeHash });

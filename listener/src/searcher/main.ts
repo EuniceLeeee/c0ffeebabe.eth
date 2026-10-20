@@ -2064,6 +2064,8 @@ async function main(): Promise<void> {
     executionIdentity,
     onSimulationFatal,
   });
+  const readyPublicationActivation = new Map<string, boolean>(PRODUCTION_FAMILY_ACTIVATIONS
+    .map(({ familyId, enabled }) => [familyId, enabled] as const));
   let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
   const historicalBackrunSpec = process.env.SEARCHER_HISTORICAL_BACKRUN_SPEC;
@@ -2076,7 +2078,7 @@ async function main(): Promise<void> {
       " cutoff=" + readyUniverse.cutoff.number + " instances=" + readyUniverse.activeInstanceKeys.length);
   } else if (blindUseIncumbentReady || useReadyGeneration) {
     if (rebuildEnvelope?.readyGeneration != null) {
-      assertReadyCheckpointPublicationCurrent(rebuildEnvelope);
+      assertReadyCheckpointPublicationCurrent(rebuildEnvelope, familyId => readyPublicationActivation.get(familyId));
     }
     if (
       rebuildEnvelope === null ||
@@ -2145,7 +2147,7 @@ async function main(): Promise<void> {
     throw new Error("strict startup readyGeneration failed root verification");
   }
   const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
-  if (historicalBackrunSpec === undefined) assertReadyCheckpointPublicationCurrent(rebuildEnvelope);
+  if (historicalBackrunSpec === undefined) assertReadyCheckpointPublicationCurrent(rebuildEnvelope, familyId => readyPublicationActivation.get(familyId));
   const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);
   // Rehydrate the exact candidate evidence sealed into Ready, not the first
   // historical alias that happens to share its instance key.

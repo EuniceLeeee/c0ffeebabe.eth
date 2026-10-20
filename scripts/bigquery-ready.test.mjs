@@ -68,6 +68,12 @@ export function createRebuildWiring(input) { return {
   writeFileSync(root + '/listener/src/searcher/venues/production-family-composition.ts', withOpaque
     ? `export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[{plugin:{manifest:{familyId:'test'}}},{plugin:{manifest:{familyId:'opaque'},discovery:{reverseBinding:{kind:'implementation'},logPatterns:[{id:'pool-id',emitter:{mode:'singleton-indexed-bytes32',topicIndex:1}}]}}}],matches:o=>o.topics.length===2?[{familyId:'opaque',patternId:'pool-id'}]:[]};`
     : `export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[{plugin:{manifest:{familyId:'test'}}}],matches:()=>[]};`);
+  // Exercise the real publication guard; only the rebuild/RPC boundary is stubbed.
+  writeFileSync(root + '/listener/src/searcher/strict-ready-runtime.ts',
+    `export { assertReadyCheckpointPublicationCurrent } from '${new URL('../listener/src/searcher/strict-ready-runtime.ts', import.meta.url).href}';`);
+  const compositionPath = root + '/listener/src/searcher/venues/production-family-composition.ts';
+  writeFileSync(compositionPath, readFileSync(compositionPath, 'utf8') +
+    `\nexport const PRODUCTION_FAMILY_ACTIVATIONS=[{familyId:'test',enabled:true},{familyId:'opaque',enabled:true},{familyId:'disabled',enabled:false}];`);
   writeFileSync(root + '/listener/src/searcher/universe-rebuild-checkpoint.ts', `import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 export class UniverseRebuildCheckpointStore {
  constructor(input){this.path=input.path;}
@@ -76,7 +82,7 @@ export class UniverseRebuildCheckpointStore {
  async inheritRebuildProofsFrom(source){const prior=await source.load();const result={verifiedMemos:prior.verifiedMemos,retryableAttemptsByCandidateKey:prior.retryableAttemptsByCandidateKey,readyGeneration:null,inProgressRun:null,checkpointFingerprint:'proof-only'};writeFileSync(this.path,JSON.stringify(result),{flag:'wx'});return result;}
  async inheritReadyFrom(source){const prior=await source.load();if(!prior?.readyGeneration||prior.inProgressRun)throw Error('Ready inheritance requires a completed source checkpoint');writeFileSync(this.path,JSON.stringify(prior),{flag:'wx'});return prior;}
 }`);
-  writeFileSync(root + '/listener/src/searcher/universe-rebuild-runner.ts', `import {writeFileSync,existsSync,mkdirSync} from 'node:fs'; export async function rebuildUniverse(input){await input.freezeCanonicalHead(input.observationRange.toBlock);if(input.resumeCompletedOutcomes)throw Error('completed-outcome resume requires a sealed unfinished run');if(existsSync('${root}/fail-strict'))throw Error('fixture strict failed');const prior=await input.store.load();writeFileSync(input.store.path,JSON.stringify({candidates:input.startupCandidates,range:input.observationRange,inheritedFingerprint:prior?.checkpointFingerprint,checkpointFingerprint:'result:'+input.runId,verifiedMemos:{},retryableAttemptsByCandidateKey:{},inProgressRun:null,readyGeneration:{cutoff:{number:123,hash:'${blockHash}'}}}));if(existsSync('${root}/fail-publication'))mkdirSync('${root}/profile.json.latest-ready.json');return {cutoff:{number:123,hash:'${blockHash}'},generation:1,candidateAccounting:{total:2,verified:2,retryable:0}};}`);
+  writeFileSync(root + '/listener/src/searcher/universe-rebuild-runner.ts', `import {writeFileSync,existsSync,mkdirSync} from 'node:fs'; export async function rebuildUniverse(input){await input.freezeCanonicalHead(input.observationRange.toBlock);if(input.resumeCompletedOutcomes)throw Error('completed-outcome resume requires a sealed unfinished run');if(existsSync('${root}/fail-strict'))throw Error('fixture strict failed');const prior=await input.store.load();writeFileSync(input.store.path,JSON.stringify({candidates:input.startupCandidates,range:input.observationRange,inheritedFingerprint:prior?.checkpointFingerprint,checkpointFingerprint:'result:'+input.runId,verifiedMemos:{},retryableAttemptsByCandidateKey:{},inProgressRun:null,readyGeneration:{generation:1,catalogSnapshot:{format:'strict-rebuild-catalog-v1',instances:[]},cutoff:{number:123,hash:'${blockHash}'}}}));if(existsSync('${root}/fail-publication'))mkdirSync('${root}/profile.json.latest-ready.json');return {cutoff:{number:123,hash:'${blockHash}'},generation:1,candidateAccounting:{total:2,verified:2,retryable:0}};}`);
   const fields = [
     ...['tx_hash', 'block_number', 'block_hash', 'receipt_status'].map(name => ({ name, type: 'STRING' })),
     { name: 'logs', type: 'RECORD', mode: 'REPEATED', fields: [{name:'log_address',type:'STRING'},{name:'topics',type:'STRING',mode:'REPEATED'},{name:'data',type:'STRING'},{name:'log_index',type:'INTEGER'}] },
@@ -407,7 +413,7 @@ test('public configuration preserves disabled families and accounts for their SQ
   try {
     const familyDir=f.root+'/listener/src/searcher/venues/production-families/';
     writeFileSync(familyDir+'test.production.ts', "export const activation={envKey:'SEARCHER_FAMILY_TEST_ENABLED'};");
-    writeFileSync(f.root+'/listener/src/searcher/venues/production-family-composition.ts',`export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>process.env.SEARCHER_FAMILY_TEST_ENABLED==='1'?[{plugin:{manifest:{familyId:'test'}}}]:[],matches:()=>[]};`);
+    writeFileSync(f.root+'/listener/src/searcher/venues/production-family-composition.ts',`export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>process.env.SEARCHER_FAMILY_TEST_ENABLED==='1'?[{plugin:{manifest:{familyId:'test'}}}]:[],matches:()=>[]};export const PRODUCTION_FAMILY_ACTIVATIONS=[{familyId:'test',enabled:process.env.SEARCHER_FAMILY_TEST_ENABLED==='1'}];`);
     const bin=f.root+'/configured-simulator';writeFileSync(bin,'fixture');
     const env={SEARCHER_FAMILY_TEST_ENABLED:'0',BOTVM_ADDRESS:'public-executor',BOTVM_OWNER:'public-owner',SEARCHER_REVM_SIM_BIN:bin,SEARCHER_DRY_RUN:'1',SEARCHER_BLOCKSCAN_SUBMIT:'0'};
     writeFileSync(f.root+'/public.json',JSON.stringify(env));
@@ -486,5 +492,54 @@ test('SQL entry point creates a new absolute output directory before writing its
     assert(existsSync(f.out + '/input-pin.json'));
     assert.equal(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
     assert.deepEqual(JSON.parse(readFileSync(f.out + '/checkpoint.json')).range, { fromBlock: 123, toBlock: 123 });
+  } finally { rmSync(f.root, { recursive: true }); }
+});
+
+function addUnpublishedProof(f, familyId) {
+  const path = f.root + '/listener/src/searcher/universe-rebuild-runner.ts';
+  const source = readFileSync(path, 'utf8');
+  const value = { familyId, familyCandidateKey: 'extra', familyInstanceKey: 'extra-instance', memoFingerprint: 'extra-proof' };
+  writeFileSync(path, source.replace('verifiedMemos:{}', 'verifiedMemos:' + JSON.stringify({ extra: value })));
+}
+
+test('SQL Ready retains installed disabled proof cache without publishing it', async () => {
+  const f = sqlFixture();
+  try {
+    addUnpublishedProof(f, 'disabled');
+    await main(f.sqlArgv);
+    const checkpoint = JSON.parse(readFileSync(f.out + '/checkpoint.json'));
+    assert.equal(checkpoint.verifiedMemos.extra.familyId, 'disabled');
+    assert.deepEqual(checkpoint.readyGeneration.catalogSnapshot.instances, []);
+    assert.equal(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
+  } finally { rmSync(f.root, { recursive: true }); }
+});
+
+test('SQL publication rejects enabled and unknown unpublished proofs before success/reference', async () => {
+  for (const familyId of ['test', 'unknown']) {
+    const f = sqlFixture();
+    try {
+      addUnpublishedProof(f, familyId);
+      await assert.rejects(main(f.sqlArgv), /added=1/);
+      assert(existsSync(f.out + '/checkpoint.json'), 'completed evidence remains available');
+      assert(!existsSync(f.out + '/result.json'));
+      assert(!existsSync(f.root + '/profile.json.latest-ready.json'));
+      assert.notEqual(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
+    } finally { rmSync(f.root, { recursive: true }); }
+  }
+});
+
+test('publication bookkeeping recovery also rejects newly stale admission without rerunning strict', async () => {
+  const f = sqlFixture();
+  try {
+    writeFileSync(f.root + '/fail-publication', '1');
+    await assert.rejects(main(f.sqlArgv), /EISDIR/);
+    rmSync(f.root + '/profile.json.latest-ready.json', { recursive: true });
+    const path = f.out + '/checkpoint.json', checkpoint = JSON.parse(readFileSync(path));
+    checkpoint.verifiedMemos.extra = { familyId: 'test', familyCandidateKey: 'extra', familyInstanceKey: 'extra-instance', memoFingerprint: 'extra-proof' };
+    writeFileSync(path, JSON.stringify(checkpoint));
+    writeFileSync(f.root + '/fail-strict', '1');
+    await assert.rejects(main([...f.sqlArgv, '--resume']), /added=1/);
+    assert(!existsSync(f.root + '/profile.json.latest-ready.json'));
+    assert.notEqual(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
   } finally { rmSync(f.root, { recursive: true }); }
 });
