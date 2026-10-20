@@ -151,7 +151,7 @@
     "searcher:yearn-auction-family-callback-evm": "node --import tsx src/searcher/venues/protocols/yearn-auction-family/test/runtime-settlement-evm.ts",
     "searcher:yearn-auction-family-historical-dual": "node --import tsx src/searcher/venues/protocols/yearn-auction-family/test/historical-dual.ts",
     "searcher:yearn-auction-family": "node --import tsx --test src/searcher/venues/protocols/yearn-auction-family/test/contract.ts",
-    "searcher:curve-lp-family": "node --import tsx --test src/searcher/venues/protocols/curve-lp-family/test/contract.ts",
+    "searcher:curve-lp-family": "node --import tsx --test src/searcher/venues/protocols/curve-lp-family/test/contract.ts && SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx --test src/searcher/venues/protocols/curve-lp-family/test/ng-contract.ts src/searcher/venues/protocols/curve-lp-family/test/generic-contract.ts src/searcher/venues/protocols/curve-lp-family/test/zap-contract.ts src/searcher/venues/protocols/curve-lp-family/test/generic-effects-contract.ts src/searcher/venues/protocols/curve-lp-family/test/historical-rpc-response-contract.ts src/searcher/venues/protocols/curve-lp-family/test/historical-preclaim-effects-contract.ts",
     "searcher:curve-lp-production-exact": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx --test src/searcher/venues/protocols/curve-lp-family/test/production-exact.ts",
     "searcher:algebra-integral-family": "node --import tsx --test src/searcher/venues/swaps/algebra-integral-family/test/contract.ts src/searcher/venues/swaps/algebra-integral-family/test/dynamic-quoter.ts src/searcher/venues/swaps/algebra-integral-family/test/central-quoter.ts src/searcher/venues/swaps/algebra-integral-family/test/execution-evidence.ts src/searcher/venues/swaps/algebra-integral-family/test/refresh.ts",
     "searcher:algebra-quoter-historical": "node --import tsx src/searcher/venues/swaps/algebra-integral-family/test/historical-quoter.ts",
@@ -477,7 +477,9 @@
     "test:staked-usdat:historical-ready": "tsx src/searcher/venues/protocols/staked-usdat-family/test/historical-ready.ts",
     "test:staked-usdat:historical-dual": "tsx src/searcher/venues/protocols/staked-usdat-family/test/historical-dual.ts",
     "test:staked-usdat:observations": "tsx --test src/searcher/venues/protocols/staked-usdat-family/test/observations.test.ts",
-    "test:erc4626-family:standard-price-state": "tsx --test src/searcher/venues/protocols/erc4626-family/test/standard-price-state.test.ts"
+    "test:erc4626-family:standard-price-state": "tsx --test src/searcher/venues/protocols/erc4626-family/test/standard-price-state.test.ts",
+    "searcher:curve-lp-historical-ready": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx src/searcher/venues/protocols/curve-lp-family/test/historical-ready.ts",
+    "searcher:curve-lp-historical-dual": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

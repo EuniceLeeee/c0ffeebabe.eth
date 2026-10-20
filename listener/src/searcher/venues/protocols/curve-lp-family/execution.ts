@@ -1,3 +1,5 @@
+import { genericProgram, genericAssets } from "./generic.js";
+import { isZap, zapProgram } from "./zap.js";
 import { ethers } from "ethers";
 import { NO_EXECUTION_RUNTIME_PROJECTION, type ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
@@ -6,8 +8,9 @@ import { ABI, uint } from "./codec.js";
 import { ACTION } from "./manifest.js";
 import { assertRoute } from "./routes.js";
 import type { Descriptor, Evidence, Route } from "./types.js";
+import { ngProgram } from "./ng.js";
 export function lpProgram(d: Descriptor, r: Route, executor: string, minimumOut?: bigint) {
-  assertRoute(d, r); const actor = runtimeExecutor(executor, d.pool, d.lp, ...d.coins), p = new RuntimeAmountProgram().constant(12, 1n);
+  assertRoute(d, r); if (isZap(d)) return zapProgram(d, r, executor, minimumOut ?? 1n); if (d.generic) return genericProgram(d, r, executor, minimumOut ?? 1n); if (d.ng) return ngProgram(d, r, executor, minimumOut ?? 1n); const actor = runtimeExecutor(executor, d.pool, d.lp, ...d.coins), p = new RuntimeAmountProgram().constant(12, 1n);
   if (minimumOut !== undefined) { if (!uint(minimumOut)) throw new Error("curve-lp zero floor");
     p.call(r.tokenIn, ABI.encodeFunctionData("balanceOf", [actor]), { static: true }).load(14, 0).math("sub", 8, 14, 0)
       .call(r.tokenOut, ABI.encodeFunctionData("balanceOf", [actor]), { static: true }).load(13, 0); }
@@ -22,7 +25,18 @@ export function lpProgram(d: Descriptor, r: Route, executor: string, minimumOut?
     .math("sub", 6, 6, 13).equal(6, 4).constant(7, minimumOut).math("sub", 8, 6, 7);
   return p;
 }
-export const execution = { buildRuntimeLeg: ({ descriptor: d, route: r, executor }) => runtimeLeg(ACTION, lpProgram(d, r, executor)),
+export const execution = { buildRuntimeLeg: ({ descriptor: d, route: r, executor, settlement }) => {
+    assertRoute(d, r);
+    const assets = d.generic ? genericAssets(d, r.direction, r.index) : undefined;
+    const direct = d.generic ? d.generic.directions.find(v => v.direction === r.direction && v.index === r.index)?.receiverMode !== "none" && assets?.input !== "native" && assets?.output !== "native"
+      : d.ng?.directions.find(v => v.direction === r.direction && v.index === r.index)?.directOutput;
+    if (settlement) {
+      if (settlement.kind !== "direct-output" || !direct) return null;
+      return { ...runtimeLeg(ACTION, d.generic ? genericProgram(d, r, executor, 1n, settlement.recipient) : ngProgram(d, r, executor, 1n, settlement.recipient)),
+        settlement: { directOutput: true as const }, settlementRequest: settlement };
+    }
+    return { ...runtimeLeg(ACTION, lpProgram(d, r, executor)), ...(direct ? { settlement: { directOutput: true as const } } : {}) };
+  },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(i) { const d = i.descriptor, r = i.route, e = i.exactEvidence; assertRoute(d, r);
     const actor = runtimeExecutor(i.executor, d.pool, d.lp, ...d.coins).toLowerCase();

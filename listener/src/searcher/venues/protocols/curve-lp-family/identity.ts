@@ -1,3 +1,5 @@
+import { genericIdentityVariant } from "./generic.js";
+import { zapIdentityVariant } from "./zap.js";
 import { ethers } from "ethers";
 import type { IdentitySemantics } from "../../adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
@@ -8,7 +10,8 @@ import { bind, dependencyRequests, dynamic, dynamicRequests, surface, surfaceReq
 import { mintQuote } from "./model.js";
 import { FAMILY, LINEAGE } from "./manifest.js";
 import type { Binding, Candidate, Direction, Identity, State } from "./types.js";
-interface Proof { readonly phase: "root" | "behavior" | "complete" | "unavailable"; readonly source?: CanonicalSource;
+import { ngIdentityVariant } from "./ng.js";
+interface Proof { readonly phase: "root" | "behavior" | "complete" | "unavailable" | "rejected"; readonly rejectionIds?: readonly string[]; readonly source?: CanonicalSource;
   readonly root?: ReturnType<typeof surface>; readonly binding?: Binding; readonly state?: State; readonly behaviorHash?: string; readonly reason?: string }
 export function samples(p: Proof) { const d = p.binding!, s = p.state!;
   if (!d || !s || s.killed || s.balances.some(b => b <= 0n) || s.totalSupply <= 0n) throw new Error("curve-lp insufficient behavior capacity");
@@ -68,7 +71,9 @@ export const identity = { memoReuse: "recheck-identity", identityKey: i => i.bin
       if (p.phase === "behavior") return behaviorRequests(p); return []; },
     decode({ step, results }): Proof { const p = step.evidence as Proof | undefined;
       try {
-        if (!p) { const r = rows(results, surfaceRequests(step.candidate.pool)); return { phase: "root", source: r.source, root: surface(address(step.candidate.pool), r.get) }; }
+        if (!p) { const c = results.find(v => v.id === "pool-code");
+          if (c?.ok && c.completion === "returned" && c.data === "0x") return { phase: "rejected", source: c.source, reason: "curve-lp-no-code", rejectionIds: ["pool-code"] };
+          const r = rows(results, surfaceRequests(step.candidate.pool)); return { phase: "root", source: r.source, root: surface(address(step.candidate.pool), r.get) }; }
         if (p.phase === "root" && p.root) { const r = rows(results, [...dependencyRequests(p.root), ...dynamicRequests(p.root)], p.source);
           const next: Proof = { ...p, phase: "behavior", binding: bind(p.root, r.get), state: dynamic(r.get, r.source) }; samples(next); return next; }
         if (p.phase !== "behavior") throw new Error("curve-lp identity phase"); verifyBehavior(p, results);
@@ -76,11 +81,12 @@ export const identity = { memoReuse: "recheck-identity", identityKey: i => i.bin
       } catch (e) { if (e instanceof RequiredAdapterRequestError) throw e; return { phase: "unavailable", reason: e instanceof Error ? e.message : "curve-lp unavailable" }; }
     },
     decide({ evidence }) { const p = evidence as Proof | undefined;
+      if (p?.phase === "rejected") return { status: "chain-proven-rejected", reasonCode: p.reason!, evidenceRequestIds: p.rejectionIds! };
       if (p?.phase === "unavailable") return { status: "retryable", reasonCode: p.reason! };
       if (p?.phase !== "complete" || !p.binding || !p.behaviorHash || !p.source) return { status: "continue" };
       return { status: "verified", identity: { familyId: FAMILY, lineageId: LINEAGE, subject: p.binding.pool, binding: p.binding,
         provenance: [{ kind: "registry-reverse-lp-minter-and-source-behavior", subject: p.binding.pool,
           evidenceHash: hashCanonical({ ...p.binding, source: { ...p.source }, behaviorHash: p.behaviorHash }) }] } };
     },
-  }],
+  }, ngIdentityVariant, genericIdentityVariant, zapIdentityVariant],
 } satisfies IdentitySemantics<Candidate, Identity>;

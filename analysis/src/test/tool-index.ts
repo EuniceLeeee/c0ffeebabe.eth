@@ -196,6 +196,37 @@ test("AppleDouble metadata is ignored without hiding an ordinary orphan CLI", ()
   }
 });
 
+test("Curve LP historical acceptance declares RPC/native cost without relabeling contract fixtures", () => {
+  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "mev-tool-index-curve-lp-"));
+  try {
+    fs.mkdirSync(path.join(fixture, "analysis"), { recursive: true });
+    fs.mkdirSync(path.join(fixture, "listener"), { recursive: true });
+    fs.mkdirSync(path.join(fixture, "scripts"), { recursive: true });
+    const { scripts } = JSON.parse(fs.readFileSync(path.join(repoRoot, "listener/package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    const historical = ["searcher:curve-lp-historical-ready", "searcher:curve-lp-historical-dual"];
+    const names = [...historical, "searcher:curve-lp-family"];
+    for (const name of names) assert.equal(typeof scripts[name], "string", `missing real package script: ${name}`);
+    fs.writeFileSync(path.join(fixture, "analysis/package.json"), JSON.stringify({ scripts: {} }));
+    fs.writeFileSync(path.join(fixture, "listener/package.json"), JSON.stringify({
+      scripts: Object.fromEntries(names.map(name => [name, scripts[name]])),
+    }));
+    const tools = discoverToolIndex(fixture);
+    for (const name of historical) {
+      const tool = tools.find(tool => tool.id === `listener:${name}`)!;
+      assert.equal(tool.cost, "fork", `${name} performs historical RPC and local native EVM execution`);
+      assert.equal(tool.kind, "test", `${name} validates adaptation, not original-transaction replay`);
+      assert.equal(tool.curated, true);
+      for (const capability of ["curve", "lp", "historical-rpc", "native-evm"]) assert(tool.capabilities.includes(capability));
+    }
+    assert.equal(relatedTools(tools, ["curve", "lp"]).length, 3, "existing Curve/LP queries retain both historical entries and the contract fixture");
+    assert.equal(tools.find(tool => tool.id === "listener:searcher:curve-lp-family")!.cost, "zero-cu");
+  } finally {
+    fs.rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
 test("production decision requires common A/B evidence without forcing a route transaction", () => {
   const tools = discoverToolIndex(repoRoot);
   const record = evidence(["analysis:ab-canary-compare"], ["ab", "comparison"]);

@@ -105,7 +105,7 @@ test("all four directions enter production sim selector without Exact, quoted fa
   const { d, rs } = setup(); let exact = 0, quoted = 0, rpc = 0, simulated = 0;
   for (const r of rs) {
     const edges = [{ adapterId: "curve-lp", target: d.pool, tokenIn: r.tokenIn, tokenOut: r.tokenOut }, { adapterId: "fixture-return", target: actor, tokenIn: r.tokenOut, tokenOut: r.tokenIn }];
-    const session: any = { source, fundingActionIds: () => ["fixture-funding"], buildRuntimeAmountLeg({ edge }: any) { return edge === edges[0]
+    const session: any = { source, blocksPrefixInversion: () => false, fundingActionIds: () => ["fixture-funding"], buildRuntimeAmountLeg({ edge }: any) { return edge === edges[0]
       ? plugin.execution.buildRuntimeLeg!({ descriptor: d, route: r, source, executor: actor, runtimeEvidence: [] })
       : { actionAdapterId: "fixture-return", program: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()) }; },
       issueExact() { exact++; throw new Error("forbidden Exact"); }, buildExecution() { quoted++; throw new Error("forbidden quoted"); },

@@ -30,7 +30,9 @@ export function invariant(balances: readonly [bigint, bigint], amp: bigint): big
 export function mintQuote(s: Pick<State, "balances" | "amp" | "fee" | "totalSupply" | "killed">, index: number, amount: bigint): bigint {
   if ((index !== 0 && index !== 1) || !uint(amount) || s.killed || !uint(s.totalSupply) || s.balances.some(b => b <= 0n) ||
       !uint(s.amp) || uint(s.fee) > 5n * 10n ** 9n) throw new Error("curve-lp no mint capacity");
-  const d0 = invariant(s.balances, s.amp), next: [bigint, bigint] = [...s.balances]; next[index] = add(next[index], amount);
+  if (s.balances.length !== 2) throw new Error("curve-lp legacy balance domain");
+  const balances: [bigint, bigint] = [s.balances[0], s.balances[1]];
+  const d0 = invariant(balances, s.amp), next: [bigint, bigint] = [...balances]; next[index] = add(next[index], amount);
   const d1 = invariant(next, s.amp); if (d1 <= d0) throw new Error("curve-lp input below mint resolution");
   const fee = div(mul(s.fee, 2n), 4n);
   for (let i = 0; i < 2; i++) { const ideal = div(mul(d1, s.balances[i]), d0);
