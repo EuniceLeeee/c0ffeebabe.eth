@@ -2642,6 +2642,39 @@
       },
       "created_at": "2026-10-20T06:16:26.921284+00:00",
       "updated_at": "2026-10-20T06:30:28.642Z"
+    },
+    {
+      "learning_case_id": "tooling-defect-ready-startup-admission-20261020",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [],
+      "trigger": "tooling_defect",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Ready preflight omitted checkpoint publication-current check; inherited disabled-family proof cache also lacked current activation scope in startup check",
+      "our_stage": "startup",
+      "evidence": {
+        "oldVerifierSha256": "01979e911bbe1898a08ea738f677ab9a3652e0868fea133cd107a62db803034c",
+        "oldReadySummarySha256": "f1ec20ced4f0b4aa64f7137d1dc591f0fe738b88bb9e89ed625190d711e1a231",
+        "liveFailureLogSha256": "657e5a418268c0654b16451dcdecb78f44b998926f2a1c030513062de434e2b9",
+        "completedCheckpointSha256": "36da3c211138c7ed0e12e2adb175b73b0cb65e52643e6322a63864066f374a90",
+        "startupError": "added=892 removed=0 changed=0",
+        "disabledCacheOnly": true,
+        "noCheckpointOrGraphMutation": true,
+        "realCheckpointReceipt": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-staked-no-moon-20261020/sql-input-current-source/startup-activation-real-checkpoint-verification.json",
+        "independentReview": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-staked-no-moon-20261020/sql-input-current-source/startup-activation-independent-type-followup-review.json",
+        "buildReceipt": "/opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-staked-no-moon-20261020/sql-input-current-source/startup-activation-production-build-r2.json"
+      },
+      "tooling_defect": {
+        "tool": "Ready startup preflight and SQL Ready success publication",
+        "issue": "Success artifact lacked the production checkpoint-publication admission check; current operator-disabled inherited proof caches were incorrectly treated as unpublished active admission",
+        "evidence": "Original preflight reported validated-current-production-ready; actual live exited before pricing with added=892. All892 are disabled-family cache entries; no enabled-family current outcome was missing. Original artifacts remain under /opt/mev-cloud/family-runtime-20261007/logs/family-implementation-20261015.0exjskqq/live250-staked-no-moon-20261020",
+        "codify_target": "scripts/ready-bigquery.mjs exported assertReadyPublication used by importer and thin preflight; strict-ready-runtime current installed activation boundary and regression tests",
+        "status": "codified",
+        "codify_commit": "b33d1039426d8d6e946b71828d93a8b0edb46c93"
+      },
+      "created_at": "2026-10-20T13:12:23.797127+00:00",
+      "updated_at": "2026-10-20T13:12:23.797127+00:00"
     }
   ]
 }
