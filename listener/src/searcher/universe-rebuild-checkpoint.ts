@@ -13,7 +13,7 @@ import {
   writeFile,
   type FileHandle,
 } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { assertTransactionObservationScope, type TransactionObservationScope } from "./ready-transaction-input.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
@@ -1381,6 +1381,39 @@ export class UniverseRebuildCheckpointStore {
     activeReadyMemos(checkpoint);
     // Never overwrite either an existing destination or the source itself.
     return this.#cas(0, () => checkpoint);
+  }
+
+  /** Seed a fresh rebuild with reusable proofs, never with discovery or Ready
+   * authority. Source may be unfinished: load validates its base and journal;
+   * the ordinary runner still rechecks every memo under the new candidate,
+   * definition and canonical source before any publication.
+   */
+  async inheritRebuildProofsFrom(
+    source: UniverseRebuildCheckpointStore,
+  ): Promise<StartupCheckpointEnvelope> {
+    if (resolve(this.#path) === resolve(source.#path)) {
+      throw new Error("Rebuild proof inheritance requires a different destination");
+    }
+    const checkpoint = await source.load();
+    if (checkpoint === null) {
+      throw new Error("Rebuild proof inheritance source checkpoint is absent");
+    }
+    for (const [key, memo] of Object.entries(checkpoint.verifiedMemos)) {
+      assertDurableVerifiedMemoFingerprint(memo);
+      if (key !== memo.familyCandidateKey || !hasDurableCandidateSnapshot(memo)) {
+        throw new Error("Rebuild proof inheritance requires a bound candidate snapshot");
+      }
+    }
+    // One atomic write regardless of proof count. A pre-existing destination
+    // fails CAS; old outcomes, coverage and Ready roots are deliberately absent.
+    return this.#cas(0, (current) => {
+      if (current !== null) throw new Error("Rebuild proof inheritance destination already exists");
+      return Object.freeze({
+        ...UniverseRebuildCheckpointStore.emptyEnvelope(),
+        verifiedMemos: checkpoint.verifiedMemos,
+        retryableAttemptsByCandidateKey: checkpoint.retryableAttemptsByCandidateKey,
+      });
+    });
   }
 
   async #fileSignature(path: string): Promise<string | null> {
