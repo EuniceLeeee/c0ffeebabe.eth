@@ -279,7 +279,7 @@
     "searcher:dodo-v2-historical-contract": "node --import tsx --test src/searcher/venues/swaps/dodo-v2-family/test/reference-amount.test.ts src/searcher/venues/swaps/dodo-v2-family/test/historical-dual.test.ts",
     "searcher:angstrom-v4-family-plugin": "node --import tsx src/searcher/test/angstrom-v4-family-plugin.ts",
     "searcher:curve-underlying-family-plugin": "node --import tsx src/searcher/test/curve-underlying-family-plugin.ts",
-    "searcher:erc4626-family-plugin": "node --import tsx src/searcher/test/erc4626-family-plugin.ts",
+    "searcher:erc4626-family-plugin": "node --import tsx --test src/searcher/test/erc4626-family-plugin.ts src/searcher/test/declarative-identity.test.ts src/searcher/test/erc4626-declarative-pipeline.ts src/searcher/test/declarative-production.test.ts",
     "searcher:infinifi-historical-cache": "node --import tsx src/searcher/venues/protocols/erc4626-family/test/historical-cache.ts",
     "searcher:frax-custodian-contract": "node --import tsx --test src/searcher/venues/protocols/erc4626-family/test/custodian-contract.ts",
     "searcher:frax-custodian-historical-ready": "node --import tsx src/searcher/venues/protocols/erc4626-family/test/historical-ready.ts",
@@ -479,7 +479,8 @@
     "test:staked-usdat:observations": "tsx --test src/searcher/venues/protocols/staked-usdat-family/test/observations.test.ts",
     "test:erc4626-family:standard-price-state": "tsx --test src/searcher/venues/protocols/erc4626-family/test/standard-price-state.test.ts",
     "searcher:curve-lp-historical-ready": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx src/searcher/venues/protocols/curve-lp-family/test/historical-ready.ts",
-    "searcher:curve-lp-historical-dual": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts"
+    "searcher:curve-lp-historical-dual": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
+    "searcher:identity-flow": "node --import tsx --test src/searcher/test/identity-flow.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

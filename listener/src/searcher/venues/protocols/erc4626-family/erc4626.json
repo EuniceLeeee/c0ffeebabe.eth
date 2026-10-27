@@ -1,0 +1,310 @@
+{
+  "version": 1,
+  "scope": {
+    "family": "protocol:erc4626",
+    "variant": "standalone-standard-behavior",
+    "consumed": [
+      "production",
+      "discovery",
+      "identity"
+    ],
+    "unchanged": [
+      "custodian variant",
+      "infinifi variant",
+      "pricing",
+      "exact",
+      "execution",
+      "settlement"
+    ]
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_ERC4626_ENABLED"
+    }
+  },
+  "manifest": {
+    "binding": {
+      "module": "./manifest.js",
+      "export": "erc4626FamilyManifest"
+    }
+  },
+  "capture": {
+    "binding": {
+      "module": "./capture.js",
+      "export": "erc4626Capture"
+    }
+  },
+  "discovery": {
+    "binding": {
+      "module": "./discovery.js",
+      "export": "erc4626Discovery"
+    },
+    "definition": {
+      "sources": [
+        "observed-call",
+        "landed-log",
+        "address-surface"
+      ],
+      "candidateSources": [
+        "dex-token-domain",
+        "observed-interaction"
+      ],
+      "candidate": {
+        "kind": "erc4626-vault",
+        "addressField": "vault"
+      },
+      "calls": [
+        {
+          "id": "erc4626-deposit-call",
+          "signature": "deposit(uint256,address)"
+        },
+        {
+          "id": "erc4626-redeem-call",
+          "signature": "redeem(uint256,address,address)"
+        }
+      ],
+      "events": [
+        {
+          "id": "erc4626-deposit-log",
+          "signature": "Deposit(address,address,uint256,uint256)"
+        },
+        {
+          "id": "erc4626-withdraw-log",
+          "signature": "Withdraw(address,address,address,uint256,uint256)"
+        }
+      ],
+      "surface": {
+        "id": "erc4626-standard-surface",
+        "fingerprint": "erc4626-standard-behavior-v1"
+      },
+      "labels": [
+        "erc4626",
+        "protocol:erc4626"
+      ]
+    }
+  },
+  "identity": {
+    "binding": {
+      "module": "./identity.js",
+      "export": "erc4626Identity"
+    },
+    "definition": {
+      "version": 1,
+      "workflow": "sampled-conversion-v1",
+      "abi": {
+        "vault": [
+          "function asset() view returns (address)",
+          "function totalAssets() view returns (uint256)",
+          "function totalSupply() view returns (uint256)",
+          "function convertToShares(uint256 assets) view returns (uint256)",
+          "function convertToAssets(uint256 shares) view returns (uint256)",
+          "function previewDeposit(uint256 assets) view returns (uint256)",
+          "function previewRedeem(uint256 shares) view returns (uint256)",
+          "function deposit(uint256 assets,address receiver) returns (uint256 shares)",
+          "function redeem(uint256 shares,address receiver,address owner) returns (uint256 assets)",
+          "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+          "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)"
+        ],
+        "token": [
+          "function balanceOf(address account) view returns (uint256)",
+          "function decimals() view returns (uint8)",
+          "function approve(address spender,uint256 amount) returns (bool)"
+        ],
+        "specialized": [
+          "function asset() view returns(address)",
+          "function getStrcOracle() view returns(address)",
+          "function getWithdrawalQueue() view returns(address)"
+        ]
+      },
+      "parameters": {
+        "constants": {
+          "actor": "0x000000000000000000000000000000000000face",
+          "caller": {
+            "kind": "verified-actor",
+            "evidenceId": "erc4626-probe-actor"
+          },
+          "zero": "0x0000000000000000000000000000000000000000",
+          "samples": [
+            "1000000",
+            "1000000000000000000"
+          ],
+          "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+          "maskedCodePattern": "^0x[0-9a-fA-F]{2976}$",
+          "maskedAdminOffset": 16,
+          "maskedAdminSize": 32,
+          "sampleToleranceDivisor": "1000",
+          "sampleToleranceAddend": "2",
+          "getterProxyCode": "0x6080604052600a600c565b005b60186014601a565b6050565b565b5f604b7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc546001600160a01b031690565b905090565b365f5f375f5f365f845af43d5f5f3e8080156069573d5ff35b3d5ffdfea264697066735822122062ba703e4a09017c3a3f8e56bd964d252d36fcc1692ec264f7c15b6c0b89424064736f6c634300081e0033",
+          "getterImplementationHash": "0x555fcdfcc7e072b39cb27f6a0f4619c376a0d6b1f6d2b8d60216d5beaca8d2a2",
+          "maskedTemplateHash": "0x834029e91a0eb94f478b72d8f8d0924a57de0dc6046e828a543fc421bd6270d7",
+          "maskedImplementationHash": "0x51c008b264124ad667f58a8595b86745a657419baac327c1d1f335bc95b953a7",
+          "getterBindings": [
+            {
+              "offsets": [
+                11189,
+                11230,
+                11551
+              ]
+            },
+            {
+              "offsets": [
+                3508,
+                8461,
+                9878,
+                11665
+              ],
+              "getter": "getStrcOracle",
+              "requestId": "standard-staked-getStrcOracle"
+            },
+            {
+              "offsets": [
+                1439,
+                6190,
+                6667,
+                7579,
+                7646,
+                7723,
+                7813,
+                12524,
+                12584
+              ],
+              "getter": "getWithdrawalQueue",
+              "requestId": "standard-staked-getWithdrawalQueue"
+            }
+          ],
+          "maskedByteChecks": [
+            {
+              "offset": 15,
+              "size": 1,
+              "value": "0x7f"
+            }
+          ]
+        },
+        "calls": {
+          "inputAsset": "asset",
+          "assetSupply": "totalAssets",
+          "shareSupply": "totalSupply",
+          "toShares": "convertToShares",
+          "toAssets": "convertToAssets",
+          "previewForward": "previewDeposit",
+          "previewReverse": "previewRedeem",
+          "forward": "deposit",
+          "reverse": "redeem",
+          "balance": "balanceOf",
+          "approval": "approve"
+        },
+        "events": {
+          "forward": "Deposit",
+          "reverse": "Withdraw",
+          "assetField": "assets",
+          "shareField": "shares"
+        },
+        "errors": {
+          "erc4626_identity_phase": "erc4626 identity phase",
+          "erc4626_conflicting_identity_stages": "erc4626 conflicting identity stages",
+          "erc4626_retry_phase": "erc4626 retry phase",
+          "erc4626_implementation_stage": "erc4626 implementation stage",
+          "erc4626_custodian_stage": "erc4626 custodian stage",
+          "ERC4626_active_deposit_result_is_missing": "ERC4626 active-deposit result is missing",
+          "ERC4626_deposit_retry_evidence_missing": "ERC4626 deposit retry evidence missing",
+          "ERC4626_deposit_retry_result_missing": "ERC4626 deposit retry result missing",
+          "StakedUSDat_malformed_address_word": "StakedUSDat malformed address word",
+          "StakedUSDat_zero_binding": "StakedUSDat zero binding",
+          "Custodian_malformed_implementation_slot": "Custodian malformed implementation slot",
+          "Custodian_zero_binding": "Custodian zero binding",
+          "StakedUSDat_missing_reverse_proxy_proof": "StakedUSDat missing reverse proxy proof",
+          "StakedUSDat_immutable_disagreement": "StakedUSDat immutable disagreement",
+          "StakedUSDat_UUPS_implementation_self_mismatch": "StakedUSDat UUPS implementation self mismatch",
+          "StakedUSDat_getter_binding_mismatch": "StakedUSDat getter binding mismatch",
+          "erc4626_standard_views_failed": "erc4626_standard_views_failed",
+          "erc4626_erc20_surfaces_failed": "erc4626_erc20_surfaces_failed",
+          "erc4626_execution_surfaces_failed": "erc4626_execution_surfaces_failed",
+          "erc4626_standard_active_proof": "erc4626-standard-active-proof"
+        },
+        "fields": {
+          "getterCheck": "stakedUsdatCheck",
+          "maskedCheck": "custodianCheck",
+          "maskedSource": "custodianCheckSource",
+          "maskedImplementation": "custodianImplementation"
+        },
+        "requestPrefixes": {
+          "getter": "standard-staked"
+        },
+        "execution": {
+          "forwardArgs": [
+            "$base.sampleAssets",
+            {
+              "op": "address",
+              "args": [
+                "$constants.actor"
+              ]
+            }
+          ],
+          "reverseArgs": [
+            "$base.sampleShares",
+            {
+              "op": "address",
+              "args": [
+                "$constants.actor"
+              ]
+            },
+            {
+              "op": "address",
+              "args": [
+                "$constants.actor"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "instance": {
+    "binding": {
+      "module": "./instance.js",
+      "export": "erc4626Instance"
+    }
+  },
+  "routes": {
+    "binding": {
+      "module": "./routes.js",
+      "export": "erc4626Routes"
+    }
+  },
+  "pricing": {
+    "binding": {
+      "module": "./pricing.js",
+      "export": "erc4626Pricing"
+    }
+  },
+  "exact": {
+    "binding": {
+      "module": "./exact.js",
+      "export": "erc4626Exact"
+    }
+  },
+  "execution": {
+    "binding": {
+      "module": "./execution.js",
+      "export": "erc4626Execution"
+    }
+  },
+  "protocol": {
+    "binding": {
+      "module": "./protocol.js",
+      "export": "erc4626Protocol"
+    }
+  },
+  "actionAdapters": [
+    {
+      "module": "./action.js",
+      "export": "erc4626DepositFamilyOwnedAction"
+    },
+    {
+      "module": "./action.js",
+      "export": "erc4626RedeemFamilyOwnedAction"
+    }
+  ]
+}

@@ -37,6 +37,7 @@ import {
   PRODUCTION_ENTRY_PATTERN,
   productionFamilySourceDirectory,
 } from "./venues/production-families/tracked-sources.js";
+import { syncDeclarativeProductionEntries, type DeclarativeProductionEntry } from "./build-declarative-production.js";
 type StrictFamilyDomain = "swap" | "protocol" | "funding" | "credit";
 
 const STRICT_DOMAIN_CONSTRUCTORS: Readonly<
@@ -86,6 +87,9 @@ export async function buildFamilyCapabilityShadowArtifact(
   options: BuildFamilyCapabilityShadowOptions,
 ): Promise<FamilyCapabilityShadowArtifact> {
   const rootDirectory = resolve(options.rootDirectory);
+  const declarativeEntries = await syncDeclarativeProductionEntries({
+    rootDirectory, productionDirectory: options.productionDirectory, mode: "check",
+  });
   const context = loadProgram(rootDirectory);
   const provenanceCommit = options.provenanceCommit ?? null;
   const productionRegistryFile = resolve(
@@ -169,6 +173,7 @@ export async function buildFamilyCapabilityShadowArtifact(
       context,
       source,
       declaration: strictDeclaration!,
+      jsonEntry: declarativeEntries.get(resolve(entryFile)),
       provenanceCommit,
       issues,
     });
@@ -298,6 +303,7 @@ async function strictProductionRecords(input: {
   readonly context: ProgramContext;
   readonly source: ts.SourceFile;
   readonly declaration: ts.VariableDeclaration;
+  readonly jsonEntry?: DeclarativeProductionEntry;
   readonly provenanceCommit: string | null;
   readonly issues: FamilyCapabilityShadowBuildIssue[];
 }): Promise<readonly CapabilityExactShadowRecord[]> {
@@ -421,6 +427,13 @@ async function strictProductionRecords(input: {
     ));
     return [];
   }
+  if (input.jsonEntry && (resolvedFamilyId !== input.jsonEntry.familyId ||
+      domain !== input.jsonEntry.domain || readExportedStringProperty(input.context, manifestRoot, "domain") !== domain)) {
+    input.issues.push(issue(sourceLabel, "invalid_production_entry", "JSON Family/domain disagrees with its semantic manifest"));
+    return [];
+  }
+  const declarativeDependencies = input.jsonEntry ? [input.jsonEntry.definitionFile,
+    resolve(input.context.rootDirectory, "src/searcher/build-declarative-production.ts")] : [];
   const strictFamilyId = familyId(resolvedFamilyId);
   const actionsExpression = unwrapExpression(properties.get("actionAdapters")!);
   if (!ts.isArrayLiteralExpression(actionsExpression)) {
@@ -458,7 +471,7 @@ async function strictProductionRecords(input: {
   try {
     for (const capability of capabilities) {
       const root = roots.get(capability)!;
-      const additional = [manifestRoot.sourceFile];
+      const additional = [manifestRoot.sourceFile, ...declarativeDependencies];
       if (capability === "execution" || capability === "funding") {
         additional.push(...actionRoots.map((action) => action.sourceFile));
       }
@@ -517,7 +530,7 @@ async function strictProductionRecords(input: {
           ));
           return [];
         }
-        const additional = [manifestRoot.sourceFile];
+        const additional = [manifestRoot.sourceFile, ...declarativeDependencies];
         if (victimRoot.sourceFile !== domainRoot.sourceFile) {
           additional.push(domainRoot.sourceFile);
         }
@@ -1321,6 +1334,7 @@ async function runCli(): Promise<void> {
     ));
   const provenanceCommit = argumentValue(args, "--provenance") ?? null;
   const productionDirectory = productionFamilySourceDirectory(rootDirectory);
+  await syncDeclarativeProductionEntries({ rootDirectory, productionDirectory, mode });
   const productionEntryFiles = (await readdir(productionDirectory, {
     withFileTypes: true,
   }))
