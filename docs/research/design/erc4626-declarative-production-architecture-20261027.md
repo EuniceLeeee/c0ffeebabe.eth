@@ -1,8 +1,8 @@
 # Adapter Family Plugin：共用管线怎样读取并调用 Family 定义
 
-这份文档围绕 **Family Plugin 的共用接入流程** 展开：中央怎样读 JSON、调用发现与身份能力、生成 instance 和 routes、更新价格，以及在需要模拟执行时取得 Family 的执行接口。用标准 ERC4626 的存入／赎回贯穿七步。
+这份文档围绕 **Family Plugin 的共用接入流程** 展开：中央怎样读 JSON、调用发现与身份能力、生成 instance 和 routes、更新价格，以及在需要模拟执行时取得 Family 的执行接口。用标准 ERC4626 的存入／赎回贯穿前七步，第八步逐文件核对 JSON 覆盖。
 
-实际源码在云端 `/opt/mev-cloud/family-runtime-20261007`。下文相对路径以 `listener/src/searcher/` 为起点。正文 JSON 是对应文件的**局部摘录**，帮助对照每一步；完整 ERC4626 JSON 放在最后。
+实际源码在云端 `/opt/mev-cloud/family-runtime-20261007`。下文相对路径以 `listener/src/searcher/` 为起点。正文 JSON 是对应文件的**局部摘录**，帮助对照每一步；正文之后给出完整 ERC4626 JSON，文末整理函数调用顺序。
 
 当前 JSON 有两类内容：`definition` 描述由共用解释器执行的规则；`binding` 指向提供能力的模块导出。标准 discovery／identity 已使用前一种方式；instance、routes、pricing、Exact、execution 当前使用后一种方式。两类都从同一个 Family JSON 接入，但不能把模块绑定理解成这些模块的内部语义也已经全部 JSON 化。
 
@@ -12,7 +12,7 @@
 | `venues/sampled-conversion-flow.json` | 可复用的分阶段身份流程，声明请求、解码和阶段选择 |
 | 共用加载器与解释器 | 装配插件，执行声明，管理各阶段输入、结果和来源 |
 
-正文每一步分别给出“中央怎样调用、Family 声明什么、返回什么”，JSON 按所属文件单独展示。
+正文每一步分别给出“中央怎样调用、Family 声明什么、返回什么”，同时放入对应 JSON 和共用调用代码。代码是当前源码摘录，省略处有标记，不是新造的示例实现；完整 JSON 后附函数调用索引。
 
 ```mermaid
 flowchart TD
@@ -67,6 +67,77 @@ build-declarative-production.ts
 生成的 `.production.ts` 是产物，不是第二个手工维护入口。修改定义后，使用原 `family-capability-manifest:generate`；`family-capability-manifest:check` 只核对、不写文件。swap、protocol、credit 等原模板保留。
 
 **交给下一步：** 已注册、已校验的 discovery、identity、instance、pricing、execution 等能力。此时只是 Family 已装载，尚未证明任何 vault 可用。
+
+
+**共用代码：真正读取 JSON 的位置**
+
+源码：`build-declarative-production.ts`（136–138 行，核心摘录）。
+
+```ts
+const document = JSON.parse(text);
+if (!Object.hasOwn(object(document, "Family definition"), "production")) continue;
+const entry = renderDeclarativeProductionEntry({ rootDirectory: root, productionDirectory, definitionFile, document });
+```
+
+**共用代码：把 module/export 变成静态导入和插件属性**
+
+源码：`build-declarative-production.ts`（88–107 行，核心摘录）。
+
+```ts
+const imports: string[] = [], assignments: string[] = [];
+function importBinding(b: Binding, alias: string): void {
+  const module = resolve(dirname(definitionFile), b.module);
+  localPath(sourceRoot, module);
+  let path = relative(dirname(entryFile), module).split(sep).join("/");
+  if (!path.startsWith(".")) path = `./${path}`;
+  imports.push(`import { ${b.export} as ${alias} } from ${JSON.stringify(path)};`);
+}
+for (const key of Object.keys(bindings).sort()) {
+  importBinding(bindings[key], `binding_${key}`);
+  assignments.push(`  ${key}: binding_${key},`);
+}
+declarations.actionAdapters.forEach((b, i) => importBinding(b, `action${i}`));
+const source = [MARKER, `// Definition: ${localPath(root, definitionFile)}`,
+  '// Regenerate with: npm run family-capability-manifest:generate',
+  'import { defineFamilyActivation } from "./activation.js";',
+  `import { ${CONSTRUCTORS[domain]} } from "../adapter-family-plugin.js";`,
+  ...imports, "", `export const activation = defineFamilyActivation(${JSON.stringify(activation)});`, "",
+  `export const plugin = ${CONSTRUCTORS[domain]}({`, ...assignments,
+  `  actionAdapters: [${declarations.actionAdapters.map((_b, i) => `action${i}`).join(", ")}],`, "});", ""].join("\n");
+```
+
+**生成结果：各 JSON 块成为同一个插件对象**
+
+源码：`venues/production-families/erc4626.production.ts`（21–33 行，核心摘录）。
+
+```ts
+export const plugin = defineProtocolFamily({
+  capture: binding_capture,
+  discovery: binding_discovery,
+  exact: binding_exact,
+  execution: binding_execution,
+  identity: binding_identity,
+  instance: binding_instance,
+  manifest: binding_manifest,
+  pricing: binding_pricing,
+  protocol: binding_protocol,
+  routes: binding_routes,
+  actionAdapters: [action0, action1],
+});
+```
+
+**共用代码：统一加载，再建立 catalog 与 action registry**
+
+源码：`venues/production-family-composition.ts`（140–143 行，核心摘录）。
+
+```ts
+const strictLoad = await loadStrictProductionFamilyPlugins({
+  sharedInfraActionAdapterIds: PRODUCTION_INFRA_ACTION_ADAPTER_IDS,
+});
+const composition = composeProductionFamilyActivation({ load: strictLoad, artifact: capabilityShadowArtifact });
+```
+
+因此生产接入仍有生成文件，但维护入口是 Family JSON。代码生成发生在构建阶段；运行时读取的是已经装配的插件，不是每次调用再动态加载 JSON 指定的模块。
 
 ## 2. 中央接收观测，Family 发现 candidate
 
@@ -141,6 +212,51 @@ build-declarative-production.ts
 `capture` 绑定的 `capture.ts` 复用观测／捕获材料的物化能力，不负责计算 vault 价格，也不是后面按块刷新价格的实现。
 
 **交给下一步：** candidate、观测来源与匹配依据。标准 ERC4626 不假设存在统一 factory 注册表，实际身份由后续链上读取与行为证明取得。
+
+
+**Family 薄入口：把本族 discovery.definition 交给共用解释器**
+
+源码：`venues/protocols/erc4626-family/discovery.ts`（1–5 行，核心摘录）。
+
+```ts
+import { compileDeclarativeDiscovery } from "../../declarative-discovery.js";
+import type { Erc4626Candidate } from "./types.js";
+import definition from "./erc4626.json";
+
+export const erc4626Discovery = compileDeclarativeDiscovery<Erc4626Candidate>(definition.discovery.definition);
+```
+
+**共用代码：由签名生成匹配条件，由地址字段生成 candidate**
+
+源码：`venues/declarative-discovery.ts`（21–32 行，核心摘录）。
+
+```ts
+return compileAddressDiscovery<C>({
+  evidenceChannel: "nominate", sources: d.sources as DiscoverySemantics<C>["sources"],
+  candidateSources: d.candidateSources as DiscoverySemantics<C>["candidateSources"],
+  callPatterns: d.calls.map(c => ({ ...c, selector: id(c.signature).slice(0, 10) as `0x${string}`,
+    candidateAddress: { from: "call-target" as const } })),
+  logPatterns: d.events.map(e => ({ ...e, topic: id(e.signature) as `0x${string}` })),
+  addressSurfaces: [{ ...d.surface, kind: "interface" }],
+  candidate: address => ({ candidateKind: d.candidate.kind, [d.candidate.addressField]: address } as unknown as C),
+  candidateKey: candidate => getAddress((candidate as unknown as Record<string, string>)[d.candidate.addressField]).toLowerCase(),
+  nominate: createAddressSurfaceNomination({ opaqueLabels: d.labels, interfaceFingerprints: [d.surface.fingerprint] }),
+  reverseBinding: explicitReverseBindingUnsupported("no reverse-binding registry declared (explicit unsupported)"),
+});
+```
+
+**共用代码：匹配之后调用插件的 decodeCandidate**
+
+源码：`venues/adapter-family-runtime.ts`（2985–2988 行，核心摘录）。
+
+```ts
+candidate = family.plugin.discovery.decodeCandidate({
+  observation: match.observation,
+  matchedPatternId: match.matchedPatternId,
+});
+```
+
+`FamilyCapabilityCatalog.matches(observation)` 先按已编译模式匹配；`coalesceCandidateMatches()` 再调用上面的 `decodeCandidate` 并归并候选。新增普通 vault 无须添加地址清单，候选地址来自观测，身份留到下一步。
 
 ## 3. 中央执行分阶段请求，验证 identity
 
@@ -230,6 +346,97 @@ build-declarative-production.ts
 
 **交给下一步：** 带证据与 provenance 的 verified identity，包括 vault、asset、lineage 和 `verifiedDirections`。存入失败但赎回证据成立时，可以只保留赎回方向；两边失败或零扣款不能取得发布权限。
 
+
+**Family 薄入口：展开身份定义，再编译成共用接口**
+
+源码：`venues/protocols/erc4626-family/identity.ts`（22–26 行，核心摘录）。
+
+```ts
+return compileDeclarativeIdentity<Erc4626Candidate, Erc4626Identity>(
+  expandConversionDefinition(definition.identity.definition), { id: profile.id, familyId: profile.familyId, lineageId: profile.lineageId,
+    parameters: { excludeSpecialized: profile.excludeSpecialized !== false, hasEventMath: !!profile.depositEventAssets } },
+  profile.depositEventAssets ? { depositEventAssets: profile.depositEventAssets } : {},
+);
+```
+
+**共用代码：展开的是共用流程 JSON**
+
+源码：`venues/declarative-definition.ts`（1–1、58–58 行，核心摘录）。
+
+```ts
+import flow from "./sampled-conversion-flow.json";
+// ……同一文件内省略的代码……
+return expand(flow) as DeclarativeIdentityDocument;
+```
+
+`expand()` 用 Family 的 `parameters.calls`、`parameters.events`、ABI 与常量替换流程占位符。例如 `{{calls.inputAsset}}` 得到 `asset`。同族第一次读取与依赖结果后的下一次读取，都由展开后的流程声明选择。
+
+**共用解释器：从流程 JSON 取得阶段、请求、解码与判定**
+
+源码：`venues/declarative-identity.ts`（227–251 行，核心摘录）。
+
+```ts
+  const stage = (step: Value) => {
+    budget = 0;
+    const id = run(doc.identity.select, environment(step));
+    if (!Object.prototype.hasOwnProperty.call(doc.identity.stages, id)) throw new Error("unknown declared identity stage");
+    return doc.identity.stages[id];
+  };
+  return {
+    id: profile.id, kind: "standalone-contract", lineageId: profile.lineageId, applies: () => true,
+    requirements: step => stage(step).requirements,
+    buildRequests: step => {
+      const selected = stage(step);
+      const requests = evaluate(selected.requests, environment(step)) as AdapterRequest[];
+      if (!Array.isArray(requests) || new Set(requests.map(r => r.id)).size !== requests.length) throw new Error("duplicate declared request id");
+      return freeze(requests);
+    },
+    decode: ({ step, results }) => {
+      const selected = stage(step);
+      for (const result of results) if (!result.ok && !selected.optionalFailures?.includes(result.id)) throw new RequiredAdapterRequestError(result);
+      return freeze(run(selected.decode, environment(step, results)));
+    },
+    decide: step => { budget = 0; return freeze(run(doc.identity.decide, environment(step))); },
+  };
+}
+```
+
+**共用 runtime：把声明编译出的函数接到统一请求执行**
+
+源码：`venues/adapter-family-runtime.ts`（3710–3736 行，核心摘录）。
+
+```ts
+const program: RequestProgram<typeof stepInput, IdentityProgramEvidence> = {
+  requirements: (programInput) => {
+    const base = variant.requirements(programInput);
+    return assets === undefined ? base : assets.requirements(base);
+  },
+  buildRequests: (programInput) => {
+    const base = variant.buildRequests(programInput);
+    return assets === undefined ? base : assets.append(base);
+  },
+  decode: ({ programInput, results }) => ({
+    evidence: variant.decode({ step: programInput, results,
+      ...(assets === undefined ? {} : { assets: assets.decode(results) }) }),
+    // Chain metadata does not stand in for the protocol's identity proof.
+    successfulResultCount: results.filter((result) => result.ok && !assets?.isMetadataResult(result.id)).length,
+  }),
+};
+const work = await executeAdapterWork({
+  intent: {
+    stage: "identity",
+    familyId: plugin.manifest.familyId,
+    source: input.source,
+    generation: input.generation,
+    program,
+    programInput: stepInput,
+  },
+  runtime: input.runtime,
+});
+```
+
+`resolveIdentity()` 循环调用 `variant.decide(stepInput)`：需要更多证据时执行该请求程序，把 `decode` 的结果带入下一轮；验证成立或明确拒绝时结束。读链与请求执行由中央承担，协议判定由声明编译出的 Family 接口承担。
+
 ## 4. 用 verified identity 生成 instance 与 routes
 
 **中央做什么：** 调用 instance 能力建立稳定描述，再调用 routes 能力投影方向；检查静态绑定与能力来源，供后续定价、发布和 Graph 使用。候选不会绕过 identity 直接成为 instance。
@@ -275,6 +482,36 @@ build-declarative-production.ts
 
 **返回中央：** descriptor、routes、定价所需的绑定。后续价格与执行调用都通过这些已验证的实例和方向定位 Family。
 
+
+**共用代码：prepareCandidate 调用 instance 和 routes**
+
+源码：`venues/adapter-family-runtime.ts`（3345–3348、3396–3404、3499–3503 行，核心摘录）。
+
+```ts
+draft = requireObject(
+  input.family.plugin.instance.compileDraft(identity),
+  "instance draft",
+);
+// ……同一文件内省略的代码……
+preliminaryDescriptor = requireObject(
+  input.family.plugin.instance.finalizeDescriptor({
+    identity,
+    draft,
+    staticEvidence: instanceStaticEvidence,
+    sharedBindings: Object.freeze([]),
+  }),
+  "preliminary instance descriptor",
+) as CompiledInstanceDescriptor;
+// ……同一文件内省略的代码……
+routes = validateRoutes(
+  input.family.plugin.routes.project({ descriptor }),
+  descriptor,
+  input.family,
+);
+```
+
+上面三处是同一共用准备流程中的关键调用，省略了静态证据、共享绑定与校验分支。JSON 的 `instance.binding` 和 `routes.binding` 决定方法来自哪里；`identity`、`draft`、`descriptor` 是中央逐阶段传递的输入。
+
 ## 5. 中央调用 pricing，读取状态并更新价格
 
 **中央怎样调用：** 从已装配插件取得 `pricing`，传入 instance 和 routes。共用流程负责执行声明的请求、传回结果，并管理状态复用；Family 负责说明读哪些合约数据、怎样解码、怎样形成价格。
@@ -309,6 +546,49 @@ build-declarative-production.ts
 
 **返回中央：** 定价描述、状态快照、各 route 的 raw mid 及其来源。这里使用单单位采样；任意指定金额的报价由下一步 Exact 接口提供。
 
+
+**共用代码：executePreparedPricingCurrent 请求当前状态**
+
+源码：`venues/adapter-family-runtime.ts`（4054–4061 行，核心摘录）。
+
+```ts
+const initialProgram: RequestProgram<typeof currentInput, ResultSetEvidence> = {
+  requirements: (programInput) =>
+    input.family.plugin.pricing.current.requirements(programInput),
+  buildRequests: (programInput) =>
+    input.family.plugin.pricing.current.buildRequests(programInput),
+  decode: ({ results }) => ({ results }),
+};
+const initial = await executeCurrentWork(input, initialProgram, currentInput);
+```
+
+**共用代码：结果交还同一个 pricing 能力解码并产出价格**
+
+源码：`venues/adapter-family-runtime.ts`（4173–4190 行，核心摘录）。
+
+```ts
+snapshot = requireObject(
+  input.family.plugin.pricing.current.decodeSnapshot({
+    descriptor: input.pricingDescriptor,
+    initialResults,
+    dependentEvidence: Object.freeze([...dependentEvidence]),
+  }),
+  "pricing snapshot",
+);
+deepFreezeOpaqueRuntimeValue(snapshot, "pricing snapshot");
+mids = validateRouteMap(
+  input.family.plugin.pricing.current.deriveMids({
+    descriptor: input.pricingDescriptor,
+    snapshot,
+    routes: input.routes,
+  }),
+  input.routes,
+  "mid",
+) as ReadonlyMap<RouteKey, RouteVenueMid>;
+```
+
+首次实例准备由 `preparePricingState()` 建好定价描述，再进入当前状态读取；后续刷新通过 `refreshPreparedFamilyInstancePricing()` 复用同一能力。共用调用点始终是 `plugin.pricing`，不写 ERC4626 专属中央分支。
+
 ## 6. 中央调用 Exact，取得指定金额报价
 
 **中央怎样调用：** 调用方已经给出 route、`amountIn` 和受测状态，中央通过同一插件取得 `exact`，按其声明执行报价方法。Family 回答这个方向、这个金额、这个状态对应的输出。
@@ -341,6 +621,54 @@ JSON exact.binding
 对标准存入，模块编码 `previewDeposit(amountIn)`；对标准赎回，编码 `previewRedeem(amountIn)`。返回证据包含输入、输出、方向、状态来源与绑定指纹。中央核对请求与结果的金额、来源，供 effective 价格等调用方使用。
 
 **返回中央：** 指定金额的 `amountOut`、证据，或明确的失败结果。raw mid 与 Exact 共用实例身份，但用途不同：前者是状态价格，后者是真正针对本次输入金额的报价。参考金额怎样选择不属于这个 Family 的定义。
+
+
+**共用代码：按 exact 槽声明取得报价方法**
+
+源码：`venues/adapter-family-runtime.ts`（1338–1338 行，核心摘录）。
+
+```ts
+const methods = declareExactMethods(invocation.family.plugin.exact.methods(programInput));
+```
+
+**共用代码：请求程序提供 requirements 和 buildRequests**
+
+源码：`venues/adapter-family-runtime.ts`（2257–2270 行，核心摘录）。
+
+```ts
+function declareInitialExactRound(
+  program: ExactRequestProgram<
+    CompiledInstanceDescriptor,
+    FamilyRouteDescriptor,
+    unknown
+  >,
+  programInput: RuntimeExactQuoteInput,
+): DeclaredExactRound {
+  return declareExactRound({
+    requirements: program.requirements(programInput),
+    requests: program.buildRequests(programInput),
+  });
+}
+
+```
+
+**共用代码：请求结束后调用同一程序的 decode**
+
+源码：`venues/adapter-family-runtime.ts`（1882–1890 行，核心摘录）。
+
+```ts
+quote = requireSynchronousExactValue(
+  input.program.decode({
+    programInput: input.programInput,
+    initialResults,
+    dependentEvidence: Object.freeze([...dependentEvidence]),
+  }),
+  "exact request program decode",
+);
+validateExactQuote(quote);
+```
+
+这些调用属于 `executeFamilyExactQuote()` 的共用流程。`erc4626Exact.methods()` 返回标准 `erc4626-preview` 请求程序；协议函数选择留在 Family 的 `exact.ts`，中央只执行请求并接收报价证据。
 
 ## 7. 模拟执行时，中央怎样从 JSON 找到 Family 函数
 
@@ -394,7 +722,110 @@ execution.binding.export = erc4626Execution
 
 **这里没有从 JSON 直接执行任意函数名：** JSON 绑定的是命名导出的能力对象，中央按固定合同调用对象上的方法。`deposit`／`redeem` 的合约 ABI 编码仍由 ERC4626 执行模块负责；identity 中的 `calls.forward` 等映射只供身份流程使用，不会自动替代执行模块。
 
-**返回中央：** 该 Family 的执行能力产物，或者不支持／失败结果。本文在这个接口边界结束。
+**返回中央：** 该 Family 的执行能力产物，或者不支持／失败结果。模拟部分的正文停在这个接口边界。
+
+
+**共用 session：从 edge 解析出 Family 与已验证 route**
+
+源码：`strict-production-runtime-session.ts`（1430–1442 行，核心摘录）。
+
+```ts
+buildRuntimeAmountLeg(input: {
+  readonly edge: TokenEdge;
+  readonly executor: string;
+  readonly runtimeEvidence: readonly RuntimeEvidence[];
+  readonly settlement?: import("../adapters/runtime-amount-program.js").RuntimeSettlementRequest;
+}): import("../adapters/runtime-amount-program.js").RuntimeAmountLeg | null {
+  this.#runtime.generationFence.assertCurrent(this.source.generation, this.source);
+  const route = this.#resolve(input.edge);
+  if (route.kind === "credit") return null;
+  return buildFamilyRuntimeAmountLeg({ family: route.family, route: route.handle,
+    source: this.source, runtime: this.#runtime, executor: input.executor,
+    runtimeEvidence: input.runtimeEvidence, settlement: input.settlement, actionOwnership: this.#catalog });
+}
+```
+
+**共用 runtime：取出 JSON 所绑定对象的方法并调用**
+
+源码：`venues/adapter-family-runtime.ts`（2787–2796 行，核心摘录）。
+
+```ts
+const builder = input.family.plugin.execution.buildRuntimeLeg;
+if (!builder) return null;
+executionNativeSides(record.route);
+const requested = mapRuntimeAssetSettlementRequest({ route: record.route, executor: input.executor, request: input.settlement });
+if (requested === null) return null;
+const leg = builder(Object.freeze({ descriptor: record.instance.descriptor, route: record.route,
+  source: Object.freeze({ ...input.source }),
+  executor: input.executor, runtimeEvidence: Object.freeze([...input.runtimeEvidence]),
+  ...(requested === undefined ? {} : { settlement: Object.freeze({ ...requested }) }),
+  ...(caller.transactionOrigin === undefined ? {} : { transactionOrigin: caller.transactionOrigin }) }));
+```
+
+**指定金额分支：调用同一 execution 对象的 buildFragment**
+
+源码：`venues/adapter-family-runtime.ts`（2850–2865 行，核心摘录）。
+
+```ts
+const fragment = input.family.plugin.execution.buildFragment(Object.freeze({
+  descriptor: routeRecord.instance.descriptor,
+  route: routeRecord.route,
+  amountIn: exactRecord.amountIn,
+  quotedAmountOut: exactRecord.amountOut,
+  minAmountOut: input.minAmountOut,
+  ...(input.quoteToleranceRawUnits === undefined ? {} : {
+    quoteToleranceRawUnits: input.quoteToleranceRawUnits,
+  }),
+  exactEvidence: exactRecord.evidence,
+  executor: exactRecord.executor,
+  ...(exactRecord.callerContext.transactionOrigin === undefined ? {} : {
+    transactionOrigin: exactRecord.callerContext.transactionOrigin,
+  }),
+  runtimeEvidence: exactRecord.runtimeEvidence,
+}));
+```
+
+这里展示到 Family 函数调用为止。`buildRuntimeLeg` 与 `buildFragment` 是两条接口，不能画成先后必经步骤。当前选择器优先尝试 runtime；`runtimeAmounts === false`、没有 runtime 方法或任一 leg 返回 `null` 时，现有代码会走 quoted 分支。因此这里只描述调用接线，不把它写成所有模拟都保证零 Exact 或绝无 quoted 回退。
+
+## 8. 逐文件核对：哪些已有 JSON，哪些仍是代码
+
+**目前没有做到“每个原文件的语义都有对应 JSON”。** 已完成的是一个 Family JSON 统一装配生产能力，以及标准 discovery／identity 的声明驱动。`binding` 只回答“调用哪个模块导出”，不能算该文件逻辑已经迁入 JSON。
+
+以下逐项覆盖当前 `venues/protocols/erc4626-family/` 的全部 **20 个顶层 TypeScript 文件**。共用管线与测试文件另列，避免把测试资料当成运行定义。
+
+| 原文件 | 对应 JSON 位置 | 当前程度 | 实际保留内容 |
+|---|---|---|---|
+| `manifest.ts` | `manifest.binding` | 仅绑定 | Family ID、lineage、action 所有权等仍由代码导出 |
+| `capture.ts` | `capture.binding` | 仅绑定 | 复用观测材料物化函数；不等于价格读取定义 |
+| `discovery.ts` | `discovery.binding` + `discovery.definition` | 声明驱动 | call／event／surface 与候选字段交给共用编译器 |
+| `identity.ts` | `identity.binding` + `identity.definition` | 部分声明驱动 | 标准变体使用流程 JSON；variants 组装及非标变体仍有代码 |
+| `instance.ts` | `instance.binding` | 仅绑定 | 实例描述投影规则仍在代码 |
+| `routes.ts` | `routes.binding` | 仅绑定 | 方向和 route 投影仍在代码 |
+| `pricing.ts` | `pricing.binding` | 仅绑定 | 请求、刷新策略、快照与 mid 派生仍在代码 |
+| `exact.ts` | `exact.binding` | 仅绑定 | 指定金额请求及解码仍在代码 |
+| `execution.ts` | `execution.binding` | 仅绑定 | 执行接口与协议编码仍在代码 |
+| `protocol.ts` | `protocol.binding` | 仅绑定 | Protocol 槽的合同声明仍在代码 |
+| `action.ts` | `actionAdapters[0]`、`actionAdapters[1]` | 仅绑定 | 绑定两个 action 导出；encode 实现仍在代码 |
+| `abi.ts` | 标准 identity 的 ABI 另有 `identity.definition.abi` | 部分重复定义，未替代文件 | pricing／exact 等仍导入 TypeScript ABI；不能说 ABI 已统一只读 JSON |
+| `binding.ts` | 无独立 JSON 块 | 代码保留 | 实例、方向、资产和静态指纹校验由能力模块调用 |
+| `types.ts` | 无独立 JSON 块 | 代码保留 | 编译期类型，不是运行期 Family 定义 |
+| `custodian.ts` | 无独立 JSON 块 | 未声明化 | Custodian 的绑定、读取与规则仍在模块 |
+| `custodian-identity.ts` | 由 `identity.ts` 引入；无独立 definition | 未声明化 | 非标身份逻辑仍在代码 |
+| `custodian-execution.ts` | 由 execution／action 等引用；无独立 definition | 未声明化 | Custodian 执行逻辑仍在代码 |
+| `infinifi.ts` | 无独立 JSON 块 | 未声明化 | InfiniFi 的绑定、读取与规则仍在模块 |
+| `infinifi-identity.ts` | 由 `identity.ts` 引入；无独立 definition | 未声明化 | 非标身份逻辑仍在代码 |
+| `infinifi-execution.ts` | 由 execution／action 等引用；无独立 definition | 未声明化 | InfiniFi 执行逻辑仍在代码 |
+
+另外三类文件的对应关系：
+
+| 文件／类别 | JSON 关系 |
+|---|---|
+| `production-families/erc4626.production.ts` | 由 Family JSON 生成；不是第二份手工维护定义 |
+| `declarative-discovery.ts`、`declarative-definition.ts`、`declarative-identity.ts` 及 loader/runtime | 共用解释器和调用流程，负责消费定义；不要求给这些解释器再各造一份 Family JSON |
+| `sampled-conversion-flow.json` | 独立的共用身份流程；由 Family 的 `identity.definition.workflow` 和参数展开 |
+| 本族 `test/` 下的 24 份文件 | 测试、样本或证据；其中已有的 JSON 是测试输入，不是该 Family 的生产定义 |
+
+目前 **11 个顶层代码文件有直接绑定，9 个没有直接绑定**；有绑定的文件中，只有 discovery 与标准 identity 已将相应规则交给共用解释器。一个 Family 可以用一个 JSON 内的不同块对应原能力文件，不必机械地拆成 20 个 JSON 文件。若目标是“Family 只给声明，流程统一执行”，上述“仅绑定／未声明化”项仍是待迁移内容，本次文档更新没有把它们伪装成已完成。
 
 ## 完整 ERC4626 JSON
 
@@ -714,3 +1145,94 @@ execution.binding.export = erc4626Execution
   ]
 }
 ```
+
+
+## 函数调用整理
+
+以下按“文件.函数”列出入口和主要被调用函数。箭头是调用或产物流向；带缩进的是同一阶段内部步骤。Family 目录下的函数属于 ERC4626，共用文件不根据协议名分支。
+
+**加载 JSON 与装配**
+
+```text
+1. build-declarative-production.syncDeclarativeProductionEntries()
+   → JSON.parse() 读取 <family>-family/<family>.json
+2. build-declarative-production.renderDeclarativeProductionEntry()
+   → importBinding() 读取 binding.module / binding.export
+   → 生成 production-families/erc4626.production.ts
+3. production-families/erc4626.production.ts（生成产物）
+   → adapter-family-plugin.defineProtocolFamily({...})
+   → manifest / discovery / identity / instance / routes / pricing / exact / execution 等槽
+4. production-families/loader.loadStrictProductionFamilyPlugins()
+5. production-family-composition.composeProductionFamilyActivation()
+   → FamilyCapabilityCatalog + action registry
+```
+
+**发现、身份与实例**
+
+```text
+1. erc4626-family/discovery.erc4626Discovery
+   ← declarative-discovery.compileDeclarativeDiscovery(definition.discovery.definition)
+2. erc4626-family/identity.createErc4626StandardIdentityVariant() [装配时]
+   → declarative-definition.expandConversionDefinition()
+   → declarative-identity.compileDeclarativeIdentity()
+3. family-capability-catalog.FamilyCapabilityCatalog.matches(observation) [接收观测后]
+4. adapter-family-runtime.coalesceCandidateMatches()
+   → plugin.discovery.decodeCandidate()
+5. adapter-family-runtime.prepareCandidate()
+   → resolveIdentity()
+     → 已装配 variant 的 decide() / requirements() / buildRequests() / decode()
+6. adapter-family-runtime.prepareCandidate()
+   → erc4626Instance.compileDraft() / finalizeDescriptor()
+   → erc4626Routes.project()
+```
+
+**状态价格与指定金额报价**
+
+```text
+1. adapter-family-runtime.preparePricingState()             [首次准备]
+   → erc4626Pricing.compileDraft()
+   → staticEvidence.buildRequests() / decode()
+   → finalizePricingDescriptor()
+2. adapter-family-runtime.executePreparedPricingCurrent()
+   → erc4626Pricing.current.buildRequests()
+   → 中央执行请求
+   → erc4626Pricing.current.decodeSnapshot() / deriveMids()
+3. adapter-family-runtime.refreshPreparedFamilyInstancePricing()  [后续刷新入口]
+   → 同一 current 能力
+4. strict-production-runtime-session.StrictProductionRuntimeSession.issueExact()
+   → adapter-family-runtime.executeFamilyExactQuote()
+     → erc4626Exact.methods()
+     → 请求程序 buildRequests() / decode()
+```
+
+**模拟需要执行能力时：实收分支**
+
+```text
+1. simulator/blockscan-sim-amount-selector.createBlockScanSimAmountSelector()
+2. strict-production-runtime-session.StrictProductionRuntimeSession.buildRuntimeAmountLeg()
+3. venues/adapter-family-runtime.buildFamilyRuntimeAmountLeg()
+4. erc4626-family/execution.erc4626Execution.buildRuntimeLeg()
+   → 返回该 Family 的 RuntimeAmountLeg
+```
+
+**指定金额分支，以及后续消费接口**
+
+```text
+1. simulator/blockscan-sim-amount-selector.createBlockScanSimAmountSelector()
+   → quoted 分支取得金额与 Exact handles
+2. solver/plan-builder.buildResolvedPlanFromPath()
+   → 内部 buildFragment()
+3. strict-production-runtime-session.StrictProductionRuntimeSession.buildExecution()
+4. venues/adapter-family-runtime.buildFamilyExecutionFragment()
+5. erc4626-family/execution.erc4626Execution.buildFragment()
+   → 返回 Family fragment
+6. solver/plan-fragment-requirements.planFragmentNodes()
+   → 回到 buildResolvedPlanFromPath()
+7. strict-production-runtime-session.StrictProductionRuntimeSession.buildFundingRoot()
+   → adapter-funding-runtime.buildFundingBorrowFragment()  [资金来源的独立能力]
+8. 后续编译入口：listener/src/compiler.compilePlan()
+   → compileNode() → registry.get(node.adapterId) → adapter.encode()
+   → 对 ERC4626 action：erc4626-family/action.ts 内 encode(node, executor, inner)
+```
+
+最后两项只标出下游怎样消费插件产物，不展开整条计划或模拟构造。`fluidCreditExecution.buildFragment()`、`curvePlainExecution.buildFragment()` 是其他 Family 在相应接口上的实现，不是 ERC4626 路径中会依次调用的函数；`fluidVaultAdapter.encode()` 也不能作为所有 Family 共用的编码终点。
