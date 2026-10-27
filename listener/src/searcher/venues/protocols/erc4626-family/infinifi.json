@@ -1,0 +1,1430 @@
+{
+  "version": 1,
+  "id": "infinifi-gateway-staking",
+  "lineageId": "erc4626:infinifi-gateway-staking",
+  "abi": {
+    "vault": [
+      "function getAddress(string) view returns(address)",
+      "function core() view returns(address)",
+      "function asset() view returns(address)",
+      "function yieldSharing() view returns(address)",
+      "function stakedToken() view returns(address)",
+      "function receiptToken() view returns(address)",
+      "function paused() view returns(bool)",
+      "function hasRole(bytes32,address) view returns(bool)",
+      "function unaccruedYield() view returns(int256)",
+      "function canEnterOrExitStakedToken() view returns(bool)",
+      "function distributeInterpolationRewards()",
+      "function vested() view returns(uint256)",
+      "function previewDeposit(uint256) view returns(uint256)",
+      "function previewRedeem(uint256) view returns(uint256)",
+      "function stake(address,uint256) returns(uint256)",
+      "function unstake(address,uint256) returns(uint256)",
+      "function balanceOf(address) view returns(uint256)",
+      "function totalSupply() view returns(uint256)",
+      "function decimals() view returns(uint8)",
+      "function approve(address,uint256) returns(bool)",
+      "function allowance(address,address) view returns(uint256)",
+      "function aggregate3(tuple(address target,bool allowFailure,bytes callData)[] calls) payable returns(tuple(bool success,bytes returnData)[])",
+      "event Transfer(address indexed from,address indexed to,uint256 value)"
+    ],
+    "events": [
+      "function asset() view returns (address)",
+      "function totalAssets() view returns (uint256)",
+      "function totalSupply() view returns (uint256)",
+      "function convertToShares(uint256 assets) view returns (uint256)",
+      "function convertToAssets(uint256 shares) view returns (uint256)",
+      "function previewDeposit(uint256 assets) view returns (uint256)",
+      "function previewRedeem(uint256 shares) view returns (uint256)",
+      "function deposit(uint256 assets,address receiver) returns (uint256 shares)",
+      "function redeem(uint256 shares,address receiver,address owner) returns (uint256 assets)",
+      "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+      "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)"
+    ]
+  },
+  "constants": {
+    "actor": "0x000000000000000000000000000000000000face",
+    "caller": {"kind": "verified-actor", "evidenceId": "erc4626-probe-actor"},
+    "zero": "0x0000000000000000000000000000000000000000",
+    "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+    "gateway": "0x3f04b65ddbd87f9ce0a2e7eb24d80e7fb87625b5",
+    "multicall": "0xcA11bde05977b3631167028862bE2a173976CA11",
+    "role": "0x276ea66e969b021a947c47a128f4d53c55387336443ef7a5391a75f0d2e48d25",
+    "sample": "1000000000000000000"
+  },
+  "expressions": {
+    "slotRequest": {
+      "id": "$id",
+      "kind": "get-storage",
+      "address": "$vault",
+      "slot": "$constants.implementationSlot"
+    },
+    "projection": {
+      "$merge": [
+        "$binding",
+        {
+          "proofSource": {"$merge": ["$binding.proofSource"]},
+          "codeHashes": {"$merge": ["$binding.codeHashes"]}
+        }
+      ]
+    }
+  },
+  "readPrograms": {
+    "guard": {
+      "requests": {
+        "$expression": [
+          "guardRequests",
+          {
+            "prefix": "$prefix",
+            "vault": "$vault",
+            "binding": "$binding",
+            "actor": "$actor",
+            "caller": "$caller",
+            "direction": "$direction",
+            "amountIn": "$amountIn",
+            "requestId": "$requestId"
+          }
+        ]
+      },
+      "result": {
+        "$program": [
+          "guard",
+          {
+            "prefix": "$prefix",
+            "vault": "$vault",
+            "binding": "$binding",
+            "actor": "$actor",
+            "source": "$source",
+            "direction": "$direction",
+            "redeem": "$redeem",
+            "requestId": "$requestId"
+          }
+        ]
+      }
+    },
+    "quote": {
+      "requests": {
+        "$expression": [
+          "quoteRequests",
+          {
+            "prefix": "$prefix",
+            "vault": "$vault",
+            "binding": "$binding",
+            "actor": "$actor",
+            "caller": "$caller",
+            "direction": "$direction",
+            "amountIn": "$amountIn",
+            "requestId": "$requestId"
+          }
+        ]
+      },
+      "result": {
+        "$program": [
+          "quote",
+          {
+            "prefix": "$prefix",
+            "vault": "$vault",
+            "binding": "$binding",
+            "actor": "$actor",
+            "source": "$source",
+            "direction": "$direction",
+            "redeem": "$redeem",
+            "requestId": "$requestId"
+          }
+        ]
+      }
+    }
+  },
+  "inputs": [
+    "prefix",
+    "binding",
+    "vault",
+    "caller",
+    "actor",
+    "source",
+    "direction",
+    "amountIn",
+    "requestId",
+    "redeem",
+    "checkActor",
+    "code",
+    "value",
+    "data",
+    "id",
+    "actual",
+    "expected"
+  ],
+  "admission": {
+    "version": 1,
+    "requestPrefix": "infinifi",
+    "retryPrefix": "infinifi_unavailable:",
+    "match": {
+      "phase": "registry",
+      "kind": "registry-pointer",
+      "requirements": {"transports": ["get-code", "eth-call"]},
+      "sourceFailure": "propagate",
+      "codeRequestId": "infinifi-registry-code",
+      "candidateValue": "$candidate.vault",
+      "mismatchReason": "infinifi_registry_not_matched",
+      "valueRequestId": "infinifi-registry",
+      "abi": "vault",
+      "function": "getAddress",
+      "noCodeReason": "infinifi_registry_not_deployed",
+      "malformedReason": "InfiniFi malformed registry response",
+      "reads": [
+        {"id": "infinifi-registry-code", "code": "$constants.gateway"},
+        {
+          "id": "infinifi-registry",
+          "call": {"abi": "vault", "function": "getAddress", "args": ["stakedToken"]},
+          "target": "$constants.gateway",
+          "required": false,
+          "completion": "return-or-revert-data"
+        }
+      ]
+    },
+    "surface": {
+      "requirements": {"transports": ["get-code", "get-storage", "eth-call"]},
+      "decode": {"$program": ["surface", {"prefix": "infinifi", "vault": "$candidate.vault"}]},
+      "sourceFailure": "propagate",
+      "reads": [{"use": "surfaceRequests", "with": {"prefix": "infinifi", "vault": "$candidate.vault"}}]
+    },
+    "dependencies": {
+      "requirements": {"transports": ["get-code", "get-storage", "eth-call"]},
+      "decode": {"$program": ["dependencies", {"prefix": "infinifi", "surface": "$evidence.surface"}]},
+      "permission": {"$program": ["permission", {"prefix": "infinifi", "redeem": true}]},
+      "sourceFailure": "propagate",
+      "reads": [
+        {
+          "use": "dependencyRequests",
+          "with": {"prefix": "infinifi", "binding": "$evidence.surface"}
+        },
+        {
+          "each": ["deposit", "redeem"],
+          "as": "direction",
+          "reads": [
+            {
+              "use": "quoteRequests",
+              "with": {
+                "requestId": {"$join": [["infinifi-preview-", "$direction"], ""]},
+                "binding": "$evidence.surface",
+                "direction": "$direction",
+                "amountIn": {"$uint": ["1000000000000000000"]}
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "samples": {
+      "stage": "dependencies",
+      "directions": ["deposit", "redeem"],
+      "select": {"direction": "$direction", "amount": {"$uint": ["1000000000000000000"]}},
+      "quote": {
+        "$program": ["quote", {"requestId": {"$join": [["infinifi-preview-", "$sample.direction"], ""]}}]
+      }
+    },
+    "active": {
+      "requirements": {
+        "transports": ["get-code", "effect-delta-simulation"],
+        "caller": "verified-actor",
+        "effects": ["return-data", "revert-data", "token-delta", "logs"]
+      },
+      "sourceFailure": "propagate",
+      "source": "$evidence.partial.proofSource",
+      "binding": {
+        "$merge": [
+          "$evidence.partial",
+          {
+            "codeHashes": {
+              "$merge": [
+                "$evidence.partial.codeHashes",
+                {
+                  "yieldSharingImplementation": {"$codeHash": [{"$code": ["infinifi-code-yieldSharingImplementation"]}]}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "bindingField": "partial",
+      "carriedSurface": false,
+      "unavailableReason": "infinifi_gateway_execution_unavailable",
+      "requestId": {"$join": [["infinifi-active-", "$sample.direction"], ""]},
+      "expectedReturn": "$sample.expected",
+      "returnValue": {"$uint": ["$result.data"]},
+      "returnError": "InfiniFi Gateway return/quote mismatch",
+      "tokenDeltas": [
+        {
+          "token": "$binding.vault",
+          "account": {"$address": ["$constants.actor"]},
+          "delta": {"$if": ["$deposit", "$sample.expected", {"$sub": [{"$uint": ["0"]}, "$sample.amount"]}]}
+        },
+        {
+          "token": "$binding.asset",
+          "account": {"$address": ["$constants.actor"]},
+          "delta": {"$if": ["$deposit", {"$sub": [{"$uint": ["0"]}, "$sample.amount"]}, "$sample.expected"]}
+        },
+        {"token": "$binding.vault", "account": "$binding.gateway", "delta": {"$uint": ["0"]}},
+        {"token": "$binding.asset", "account": "$binding.gateway", "delta": {"$uint": ["0"]}}
+      ],
+      "supplyDeltas": [],
+      "events": [
+        {
+          "address": "$binding.vault",
+          "abi": "events",
+          "name": {"$if": ["$deposit", "Deposit", "Withdraw"]},
+          "fields": {
+            "$merge": [
+              {
+                "sender": "$binding.gateway",
+                "owner": {"$if": ["$deposit", {"$address": ["$constants.actor"]}, "$binding.gateway"]},
+                "assets": {"$if": ["$deposit", "$sample.amount", "$sample.expected"]},
+                "shares": {"$if": ["$deposit", "$sample.expected", "$sample.amount"]}
+              },
+              {"$if": ["$deposit", {}, {"receiver": {"$address": ["$constants.actor"]}}]}
+            ]
+          },
+          "error": "InfiniFi synchronous vault event missing"
+        },
+        {
+          "address": "$binding.vault",
+          "abi": "vault",
+          "name": "Transfer",
+          "fields": {
+            "from": {"$if": ["$deposit", {"$address": ["$constants.zero"]}, "$binding.gateway"]},
+            "to": {
+              "$if": ["$deposit", {"$address": ["$constants.actor"]}, {"$address": ["$constants.zero"]}]
+            },
+            "value": {"$if": ["$deposit", "$sample.expected", "$sample.amount"]}
+          },
+          "error": "InfiniFi mint/burn event missing"
+        }
+      ],
+      "proofHash": {
+        "$hash": [
+          {
+            "binding": "$binding",
+            "samples": "$evidence.samples",
+            "directions": "$directions",
+            "results": {
+              "$map": [
+                {"$filter": ["$results", "r", "$r.ok"]},
+                "r",
+                {
+                  "id": "$r.id",
+                  "completion": "$r.completion",
+                  "effects": {"$effects": ["$r.effects"]}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "reads": [
+        {
+          "id": "infinifi-code-yieldSharingImplementation",
+          "code": "$evidence.partial.yieldSharingImplementation"
+        },
+        {
+          "each": "$evidence.samples",
+          "as": "sample",
+          "reads": [
+            {
+              "simulation": {
+                "id": {"$join": [["infinifi-active-", "$sample.direction"], ""]},
+                "required": false,
+                "kind": "effect-delta-simulation",
+                "preCalls": {
+                  "$map": [
+                    [{"$uint": ["0"]}, "$sample.amount"],
+                    "quantity",
+                    {
+                      "caller": "$constants.caller",
+                      "to": {
+                        "$if": [
+                          {"$eq": ["$sample.direction", "deposit"]},
+                          "$evidence.partial.asset",
+                          "$evidence.partial.vault"
+                        ]
+                      },
+                      "data": {"$encode": ["vault", "approve", ["$evidence.partial.gateway", "$quantity"]]}
+                    }
+                  ]
+                },
+                "call": {
+                  "caller": "$constants.caller",
+                  "to": "$evidence.partial.gateway",
+                  "data": {
+                    "$encode": [
+                      "vault",
+                      {"$if": [{"$eq": ["$sample.direction", "deposit"]}, "stake", "unstake"]},
+                      [{"$address": ["$constants.actor"]}, "$sample.amount"]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": "$constants.caller",
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "$if": [
+                          {"$eq": ["$sample.direction", "deposit"]},
+                          "$evidence.partial.asset",
+                          "$evidence.partial.vault"
+                        ]
+                      },
+                      "amount": "$sample.amount"
+                    },
+                    {
+                      "token": {
+                        "$if": [
+                          {"$eq": ["$sample.direction", "deposit"]},
+                          "$evidence.partial.vault",
+                          "$evidence.partial.asset"
+                        ]
+                      },
+                      "amount": {"$uint": ["0"]}
+                    }
+                  ]
+                },
+                "observeTokenBalances": {
+                  "$flatMap": [
+                    ["$evidence.partial.vault", "$evidence.partial.asset"],
+                    "token",
+                    [
+                      {"token": "$token", "account": "$constants.caller"},
+                      {"token": "$token", "account": "$evidence.partial.gateway"}
+                    ]
+                  ]
+                },
+                "observe": ["return-data", "revert-data", "token-delta", "logs"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "identity": {
+      "bindingField": "infinifi",
+      "subject": "$candidate.vault",
+      "provenanceKind": "infinifi-registry-and-gateway-active-proof"
+    }
+  },
+  "models": {
+    "surface": {
+      "fields": [
+        {
+          "name": "observedSource",
+          "value": {"$source": [{"$map": ["$results", "row", {"$successful": ["$row.id"]}]}]}
+        },
+        {
+          "name": "asset",
+          "value": {
+            "$addressWord": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "vault-asset"], ""]}]}, "data"]}]
+          }
+        },
+        {
+          "name": "yieldSharing",
+          "value": {
+            "$addressWord": [
+              {
+                "$get": [{"$returned": [{"$join": [["$prefix", "-", "vault-yieldSharing"], ""]}]}, "data"]
+              }
+            ]
+          }
+        },
+        {
+          "name": "core",
+          "value": {
+            "$addressWord": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "vault-core"], ""]}]}, "data"]}]
+          },
+          "checks": [
+            {
+              "condition": {
+                "$and": [
+                  {
+                    "$sameAddress": [
+                      {
+                        "$addressWord": [
+                          {
+                            "$get": [
+                              {
+                                "$returned": [{"$join": [["$prefix", "-", "registry-stakedToken"], ""]}]
+                              },
+                              "data"
+                            ]
+                          }
+                        ]
+                      },
+                      "$vault"
+                    ]
+                  },
+                  {
+                    "$sameAddress": [
+                      {
+                        "$addressWord": [
+                          {
+                            "$get": [
+                              {
+                                "$returned": [{"$join": [["$prefix", "-", "registry-receiptToken"], ""]}]
+                              },
+                              "data"
+                            ]
+                          }
+                        ]
+                      },
+                      "$asset"
+                    ]
+                  },
+                  {
+                    "$sameAddress": [
+                      {
+                        "$addressWord": [
+                          {
+                            "$get": [
+                              {
+                                "$returned": [{"$join": [["$prefix", "-", "registry-yieldSharing"], ""]}]
+                              },
+                              "data"
+                            ]
+                          }
+                        ]
+                      },
+                      "$yieldSharing"
+                    ]
+                  },
+                  {
+                    "$sameAddress": [
+                      {
+                        "$addressWord": [
+                          {
+                            "$get": [
+                              {"$returned": [{"$join": [["$prefix", "-", "gateway-core"], ""]}]},
+                              "data"
+                            ]
+                          }
+                        ]
+                      },
+                      "$core"
+                    ]
+                  },
+                  {
+                    "$eq": [
+                      {
+                        "$length": [
+                          {
+                            "$unique": [
+                              {
+                                "$map": [
+                                  [
+                                    "$vault",
+                                    "$asset",
+                                    "$yieldSharing",
+                                    "$core",
+                                    "$constants.gateway"
+                                  ],
+                                  "address",
+                                  {"$lower": ["$address"]}
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      5
+                    ]
+                  }
+                ]
+              },
+              "error": "InfiniFi registry/reverse binding mismatch"
+            }
+          ]
+        },
+        {
+          "name": "shareDecimals",
+          "value": {
+            "$number": [
+              {
+                "$word": [
+                  {
+                    "$get": [{"$returned": [{"$join": [["$prefix", "-", "vault-decimals"], ""]}]}, "data"]
+                  }
+                ]
+              }
+            ]
+          },
+          "checks": [{"condition": {"$lte": ["$shareDecimals", 36]}, "error": "InfiniFi share decimals"}]
+        }
+      ],
+      "output": {
+        "proofSource": "$observedSource",
+        "vault": {"$address": ["$vault"]},
+        "asset": "$asset",
+        "gateway": {"$address": ["$constants.gateway"]},
+        "core": "$core",
+        "yieldSharing": "$yieldSharing",
+        "shareDecimals": "$shareDecimals",
+        "gatewayImplementation": {
+          "$addressWord": [
+            {
+              "$get": [{"$returned": [{"$join": [["$prefix", "-", "gateway-implementation"], ""]}]}, "data"]
+            }
+          ]
+        },
+        "vaultCodeHash": {"$codeHash": [{"$code": [{"$join": [["$prefix", "-", "vault-code"], ""]}]}]},
+        "gatewayCodeHash": {"$codeHash": [{"$code": [{"$join": [["$prefix", "-", "gateway-code"], ""]}]}]}
+      }
+    },
+    "dependencies": {
+      "fields": [
+        {
+          "name": "assetDecimals",
+          "value": {
+            "$number": [
+              {
+                "$word": [
+                  {
+                    "$get": [{"$returned": [{"$join": [["$prefix", "-", "asset-decimals"], ""]}]}, "data"]
+                  }
+                ]
+              }
+            ]
+          },
+          "checks": [{"condition": {"$lte": ["$assetDecimals", 36]}, "error": "InfiniFi asset decimals"}]
+        }
+      ],
+      "checks": [
+        {
+          "condition": {
+            "$assertSource": [
+              {"$source": [{"$map": ["$results", "row", {"$successful": ["$row.id"]}]}]},
+              "$surface.proofSource"
+            ]
+          },
+          "error": "declared relationship check failed"
+        },
+        {
+          "condition": {
+            "$every": [
+              [
+                ["core", "$surface.core"],
+                ["stakedToken", "$surface.vault"],
+                ["receiptToken", "$surface.asset"]
+              ],
+              "row",
+              {
+                "$sameAddress": [
+                  {
+                    "$addressWord": [
+                      {
+                        "$get": [
+                          {
+                            "$returned": [{"$join": [["$prefix", "-ys-", {"$at": ["$row", 0]}], ""]}]
+                          },
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  {"$at": ["$row", 1]}
+                ]
+              }
+            ]
+          },
+          "error": "InfiniFi YieldSharing reverse binding"
+        }
+      ],
+      "output": {
+        "$merge": [
+          "$surface",
+          {
+            "assetDecimals": "$assetDecimals",
+            "yieldSharingImplementation": {
+              "$addressWord": [
+                {
+                  "$get": [
+                    {
+                      "$returned": [{"$join": [["$prefix", "-", "yieldSharing-implementation"], ""]}]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            },
+            "codeHashes": {
+              "$objectFromEntries": [
+                {
+                  "$map": [
+                    ["asset", "core", "yieldSharing", "gatewayImplementation", "multicall"],
+                    "key",
+                    [
+                      "$key",
+                      {"$codeHash": [{"$code": [{"$join": [["$prefix", "-code-", "$key"], ""]}]}]}
+                    ]
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "permission": {
+      "fields": [
+        {
+          "name": "role",
+          "value": {
+            "$bool": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "entry-point"], ""]}]}, "data"]}]
+          }
+        },
+        {
+          "name": "gatewayPaused",
+          "value": {
+            "$bool": [
+              {
+                "$get": [{"$returned": [{"$join": [["$prefix", "-", "gateway-paused"], ""]}]}, "data"]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vaultPaused",
+          "value": {
+            "$bool": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "vault-paused"], ""]}]}, "data"]}]
+          }
+        },
+        {
+          "name": "loss",
+          "value": {
+            "$word": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "loss"], ""]}]}, "data"]}]
+          }
+        }
+      ],
+      "output": {
+        "$if": [
+          {"$not": ["$role"]},
+          "infinifi_gateway_permission_disabled",
+          {
+            "$if": [
+              {"$or": ["$gatewayPaused", "$vaultPaused"]},
+              "infinifi_paused",
+              {
+                "$if": [
+                  {"$and": ["$redeem", {"$gte": ["$loss", {"$pow": [{"$uint": ["2"]}, 255]}]}]},
+                  "infinifi_pending_losses",
+                  null
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "guard": {
+      "fields": [
+        {
+          "name": "surface",
+          "value": {"$program": ["surface", {"prefix": "$prefix", "vault": "$binding.vault"}]},
+          "checks": [
+            {
+              "condition": {"$assertSource": ["$surface.proofSource", "$source"]},
+              "error": "declared relationship check failed",
+              "when": {"$defined": ["$source"]}
+            }
+          ]
+        },
+        {
+          "name": "actual",
+          "value": {"$program": ["dependencies", {"prefix": "$prefix", "surface": "$surface"}]},
+          "checks": [
+            {
+              "condition": {
+                "$every": [
+                  [
+                    "vault",
+                    "asset",
+                    "gateway",
+                    "core",
+                    "yieldSharing",
+                    "gatewayImplementation",
+                    "yieldSharingImplementation"
+                  ],
+                  "key",
+                  {"$sameAddress": [{"$get": ["$actual", "$key"]}, {"$get": ["$binding", "$key"]}]}
+                ]
+              },
+              "error": "InfiniFi dependency changed"
+            },
+            {
+              "condition": {
+                "$every": [
+                  ["shareDecimals", "assetDecimals", "vaultCodeHash", "gatewayCodeHash"],
+                  "key",
+                  {"$eq": [{"$get": ["$actual", "$key"]}, {"$get": ["$binding", "$key"]}]}
+                ]
+              },
+              "error": "InfiniFi surface changed"
+            },
+            {
+              "condition": {
+                "$every": [
+                  {"$objectEntries": ["$actual.codeHashes"]},
+                  "row",
+                  {
+                    "$eq": [{"$at": ["$row", 1]}, {"$get": ["$binding.codeHashes", {"$at": ["$row", 0]}]}]
+                  }
+                ]
+              },
+              "error": "InfiniFi dependency code changed"
+            },
+            {
+              "condition": {
+                "$eq": [
+                  {
+                    "$codeHash": [
+                      {
+                        "$code": [{"$join": [["$prefix", "-", "code-yieldSharingImplementation"], ""]}]
+                      }
+                    ]
+                  },
+                  "$binding.codeHashes.yieldSharingImplementation"
+                ]
+              },
+              "error": "InfiniFi YieldSharing implementation changed"
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "value": {
+            "$program": [
+              "permission",
+              {
+                "prefix": "$prefix",
+                "redeem": {"$or": [{"$eq": ["$direction", "redeem"]}, {"$coalesce": ["$redeem", false]}]}
+              }
+            ]
+          },
+          "checks": [{"condition": {"$eq": ["$reason", null]}, "error": "$reason"}]
+        }
+      ],
+      "output": "$surface"
+    },
+    "quote": {
+      "fields": [
+        {
+          "name": "rows",
+          "value": {"$decode": ["vault", "aggregate3", {"$get": [{"$returned": ["$requestId"]}, "data"]}, 0]},
+          "checks": [
+            {
+              "condition": {
+                "$and": [
+                  {"$eq": [{"$length": ["$rows"]}, 2]},
+                  {"$every": ["$rows", "row", {"$get": ["$row", "success"]}]},
+                  {"$eq": [{"$get": [{"$at": ["$rows", 0]}, "returnData"]}, "0x"]},
+                  {
+                    "$matches": [{"$get": [{"$at": ["$rows", 1]}, "returnData"]}, "^0x[0-9a-fA-F]{64}$"]
+                  }
+                ]
+              },
+              "error": "InfiniFi distribution/preview response"
+            }
+          ]
+        },
+        {
+          "name": "amount",
+          "value": {"$uint": [{"$get": [{"$at": ["$rows", 1]}, "returnData"]}]},
+          "checks": [
+            {
+              "condition": {"$gt": ["$amount", {"$uint": ["0"]}]},
+              "error": "InfiniFi quote returned no output"
+            }
+          ]
+        }
+      ],
+      "output": "$amount"
+    },
+    "address": {
+      "fields": [
+        {
+          "name": "address",
+          "value": {"$address": ["$value"]},
+          "checks": [
+            {
+              "condition": {"$ne": ["$address", {"$address": ["$constants.zero"]}]},
+              "error": "InfiniFi zero address"
+            }
+          ]
+        }
+      ],
+      "output": "$address"
+    },
+    "word": {
+      "fields": [
+        {
+          "name": "data",
+          "value": {"$get": [{"$returned": ["$id"]}, "data"]},
+          "checks": [
+            {
+              "condition": {"$matches": ["$data", "^0x[0-9a-fA-F]{64}$"]},
+              "error": {"$join": [["InfiniFi malformed word: ", "$id"], ""]}
+            }
+          ]
+        }
+      ],
+      "output": {"$uint": ["$data"]}
+    },
+    "quoteRequests": {
+      "fields": [],
+      "checks": [
+        {
+          "condition": {
+            "$and": [
+              {"$gt": ["$amountIn", {"$uint": ["0"]}]},
+              {
+                "$lte": [
+                  "$amountIn",
+                  {
+                    "$uint": [
+                      "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "InfiniFi quote amount"
+        }
+      ],
+      "output": {
+        "$at": [
+          {
+            "$expression": [
+              "quoteRequests",
+              {
+                "requestId": "$requestId",
+                "binding": "$binding",
+                "direction": "$direction",
+                "amountIn": "$amountIn"
+              }
+            ]
+          },
+          0
+        ]
+      }
+    },
+    "quoteData": {
+      "fields": [
+        {
+          "name": "rows",
+          "value": {"$decode": ["vault", "aggregate3", "$data", 0]},
+          "checks": [
+            {
+              "condition": {
+                "$and": [
+                  {"$eq": [{"$length": ["$rows"]}, 2]},
+                  {"$every": ["$rows", "row", {"$get": ["$row", "success"]}]},
+                  {"$eq": [{"$get": [{"$at": ["$rows", 0]}, "returnData"]}, "0x"]},
+                  {
+                    "$matches": [{"$get": [{"$at": ["$rows", 1]}, "returnData"]}, "^0x[0-9a-fA-F]{64}$"]
+                  }
+                ]
+              },
+              "error": "InfiniFi distribution/preview response"
+            }
+          ]
+        },
+        {
+          "name": "amount",
+          "value": {"$uint": [{"$get": [{"$at": ["$rows", 1]}, "returnData"]}]},
+          "checks": [
+            {
+              "condition": {"$gt": ["$amount", {"$uint": ["0"]}]},
+              "error": "InfiniFi quote returned no output"
+            }
+          ]
+        }
+      ],
+      "output": "$amount"
+    }
+  },
+  "requestSets": {
+    "surfaceRequests": [
+      {"id": {"$join": [["$prefix", "-", "vault-code"], ""]}, "code": "$vault"},
+      {"id": {"$join": [["$prefix", "-", "gateway-code"], ""]}, "code": "$constants.gateway"},
+      {
+        "id": {"$join": [["$prefix", "-", "gateway-implementation"], ""]},
+        "storage": {"address": "$constants.gateway", "slot": "$constants.implementationSlot"}
+      },
+      {
+        "each": ["stakedToken", "receiptToken", "yieldSharing"],
+        "as": "name",
+        "reads": [
+          {
+            "id": {"$join": [["$prefix", "-registry-", "$name"], ""]},
+            "call": {"abi": "vault", "function": "getAddress", "args": ["$name"]},
+            "target": "$constants.gateway"
+          }
+        ]
+      },
+      {
+        "each": ["asset", "yieldSharing", "core", "decimals"],
+        "as": "name",
+        "reads": [
+          {
+            "id": {"$join": [["$prefix", "-vault-", "$name"], ""]},
+            "call": {"abi": "vault", "function": "$name", "args": []},
+            "target": "$vault"
+          }
+        ]
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "gateway-core"], ""]},
+        "call": {"abi": "vault", "function": "core", "args": []},
+        "target": "$constants.gateway"
+      }
+    ],
+    "dependencyRequests": [
+      {
+        "each": ["asset", "core", "yieldSharing", "gatewayImplementation"],
+        "as": "key",
+        "reads": [
+          {
+            "id": {"$join": [["$prefix", "-code-", "$key"], ""]},
+            "code": {"$get": ["$binding", "$key"]}
+          }
+        ]
+      },
+      {"id": {"$join": [["$prefix", "-", "code-multicall"], ""]}, "code": "$constants.multicall"},
+      {
+        "id": {"$join": [["$prefix", "-", "yieldSharing-implementation"], ""]},
+        "storage": {"address": "$binding.yieldSharing", "slot": "$constants.implementationSlot"}
+      },
+      {
+        "each": ["core", "stakedToken", "receiptToken"],
+        "as": "name",
+        "reads": [
+          {
+            "id": {"$join": [["$prefix", "-ys-", "$name"], ""]},
+            "call": {"abi": "vault", "function": "$name", "args": []},
+            "target": "$binding.yieldSharing"
+          }
+        ]
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "asset-decimals"], ""]},
+        "call": {"abi": "vault", "function": "decimals", "args": []},
+        "target": "$binding.asset"
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "entry-point"], ""]},
+        "call": {"abi": "vault", "function": "hasRole", "args": ["$constants.role", "$binding.gateway"]},
+        "target": "$binding.core"
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "gateway-paused"], ""]},
+        "call": {"abi": "vault", "function": "paused", "args": []},
+        "target": "$binding.gateway"
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "vault-paused"], ""]},
+        "call": {"abi": "vault", "function": "paused", "args": []},
+        "target": "$binding.vault"
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "loss"], ""]},
+        "call": {"abi": "vault", "function": "unaccruedYield", "args": []},
+        "target": "$binding.yieldSharing"
+      }
+    ],
+    "guardRequests": [
+      {"use": "surfaceRequests", "with": {"prefix": "$prefix", "vault": "$binding.vault"}},
+      {"use": "dependencyRequests", "with": {"prefix": "$prefix", "binding": "$binding"}},
+      {
+        "id": {"$join": [["$prefix", "-", "code-yieldSharingImplementation"], ""]},
+        "code": "$binding.yieldSharingImplementation"
+      }
+    ],
+    "quoteRequests": [
+      {
+        "id": "$requestId",
+        "call": {
+          "abi": "vault",
+          "function": "aggregate3",
+          "args": [
+            [
+              {
+                "target": "$binding.yieldSharing",
+                "allowFailure": false,
+                "callData": {"$encode": ["vault", "distributeInterpolationRewards", []]}
+              },
+              {
+                "target": "$binding.vault",
+                "allowFailure": false,
+                "callData": {
+                  "$encode": [
+                    "vault",
+                    {"$if": [{"$eq": ["$direction", "deposit"]}, "previewDeposit", "previewRedeem"]},
+                    ["$amountIn"]
+                  ]
+                }
+              }
+            ]
+          ]
+        },
+        "target": "$constants.multicall"
+      }
+    ]
+  },
+  "match": {"op": "defined", "args": ["$descriptor.infinifi"]},
+  "boundState": "$descriptor.infinifi",
+  "context": {
+    "vault": "$descriptor.vault",
+    "redeem": {"op": "some", "args": ["$routes", "r", {"op": "eq", "args": ["$r.direction", "redeem"]}]}
+  },
+  "pricing": {
+    "mutationAddresses": ["$descriptor.vault", "$binding.gateway", "$binding.yieldSharing", "$binding.core"],
+    "refreshPolicy": "each-block",
+    "requirements": {"transports": ["eth-call", "get-code", "get-storage"]},
+    "guardProgram": "guard",
+    "guardPrefix": "current-infinifi",
+    "dependencies": [
+      "$descriptor.vault",
+      "$descriptor.asset",
+      "$descriptor.share",
+      "$binding.gateway",
+      "$binding.yieldSharing",
+      "$binding.core",
+      "$binding.gatewayImplementation",
+      "$binding.yieldSharingImplementation"
+    ],
+    "finalizeChecks": [
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.oneAsset",
+                {"op": "pow", "args": ["10", "$descriptor.infinifi.assetDecimals"]}
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.oneShare",
+                {"op": "pow", "args": ["10", "$descriptor.infinifi.shareDecimals"]}
+              ]
+            }
+          ]
+        },
+        "error": "infinifi pricing decimals binding mismatch"
+      }
+    ]
+  },
+  "exact": {
+    "protectedAddresses": ["$descriptor.vault", "$binding.gateway"],
+    "methodId": "erc4626-preview",
+    "requirements": {"transports": ["eth-call", "get-code", "get-storage"]},
+    "guardProgram": "guard",
+    "guardPrefix": "exact-infinifi",
+    "caller": {"kind": "executor"},
+    "checks": [
+      {
+        "condition": {
+          "op": "eq",
+          "args": [{"op": "length", "args": [{"op": "coalesce", "args": ["$prefix", []]}]}, 0]
+        },
+        "error": "infinifi sequential/pending quote unsupported"
+      },
+      {
+        "condition": {"op": "eq", "args": [{"op": "length", "args": ["$runtimeEvidence"]}, 0]},
+        "error": "infinifi sequential/pending quote unsupported"
+      }
+    ],
+    "evidence": {
+      "kind": "infinifi-gateway-preview",
+      "source": "$source",
+      "vault": "$descriptor.vault",
+      "direction": "$route.direction",
+      "amountIn": "$amountIn",
+      "amountOut": "$amountOut",
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "executor": "$executor"
+    }
+  },
+  "assertions": [
+    {
+      "condition": {
+        "op": "and",
+        "args": [
+          {"op": "not", "args": [{"op": "defined", "args": ["$descriptor.custodian"]}]},
+          {
+            "op": "sameAddress",
+            "args": ["$binding.gateway", "0x3f04b65ddbd87f9ce0a2e7eb24d80e7fb87625b5"]
+          },
+          {"op": "sameAddress", "args": ["$binding.vault", "$descriptor.vault"]},
+          {"op": "sameAddress", "args": ["$binding.vault", "$descriptor.share"]},
+          {"op": "sameAddress", "args": ["$binding.asset", "$descriptor.asset"]},
+          {
+            "op": "not",
+            "args": [{"op": "sameAddress", "args": ["$binding.vault", "$binding.asset"]}]
+          }
+        ]
+      },
+      "error": "InfiniFi route binding mismatch"
+    }
+  ],
+  "execution": {
+    "version": 1,
+    "settlement": {"directOutput": true},
+    "protectedAddresses": [
+      "$binding.vault",
+      "$binding.asset",
+      "$binding.gateway",
+      "$binding.yieldSharing",
+      "$binding.core"
+    ],
+    "preflight": [
+      {
+        "target": "$binding.gateway",
+        "signature": "function getAddress(string) view returns(address)",
+        "args": ["stakedToken"],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$binding.vault"}]
+      },
+      {
+        "target": "$binding.gateway",
+        "signature": "function getAddress(string) view returns(address)",
+        "args": ["receiptToken"],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$binding.asset"}]
+      },
+      {
+        "target": "$binding.gateway",
+        "signature": "function getAddress(string) view returns(address)",
+        "args": ["yieldSharing"],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$binding.yieldSharing"}]
+      },
+      {
+        "target": "$binding.vault",
+        "signature": "function asset() view returns(address)",
+        "args": [],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$binding.asset"}]
+      },
+      {
+        "target": "$binding.vault",
+        "signature": "function yieldSharing() view returns(address)",
+        "args": [],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$binding.yieldSharing"}]
+      },
+      {
+        "target": "$binding.gateway",
+        "signature": "function core() view returns(address)",
+        "args": [],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$binding.core"}]
+      },
+      {
+        "target": "$binding.vault",
+        "signature": "function core() view returns(address)",
+        "args": [],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$binding.core"}]
+      },
+      {
+        "target": "$binding.yieldSharing",
+        "signature": "function core() view returns(address)",
+        "args": [],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$binding.core"}]
+      },
+      {
+        "target": "$binding.core",
+        "signature": "function hasRole(bytes32,address) view returns(bool)",
+        "args": ["$constants.role", "$binding.gateway"],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": true}]
+      }
+    ],
+    "approval": {
+      "token": "$route.tokenIn",
+      "spender": "$binding.gateway",
+      "mode": "exact-clear",
+      "requireBool": true,
+      "verifyAllowance": true
+    },
+    "call": {
+      "target": "$binding.gateway",
+      "signature": {
+        "op": "if",
+        "args": [
+          {"op": "eq", "args": ["$direction", "deposit"]},
+          "function stake(address,uint256) returns(uint256)",
+          "function unstake(address,uint256) returns(uint256)"
+        ]
+      },
+      "args": ["$recipient", {"runtime": "amountIn"}],
+      "save": {"output": 0},
+      "checks": [{"left": {"runtime": "output"}, "operator": "gte", "right": 1}]
+    },
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {"runtime": "amountIn"}
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "equals": {"runtime": "output"},
+        "minimum": "$minAmountOut"
+      },
+      {
+        "kind": "supply",
+        "token": "$binding.vault",
+        "direction": {
+          "op": "if",
+          "args": [{"op": "eq", "args": ["$direction", "deposit"]}, "increase", "decrease"]
+        },
+        "equals": {
+          "op": "if",
+          "args": [
+            {"op": "eq", "args": ["$direction", "deposit"]},
+            {"runtime": "output"},
+            {"runtime": "amountIn"}
+          ]
+        }
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenIn",
+        "account": "$recipient",
+        "when": "$externalRecipient"
+      },
+      {"kind": "unchanged-native", "when": "$directSettlement"},
+      {"kind": "unchanged-token", "token": "$route.tokenIn", "account": "$binding.gateway"},
+      {"kind": "unchanged-token", "token": "$route.tokenOut", "account": "$binding.gateway"}
+    ],
+    "requireCanonicalSource": true,
+    "rejectRuntimeEvidence": true,
+    "contextChecks": [
+      {
+        "error": "conversion direction unsupported",
+        "condition": {
+          "op": "or",
+          "args": [
+            {"op": "eq", "args": ["$direction", "deposit"]},
+            {"op": "eq", "args": ["$direction", "redeem"]}
+          ]
+        }
+      },
+      {
+        "error": "InfiniFi runtime bindings",
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": ["$binding.vault", "0x0000000000000000000000000000000000000000"]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": ["$binding.asset", "0x0000000000000000000000000000000000000000"]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": ["$binding.gateway", "0x0000000000000000000000000000000000000000"]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": ["$binding.yieldSharing", "0x0000000000000000000000000000000000000000"]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": ["$binding.core", "0x0000000000000000000000000000000000000000"]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.vault", "$binding.asset"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.vault", "$binding.gateway"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.vault", "$binding.yieldSharing"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.vault", "$binding.core"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.asset", "$binding.gateway"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.asset", "$binding.yieldSharing"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.asset", "$binding.core"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.gateway", "$binding.yieldSharing"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.gateway", "$binding.core"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$binding.yieldSharing", "$binding.core"]}]
+            },
+            {"op": "sameAddress", "args": ["$binding.gateway", "$constants.gateway"]}
+          ]
+        }
+      }
+    ]
+  }
+}

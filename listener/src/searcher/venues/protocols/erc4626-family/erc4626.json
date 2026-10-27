@@ -1,95 +1,49 @@
 {
-  "version": 1,
-  "scope": {
-    "family": "protocol:erc4626",
-    "variant": "standalone-standard-behavior",
-    "consumed": [
-      "production",
-      "discovery",
-      "identity"
-    ],
-    "unchanged": [
-      "custodian variant",
-      "infinifi variant",
-      "pricing",
-      "exact",
-      "execution",
-      "settlement"
-    ]
-  },
+  "version": 2,
+  "scope": {"family": "protocol:erc4626"},
   "production": {
     "domain": "protocol",
-    "activation": {
-      "enabled": true,
-      "envKey": "SEARCHER_FAMILY_ERC4626_ENABLED"
-    }
+    "activation": {"enabled": true, "envKey": "SEARCHER_FAMILY_ERC4626_ENABLED"}
   },
   "manifest": {
-    "binding": {
-      "module": "./manifest.js",
-      "export": "erc4626FamilyManifest"
-    }
-  },
-  "capture": {
-    "binding": {
-      "module": "./capture.js",
-      "export": "erc4626Capture"
-    }
+    "familyId": "protocol:erc4626",
+    "domain": "protocol",
+    "ownedActionAdapterIds": ["erc4626-deposit", "erc4626-redeem"],
+    "requiredInfraActionAdapterIds": ["erc20-approve"],
+    "allowedTaxonomy": [
+      {"slotKind": "protocol", "protocolAction": "wrap"},
+      {"slotKind": "protocol", "protocolAction": "redeem"}
+    ],
+    "supportedLineages": [
+      "erc4626:standalone-standard-behavior",
+      "erc4626:frax-custodian-sync-conversion",
+      "erc4626:infinifi-gateway-staking"
+    ],
+    "poolAdapterIds": ["erc4626"],
+    "edgeAdapterIds": ["erc4626-deposit", "erc4626-redeem"],
+    "requiresProtocolEdgesFlag": true
   },
   "discovery": {
-    "binding": {
-      "module": "./discovery.js",
-      "export": "erc4626Discovery"
-    },
     "definition": {
-      "sources": [
-        "observed-call",
-        "landed-log",
-        "address-surface"
-      ],
-      "candidateSources": [
-        "dex-token-domain",
-        "observed-interaction"
-      ],
-      "candidate": {
-        "kind": "erc4626-vault",
-        "addressField": "vault"
-      },
+      "sources": ["observed-call", "landed-log", "address-surface"],
+      "candidateSources": ["dex-token-domain", "observed-interaction"],
+      "candidate": {"kind": "erc4626-vault", "addressField": "vault"},
       "calls": [
-        {
-          "id": "erc4626-deposit-call",
-          "signature": "deposit(uint256,address)"
-        },
-        {
-          "id": "erc4626-redeem-call",
-          "signature": "redeem(uint256,address,address)"
-        }
+        {"id": "erc4626-deposit-call", "signature": "deposit(uint256,address)"},
+        {"id": "erc4626-redeem-call", "signature": "redeem(uint256,address,address)"}
       ],
       "events": [
-        {
-          "id": "erc4626-deposit-log",
-          "signature": "Deposit(address,address,uint256,uint256)"
-        },
+        {"id": "erc4626-deposit-log", "signature": "Deposit(address,address,uint256,uint256)"},
         {
           "id": "erc4626-withdraw-log",
           "signature": "Withdraw(address,address,address,uint256,uint256)"
         }
       ],
-      "surface": {
-        "id": "erc4626-standard-surface",
-        "fingerprint": "erc4626-standard-behavior-v1"
-      },
-      "labels": [
-        "erc4626",
-        "protocol:erc4626"
-      ]
+      "surface": {"id": "erc4626-standard-surface", "fingerprint": "erc4626-standard-behavior-v1"},
+      "labels": ["erc4626", "protocol:erc4626"]
     }
   },
   "identity": {
-    "binding": {
-      "module": "./identity.js",
-      "export": "erc4626Identity"
-    },
     "definition": {
       "version": 1,
       "workflow": "sampled-conversion-v1",
@@ -121,15 +75,9 @@
       "parameters": {
         "constants": {
           "actor": "0x000000000000000000000000000000000000face",
-          "caller": {
-            "kind": "verified-actor",
-            "evidenceId": "erc4626-probe-actor"
-          },
+          "caller": {"kind": "verified-actor", "evidenceId": "erc4626-probe-actor"},
           "zero": "0x0000000000000000000000000000000000000000",
-          "samples": [
-            "1000000",
-            "1000000000000000000"
-          ],
+          "samples": ["1000000", "1000000000000000000"],
           "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
           "maskedCodePattern": "^0x[0-9a-fA-F]{2976}$",
           "maskedAdminOffset": 16,
@@ -141,46 +89,19 @@
           "maskedTemplateHash": "0x834029e91a0eb94f478b72d8f8d0924a57de0dc6046e828a543fc421bd6270d7",
           "maskedImplementationHash": "0x51c008b264124ad667f58a8595b86745a657419baac327c1d1f335bc95b953a7",
           "getterBindings": [
+            {"offsets": [11189, 11230, 11551]},
             {
-              "offsets": [
-                11189,
-                11230,
-                11551
-              ]
-            },
-            {
-              "offsets": [
-                3508,
-                8461,
-                9878,
-                11665
-              ],
+              "offsets": [3508, 8461, 9878, 11665],
               "getter": "getStrcOracle",
               "requestId": "standard-staked-getStrcOracle"
             },
             {
-              "offsets": [
-                1439,
-                6190,
-                6667,
-                7579,
-                7646,
-                7723,
-                7813,
-                12524,
-                12584
-              ],
+              "offsets": [1439, 6190, 6667, 7579, 7646, 7723, 7813, 12524, 12584],
               "getter": "getWithdrawalQueue",
               "requestId": "standard-staked-getWithdrawalQueue"
             }
           ],
-          "maskedByteChecks": [
-            {
-              "offset": 15,
-              "size": 1,
-              "value": "0x7f"
-            }
-          ]
+          "maskedByteChecks": [{"offset": 15, "size": 1, "value": "0x7f"}]
         },
         "calls": {
           "inputAsset": "asset",
@@ -229,82 +150,433 @@
           "maskedSource": "custodianCheckSource",
           "maskedImplementation": "custodianImplementation"
         },
-        "requestPrefixes": {
-          "getter": "standard-staked"
-        },
+        "requestPrefixes": {"getter": "standard-staked"},
         "execution": {
-          "forwardArgs": [
-            "$base.sampleAssets",
-            {
-              "op": "address",
-              "args": [
-                "$constants.actor"
-              ]
-            }
-          ],
+          "forwardArgs": ["$base.sampleAssets", {"op": "address", "args": ["$constants.actor"]}],
           "reverseArgs": [
             "$base.sampleShares",
-            {
-              "op": "address",
+            {"op": "address", "args": ["$constants.actor"]},
+            {"op": "address", "args": ["$constants.actor"]}
+          ]
+        }
+      }
+    },
+    "memoReuse": "recheck-identity",
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]}
+  },
+  "instance": {
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [{"kind": "source-state", "freshness": "pinned-block"}],
+      "vault": {"op": "address", "args": ["$identity.subject"]},
+      "asset": {"op": "address", "args": ["$identity.asset"]},
+      "share": {
+        "op": "address",
+        "args": [{"op": "coalesce", "args": ["$identity.custodian.share", "$identity.subject"]}]
+      },
+      "custodian": "$identity.custodian",
+      "infinifi": "$identity.infinifi",
+      "verifiedDirections": "$identity.verifiedDirections"
+    },
+    "bindingProjection": {
+      "vault": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.vault"]}]},
+      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
+      "share": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.share"]}]},
+      "verifiedDirections": "$descriptor.verifiedDirections",
+      "standardPayout": "asset()",
+      "custodian": "$descriptor.custodian",
+      "infinifi": "$descriptor.infinifi"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.vault",
+    "bindingKey": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.vault"]}]},
+    "directions": [
+      {
+        "id": "deposit",
+        "enabled": "$descriptor.verifiedDirections.deposit",
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.share",
+        "adapterId": "erc4626-deposit",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "wrap"}
+      },
+      {
+        "id": "redeem",
+        "enabled": "$descriptor.verifiedDirections.redeem",
+        "tokenIn": "$descriptor.share",
+        "tokenOut": "$descriptor.asset",
+        "adapterId": "erc4626-redeem",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "redeem"}
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.vault"]}]}
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      },
+      {
+        "kind": "total-supply-delta",
+        "token": {
+          "op": "if",
+          "args": [
+            {"op": "eq", "args": ["$route.direction", "deposit"]},
+            "$route.tokenOut",
+            "$route.tokenIn"
+          ]
+        },
+        "direction": {
+          "op": "if",
+          "args": [{"op": "eq", "args": ["$route.direction", "deposit"]}, "increase", "decrease"]
+        }
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "familyId": "$descriptor.familyId",
+      "lineageId": "$descriptor.lineageId",
+      "instanceKey": "$descriptor.instanceKey",
+      "vault": "$descriptor.vault",
+      "asset": "$descriptor.asset",
+      "share": "$descriptor.share",
+      "custodian": "$descriptor.custodian",
+      "infinifi": "$descriptor.infinifi",
+      "verifiedDirections": "$descriptor.verifiedDirections",
+      "runtimeRequirements": "$descriptor.runtimeRequirements",
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "vault": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.vault"]}]},
+      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
+      "share": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.share"]}]},
+      "custodian": "$descriptor.custodian",
+      "infinifi": "$descriptor.infinifi",
+      "directions": {"op": "map", "args": ["$routes", "route", "$route.direction"]}
+    },
+    "static": {
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": ["$draft.vault", "$draft.asset", "$draft.share"],
+      "requests": [
+        {
+          "id": "static-asset-decimals",
+          "kind": "eth-call",
+          "to": "$draft.asset",
+          "data": {"op": "encode", "args": ["token", "decimals", []]},
+          "completion": "return-data"
+        },
+        {
+          "id": "static-share-decimals",
+          "kind": "eth-call",
+          "to": "$draft.share",
+          "data": {"op": "encode", "args": ["token", "decimals", []]},
+          "completion": "return-data"
+        }
+      ],
+      "decode": {
+        "fields": [
+          {
+            "name": "assetDecimals",
+            "value": {
+              "op": "word",
               "args": [
-                "$constants.actor"
+                {
+                  "op": "get",
+                  "args": [{"op": "returned", "args": ["static-asset-decimals"]}, "data"]
+                }
               ]
             },
-            {
-              "op": "address",
+            "checks": [
+              {
+                "condition": {"op": "lte", "args": ["$assetDecimals", {"op": "uint", "args": ["77"]}]},
+                "error": "protocol token decimals exceed uint256 scale"
+              }
+            ]
+          },
+          {
+            "name": "shareDecimals",
+            "value": {
+              "op": "word",
               "args": [
-                "$constants.actor"
+                {
+                  "op": "get",
+                  "args": [{"op": "returned", "args": ["static-share-decimals"]}, "data"]
+                }
+              ]
+            },
+            "checks": [
+              {
+                "condition": {"op": "lte", "args": ["$shareDecimals", {"op": "uint", "args": ["77"]}]},
+                "error": "protocol token decimals exceed uint256 scale"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "oneAsset": {"op": "pow", "args": ["10", "$assetDecimals"]},
+          "oneShare": {"op": "pow", "args": ["10", "$shareDecimals"]}
+        }
+      }
+    },
+    "finalize": {"op": "merge", "args": ["$draft", "$staticEvidence"]},
+    "sampleAmount": {
+      "op": "if",
+      "args": [
+        {"op": "eq", "args": ["$route.direction", "deposit"]},
+        "$descriptor.oneAsset",
+        "$descriptor.oneShare"
+      ]
+    },
+    "exactCompatibility": {
+      "vault": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.vault"]}]},
+      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
+      "share": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.share"]}]},
+      "direction": "$route.direction",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": ["log"]
+  },
+  "protocol": {
+    "candidateKinds": ["observed-call", "address-surface", "standalone-contract"],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "standalone-standard-behavior",
+    "lineageId": "erc4626:standalone-standard-behavior",
+    "abi": {
+      "vault": [
+        "function asset() view returns (address)",
+        "function totalAssets() view returns (uint256)",
+        "function totalSupply() view returns (uint256)",
+        "function convertToShares(uint256 assets) view returns (uint256)",
+        "function convertToAssets(uint256 shares) view returns (uint256)",
+        "function previewDeposit(uint256 assets) view returns (uint256)",
+        "function previewRedeem(uint256 shares) view returns (uint256)",
+        "function deposit(uint256 assets,address receiver) returns (uint256 shares)",
+        "function redeem(uint256 shares,address receiver,address owner) returns (uint256 assets)",
+        "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+        "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)"
+      ],
+      "token": [
+        "function balanceOf(address account) view returns (uint256)",
+        "function decimals() view returns (uint8)",
+        "function approve(address spender,uint256 amount) returns (bool)",
+        "function allowance(address,address) view returns(uint256)",
+        "function totalSupply() view returns(uint256)"
+      ],
+      "specialized": [
+        "function asset() view returns(address)",
+        "function getStrcOracle() view returns(address)",
+        "function getWithdrawalQueue() view returns(address)"
+      ]
+    },
+    "constants": {},
+    "expressions": {},
+    "match": {
+      "op": "and",
+      "args": [
+        {"op": "not", "args": [{"op": "defined", "args": ["$descriptor.custodian"]}]},
+        {"op": "not", "args": [{"op": "defined", "args": ["$descriptor.infinifi"]}]}
+      ]
+    },
+    "context": {"vault": "$descriptor.vault"},
+    "boundState": "$descriptor",
+    "identityParameters": {"excludeSpecialized": true, "hasEventMath": false},
+    "assertions": [
+      {
+        "condition": {"op": "sameAddress", "args": ["$descriptor.share", "$descriptor.vault"]},
+        "error": "ERC4626 standard share binding mismatch"
+      }
+    ],
+    "pricing": {
+      "mutationAddresses": ["$descriptor.vault"],
+      "refreshPolicy": "on-touch",
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": ["$descriptor.vault", "$descriptor.asset", "$descriptor.share"]
+    },
+    "exact": {
+      "methodId": "erc4626-preview",
+      "requirements": {"transports": ["eth-call"]},
+      "evidence": {
+        "kind": "erc4626-preview",
+        "source": "$source",
+        "vault": "$descriptor.vault",
+        "direction": "$route.direction",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {
+      "quote": {
+        "requests": [
+          {
+            "id": "$requestId",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "vault",
+                {
+                  "op": "if",
+                  "args": [
+                    {"op": "eq", "args": ["$direction", "deposit"]},
+                    "previewDeposit",
+                    "previewRedeem"
+                  ]
+                },
+                ["$amountIn"]
+              ]
+            },
+            "completion": "return-data"
+          }
+        ],
+        "result": {
+          "op": "uint",
+          "args": [
+            {
+              "op": "decode",
+              "args": [
+                "vault",
+                {
+                  "op": "if",
+                  "args": [
+                    {"op": "eq", "args": ["$direction", "deposit"]},
+                    "previewDeposit",
+                    "previewRedeem"
+                  ]
+                },
+                {"op": "get", "args": [{"op": "returned", "args": ["$requestId"]}, "data"]},
+                0
               ]
             }
           ]
         }
       }
+    },
+    "execution": {
+      "version": 1,
+      "settlement": {"directOutput": true},
+      "protectedAddresses": ["$descriptor.vault", "$descriptor.share", "$descriptor.asset"],
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.vault",
+        "mode": "ensure",
+        "when": {"op": "eq", "args": ["$direction", "deposit"]}
+      },
+      "call": {
+        "target": "$descriptor.vault",
+        "signature": {
+          "op": "if",
+          "args": [
+            {"op": "eq", "args": ["$direction", "deposit"]},
+            "function deposit(uint256,address) returns(uint256)",
+            "function redeem(uint256,address,address) returns(uint256)"
+          ]
+        },
+        "args": {
+          "op": "if",
+          "args": [
+            {"op": "eq", "args": ["$direction", "deposit"]},
+            [{"runtime": "amountIn"}, "$recipient"],
+            [{"runtime": "amountIn"}, "$recipient", "$executor"]
+          ]
+        },
+        "save": {"output": 0}
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {"runtime": "amountIn"}
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {"runtime": "output"},
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        },
+        {"kind": "unchanged-native", "when": "$directSettlement"}
+      ],
+      "contextChecks": [
+        {
+          "error": "conversion direction unsupported",
+          "condition": {
+            "op": "or",
+            "args": [
+              {"op": "eq", "args": ["$direction", "deposit"]},
+              {"op": "eq", "args": ["$direction", "redeem"]}
+            ]
+          }
+        }
+      ]
     }
   },
-  "instance": {
-    "binding": {
-      "module": "./instance.js",
-      "export": "erc4626Instance"
-    }
-  },
-  "routes": {
-    "binding": {
-      "module": "./routes.js",
-      "export": "erc4626Routes"
-    }
-  },
-  "pricing": {
-    "binding": {
-      "module": "./pricing.js",
-      "export": "erc4626Pricing"
-    }
-  },
-  "exact": {
-    "binding": {
-      "module": "./exact.js",
-      "export": "erc4626Exact"
-    }
-  },
-  "execution": {
-    "binding": {
-      "module": "./execution.js",
-      "export": "erc4626Execution"
-    }
-  },
-  "protocol": {
-    "binding": {
-      "module": "./protocol.js",
-      "export": "erc4626Protocol"
-    }
-  },
+  "variantFiles": ["./custodian.json", "./infinifi.json"],
   "actionAdapters": [
     {
-      "module": "./action.js",
-      "export": "erc4626DepositFamilyOwnedAction"
+      "descriptor": {
+        "adapterId": "erc4626-deposit",
+        "lineage": "erc4626",
+        "edgeKind": "protocol",
+        "action": "deposit",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function deposit(uint256,address)"},
+        {
+          "target": "0x3f04b65ddbd87f9ce0a2e7eb24d80e7fb87625b5",
+          "signature": "function stake(address,uint256)"
+        }
+      ]
     },
     {
-      "module": "./action.js",
-      "export": "erc4626RedeemFamilyOwnedAction"
+      "descriptor": {
+        "adapterId": "erc4626-redeem",
+        "lineage": "erc4626",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function redeem(uint256,address,address)"},
+        {
+          "target": "0x3f04b65ddbd87f9ce0a2e7eb24d80e7fb87625b5",
+          "signature": "function unstake(address,uint256)"
+        }
+      ]
     }
   ]
 }

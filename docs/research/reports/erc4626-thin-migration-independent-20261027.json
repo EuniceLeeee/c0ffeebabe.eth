@@ -1,0 +1,1409 @@
+{
+  "reviewMode": "Read-only independent inspection of existing artifacts and CLI source; no test reruns.",
+  "method": "Count actual trusted completion, verify pinned source, positive full debit, quote-equal actual receipt, native conservation and direct old-output protection; pass labels alone are not acceptance.",
+  "backend": {
+    "sourceRoot": "/opt/mev-cloud/family-runtime-20261007/listener/revm-sim",
+    "sourcePins": {
+      "Cargo.toml": "910f0f0618c35138957014aeed416292c1fea6173db0e55ed925b2afcbd1b48a",
+      "Cargo.lock": "f9afc1d72c4d71bcd07310a4e94f984fa39ac7908c560e792cfcfa755ac6875e",
+      "src/diagnostic.rs": "8aaef92ce3ebbebfc8588c255d34ec528b63f25affc5d3a8c2c05ec5721d9e1e",
+      "src/main.rs": "53cd1519c02a12a237743713f0f6079461011494cafa0621110cb024c3b37133"
+    },
+    "originalPath": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-thin-migration-20261027/revm-target/release/revm-sim",
+    "copiedPath": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-thin-migration-20261027/tools/revm-sim",
+    "binarySha256": "774712da3eb2683b4ddef56daf4d074b242d55d23301ed01aacf24b17dfdcc60",
+    "health": "{\"ok\":true,\"engine\":\"revm\",\"implemented\":true}\n",
+    "buildReceipt": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-thin-migration-20261027/ready-backend-build.json",
+    "note": "Built current frozen workspace Rust; independent target; other workspaces were not modified."
+  },
+  "reports": [
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-thin-20261027/current-backend/standard-historical.json",
+      "sha256": "577997d1fad246e8ba450eb48b1e50e397f950af7d8a698c10970fdf9f79d6b3",
+      "reportedResult": "same-N-standard-erc4626-dual-and-direct-pass",
+      "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+      "source": {
+        "number": 25887370,
+        "hash": "0xf7e7ec2b6beabe318004a040dc0ed13bf17db9d4664ad223ba991fa2ef285b45"
+      },
+      "sourceTreeSha256": "bf67fb29aaf5822a6e542f694a7913e24b1f1bf061fecd35099bc43e34895efd",
+      "binarySha256": "774712da3eb2683b4ddef56daf4d074b242d55d23301ed01aacf24b17dfdcc60",
+      "familyDefinitionHash": "97bec13b43d5905ff6feebf3d85b6f61ae69f4ab417b7370da2d832beaed81c6",
+      "sampleCount": 12,
+      "sampleExecutionCounts": {
+        "positive": 32,
+        "rejection": 80
+      },
+      "perMode": {
+        "quoted": {
+          "positive": 8,
+          "rejection": 8
+        },
+        "runtime": {
+          "positive": 8,
+          "rejection": 8
+        },
+        "direct-self": {
+          "positive": 8,
+          "rejection": 32
+        },
+        "direct-external": {
+          "positive": 8,
+          "rejection": 32
+        }
+      },
+      "faultCounts": {
+        "none": 32,
+        "insufficient-cost": 32,
+        "minimum-plus-one": 16,
+        "wrong-receiver-postcondition": 16,
+        "post-revert": 16
+      },
+      "additionalBoundaryRejections": {
+        "zero-input": 4
+      },
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      },
+      "invocationCounts": {
+        "exact": 12,
+        "quoted": 4,
+        "forbiddenDuringBuild": 0
+      },
+      "sameSourcePositiveDebitEqualsFullInputAndReceiptEqualsQuote": true,
+      "issues": [],
+      "samples": [
+        {
+          "direction": "deposit",
+          "recipientMode": "default",
+          "amountIn": "106418537681190000000000",
+          "amountOut": "99998915731699846205881",
+          "input": {
+            "label": "original-event-input",
+            "tokenIn": "0x4f8e5DE400DE08B164E7421B3EE387f461beCD1A",
+            "amountIn": "106418537681190000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "1"
+          },
+          "executions": {
+            "positive": 4,
+            "rejection": 4
+          },
+          "inputBudget": {
+            "requested": "106418537681190000000000",
+            "cost": "106418537681190000000000",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "default",
+          "amountIn": "212837075362380000000000",
+          "amountOut": "199997831463399692411762",
+          "input": {
+            "label": "twice-original-event-input",
+            "tokenIn": "0x4f8e5DE400DE08B164E7421B3EE387f461beCD1A",
+            "amountIn": "212837075362380000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "2"
+          },
+          "executions": {
+            "positive": 4,
+            "rejection": 4
+          },
+          "inputBudget": {
+            "requested": "212837075362380000000000",
+            "cost": "212837075362380000000000",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "direct-self",
+          "amountIn": "106418537681190000000000",
+          "amountOut": "99998915731699846205881",
+          "input": {
+            "label": "original-event-input",
+            "tokenIn": "0x4f8e5DE400DE08B164E7421B3EE387f461beCD1A",
+            "amountIn": "106418537681190000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "1"
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "106418537681190000000000",
+            "cost": "106418537681190000000000",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "direct-self",
+          "amountIn": "212837075362380000000000",
+          "amountOut": "199997831463399692411762",
+          "input": {
+            "label": "twice-original-event-input",
+            "tokenIn": "0x4f8e5DE400DE08B164E7421B3EE387f461beCD1A",
+            "amountIn": "212837075362380000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "2"
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "212837075362380000000000",
+            "cost": "212837075362380000000000",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "direct-external",
+          "amountIn": "106418537681190000000000",
+          "amountOut": "99998915731699846205881",
+          "input": {
+            "label": "original-event-input",
+            "tokenIn": "0x4f8e5DE400DE08B164E7421B3EE387f461beCD1A",
+            "amountIn": "106418537681190000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "1"
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "106418537681190000000000",
+            "cost": "106418537681190000000000",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "direct-external",
+          "amountIn": "212837075362380000000000",
+          "amountOut": "199997831463399692411762",
+          "input": {
+            "label": "twice-original-event-input",
+            "tokenIn": "0x4f8e5DE400DE08B164E7421B3EE387f461beCD1A",
+            "amountIn": "212837075362380000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "2"
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "212837075362380000000000",
+            "cost": "212837075362380000000000",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "default",
+          "amountIn": "99998915731699846205881",
+          "amountOut": "106418537681189999999999",
+          "input": {
+            "label": "original-event-input",
+            "tokenIn": "0xC5d6A7B61d18AfA11435a889557b068BB9f29930",
+            "amountIn": "99998915731699846205881",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "1"
+          },
+          "executions": {
+            "positive": 4,
+            "rejection": 4
+          },
+          "inputBudget": {
+            "requested": "99998915731699846205881",
+            "cost": "99998915731699846205881",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "default",
+          "amountIn": "199997831463399692411762",
+          "amountOut": "212837075362379999999999",
+          "input": {
+            "label": "twice-original-event-input",
+            "tokenIn": "0xC5d6A7B61d18AfA11435a889557b068BB9f29930",
+            "amountIn": "199997831463399692411762",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "2"
+          },
+          "executions": {
+            "positive": 4,
+            "rejection": 4
+          },
+          "inputBudget": {
+            "requested": "199997831463399692411762",
+            "cost": "199997831463399692411762",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "direct-self",
+          "amountIn": "99998915731699846205881",
+          "amountOut": "106418537681189999999999",
+          "input": {
+            "label": "original-event-input",
+            "tokenIn": "0xC5d6A7B61d18AfA11435a889557b068BB9f29930",
+            "amountIn": "99998915731699846205881",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "1"
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "99998915731699846205881",
+            "cost": "99998915731699846205881",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "direct-self",
+          "amountIn": "199997831463399692411762",
+          "amountOut": "212837075362379999999999",
+          "input": {
+            "label": "twice-original-event-input",
+            "tokenIn": "0xC5d6A7B61d18AfA11435a889557b068BB9f29930",
+            "amountIn": "199997831463399692411762",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "2"
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "199997831463399692411762",
+            "cost": "199997831463399692411762",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "direct-external",
+          "amountIn": "99998915731699846205881",
+          "amountOut": "106418537681189999999999",
+          "input": {
+            "label": "original-event-input",
+            "tokenIn": "0xC5d6A7B61d18AfA11435a889557b068BB9f29930",
+            "amountIn": "99998915731699846205881",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "1"
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "99998915731699846205881",
+            "cost": "99998915731699846205881",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "direct-external",
+          "amountIn": "199997831463399692411762",
+          "amountOut": "212837075362379999999999",
+          "input": {
+            "label": "twice-original-event-input",
+            "tokenIn": "0xC5d6A7B61d18AfA11435a889557b068BB9f29930",
+            "amountIn": "199997831463399692411762",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-event-input-only",
+            "transactionHash": "0x7c8b742e0176be3ab8247f1f8d46674d9c38af7bd6ff0ccb1a804852819f3d16",
+            "logIndex": 211,
+            "multiplier": "2"
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "199997831463399692411762",
+            "cost": "199997831463399692411762",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        }
+      ],
+      "drained": true,
+      "rawStrictCount": 116,
+      "knownLimits": [
+        "N-end historical-state Family acceptance; not original transaction prefix replay or opportunity reproduction.",
+        "No natural amount selection/performance/live claim.",
+        "Runtime construction zero RPC/Exact/quoted fallback is issuer-boundary evidence; full production selector coverage belongs to separate common regressions.",
+        "Negative controls prove trusted EVM revert; empty effects are not independent post-rollback storage-diff proof.",
+        "No Anvil fork was created in this run: forkDrained=false is the optional fork absence flag in CLI line251, not an undrained active fork.",
+        "Minimum-plus-one and wrong-receiver controls use appended recipient postconditions; do not claim they are separate native protocol error codes."
+      ]
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-thin-20261027/current-backend/custodian-historical-direct.json",
+      "sha256": "29b9d3ca0ced7afb2909e6489580ef22af6d245371f6e78d7c20dd272199612b",
+      "reportedResult": "same-N-custodian-direct-pass",
+      "transactionHash": "0x02bf41c595d08e397b90edaaee8a00f4521d1d7c2b0f538b1d1597e4e1ccacec",
+      "source": {
+        "number": 26017168,
+        "hash": "0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350"
+      },
+      "sourceTreeSha256": "bf67fb29aaf5822a6e542f694a7913e24b1f1bf061fecd35099bc43e34895efd",
+      "binarySha256": "774712da3eb2683b4ddef56daf4d074b242d55d23301ed01aacf24b17dfdcc60",
+      "familyDefinitionHash": "97bec13b43d5905ff6feebf3d85b6f61ae69f4ab417b7370da2d832beaed81c6",
+      "sampleCount": 8,
+      "sampleExecutionCounts": {
+        "positive": 16,
+        "rejection": 64
+      },
+      "perMode": {
+        "direct-self": {
+          "positive": 8,
+          "rejection": 32
+        },
+        "direct-external": {
+          "positive": 8,
+          "rejection": 32
+        }
+      },
+      "faultCounts": {
+        "none": 16,
+        "insufficient-cost": 16,
+        "minimum-plus-one": 16,
+        "wrong-receiver-postcondition": 16,
+        "post-revert": 16
+      },
+      "additionalBoundaryRejections": {
+        "zero-input": 4,
+        "no-whole-asset-output": 2
+      },
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      },
+      "invocationCounts": {
+        "exact": 8,
+        "quoted": 0,
+        "forbiddenDuringBuild": 0
+      },
+      "sameSourcePositiveDebitEqualsFullInputAndReceiptEqualsQuote": true,
+      "issues": [],
+      "samples": [
+        {
+          "direction": "deposit",
+          "recipientMode": "0x1000000000000000000000000000000000000002",
+          "amountIn": "5135191",
+          "amountOut": "5135191000000000000",
+          "input": {
+            "label": "spliced-production-input-at-N",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "amountIn": "5135191",
+            "naturalTargetValuation": "not-proven",
+            "kind": "borrowed-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x0ec78ed49c2d27b315d462d43b5bab94d2c79bf8\u001fdc3bc1478cf7a1a57d902343a55f923b87dbee50919851d75fe6794b799a7b04",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135191",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "5135191",
+            "cost": "5135191",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "0x1000000000000000000000000000000000000002",
+          "amountIn": "10270382",
+          "amountOut": "10270382000000000000",
+          "input": {
+            "label": "twice-spliced-production-input-at-N",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "amountIn": "10270382",
+            "naturalTargetValuation": "not-proven",
+            "kind": "borrowed-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x0ec78ed49c2d27b315d462d43b5bab94d2c79bf8\u001fdc3bc1478cf7a1a57d902343a55f923b87dbee50919851d75fe6794b799a7b04",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135191",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "10270382",
+            "cost": "10270382",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "0x1000000000000000000000000000000000000001",
+          "amountIn": "5135191",
+          "amountOut": "5135191000000000000",
+          "input": {
+            "label": "spliced-production-input-at-N",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "amountIn": "5135191",
+            "naturalTargetValuation": "not-proven",
+            "kind": "borrowed-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x0ec78ed49c2d27b315d462d43b5bab94d2c79bf8\u001fdc3bc1478cf7a1a57d902343a55f923b87dbee50919851d75fe6794b799a7b04",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135191",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "5135191",
+            "cost": "5135191",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "0x1000000000000000000000000000000000000001",
+          "amountIn": "10270382",
+          "amountOut": "10270382000000000000",
+          "input": {
+            "label": "twice-spliced-production-input-at-N",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "amountIn": "10270382",
+            "naturalTargetValuation": "not-proven",
+            "kind": "borrowed-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x0ec78ed49c2d27b315d462d43b5bab94d2c79bf8\u001fdc3bc1478cf7a1a57d902343a55f923b87dbee50919851d75fe6794b799a7b04",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135191",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "10270382",
+            "cost": "10270382",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "0x1000000000000000000000000000000000000002",
+          "amountIn": "5135328596662424906",
+          "amountOut": "5135328",
+          "input": {
+            "label": "spliced-production-input-at-N",
+            "tokenIn": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+            "amountIn": "5135328596662424906",
+            "naturalTargetValuation": "not-proven",
+            "kind": "borrowed-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0xcacd6fd266af91b8aed52accc382b4e165586e29>0xca83dde9c22254f58e771be5e157773212acbac3\u001f2a718525d3ee031e33c3c27e23c147246b36896b4e534e8deafbaa18ba593d74",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135328596662424906",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "5135328596662424906",
+            "cost": "5135328596662424906",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "0x1000000000000000000000000000000000000002",
+          "amountIn": "215200560000000000000",
+          "amountOut": "215200560",
+          "input": {
+            "label": "historical-input-at-N",
+            "tokenIn": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+            "amountIn": "215200560000000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-tx-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0xcacd6fd266af91b8aed52accc382b4e165586e29>0xca83dde9c22254f58e771be5e157773212acbac3\u001f2a718525d3ee031e33c3c27e23c147246b36896b4e534e8deafbaa18ba593d74",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135328596662424906",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            },
+            "note": "Inherited donor-row metadata accompanies the row; actual amountIn comes from historical input label, not donorRawAmountIn."
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "215200560000000000000",
+            "cost": "215200560000000000000",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "0x1000000000000000000000000000000000000001",
+          "amountIn": "5135328596662424906",
+          "amountOut": "5135328",
+          "input": {
+            "label": "spliced-production-input-at-N",
+            "tokenIn": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+            "amountIn": "5135328596662424906",
+            "naturalTargetValuation": "not-proven",
+            "kind": "borrowed-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0xcacd6fd266af91b8aed52accc382b4e165586e29>0xca83dde9c22254f58e771be5e157773212acbac3\u001f2a718525d3ee031e33c3c27e23c147246b36896b4e534e8deafbaa18ba593d74",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135328596662424906",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "5135328596662424906",
+            "cost": "5135328596662424906",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "0x1000000000000000000000000000000000000001",
+          "amountIn": "215200560000000000000",
+          "amountOut": "215200560",
+          "input": {
+            "label": "historical-input-at-N",
+            "tokenIn": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+            "amountIn": "215200560000000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-tx-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0xcacd6fd266af91b8aed52accc382b4e165586e29>0xca83dde9c22254f58e771be5e157773212acbac3\u001f2a718525d3ee031e33c3c27e23c147246b36896b4e534e8deafbaa18ba593d74",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135328596662424906",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            },
+            "note": "Inherited donor-row metadata accompanies the row; actual amountIn comes from historical input label, not donorRawAmountIn."
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 8
+          },
+          "inputBudget": {
+            "requested": "215200560000000000000",
+            "cost": "215200560000000000000",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        }
+      ],
+      "drained": true,
+      "rawStrictCount": 86,
+      "knownLimits": [
+        "N-end historical-state Family acceptance; not original transaction prefix replay or opportunity reproduction.",
+        "No natural amount selection/performance/live claim.",
+        "Runtime construction zero RPC/Exact/quoted fallback is issuer-boundary evidence; full production selector coverage belongs to separate common regressions.",
+        "Negative controls prove trusted EVM revert; empty effects are not independent post-rollback storage-diff proof.",
+        "Borrowed production inputs came from carried rows at table block26146969, quoted block26146968; tested output/identity remain at N26017168.",
+        "Minimum-plus-one and wrong-receiver controls use appended recipient postconditions."
+      ]
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-thin-20261027/current-backend/custodian-historical-default.json",
+      "sha256": "1f03b94ded5ab41cd87f94e743588674612dd10bd38452331975831ad3e48e90",
+      "reportedResult": "same-N-custodian-default-dual-pass",
+      "transactionHash": "0x02bf41c595d08e397b90edaaee8a00f4521d1d7c2b0f538b1d1597e4e1ccacec",
+      "source": {
+        "number": 26017168,
+        "hash": "0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350"
+      },
+      "sourceTreeSha256": "bf67fb29aaf5822a6e542f694a7913e24b1f1bf061fecd35099bc43e34895efd",
+      "binarySha256": "774712da3eb2683b4ddef56daf4d074b242d55d23301ed01aacf24b17dfdcc60",
+      "familyDefinitionHash": "97bec13b43d5905ff6feebf3d85b6f61ae69f4ab417b7370da2d832beaed81c6",
+      "sampleCount": 4,
+      "sampleExecutionCounts": {
+        "positive": 16,
+        "rejection": 16
+      },
+      "perMode": {
+        "quoted": {
+          "positive": 8,
+          "rejection": 8
+        },
+        "runtime": {
+          "positive": 8,
+          "rejection": 8
+        }
+      },
+      "faultCounts": {
+        "none": 16,
+        "insufficient-cost": 16
+      },
+      "additionalBoundaryRejections": {},
+      "runtimeConstruction": {
+        "rpc": 0,
+        "exact": 0,
+        "quotedFallback": false,
+        "scope": "real production issuer; selector throwing-stub coverage in shared dual suite"
+      },
+      "invocationCounts": {
+        "exact": 4,
+        "quoted": 4,
+        "forbiddenDuringBuild": 0
+      },
+      "sameSourcePositiveDebitEqualsFullInputAndReceiptEqualsQuote": true,
+      "issues": [],
+      "samples": [
+        {
+          "direction": "deposit",
+          "recipientMode": "0x1000000000000000000000000000000000000002",
+          "amountIn": "5135191",
+          "amountOut": "5135191000000000000",
+          "input": {
+            "label": "spliced-production-input-at-N",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "amountIn": "5135191",
+            "naturalTargetValuation": "not-proven",
+            "kind": "borrowed-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x0ec78ed49c2d27b315d462d43b5bab94d2c79bf8\u001fdc3bc1478cf7a1a57d902343a55f923b87dbee50919851d75fe6794b799a7b04",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135191",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 4,
+            "rejection": 4
+          },
+          "inputBudget": {
+            "requested": "5135191",
+            "cost": "5135191",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "0x1000000000000000000000000000000000000002",
+          "amountIn": "10270382",
+          "amountOut": "10270382000000000000",
+          "input": {
+            "label": "twice-spliced-production-input-at-N",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "amountIn": "10270382",
+            "naturalTargetValuation": "not-proven",
+            "kind": "borrowed-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0x0004cd8474e882278e32e584699090be496f410e\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48>0x0ec78ed49c2d27b315d462d43b5bab94d2c79bf8\u001fdc3bc1478cf7a1a57d902343a55f923b87dbee50919851d75fe6794b799a7b04",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135191",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 4,
+            "rejection": 4
+          },
+          "inputBudget": {
+            "requested": "10270382",
+            "cost": "10270382",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "0x1000000000000000000000000000000000000002",
+          "amountIn": "5135328596662424906",
+          "amountOut": "5135328",
+          "input": {
+            "label": "spliced-production-input-at-N",
+            "tokenIn": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+            "amountIn": "5135328596662424906",
+            "naturalTargetValuation": "not-proven",
+            "kind": "borrowed-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0xcacd6fd266af91b8aed52accc382b4e165586e29>0xca83dde9c22254f58e771be5e157773212acbac3\u001f2a718525d3ee031e33c3c27e23c147246b36896b4e534e8deafbaa18ba593d74",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135328596662424906",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 4,
+            "rejection": 4
+          },
+          "inputBudget": {
+            "requested": "5135328596662424906",
+            "cost": "5135328596662424906",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "0x1000000000000000000000000000000000000002",
+          "amountIn": "215200560000000000000",
+          "amountOut": "215200560",
+          "input": {
+            "label": "historical-input-at-N",
+            "tokenIn": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+            "amountIn": "215200560000000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-tx-input-only",
+            "donorEdgeId": "univ3-standard\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0x410da528a866dc26a28a40bb5c0a458111f123f5\u001f0xcacd6fd266af91b8aed52accc382b4e165586e29>0xca83dde9c22254f58e771be5e157773212acbac3\u001f2a718525d3ee031e33c3c27e23c147246b36896b4e534e8deafbaa18ba593d74",
+            "donorQuotedAt": {
+              "number": 26146968,
+              "hash": "0x55f8e358397a55eb32e254831e187b8de083c7ef9a8e10f8a867e134cdfec417",
+              "generation": 1
+            },
+            "donorTableSource": {
+              "number": 26146969,
+              "hash": "0x0c9cffba34b89d868dd1596f5449cef9c0fdb8da84f96111f4987b0ad907f500",
+              "generation": 2
+            },
+            "freshness": "carried",
+            "donorRawAmountIn": "5135328596662424906",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            },
+            "note": "Inherited donor-row metadata accompanies the row; actual amountIn comes from historical input label, not donorRawAmountIn."
+          },
+          "executions": {
+            "positive": 4,
+            "rejection": 4
+          },
+          "inputBudget": {
+            "requested": "215200560000000000000",
+            "cost": "215200560000000000000",
+            "unspent": "0",
+            "inputMode": "exact",
+            "roundingToleranceRawUnits": "0"
+          },
+          "quotedConstructedAndExecuted": null,
+          "defaultRuntimeConstructedAndExecuted": null
+        }
+      ],
+      "drained": true,
+      "rawStrictCount": 32,
+      "knownLimits": [
+        "N-end historical-state Family acceptance; not original transaction prefix replay or opportunity reproduction.",
+        "No natural amount selection/performance/live claim.",
+        "Runtime construction zero RPC/Exact/quoted fallback is issuer-boundary evidence; full production selector coverage belongs to separate common regressions.",
+        "Negative controls prove trusted EVM revert; empty effects are not independent post-rollback storage-diff proof.",
+        "Borrowed production inputs came from carried rows at table block26146969, quoted block26146968; tested output/identity remain at N26017168.",
+        "Minimum-plus-one and wrong-receiver controls use appended recipient postconditions."
+      ]
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-thin-20261027/current-backend/infinifi-historical-default.json",
+      "sha256": "b5d1d35e009b29d464285e161b4ab9909ebff8eae66d40cfb106d00d0827f8e1",
+      "reportedResult": "same-state-pass-reference-incomplete",
+      "transactionHash": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+        "generation": 25944594
+      },
+      "sourceTreeSha256": "bf67fb29aaf5822a6e542f694a7913e24b1f1bf061fecd35099bc43e34895efd",
+      "binarySha256": "774712da3eb2683b4ddef56daf4d074b242d55d23301ed01aacf24b17dfdcc60",
+      "familyDefinitionHash": "97bec13b43d5905ff6feebf3d85b6f61ae69f4ab417b7370da2d832beaed81c6",
+      "sampleCount": 4,
+      "sampleExecutionCounts": {
+        "positive": 8,
+        "rejection": 16
+      },
+      "perMode": {
+        "quoted": {
+          "positive": 4,
+          "rejection": 8
+        },
+        "runtime": {
+          "positive": 4,
+          "rejection": 8
+        }
+      },
+      "faultCounts": {
+        "none": 8,
+        "no-input": 8,
+        "post-execution-revert": 8
+      },
+      "additionalBoundaryRejections": {},
+      "runtimeConstruction": {
+        "exactCalls": 0,
+        "quotedCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false,
+        "scope": "production issuer, not yet full sim selector"
+      },
+      "invocationCounts": {
+        "exact": 4,
+        "quoted": 4,
+        "forbiddenDuringBuild": 0
+      },
+      "sameSourcePositiveDebitEqualsFullInputAndReceiptEqualsQuote": true,
+      "issues": [],
+      "samples": [
+        {
+          "direction": "deposit",
+          "recipientMode": "per-execution",
+          "amountIn": "1000000000000000000",
+          "amountOut": "918797937190806881",
+          "input": {
+            "label": "one-token-control-not-production-reference",
+            "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+            "amountIn": "1000000000000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "manual-unit-control",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 4
+          },
+          "inputBudget": null,
+          "quotedConstructedAndExecuted": true,
+          "defaultRuntimeConstructedAndExecuted": true
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "per-execution",
+          "amountIn": "857213759247368899192",
+          "amountOut": "787606233728059501655",
+          "input": {
+            "label": "original-assets-as-deposit-control-at-tested-state",
+            "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+            "amountIn": "857213759247368899192",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-receipt-input-only",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 4
+          },
+          "inputBudget": null,
+          "quotedConstructedAndExecuted": true,
+          "defaultRuntimeConstructedAndExecuted": true
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "per-execution",
+          "amountIn": "1000000000000000000",
+          "amountOut": "1088378586327115224",
+          "input": {
+            "label": "one-token-control-not-production-reference",
+            "tokenIn": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+            "amountIn": "1000000000000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "manual-unit-control",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 4
+          },
+          "inputBudget": null,
+          "quotedConstructedAndExecuted": true,
+          "defaultRuntimeConstructedAndExecuted": true
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "per-execution",
+          "amountIn": "787606233728059501656",
+          "amountOut": "857213759247368899192",
+          "input": {
+            "label": "original-redeem-input-at-tested-state",
+            "tokenIn": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+            "amountIn": "787606233728059501656",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-receipt-input-only",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 4
+          },
+          "inputBudget": null,
+          "quotedConstructedAndExecuted": true,
+          "defaultRuntimeConstructedAndExecuted": true
+        }
+      ],
+      "drained": true,
+      "rawStrictCount": 24,
+      "knownLimits": [
+        "N-end historical-state Family acceptance; not original transaction prefix replay or opportunity reproduction.",
+        "No natural amount selection/performance/live claim.",
+        "Runtime construction zero RPC/Exact/quoted fallback is issuer-boundary evidence; full production selector coverage belongs to separate common regressions.",
+        "Negative controls prove trusted EVM revert; empty effects are not independent post-rollback storage-diff proof.",
+        "Natural effective price reference remains unmet (missing-valuation); one-token and transaction amounts are manual correctness controls.",
+        "pendingRewards=0: this historical state does not prove the accrued-reward variant.",
+        "Historical natural discovery was not reproven from zero; existing Ready provenance was revalidated.",
+        "No-input and post-execution-revert are the historical negative controls; these files do not independently test input-minus-one or every permission/capacity boundary.",
+        "Default-run external effects observe token/native deltas but not totalSupplyDeltas; direct supplement observes share supply."
+      ]
+    },
+    {
+      "file": "/opt/mev-cloud/family-runtime-20261007/logs/erc4626-thin-20261027/current-backend/infinifi-historical-direct.json",
+      "sha256": "8068376111b49b9efd28be03b4b15429d46e99d0b6c3ba0dc714547765aa6a6f",
+      "reportedResult": "same-state-pass-reference-incomplete",
+      "transactionHash": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e",
+        "generation": 25944594
+      },
+      "sourceTreeSha256": "bf67fb29aaf5822a6e542f694a7913e24b1f1bf061fecd35099bc43e34895efd",
+      "binarySha256": "774712da3eb2683b4ddef56daf4d074b242d55d23301ed01aacf24b17dfdcc60",
+      "familyDefinitionHash": "97bec13b43d5905ff6feebf3d85b6f61ae69f4ab417b7370da2d832beaed81c6",
+      "sampleCount": 4,
+      "sampleExecutionCounts": {
+        "positive": 8,
+        "rejection": 16
+      },
+      "perMode": {
+        "direct-self": {
+          "positive": 4,
+          "rejection": 8
+        },
+        "direct-external": {
+          "positive": 4,
+          "rejection": 8
+        }
+      },
+      "faultCounts": {
+        "none": 8,
+        "no-input": 8,
+        "post-execution-revert": 8
+      },
+      "additionalBoundaryRejections": {},
+      "runtimeConstruction": {
+        "exactCalls": 0,
+        "quotedCalls": 0,
+        "rpcCalls": 0,
+        "quotedFallback": false,
+        "scope": "production issuer, not yet full sim selector"
+      },
+      "invocationCounts": {
+        "exact": 4,
+        "quoted": 4,
+        "forbiddenDuringBuild": 0
+      },
+      "sameSourcePositiveDebitEqualsFullInputAndReceiptEqualsQuote": true,
+      "issues": [],
+      "samples": [
+        {
+          "direction": "deposit",
+          "recipientMode": "per-execution",
+          "amountIn": "1000000000000000000",
+          "amountOut": "918797937190806881",
+          "input": {
+            "label": "one-token-control-not-production-reference",
+            "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+            "amountIn": "1000000000000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "manual-unit-control",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 4
+          },
+          "inputBudget": null,
+          "quotedConstructedAndExecuted": false,
+          "defaultRuntimeConstructedAndExecuted": false
+        },
+        {
+          "direction": "deposit",
+          "recipientMode": "per-execution",
+          "amountIn": "857213759247368899192",
+          "amountOut": "787606233728059501655",
+          "input": {
+            "label": "original-assets-as-deposit-control-at-tested-state",
+            "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+            "amountIn": "857213759247368899192",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-receipt-input-only",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 4
+          },
+          "inputBudget": null,
+          "quotedConstructedAndExecuted": false,
+          "defaultRuntimeConstructedAndExecuted": false
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "per-execution",
+          "amountIn": "1000000000000000000",
+          "amountOut": "1088378586327115224",
+          "input": {
+            "label": "one-token-control-not-production-reference",
+            "tokenIn": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+            "amountIn": "1000000000000000000",
+            "naturalTargetValuation": "not-proven",
+            "kind": "manual-unit-control",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 4
+          },
+          "inputBudget": null,
+          "quotedConstructedAndExecuted": false,
+          "defaultRuntimeConstructedAndExecuted": false
+        },
+        {
+          "direction": "redeem",
+          "recipientMode": "per-execution",
+          "amountIn": "787606233728059501656",
+          "amountOut": "857213759247368899192",
+          "input": {
+            "label": "original-redeem-input-at-tested-state",
+            "tokenIn": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+            "amountIn": "787606233728059501656",
+            "naturalTargetValuation": "not-proven",
+            "kind": "historical-receipt-input-only",
+            "targetReferenceGate": {
+              "status": "unmet",
+              "reason": "missing-valuation"
+            }
+          },
+          "executions": {
+            "positive": 2,
+            "rejection": 4
+          },
+          "inputBudget": null,
+          "quotedConstructedAndExecuted": false,
+          "defaultRuntimeConstructedAndExecuted": false
+        }
+      ],
+      "drained": true,
+      "rawStrictCount": 24,
+      "knownLimits": [
+        "N-end historical-state Family acceptance; not original transaction prefix replay or opportunity reproduction.",
+        "No natural amount selection/performance/live claim.",
+        "Runtime construction zero RPC/Exact/quoted fallback is issuer-boundary evidence; full production selector coverage belongs to separate common regressions.",
+        "Negative controls prove trusted EVM revert; empty effects are not independent post-rollback storage-diff proof.",
+        "Natural effective price reference remains unmet (missing-valuation); one-token and transaction amounts are manual correctness controls.",
+        "pendingRewards=0: this historical state does not prove the accrued-reward variant.",
+        "Historical natural discovery was not reproven from zero; existing Ready provenance was revalidated.",
+        "No-input and post-execution-revert are the historical negative controls; these files do not independently test input-minus-one or every permission/capacity boundary.",
+        "Direct-only supplement: quoted and default runtime were constructed but intentionally not executed in this file; use default file.",
+        "External recipient native balance is not separately observed; executor native and selected token accounts are observed."
+      ]
+    }
+  ],
+  "totals": {
+    "artifactSamples": 32,
+    "positiveExecutions": 80,
+    "expectedRejections": 202,
+    "issues": 0
+  },
+  "countsNote": "Counts describe executed test cases, not distinct instances or natural-price coverage. Overlapping default/direct sample amounts are deliberately kept separate."
+}

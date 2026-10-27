@@ -1,10 +1,3 @@
-import type { ProtocolDomainSemantics } from "../../adapter-family-plugin.js";
-
-export const erc4626Protocol: ProtocolDomainSemantics = {
-  candidateKinds: Object.freeze([
-    "observed-call",
-    "address-surface",
-    "standalone-contract",
-  ]),
-  activeBehaviorProof: "required",
-};
+// Compatibility export; behavior is compiled by the shared Family pipeline.
+import { plugin } from "../../production-families/erc4626.production.js";
+export const erc4626Protocol = plugin.protocol;

@@ -197,7 +197,7 @@ test("production Exact and raw pricing use Gateway quotes; snapshots keep source
     assert.equal(q.amountOut, out(route.direction === "deposit", input.amountIn)); assert.equal(q.evidence.kind, "infinifi-gateway-preview");
     assert.throws(() => method.program.buildRequests({ ...input, prefix: [{}] } as any), /sequential/);
     const fragment = erc4626Execution.buildFragment({ ...input, quotedAmountOut: q.amountOut, minAmountOut: 1n, exactEvidence: q.evidence });
-    assert.equal(fragment.requirements.length, 0); assert.equal(fragment.nodes[0]!.params.variant, INFINIFI_VARIANT);
+    assert.equal(fragment.requirements.length, 0); assert.match(fragment.nodes[0]!.params.runtimeAmountProgram as string, /^0x01[0-9a-f]+$/);
     const action = route.direction === "deposit" ? erc4626DepositFamilyOwnedAction : erc4626RedeemFamilyOwnedAction;
     const bytes = action.encode(fragment.nodes[0] as any, executor, new Uint8Array());
     assert.equal(bytes[0], 0x0e);

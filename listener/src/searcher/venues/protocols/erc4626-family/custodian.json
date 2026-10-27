@@ -1,0 +1,1348 @@
+{
+  "version": 1,
+  "id": "frax-custodian-sync-conversion",
+  "lineageId": "erc4626:frax-custodian-sync-conversion",
+  "abi": {
+    "vault": [
+      "function frxUSD() view returns(address)",
+      "function asset() view returns(address)",
+      "function custodianTkn() view returns(address)",
+      "function frxUSDDecimals() view returns(uint8)",
+      "function custodianTknDecimals() view returns(uint8)",
+      "function mdwrComboView() view returns(uint256,uint256,uint256,uint256)",
+      "function previewRedeem(uint256) view returns(uint256)",
+      "function previewDeposit(uint256) view returns(uint256)",
+      "function deposit(uint256,address) returns(uint256)",
+      "function redeem(uint256,address,address) returns(uint256)"
+    ],
+    "token": [
+      "function balanceOf(address) view returns(uint256)",
+      "function totalSupply() view returns(uint256)",
+      "function decimals() view returns(uint8)",
+      "function approve(address,uint256) returns(bool)",
+      "function allowance(address,address) view returns(uint256)",
+      "function minters(address) view returns(bool)",
+      "function isPaused() view returns(bool)",
+      "function isFrozen(address) view returns(bool)"
+    ],
+    "events": [
+      "function asset() view returns (address)",
+      "function totalAssets() view returns (uint256)",
+      "function totalSupply() view returns (uint256)",
+      "function convertToShares(uint256 assets) view returns (uint256)",
+      "function convertToAssets(uint256 shares) view returns (uint256)",
+      "function previewDeposit(uint256 assets) view returns (uint256)",
+      "function previewRedeem(uint256 shares) view returns (uint256)",
+      "function deposit(uint256 assets,address receiver) returns (uint256 shares)",
+      "function redeem(uint256 shares,address receiver,address owner) returns (uint256 assets)",
+      "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+      "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)"
+    ]
+  },
+  "constants": {
+    "actor": "0x000000000000000000000000000000000000face",
+    "caller": {"kind": "verified-actor", "evidenceId": "erc4626-probe-actor"},
+    "zero": "0x0000000000000000000000000000000000000000",
+    "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+    "implementationHash": "0x51c008b264124ad667f58a8595b86745a657419baac327c1d1f335bc95b953a7",
+    "proxyTemplateHash": "0x834029e91a0eb94f478b72d8f8d0924a57de0dc6046e828a543fc421bd6270d7"
+  },
+  "expressions": {
+    "slotRequest": {
+      "id": "$id",
+      "kind": "get-storage",
+      "address": "$vault",
+      "slot": "$constants.implementationSlot"
+    }
+  },
+  "readPrograms": {
+    "guard": {
+      "requests": {
+        "$expression": [
+          "guardRequests",
+          {
+            "prefix": "$prefix",
+            "vault": "$vault",
+            "binding": "$binding",
+            "actor": "$actor",
+            "caller": "$caller",
+            "direction": "$direction",
+            "amountIn": "$amountIn",
+            "requestId": "$requestId"
+          }
+        ]
+      },
+      "result": {
+        "$program": [
+          "guard",
+          {
+            "prefix": "$prefix",
+            "vault": "$vault",
+            "binding": "$binding",
+            "actor": "$actor",
+            "source": "$source",
+            "requestId": "$requestId"
+          }
+        ]
+      }
+    },
+    "quote": {
+      "requests": {
+        "$expression": [
+          "quoteRequests",
+          {
+            "prefix": "$prefix",
+            "vault": "$vault",
+            "binding": "$binding",
+            "actor": "$actor",
+            "caller": "$caller",
+            "direction": "$direction",
+            "amountIn": "$amountIn",
+            "requestId": "$requestId"
+          }
+        ]
+      },
+      "result": {
+        "$program": [
+          "quote",
+          {
+            "prefix": "$prefix",
+            "vault": "$vault",
+            "binding": "$binding",
+            "actor": "$actor",
+            "source": "$source",
+            "requestId": "$requestId"
+          }
+        ]
+      }
+    }
+  },
+  "inputs": [
+    "prefix",
+    "binding",
+    "vault",
+    "caller",
+    "actor",
+    "source",
+    "direction",
+    "amountIn",
+    "requestId",
+    "redeem",
+    "checkActor",
+    "code",
+    "value",
+    "data",
+    "id",
+    "actual",
+    "expected"
+  ],
+  "admission": {
+    "version": 1,
+    "requestPrefix": "custodian",
+    "retryPrefix": "custodian_unavailable:",
+    "match": {
+      "phase": "proxy",
+      "kind": "runtime-template",
+      "requirements": {"transports": ["get-code"]},
+      "sourceFailure": "retry",
+      "codeRequestId": "custodian-proxy",
+      "candidateValue": "$candidate.vault",
+      "mismatchReason": "custodian_proxy_not_matched",
+      "templateProgram": "proxy",
+      "reads": [{"id": "custodian-proxy", "code": "$candidate.vault"}]
+    },
+    "surface": {
+      "requirements": {"transports": ["get-code", "get-storage", "eth-call"], "caller": "verified-actor"},
+      "decode": {"$program": ["surface", {"prefix": "custodian", "vault": "$candidate.vault"}]},
+      "sourceFailure": "retry",
+      "forbiddenActor": "$surface.proxyAdmin",
+      "forbiddenActorReason": "Custodian probe actor is proxy admin",
+      "reads": [
+        {
+          "use": "surfaceRequests",
+          "with": {"prefix": "custodian", "vault": "$candidate.vault", "caller": "$constants.caller"}
+        }
+      ]
+    },
+    "dependencies": {
+      "requirements": {"transports": ["get-code", "eth-call"], "caller": "verified-actor"},
+      "decode": {"$program": ["dependencies", {"prefix": "custodian", "surface": "$evidence.surface"}]},
+      "permission": {"$program": ["permission", {"prefix": "custodian", "checkActor": true}]},
+      "sourceFailure": "retry",
+      "reads": [
+        {
+          "use": "dependencyRequests",
+          "with": {
+            "prefix": "custodian",
+            "binding": "$evidence.surface",
+            "vault": "$candidate.vault",
+            "actor": {"$address": ["$constants.actor"]}
+          }
+        },
+        {
+          "each": "$evidence.samples",
+          "as": "sample",
+          "reads": [
+            {
+              "id": {"$join": [["custodian-preview-", "$sample.direction"], ""]},
+              "call": {
+                "abi": "vault",
+                "function": {
+                  "$if": [{"$eq": ["$sample.direction", "deposit"]}, "previewDeposit", "previewRedeem"]
+                },
+                "args": ["$sample.amount"]
+              },
+              "target": "$candidate.vault",
+              "caller": "$constants.caller"
+            }
+          ]
+        }
+      ]
+    },
+    "samples": {
+      "stage": "surface",
+      "directions": ["deposit", "redeem"],
+      "select": {"$program": ["sample", {"surface": "$surface", "direction": "$direction"}]},
+      "quote": {
+        "$word": [
+          {
+            "$get": [{"$returned": [{"$join": [["custodian-preview-", "$sample.direction"], ""]}]}, "data"]
+          }
+        ]
+      },
+      "usable": {
+        "$and": [
+          {"$gt": ["$sample.amount", {"$uint": ["0"]}]},
+          {"$gt": ["$sample.available", {"$uint": ["0"]}]}
+        ]
+      },
+      "shape": {"$omit": ["$sample", ["available"]]},
+      "quoteUsable": {
+        "$and": [
+          {"$gt": ["$sample.expected", {"$uint": ["0"]}]},
+          {
+            "$lte": [
+              "$sample.expected",
+              {
+                "$if": [
+                  {"$eq": ["$sample.direction", "deposit"]},
+                  "$evidence.surface.mintCapacity",
+                  "$evidence.surface.inventory"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "unavailableReason": "custodian_sample_unavailable",
+      "capacityReason": "custodian_capacity_unavailable"
+    },
+    "active": {
+      "requirements": {
+        "transports": ["effect-delta-simulation"],
+        "caller": "verified-actor",
+        "effects": ["return-data", "revert-data", "token-delta", "total-supply-delta", "logs"]
+      },
+      "sourceFailure": "retry",
+      "source": "$evidence.surface.source",
+      "binding": "$evidence.binding",
+      "bindingField": "binding",
+      "carriedSurface": true,
+      "unavailableReason": "custodian_execution_unavailable",
+      "requestId": {"$join": [["custodian-active-", "$sample.direction"], ""]},
+      "expectedReturn": "$sample.expected",
+      "returnValue": {"$word": ["$result.data"]},
+      "returnError": "Custodian return amount mismatch",
+      "tokenDeltas": [
+        {
+          "token": "$surface.share",
+          "account": {"$address": ["$constants.actor"]},
+          "delta": {"$if": ["$deposit", "$sample.expected", {"$sub": [{"$uint": ["0"]}, "$sample.amount"]}]}
+        },
+        {
+          "token": "$surface.asset",
+          "account": {"$address": ["$constants.actor"]},
+          "delta": {"$if": ["$deposit", {"$sub": [{"$uint": ["0"]}, "$sample.amount"]}, "$sample.expected"]}
+        },
+        {
+          "token": "$surface.asset",
+          "account": "$surface.vault",
+          "delta": {"$if": ["$deposit", "$sample.amount", {"$sub": [{"$uint": ["0"]}, "$sample.expected"]}]}
+        }
+      ],
+      "supplyDeltas": [
+        {
+          "token": "$surface.vault",
+          "delta": {"$if": ["$deposit", "$sample.expected", {"$sub": [{"$uint": ["0"]}, "$sample.amount"]}]}
+        }
+      ],
+      "events": [
+        {
+          "address": "$surface.vault",
+          "abi": "events",
+          "name": {"$if": ["$deposit", "Deposit", "Withdraw"]},
+          "fields": {
+            "$merge": [
+              {
+                "sender": {"$address": ["$constants.actor"]},
+                "owner": {"$address": ["$constants.actor"]},
+                "assets": {"$if": ["$deposit", "$sample.amount", "$sample.expected"]},
+                "shares": {"$if": ["$deposit", "$sample.expected", "$sample.amount"]}
+              },
+              {"$if": ["$deposit", {}, {"receiver": {"$address": ["$constants.actor"]}}]}
+            ]
+          },
+          "error": "Custodian synchronous lifecycle event missing"
+        }
+      ],
+      "proofHash": {
+        "$hash": [
+          {
+            "source": "$observedSource",
+            "binding": "$evidence.binding",
+            "samples": "$evidence.samples",
+            "directions": "$directions",
+            "results": {
+              "$map": [
+                {"$filter": ["$results", "r", "$r.ok"]},
+                "r",
+                {
+                  "id": "$r.id",
+                  "completion": "$r.completion",
+                  "effects": {"$effects": ["$r.effects"]}
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "reads": [
+        {
+          "each": "$evidence.samples",
+          "as": "sample",
+          "reads": [
+            {
+              "simulation": {
+                "id": {"$join": [["custodian-active-", "$sample.direction"], ""]},
+                "required": false,
+                "kind": "effect-delta-simulation",
+                "preCalls": {
+                  "$map": [
+                    [{"$uint": ["0"]}, "$sample.amount"],
+                    "quantity",
+                    {
+                      "caller": "$constants.caller",
+                      "to": {
+                        "$if": [
+                          {"$eq": ["$sample.direction", "deposit"]},
+                          "$evidence.surface.asset",
+                          "$evidence.surface.share"
+                        ]
+                      },
+                      "data": {"$encode": ["token", "approve", ["$evidence.surface.vault", "$quantity"]]}
+                    }
+                  ]
+                },
+                "call": {
+                  "caller": "$constants.caller",
+                  "executionMode": "impersonated-call-frame",
+                  "to": "$evidence.surface.vault",
+                  "data": {
+                    "$encode": [
+                      "vault",
+                      "$sample.direction",
+                      {
+                        "$if": [
+                          {"$eq": ["$sample.direction", "deposit"]},
+                          ["$sample.amount", {"$address": ["$constants.actor"]}],
+                          [
+                            "$sample.amount",
+                            {"$address": ["$constants.actor"]},
+                            {"$address": ["$constants.actor"]}
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": "$constants.caller",
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "$if": [
+                          {"$eq": ["$sample.direction", "deposit"]},
+                          "$evidence.surface.asset",
+                          "$evidence.surface.share"
+                        ]
+                      },
+                      "amount": "$sample.amount"
+                    },
+                    {
+                      "token": {
+                        "$if": [
+                          {"$eq": ["$sample.direction", "deposit"]},
+                          "$evidence.surface.share",
+                          "$evidence.surface.asset"
+                        ]
+                      },
+                      "amount": {"$uint": ["0"]}
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {"token": "$evidence.surface.share", "account": "$constants.caller"},
+                  {"token": "$evidence.surface.asset", "account": "$constants.caller"},
+                  {"token": "$evidence.surface.asset", "account": "$evidence.surface.vault"}
+                ],
+                "observe": ["return-data", "revert-data", "token-delta", "total-supply-delta", "logs"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "identity": {
+      "bindingField": "custodian",
+      "subject": {"$address": ["$candidate.vault"]},
+      "provenanceKind": "frax-custodian-source-and-conversion-proof"
+    }
+  },
+  "models": {
+    "proxy": {
+      "fields": [
+        {
+          "name": "proxyAdmin",
+          "value": {
+            "$addressWord": [
+              {"$bytes": ["$code", 16, 32]},
+              {
+                "malformed": "Custodian malformed implementation slot",
+                "zero": "Custodian zero binding"
+              }
+            ]
+          },
+          "checks": [
+            {
+              "condition": {
+                "$and": [
+                  {"$eq": [{"$lower": [{"$bytes": ["$code", 15, 1]}]}, "0x7f"]},
+                  {"$eq": [{"$maskHash": ["$code", [[16, 32]]]}, "$constants.proxyTemplateHash"]}
+                ]
+              },
+              "error": "Custodian proxy template mismatch"
+            }
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "condition": {"$matches": ["$code", "^0x[0-9a-fA-F]{2976}$"]},
+          "error": "Custodian proxy template length"
+        }
+      ],
+      "output": {"proxyCodeHash": {"$codeHash": ["$code"]}, "proxyAdmin": "$proxyAdmin"}
+    },
+    "surface": {
+      "fields": [
+        {
+          "name": "observedSource",
+          "value": {"$source": [{"$map": ["$results", "row", {"$successful": ["$row.id"]}]}]}
+        },
+        {
+          "name": "proxy",
+          "value": {"$program": ["proxy", {"code": {"$code": [{"$join": [["$prefix", "-", "proxy"], ""]}]}}]}
+        },
+        {
+          "name": "share",
+          "value": {
+            "$addressWord": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "frxUSD"], ""]}]}, "data"]}]
+          }
+        },
+        {
+          "name": "asset",
+          "value": {
+            "$addressWord": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "asset"], ""]}]}, "data"]}]
+          },
+          "checks": [
+            {
+              "condition": {
+                "$and": [
+                  {
+                    "$sameAddress": [
+                      "$asset",
+                      {
+                        "$addressWord": [
+                          {
+                            "$get": [
+                              {"$returned": [{"$join": [["$prefix", "-", "custodianTkn"], ""]}]},
+                              "data"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {"$not": [{"$sameAddress": ["$share", "$asset"]}]},
+                  {"$not": [{"$sameAddress": ["$vault", "$share"]}]},
+                  {"$not": [{"$sameAddress": ["$vault", "$asset"]}]}
+                ]
+              },
+              "error": "Custodian external share binding"
+            }
+          ]
+        },
+        {
+          "name": "shareDecimals",
+          "value": {
+            "$number": [
+              {
+                "$word": [
+                  {
+                    "$get": [{"$returned": [{"$join": [["$prefix", "-", "frxUSDDecimals"], ""]}]}, "data"]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "assetDecimals",
+          "value": {
+            "$number": [
+              {
+                "$word": [
+                  {
+                    "$get": [
+                      {"$returned": [{"$join": [["$prefix", "-", "custodianTknDecimals"], ""]}]},
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "checks": [
+            {
+              "condition": {"$and": [{"$lte": ["$shareDecimals", 36]}, {"$lte": ["$assetDecimals", 36]}]},
+              "error": "Custodian decimals unsupported"
+            }
+          ]
+        },
+        {
+          "name": "combo",
+          "value": {"$get": [{"$returned": [{"$join": [["$prefix", "-", "mdwrComboView"], ""]}]}, "data"]},
+          "checks": [
+            {
+              "condition": {"$matches": ["$combo", "^0x[0-9a-fA-F]{256}$"]},
+              "error": "Custodian malformed inventory"
+            }
+          ]
+        },
+        {"name": "values", "value": {"$decodeAll": ["vault", "mdwrComboView", "$combo"]}}
+      ],
+      "output": {
+        "$merge": [
+          {"source": "$observedSource", "vault": {"$address": ["$vault"]}},
+          "$proxy",
+          {
+            "implementation": {
+              "$addressWord": [
+                {
+                  "$get": [{"$returned": [{"$join": [["$prefix", "-", "implementation"], ""]}]}, "data"]
+                }
+              ]
+            },
+            "share": "$share",
+            "asset": "$asset",
+            "shareDecimals": "$shareDecimals",
+            "assetDecimals": "$assetDecimals",
+            "inventory": {"$at": ["$values", 2]},
+            "capacity": {"$at": ["$values", 3]},
+            "depositCapacity": {"$at": ["$values", 0]},
+            "mintCapacity": {"$at": ["$values", 1]}
+          }
+        ]
+      }
+    },
+    "dependencies": {
+      "fields": [],
+      "checks": [
+        {
+          "condition": {
+            "$assertSource": [
+              {"$source": [{"$map": ["$results", "row", {"$successful": ["$row.id"]}]}]},
+              "$surface.source"
+            ]
+          },
+          "error": "declared relationship check failed"
+        },
+        {
+          "condition": {
+            "$eq": [
+              {"$codeHash": [{"$code": [{"$join": [["$prefix", "-", "code"], ""]}]}]},
+              "$constants.implementationHash"
+            ]
+          },
+          "error": "Custodian implementation unsupported or upgraded"
+        },
+        {
+          "condition": {
+            "$and": [
+              {
+                "$eq": [
+                  {
+                    "$word": [
+                      {
+                        "$get": [
+                          {"$returned": [{"$join": [["$prefix", "-", "share-decimals"], ""]}]},
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  {"$uint": ["$surface.shareDecimals"]}
+                ]
+              },
+              {
+                "$eq": [
+                  {
+                    "$word": [
+                      {
+                        "$get": [
+                          {"$returned": [{"$join": [["$prefix", "-", "asset-decimals"], ""]}]},
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  {"$uint": ["$surface.assetDecimals"]}
+                ]
+              }
+            ]
+          },
+          "error": "Custodian token decimals changed"
+        }
+      ],
+      "output": {
+        "proofSource": "$surface.source",
+        "proxyCodeHash": "$surface.proxyCodeHash",
+        "proxyAdmin": "$surface.proxyAdmin",
+        "implementation": "$surface.implementation",
+        "share": "$surface.share",
+        "asset": "$surface.asset",
+        "shareDecimals": "$surface.shareDecimals",
+        "assetDecimals": "$surface.assetDecimals",
+        "shareCodeHash": {"$codeHash": [{"$code": [{"$join": [["$prefix", "-", "share-code"], ""]}]}]},
+        "assetCodeHash": {"$codeHash": [{"$code": [{"$join": [["$prefix", "-", "asset-code"], ""]}]}]}
+      }
+    },
+    "permission": {
+      "fields": [
+        {
+          "name": "minter",
+          "value": {
+            "$bool": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "minter"], ""]}]}, "data"]}]
+          }
+        },
+        {
+          "name": "paused",
+          "value": {
+            "$bool": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "paused"], ""]}]}, "data"]}]
+          }
+        },
+        {
+          "name": "frozen",
+          "value": {
+            "$bool": [{"$get": [{"$returned": [{"$join": [["$prefix", "-", "vault-frozen"], ""]}]}, "data"]}]
+          }
+        },
+        {
+          "name": "actorFrozen",
+          "value": {
+            "$if": [
+              "$checkActor",
+              {
+                "$bool": [
+                  {
+                    "$get": [{"$returned": [{"$join": [["$prefix", "-", "actor-frozen"], ""]}]}, "data"]
+                  }
+                ]
+              },
+              false
+            ]
+          }
+        }
+      ],
+      "output": {
+        "$if": [
+          {"$not": ["$minter"]},
+          "custodian_minter_disabled",
+          {
+            "$if": [
+              "$paused",
+              "custodian_frxusd_paused",
+              {"$if": [{"$or": ["$frozen", "$actorFrozen"]}, "custodian_account_frozen", null]}
+            ]
+          }
+        ]
+      }
+    },
+    "guard": {
+      "fields": [
+        {
+          "name": "surface",
+          "value": {"$program": ["surface", {"prefix": "$prefix", "vault": "$vault"}]},
+          "checks": [
+            {
+              "condition": {"$assertSource": ["$surface.source", "$source"]},
+              "error": "declared relationship check failed",
+              "when": {"$defined": ["$source"]}
+            }
+          ]
+        },
+        {
+          "name": "actual",
+          "value": {"$program": ["dependencies", {"prefix": "$prefix", "surface": "$surface"}]},
+          "checks": [
+            {
+              "condition": {
+                "$every": [
+                  ["implementation", "share", "asset", "proxyAdmin"],
+                  "key",
+                  {"$sameAddress": [{"$get": ["$actual", "$key"]}, {"$get": ["$binding", "$key"]}]}
+                ]
+              },
+              "error": "Custodian address binding changed"
+            },
+            {
+              "condition": {
+                "$every": [
+                  [
+                    "shareDecimals",
+                    "assetDecimals",
+                    "shareCodeHash",
+                    "assetCodeHash",
+                    "proxyCodeHash"
+                  ],
+                  "key",
+                  {"$eq": [{"$get": ["$actual", "$key"]}, {"$get": ["$binding", "$key"]}]}
+                ]
+              },
+              "error": "Custodian code/decimals binding changed"
+            }
+          ]
+        },
+        {
+          "name": "reason",
+          "value": {
+            "$program": [
+              "permission",
+              {
+                "prefix": "$prefix",
+                "checkActor": {"$coalesce": ["$checkActor", {"$defined": ["$actor"]}]}
+              }
+            ]
+          },
+          "checks": [{"condition": {"$eq": ["$reason", null]}, "error": "$reason"}]
+        }
+      ],
+      "output": "$surface"
+    },
+    "quote": {"fields": [], "output": {"$word": [{"$get": [{"$returned": ["$requestId"]}, "data"]}]}},
+    "sample": {
+      "fields": [
+        {"name": "deposit", "value": {"$eq": ["$direction", "deposit"]}},
+        {
+          "name": "capacity",
+          "value": {"$if": ["$deposit", "$surface.depositCapacity", "$surface.capacity"]}
+        },
+        {
+          "name": "available",
+          "value": {"$if": ["$deposit", "$surface.mintCapacity", "$surface.inventory"]}
+        },
+        {
+          "name": "amount",
+          "value": {
+            "$min": [
+              "$capacity",
+              {
+                "$pow": [
+                  {"$uint": ["10"]},
+                  {"$if": ["$deposit", "$surface.assetDecimals", "$surface.shareDecimals"]}
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "output": {"direction": "$direction", "amount": "$amount", "available": "$available"}
+    },
+    "address": {
+      "fields": [
+        {
+          "name": "address",
+          "value": {"$address": ["$value"]},
+          "checks": [
+            {
+              "condition": {"$ne": ["$address", {"$address": ["$constants.zero"]}]},
+              "error": "Custodian zero binding"
+            }
+          ]
+        }
+      ],
+      "output": "$address"
+    },
+    "word": {
+      "fields": [
+        {
+          "name": "data",
+          "value": {"$get": [{"$returned": ["$id"]}, "data"]},
+          "checks": [
+            {
+              "condition": {"$matches": ["$data", "^0x[0-9a-fA-F]{64}$"]},
+              "error": {"$join": [["Custodian malformed word: ", "$id"], ""]}
+            }
+          ]
+        }
+      ],
+      "output": {"$uint": ["$data"]}
+    },
+    "boolean": {
+      "fields": [
+        {
+          "name": "value",
+          "value": {"$program": ["word", {"id": "$id"}]},
+          "checks": [
+            {
+              "condition": {"$lte": ["$value", {"$uint": ["1"]}]},
+              "error": {"$join": [["Custodian malformed bool: ", "$id"], ""]}
+            }
+          ]
+        }
+      ],
+      "output": {"$eq": ["$value", {"$uint": ["1"]}]}
+    },
+    "implementationWord": {
+      "fields": [],
+      "output": {
+        "$addressWord": [
+          "$data",
+          {"malformed": "Custodian malformed implementation slot", "zero": "Custodian zero binding"}
+        ]
+      }
+    },
+    "bindingCheck": {
+      "fields": [],
+      "checks": [
+        {
+          "condition": {
+            "$every": [
+              ["implementation", "share", "asset", "proxyAdmin"],
+              "key",
+              {"$sameAddress": [{"$get": ["$actual", "$key"]}, {"$get": ["$expected", "$key"]}]}
+            ]
+          },
+          "error": "Custodian address binding changed"
+        },
+        {
+          "condition": {
+            "$every": [
+              ["shareDecimals", "assetDecimals", "shareCodeHash", "assetCodeHash", "proxyCodeHash"],
+              "key",
+              {"$eq": [{"$get": ["$actual", "$key"]}, {"$get": ["$expected", "$key"]}]}
+            ]
+          },
+          "error": "Custodian code/decimals binding changed"
+        }
+      ]
+    }
+  },
+  "requestSets": {
+    "surfaceRequests": [
+      {"id": {"$join": [["$prefix", "-", "proxy"], ""]}, "code": "$vault"},
+      {
+        "id": {"$join": [["$prefix", "-", "implementation"], ""]},
+        "storage": {"address": "$vault", "slot": "$constants.implementationSlot"}
+      },
+      {
+        "each": [
+          "frxUSD",
+          "asset",
+          "custodianTkn",
+          "frxUSDDecimals",
+          "custodianTknDecimals",
+          "mdwrComboView"
+        ],
+        "as": "name",
+        "reads": [
+          {
+            "id": {"$join": [["$prefix", "-", "$name"], ""]},
+            "call": {"abi": "vault", "function": "$name", "args": []},
+            "target": "$vault",
+            "caller": "$caller"
+          }
+        ]
+      }
+    ],
+    "dependencyRequests": [
+      {"id": {"$join": [["$prefix", "-", "code"], ""]}, "code": "$binding.implementation"},
+      {"id": {"$join": [["$prefix", "-", "share-code"], ""]}, "code": "$binding.share"},
+      {"id": {"$join": [["$prefix", "-", "asset-code"], ""]}, "code": "$binding.asset"},
+      {
+        "id": {"$join": [["$prefix", "-", "share-decimals"], ""]},
+        "call": {"abi": "token", "function": "decimals", "args": []},
+        "target": "$binding.share"
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "asset-decimals"], ""]},
+        "call": {"abi": "token", "function": "decimals", "args": []},
+        "target": "$binding.asset"
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "minter"], ""]},
+        "call": {"abi": "token", "function": "minters", "args": ["$vault"]},
+        "target": "$binding.share"
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "paused"], ""]},
+        "call": {"abi": "token", "function": "isPaused", "args": []},
+        "target": "$binding.share"
+      },
+      {
+        "id": {"$join": [["$prefix", "-", "vault-frozen"], ""]},
+        "call": {"abi": "token", "function": "isFrozen", "args": ["$vault"]},
+        "target": "$binding.share"
+      },
+      {
+        "when": {"$defined": ["$actor"]},
+        "reads": [
+          {
+            "id": {"$join": [["$prefix", "-", "actor-frozen"], ""]},
+            "call": {"abi": "token", "function": "isFrozen", "args": ["$actor"]},
+            "target": "$binding.share"
+          }
+        ]
+      },
+      {"when": {"$not": [{"$defined": ["$actor"]}]}, "reads": []}
+    ],
+    "guardRequests": [
+      {
+        "use": "surfaceRequests",
+        "with": {"prefix": "$prefix", "vault": "$vault", "caller": {"kind": "executor"}}
+      },
+      {
+        "use": "dependencyRequests",
+        "with": {"prefix": "$prefix", "binding": "$binding", "vault": "$vault", "actor": "$actor"}
+      }
+    ],
+    "quoteRequests": [
+      {
+        "id": "$requestId",
+        "call": {
+          "abi": "vault",
+          "function": {"$if": [{"$eq": ["$direction", "deposit"]}, "previewDeposit", "previewRedeem"]},
+          "args": ["$amountIn"]
+        },
+        "target": "$vault",
+        "caller": "$caller"
+      }
+    ]
+  },
+  "match": {"op": "defined", "args": ["$descriptor.custodian"]},
+  "boundState": "$descriptor.custodian",
+  "context": {
+    "vault": "$descriptor.vault",
+    "redeem": {"op": "some", "args": ["$routes", "r", {"op": "eq", "args": ["$r.direction", "redeem"]}]}
+  },
+  "pricing": {
+    "mutationAddresses": ["$descriptor.vault"],
+    "refreshPolicy": "each-block",
+    "requirements": {"transports": ["eth-call", "get-code", "get-storage"], "caller": "executor"},
+    "guardProgram": "guard",
+    "guardPrefix": "current-custodian",
+    "dependencies": ["$descriptor.vault", "$descriptor.asset", "$descriptor.share"],
+    "finalizeChecks": [
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.oneAsset",
+                {"op": "pow", "args": ["10", "$descriptor.custodian.assetDecimals"]}
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.oneShare",
+                {"op": "pow", "args": ["10", "$descriptor.custodian.shareDecimals"]}
+              ]
+            }
+          ]
+        },
+        "error": "custodian pricing decimals binding mismatch"
+      }
+    ]
+  },
+  "exact": {
+    "protectedAddresses": ["$descriptor.vault", "$binding.proxyAdmin", "$descriptor.asset", "$descriptor.share"],
+    "methodId": "erc4626-preview",
+    "requirements": {"transports": ["eth-call", "get-code", "get-storage"], "caller": "executor"},
+    "guardProgram": "guard",
+    "guardPrefix": "exact-custodian",
+    "caller": {"kind": "executor"},
+    "checks": [
+      {
+        "condition": {
+          "op": "eq",
+          "args": [{"op": "length", "args": [{"op": "coalesce", "args": ["$prefix", []]}]}, 0]
+        },
+        "error": "custodian sequential/pending quote unsupported"
+      },
+      {
+        "condition": {"op": "eq", "args": [{"op": "length", "args": ["$runtimeEvidence"]}, 0]},
+        "error": "custodian sequential/pending quote unsupported"
+      }
+    ],
+    "evidence": {
+      "kind": "frax-custodian-preview",
+      "source": "$source",
+      "vault": "$descriptor.vault",
+      "direction": "$route.direction",
+      "amountIn": "$amountIn",
+      "amountOut": "$amountOut",
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "executor": "$executor"
+    },
+    "outputChecks": [
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "lte",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "if",
+                  "args": [
+                    {"op": "eq", "args": ["$direction", "deposit"]},
+                    "$guardResult.depositCapacity",
+                    "$guardResult.capacity"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$amountOut",
+                {
+                  "op": "if",
+                  "args": [
+                    {"op": "eq", "args": ["$direction", "deposit"]},
+                    "$guardResult.mintCapacity",
+                    "$guardResult.inventory"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "custodian_conversion_capacity_exceeded"
+      }
+    ]
+  },
+  "assertions": [
+    {
+      "condition": {
+        "op": "and",
+        "args": [
+          {"op": "not", "args": [{"op": "defined", "args": ["$descriptor.infinifi"]}]},
+          {"op": "sameAddress", "args": ["$binding.share", "$descriptor.share"]},
+          {"op": "sameAddress", "args": ["$binding.asset", "$descriptor.asset"]},
+          {
+            "op": "ne",
+            "args": [
+              {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.share"]}]},
+              {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.vault"]}]}
+            ]
+          },
+          {
+            "op": "ne",
+            "args": [
+              {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
+              {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.vault"]}]}
+            ]
+          },
+          {
+            "op": "ne",
+            "args": [
+              {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.share"]}]},
+              {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]}
+            ]
+          }
+        ]
+      },
+      "error": "Custodian conversion binding mismatch"
+    }
+  ],
+  "execution": {
+    "version": 1,
+    "settlement": {"directOutput": true},
+    "protectedAddresses": {
+      "op": "concat",
+      "args": [
+        {
+          "op": "concat",
+          "args": [
+            ["$descriptor.vault", "$descriptor.share", "$descriptor.asset"],
+            {
+              "op": "if",
+              "args": [
+                {"op": "defined", "args": ["$descriptor.custodian.proxyAdmin"]},
+                ["$descriptor.custodian.proxyAdmin"],
+                []
+              ]
+            }
+          ]
+        },
+        {
+          "op": "if",
+          "args": [{"op": "defined", "args": ["$binding.proxyAdmin"]}, ["$binding.proxyAdmin"], []]
+        }
+      ]
+    },
+    "preflight": [
+      {
+        "target": "$descriptor.vault",
+        "signature": "function frxUSD() view returns(address)",
+        "args": [],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$descriptor.share"}]
+      },
+      {
+        "target": "$descriptor.vault",
+        "signature": "function asset() view returns(address)",
+        "args": [],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$descriptor.asset"}]
+      },
+      {
+        "target": "$descriptor.vault",
+        "signature": "function custodianTkn() view returns(address)",
+        "args": [],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": "$descriptor.asset"}]
+      },
+      {
+        "target": "$descriptor.share",
+        "signature": "function minters(address) view returns(bool)",
+        "args": ["$descriptor.vault"],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": true}]
+      },
+      {
+        "target": "$descriptor.share",
+        "signature": "function isPaused() view returns(bool)",
+        "args": [],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": false}]
+      },
+      {
+        "target": "$descriptor.share",
+        "signature": "function isFrozen(address) view returns(bool)",
+        "args": ["$executor"],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": false}]
+      },
+      {
+        "target": "$descriptor.share",
+        "signature": "function isFrozen(address) view returns(bool)",
+        "args": ["$descriptor.vault"],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": false}]
+      },
+      {
+        "target": "$descriptor.share",
+        "signature": "function isFrozen(address) view returns(bool)",
+        "args": ["$recipient"],
+        "save": {"bindingValue": 0},
+        "checks": [{"left": {"runtime": "bindingValue"}, "operator": "eq", "right": false}]
+      },
+      {
+        "target": "$descriptor.vault",
+        "signature": "function mdwrComboView() view returns(uint256,uint256,uint256,uint256)",
+        "args": [],
+        "save": {
+          "inputCapacity": {"op": "if", "args": [{"op": "eq", "args": ["$direction", "deposit"]}, 0, 3]},
+          "outputCapacity": {"op": "if", "args": [{"op": "eq", "args": ["$direction", "deposit"]}, 1, 2]}
+        },
+        "checks": [
+          {
+            "left": {"runtime": "inputCapacity"},
+            "operator": "gte",
+            "right": {"runtime": "amountIn"}
+          }
+        ]
+      },
+      {
+        "target": "$descriptor.vault",
+        "signature": {
+          "op": "if",
+          "args": [
+            {"op": "eq", "args": ["$direction", "deposit"]},
+            "function previewDeposit(uint256) view returns(uint256)",
+            "function previewRedeem(uint256) view returns(uint256)"
+          ]
+        },
+        "args": [{"runtime": "amountIn"}],
+        "save": {"preview": 0},
+        "checks": [
+          {"left": {"runtime": "preview"}, "operator": "gte", "right": 1},
+          {
+            "left": {"runtime": "outputCapacity"},
+            "operator": "gte",
+            "right": {"runtime": "preview"}
+          }
+        ]
+      }
+    ],
+    "approval": {
+      "token": "$route.tokenIn",
+      "spender": "$descriptor.vault",
+      "mode": "exact-clear",
+      "requireBool": true,
+      "verifyAllowance": true
+    },
+    "call": {
+      "target": "$descriptor.vault",
+      "signature": {
+        "op": "if",
+        "args": [
+          {"op": "eq", "args": ["$direction", "deposit"]},
+          "function deposit(uint256,address) returns(uint256)",
+          "function redeem(uint256,address,address) returns(uint256)"
+        ]
+      },
+      "args": {
+        "op": "if",
+        "args": [
+          {"op": "eq", "args": ["$direction", "deposit"]},
+          [{"runtime": "amountIn"}, "$recipient"],
+          [{"runtime": "amountIn"}, "$recipient", "$executor"]
+        ]
+      },
+      "save": {"output": 0},
+      "checks": [{"left": {"runtime": "output"}, "operator": "eq", "right": {"runtime": "preview"}}]
+    },
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {"runtime": "amountIn"}
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "equals": {"runtime": "output"},
+        "minimum": "$minAmountOut"
+      },
+      {
+        "kind": "supply",
+        "token": "$descriptor.share",
+        "direction": {
+          "op": "if",
+          "args": [{"op": "eq", "args": ["$direction", "deposit"]}, "increase", "decrease"]
+        },
+        "equals": {
+          "op": "if",
+          "args": [
+            {"op": "eq", "args": ["$direction", "deposit"]},
+            {"runtime": "output"},
+            {"runtime": "amountIn"}
+          ]
+        }
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenIn",
+        "account": "$recipient",
+        "when": "$externalRecipient"
+      },
+      {"kind": "unchanged-native", "when": "$directSettlement"}
+    ],
+    "requireCanonicalSource": true,
+    "rejectRuntimeEvidence": true,
+    "contextChecks": [
+      {
+        "error": "conversion direction unsupported",
+        "condition": {
+          "op": "or",
+          "args": [
+            {"op": "eq", "args": ["$direction", "deposit"]},
+            {"op": "eq", "args": ["$direction", "redeem"]}
+          ]
+        }
+      },
+      {
+        "error": "Custodian external token binding",
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": ["$descriptor.vault", "0x0000000000000000000000000000000000000000"]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": ["$descriptor.share", "0x0000000000000000000000000000000000000000"]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": ["$descriptor.asset", "0x0000000000000000000000000000000000000000"]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$descriptor.vault", "$descriptor.share"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$descriptor.vault", "$descriptor.asset"]}]
+            },
+            {
+              "op": "not",
+              "args": [{"op": "sameAddress", "args": ["$descriptor.share", "$descriptor.asset"]}]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

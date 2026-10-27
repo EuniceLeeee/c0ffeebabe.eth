@@ -13,11 +13,16 @@ type Declaration = {
   readonly actionAdapters: readonly Binding[];
 };
 export interface DeclarativeProductionEntry {
+  readonly format: "bindings-v1" | "protocol-json-v2";
   readonly definitionFile: string;
   readonly entryFile: string;
   readonly familyId: string;
   readonly domain: FamilyDomain;
   readonly source: string;
+  /** Build-validated static data and compiler roots. Runtime never loads paths. */
+  readonly dependencyFiles: readonly string[];
+  readonly childFiles: readonly string[];
+  readonly ownedActionAdapterIds: readonly string[];
 }
 function object(value: unknown, label: string): Record<string, any> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -41,6 +46,113 @@ function binding(value: unknown): Binding {
     throw new Error("production bindings require a relative source module and named export");
   return b as Binding;
 }
+
+function dataOnly(value: unknown): void {
+  if (value === undefined || typeof value === "function" || typeof value === "bigint" ||
+      typeof value === "symbol" || (typeof value === "number" && !Number.isSafeInteger(value)))
+    throw new Error("Family definition must contain lossless JSON data");
+  if (value === null || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    if (["__proto__", "prototype", "constructor"].includes(key)) throw new Error("forbidden definition key");
+    if (["module", "export", "handler"].includes(key))
+      throw new Error("declarative protocol cannot reference TypeScript handlers");
+    dataOnly(child);
+  }
+}
+
+/** Validate the authored format here; the shared compiler alone expands and
+ * interprets its semantics. Ordinary evidence fields named binding are data. */
+function variantDeclaration(child: Record<string, any>): void {
+  if (!Object.hasOwn(child, "admission")) {
+    object(child.identity, "variant identity"); // Existing expanded v2 declarations.
+    return;
+  }
+  if (Object.hasOwn(child, "identity") || Object.hasOwn(child, "programs"))
+    throw new Error("authored variant cannot mix admission with expanded identity/programs");
+  const admission = object(child.admission, "variant admission");
+  if (admission.version !== 1) throw new Error("unsupported variant admission version");
+  for (const name of ["match", "surface", "dependencies", "active"]) {
+    const stage = object(admission[name], `variant admission ${name}`);
+    if (!Array.isArray(stage.reads) || Object.hasOwn(stage, "requests"))
+      throw new Error("authored admission stages require declared reads");
+  }
+  object(child.models, "variant models");
+  const requestSets = object(child.requestSets, "variant request sets");
+  if (Object.values(requestSets).some(value => !Array.isArray(value)))
+    throw new Error("variant request sets must contain read arrays");
+  const reads = object(child.readPrograms, "variant read programs");
+  for (const read of Object.values(reads))
+    keys(object(read, "variant read program"), ["requests", "result"], "variant read program");
+}
+
+function uniqueIds(value: unknown, label: string): readonly string[] {
+  if (!Array.isArray(value) || value.some(id => typeof id !== "string" || !/^[a-z0-9][a-z0-9:._-]*$/.test(id)) ||
+      new Set(value).size !== value.length) throw new Error(`invalid ${label}`);
+  return value;
+}
+
+function renderProtocolEntry(input: {
+  root: string; sourceRoot: string; definitionFile: string; entryFile: string;
+  doc: Record<string, any>; activation: Record<string, any>;
+}): DeclarativeProductionEntry {
+  const { root, sourceRoot, definitionFile, entryFile, doc, activation } = input;
+  dataOnly(doc);
+  const required = ["version", "scope", "production", "manifest", "discovery", "identity", "instance", "routes",
+    "pricing", "protocol", "standard", "actionAdapters", "variantFiles"];
+  keys(doc, required, "declarative protocol");
+  if (doc.production.domain !== "protocol") throw new Error("declarative v2 supports protocol domain only");
+  for (const key of ["manifest", "discovery", "identity", "instance", "routes", "pricing", "protocol", "standard"])
+    object(doc[key], `${key} declaration`);
+  const manifest = doc.manifest;
+  if (manifest.familyId !== doc.scope.family || manifest.domain !== "protocol")
+    throw new Error("JSON Family/domain disagrees with its semantic manifest");
+  const ownedActionAdapterIds = uniqueIds(manifest.ownedActionAdapterIds, "owned action IDs");
+  uniqueIds(manifest.requiredInfraActionAdapterIds, "infrastructure action IDs");
+  const lineages = uniqueIds(manifest.supportedLineages, "supported lineages");
+  if (lineages.length === 0 || ownedActionAdapterIds.length === 0) throw new Error("protocol requires actions and lineages");
+  if (typeof doc.standard.id !== "string" || typeof doc.standard.lineageId !== "string" ||
+      !lineages.includes(doc.standard.lineageId)) throw new Error("invalid standard variant identity/lineage");
+  for (const key of ["abi", "constants", "expressions", "pricing", "exact", "readPrograms", "execution"])
+    object(doc.standard[key], `standard ${key}`);
+  object(doc.discovery.definition, "discovery definition");
+  object(doc.identity.definition, "identity definition");
+  if (!Array.isArray(doc.actionAdapters)) throw new Error("production actionAdapters must be an array");
+  const actions = doc.actionAdapters.map((value: unknown) => {
+    const action = object(value, "action declaration");
+    const descriptor = object(action.descriptor, "action descriptor");
+    return descriptor.adapterId;
+  });
+  uniqueIds(actions, "action descriptor IDs");
+  if (JSON.stringify([...actions].sort()) !== JSON.stringify([...ownedActionAdapterIds].sort()))
+    throw new Error("declared actions disagree with manifest owned actions");
+  if (Object.hasOwn(doc.protocol, "oracleVictim")) throw new Error("v2 protocol victim semantics are not declared by this compiler");
+  if (!Array.isArray(doc.variantFiles) || doc.variantFiles.some((name: unknown) =>
+    typeof name !== "string" || !/^\.\/[a-z0-9][a-z0-9-]*\.json$/.test(name)))
+    throw new Error("variants must be same-directory static JSON references");
+  const childFiles = doc.variantFiles.map((name: string) => resolve(dirname(definitionFile), name));
+  if (childFiles.includes(definitionFile) || new Set(childFiles).size !== childFiles.length)
+    throw new Error("duplicate or cyclic child JSON reference");
+  if (lineages.length !== childFiles.length + 1) throw new Error("variant references do not cover declared lineages");
+  const compiler = resolve(root, "src/searcher/venues/declarative-protocol.ts");
+  const relativeImport = (file: string) => {
+    localPath(sourceRoot, file);
+    const path = relative(dirname(entryFile), file).split(sep).join("/");
+    return path.startsWith(".") ? path : `./${path}`;
+  };
+  const source = [MARKER, `// Definition: ${localPath(root, definitionFile)}`,
+    '// Regenerate with: npm run family-capability-manifest:generate',
+    'import { defineFamilyActivation } from "./activation.js";',
+    'import { defineProtocolFamily } from "../adapter-family-plugin.js";',
+    `import { compileDeclarativeProtocol } from ${JSON.stringify(relativeImport(compiler).replace(/\.ts$/, ".js"))};`,
+    `import definition from ${JSON.stringify(relativeImport(definitionFile))};`,
+    ...childFiles.map((file: string, index: number) => `import child${index} from ${JSON.stringify(relativeImport(file))};`),
+    "", `export const activation = defineFamilyActivation(${JSON.stringify(activation)});`, "",
+    `export const plugin = defineProtocolFamily(compileDeclarativeProtocol(definition, [${childFiles.map((_file: string, index: number) => `child${index}`).join(", ")}]));`, "",
+  ].join("\n");
+  return Object.freeze({ format: "protocol-json-v2", definitionFile, entryFile, familyId: doc.scope.family,
+    domain: "protocol", source, childFiles: Object.freeze(childFiles), ownedActionAdapterIds: Object.freeze([...ownedActionAdapterIds]),
+    dependencyFiles: Object.freeze([definitionFile, ...childFiles, compiler, resolve(root, "src/searcher/build-declarative-production.ts")]) });
+}
 export function renderDeclarativeProductionEntry(input: {
   rootDirectory: string; definitionFile: string; productionDirectory?: string; document: unknown;
 }): DeclarativeProductionEntry {
@@ -54,13 +166,16 @@ export function renderDeclarativeProductionEntry(input: {
   if (typeof scope.family !== "string" || !/^[a-z0-9][a-z0-9:-]*$/.test(scope.family)) throw new Error("Family scope requires a family ID");
   const p = object(doc.production, "production");
   keys(p, ["domain", "activation"], "production");
-  if (doc.version !== 1) throw new Error("unsupported production definition version");
+  if (doc.version !== 1 && doc.version !== 2) throw new Error("unsupported production definition version");
   if (typeof p.domain !== "string" || !Object.hasOwn(CONSTRUCTORS, p.domain)) throw new Error("unknown production domain");
   const domain = p.domain as FamilyDomain;
   const activation = object(p.activation, "production activation");
   keys(activation, ["enabled", "envKey"], "production activation");
   if (typeof activation.enabled !== "boolean" || typeof activation.envKey !== "string" ||
       !/^SEARCHER_FAMILY_[A-Z0-9_]+_ENABLED$/.test(activation.envKey)) throw new Error("invalid production activation");
+  const entryFile = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root), `${stem}.production.ts`);
+  localPath(sourceRoot, entryFile);
+  if (doc.version === 2) return renderProtocolEntry({ root, sourceRoot, definitionFile, entryFile, doc, activation });
   const slots = FAMILY_CAPABILITY_APPLICABILITY[domain];
   const allowed = ["version", "scope", "production", ...Object.keys(slots)];
   if (Object.keys(doc).some(key => !allowed.includes(key))) throw new Error("unknown Family definition block");
@@ -83,8 +198,6 @@ export function renderDeclarativeProductionEntry(input: {
   if (!Array.isArray(doc.actionAdapters)) throw new Error("production actionAdapters must be an array");
   doc.actionAdapters.forEach(binding);
   const declarations: Declaration = { domain, activation: activation as Declaration["activation"], bindings, actionAdapters: doc.actionAdapters };
-  const entryFile = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root), `${stem}.production.ts`);
-  localPath(sourceRoot, entryFile);
   const imports: string[] = [], assignments: string[] = [];
   function importBinding(b: Binding, alias: string): void {
     const module = resolve(dirname(definitionFile), b.module);
@@ -105,7 +218,9 @@ export function renderDeclarativeProductionEntry(input: {
     ...imports, "", `export const activation = defineFamilyActivation(${JSON.stringify(activation)});`, "",
     `export const plugin = ${CONSTRUCTORS[domain]}({`, ...assignments,
     `  actionAdapters: [${declarations.actionAdapters.map((_b, i) => `action${i}`).join(", ")}],`, "});", ""].join("\n");
-  return Object.freeze({ definitionFile, entryFile, familyId: scope.family, domain, source });
+  return Object.freeze({ format: "bindings-v1", definitionFile, entryFile, familyId: scope.family, domain, source,
+    childFiles: Object.freeze([]), ownedActionAdapterIds: Object.freeze([]),
+    dependencyFiles: Object.freeze([definitionFile, resolve(root, "src/searcher/build-declarative-production.ts")]) });
 }
 
 /** Build-time only. Runtime keeps the existing generated static imports and
@@ -120,6 +235,14 @@ export async function syncDeclarativeProductionEntries(input: {
     const stat = await lstat(path);
     if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`production source must be a regular file: ${path}`);
     localPath(await realpath(sourceRoot), await realpath(path));
+    // Reject links in ancestor directories as well as at the leaf. A static
+    // child reference must identify the exact on-disk file in this source tree.
+    let current = dirname(path);
+    while (current !== sourceRoot) {
+      localPath(sourceRoot, current);
+      if ((await lstat(current)).isSymbolicLink()) throw new Error("production source ancestor must not be a symlink");
+      current = dirname(current);
+    }
   }
   async function visit(directory: string): Promise<void> {
     let children;
@@ -137,11 +260,28 @@ export async function syncDeclarativeProductionEntries(input: {
       if (!Object.hasOwn(object(document, "Family definition"), "production")) continue;
       const entry = renderDeclarativeProductionEntry({ rootDirectory: root, productionDirectory, definitionFile, document });
       if (entries.has(entry.entryFile) || familyIds.has(entry.familyId)) throw new Error("duplicate declarative production entry or Family ID");
-      const references = Object.keys(FAMILY_CAPABILITY_APPLICABILITY[entry.domain])
-        .filter(key => key !== "actionAdapters" && Object.hasOwn(document, key))
-        .map(key => binding(document[key].binding));
-      for (const b of [...references, ...document.actionAdapters as Binding[]])
-        await regular(resolve(path, b.module.replace(/\.js$/, ".ts")));
+      if (entry.format === "protocol-json-v2") {
+        const ids = new Set<string>([document.standard.id]), lineages = new Set<string>([document.standard.lineageId]);
+        for (const childFile of entry.childFiles) {
+          await regular(childFile);
+          const child = object(JSON.parse(await readFile(childFile, "utf8")), "variant JSON");
+          dataOnly(child);
+          if (Object.hasOwn(child, "variantFiles") || Object.hasOwn(child, "production"))
+            throw new Error("nested or cyclic variant JSON references are unsupported");
+          if (child.version !== 1 || typeof child.id !== "string" || typeof child.lineageId !== "string" ||
+              !document.manifest.supportedLineages.includes(child.lineageId) || ids.has(child.id) || lineages.has(child.lineageId))
+            throw new Error("invalid or duplicate variant identity/lineage");
+          variantDeclaration(child);
+          ids.add(child.id); lineages.add(child.lineageId);
+        }
+        for (const dependency of entry.dependencyFiles) await regular(dependency);
+      } else {
+        const references = Object.keys(FAMILY_CAPABILITY_APPLICABILITY[entry.domain])
+          .filter(key => key !== "actionAdapters" && Object.hasOwn(document, key))
+          .map(key => binding(document[key].binding));
+        for (const b of [...references, ...document.actionAdapters as Binding[]])
+          await regular(resolve(path, b.module.replace(/\.js$/, ".ts")));
+      }
       entries.set(entry.entryFile, entry); familyIds.add(entry.familyId);
     }
   }

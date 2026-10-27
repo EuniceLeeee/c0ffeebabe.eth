@@ -298,6 +298,29 @@ test(id + ": runtime ABI uses actual input for each direction and keeps approval
   }
 });
 
+// The standard conversion now observes actual debit and receipt in both modes.
+// Model those observations explicitly; an absent host must remain a word-bounds
+// failure rather than teaching the interpreter to invent return values.
+function standard4626AmountHost(d: any, r: any, amount: bigint,
+  fault?: "under-debit" | "short-receipt") {
+  const abi = new ethers.Interface(["function deposit(uint256,address)", "function redeem(uint256,address,address)"]);
+  let converted = false;
+  return { call(c: RuntimeCall) {
+    if (c.static && c.data.startsWith(erc20.getFunction("balanceOf")!.selector)) {
+      assert(same(erc20.decodeFunctionData("balanceOf", c.data)[0], executor));
+      if (same(c.target, r.tokenIn)) return word(converted ? 101n + (fault === "under-debit" ? 1n : 0n) : amount + 101n);
+      if (same(c.target, r.tokenOut)) return word(converted ? 150n - (fault === "short-receipt" ? 1n : 0n) : 103n);
+      assert.fail("unexpected ERC4626 balance token");
+    }
+    assert(!c.static && same(c.target, d.vault), "unexpected ERC4626 call");
+    const args = abi.decodeFunctionData(r.direction, c.data);
+    assert.equal(args[0], amount); assert(same(args[1], executor));
+    if (r.direction === "redeem") assert(same(args[2], executor));
+    assert.equal(converted, false); converted = true;
+    return word(47n);
+  } };
+}
+
 for (const id of ["protocol:erc4626", "protocol:staked-usdat", "protocol:wsteth", "protocol:token-conversion"])
 test(id + ": supported amount directions preserve method, recipient and temporary allowance semantics", () => {
   for (const d of fixtures.filter(d => d.familyId === id)) for (const r of routes(d)) for (const amount of [19n, 123456789n]) {
@@ -308,7 +331,7 @@ test(id + ": supported amount directions preserve method, recipient and temporar
       : ["function deposit(uint256,uint32)", "function withdraw(uint256,uint32)"]);
     const method = id !== "protocol:token-conversion" || d.variant === "btb-bear-v1" ? r.direction : r.direction === "mint" ? "deposit" : "withdraw";
     let deposited = false;
-    const trace = inspectRuntime(build(d, r).program, amount, id === "protocol:staked-usdat" ? {
+    const trace = inspectRuntime(build(d, r).program, amount, id === "protocol:erc4626" ? standard4626AmountHost(d, r, amount) : id === "protocol:staked-usdat" ? {
       nativeBalance: () => 17n,
       call(c) {
         if (c.static && c.data.startsWith(erc20.getFunction("balanceOf")!.selector))
@@ -329,6 +352,16 @@ test(id + ": supported amount directions preserve method, recipient and temporar
     const approves = trace.calls.filter(c => c.data.startsWith(erc20.getFunction("approve")!.selector));
     if (id === "protocol:token-conversion" && r.direction === "mint")
       assert.deepEqual(approves.map(c => erc20.decodeFunctionData("approve", c.data)[1]), [0n, amount, 0n]);
+  }
+});
+
+test("ERC4626 amount fixture preserves missing-return, debit and receipt rejection", () => {
+  for (const d of fixtures.filter(d => d.familyId === "protocol:erc4626")) for (const r of routes(d)) {
+    const program = build(d, r).program, amount = 19n;
+    assert.throws(() => inspectRuntime(program, amount), /word bounds/);
+    assert.doesNotThrow(() => inspectRuntime(program, amount, standard4626AmountHost(d, r, amount)));
+    for (const fault of ["under-debit", "short-receipt"] as const)
+      assert.throws(() => inspectRuntime(program, amount, standard4626AmountHost(d, r, amount, fault)), /runtime amount mismatch/);
   }
 });
 

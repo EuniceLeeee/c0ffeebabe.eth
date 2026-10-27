@@ -1,5 +1,7 @@
 import type { ExactQuoteSemantics, ExactRequestProgram } from "../../adapter-family-plugin.js";
-import { erc4626Exact } from "../erc4626-family/exact.js";
+import { standardFamily } from "./standard-base.js";
+import type { erc4626Exact as OriginalShared } from "../erc4626-family/exact.js";
+const erc4626Exact = standardFamily.exact as unknown as typeof OriginalShared;
 import type { Erc4626Descriptor, Erc4626Route, Erc4626ExactEvidence } from "../erc4626-family/types.js";
 import { checkStakedUsdatGuard, stakedUsdatGuardRequests } from "./identity-proof.js";
 

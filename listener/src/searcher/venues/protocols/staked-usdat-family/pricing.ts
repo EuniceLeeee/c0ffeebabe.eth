@@ -1,6 +1,8 @@
 import { compileAddressMutations } from "../../mutation-index.js";
 import { lowerAddress } from "../standard-family/common.js";
-import { erc4626Pricing } from "../erc4626-family/pricing.js";
+import { standardFamily } from "./standard-base.js";
+import type { erc4626Pricing as OriginalShared } from "../erc4626-family/pricing.js";
+const erc4626Pricing = standardFamily.pricing as unknown as typeof OriginalShared;
 import type { Erc4626PricingDescriptor } from "../erc4626-family/types.js";
 import { checkStakedUsdatGuard, stakedUsdatGuardRequests } from "./identity-proof.js";
 

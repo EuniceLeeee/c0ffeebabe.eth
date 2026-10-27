@@ -336,6 +336,9 @@ async function strictProductionRecords(input: {
     ));
     return [];
   }
+  if (input.jsonEntry?.format === "protocol-json-v2") {
+    return declarativeProtocolRecords(input, call);
+  }
   const definition = unwrapObjectLiteral(call.arguments[0]);
   if (definition === null) {
     input.issues.push(issue(
@@ -568,6 +571,62 @@ async function strictProductionRecords(input: {
       "capability_generation_failed",
       errorMessage(error),
     ));
+    return [];
+  }
+  return Object.freeze(records);
+}
+
+/** A v2 entry is an exact, generated call into one shared compiler. Its
+ * semantics are the compiler closure plus all statically validated JSON
+ * inputs, so every present capability conservatively owns that same closure.
+ * This branch is never selected merely because a nearby JSON file exists. */
+async function declarativeProtocolRecords(input: {
+  readonly context: ProgramContext;
+  readonly source: ts.SourceFile;
+  readonly declaration: ts.VariableDeclaration;
+  readonly jsonEntry?: DeclarativeProductionEntry;
+  readonly provenanceCommit: string | null;
+  readonly issues: FamilyCapabilityShadowBuildIssue[];
+}, call: ts.CallExpression): Promise<readonly CapabilityExactShadowRecord[]> {
+  const entry = input.jsonEntry!;
+  const sourceLabel = repoRelative(input.context.rootDirectory, input.source.fileName);
+  const fail = (message: string): readonly CapabilityExactShadowRecord[] => {
+    input.issues.push(issue(sourceLabel, "invalid_production_entry", message));
+    return [];
+  };
+  if (input.source.text !== entry.source || entry.domain !== "protocol" ||
+      !ts.isIdentifier(call.expression) || call.expression.text !== "defineProtocolFamily")
+    return fail("declarative production source/domain differs from its validated generated entry");
+  const compiled = unwrapExpression(call.arguments[0]);
+  if (!ts.isCallExpression(compiled) || !ts.isIdentifier(compiled.expression) ||
+      compiled.expression.text !== "compileDeclarativeProtocol" || compiled.arguments.length !== 2)
+    return fail("declarative protocol must call the shared compiler with its static JSON inputs");
+  const compilerRoot = directImportRoot(input.context, input.source, compiled.expression);
+  const constructorRoot = directImportRoot(input.context, input.source, call.expression);
+  if (compilerRoot?.exportName !== "compileDeclarativeProtocol" || compilerRoot.sourceFile !==
+      resolve(input.context.rootDirectory, "src/searcher/venues/declarative-protocol.ts") ||
+      constructorRoot?.exportName !== "defineProtocolFamily" || constructorRoot.sourceFile !==
+      resolve(input.context.rootDirectory, "src/searcher/venues/adapter-family-plugin.ts"))
+    return fail("declarative compiler or strict constructor is not a resolvable framework export");
+  const dependencies = [...new Set(entry.dependencyFiles)].filter(file => file !== compilerRoot.sourceFile);
+  const strictFamilyId = familyId(entry.familyId);
+  const capabilities = familyCapabilitiesForDefinition("protocol", () => true).filter(capability => capability !== "victim");
+  const present = new Set<string>(capabilities);
+  const records: CapabilityExactShadowRecord[] = [];
+  try {
+    for (const capability of capabilities) {
+      const generated = await generateCapabilityClosure({
+        familyId: strictFamilyId, capability, rootDirectory: input.context.rootDirectory,
+        entryFile: compilerRoot.sourceFile, additionalEntryFiles: dependencies,
+        provenanceCommit: input.provenanceCommit,
+      });
+      records.push(exactRecord(generated.identity, capability, compilerRoot, dependencies, input.context.rootDirectory));
+    }
+    for (const capability of FAMILY_CAPABILITY_NAMES) {
+      if (!present.has(capability)) records.push(absentRecord(strictFamilyId, capability, input.provenanceCommit));
+    }
+  } catch (error) {
+    input.issues.push(issue(sourceLabel, "capability_generation_failed", errorMessage(error)));
     return [];
   }
   return Object.freeze(records);

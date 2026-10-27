@@ -1,27 +1,10 @@
-import type { FamilyManifest } from "../../adapter-family-plugin.js";
 import { familyId, lineageId } from "../../adapter-family-identifiers.js";
-
-export const ERC4626_FAMILY_ID = familyId("protocol:erc4626");
-export const ERC4626_LINEAGE_ID = lineageId(
-  "erc4626:standalone-standard-behavior",
-);
-export const INFINIFI_LINEAGE_ID = lineageId("erc4626:infinifi-gateway-staking");
-export const CUSTODIAN_LINEAGE_ID = lineageId("erc4626:frax-custodian-sync-conversion");
-
-export const erc4626FamilyManifest: FamilyManifest<"protocol"> = Object.freeze({
-  familyId: ERC4626_FAMILY_ID,
-  domain: "protocol",
-  ownedActionAdapterIds: Object.freeze([
-    "erc4626-deposit",
-    "erc4626-redeem",
-  ]),
-  requiredInfraActionAdapterIds: Object.freeze(["erc20-approve"]),
-  allowedTaxonomy: Object.freeze([
-    Object.freeze({ slotKind: "protocol" as const, protocolAction: "wrap" as const }),
-    Object.freeze({ slotKind: "protocol" as const, protocolAction: "redeem" as const }),
-  ]),
-  supportedLineages: Object.freeze([ERC4626_LINEAGE_ID, CUSTODIAN_LINEAGE_ID, INFINIFI_LINEAGE_ID]),
-  poolAdapterIds: Object.freeze(["erc4626"]),
-  edgeAdapterIds: Object.freeze(["erc4626-deposit", "erc4626-redeem"]),
-  requiresProtocolEdgesFlag: true,
-});
+import type { FamilyManifest } from "../../adapter-family-plugin.js";
+import definition from "./erc4626.json";
+import custodian from "./custodian.json";
+import infinifi from "./infinifi.json";
+export const ERC4626_FAMILY_ID = familyId(definition.manifest.familyId);
+export const ERC4626_LINEAGE_ID = lineageId(definition.standard.lineageId);
+export const CUSTODIAN_LINEAGE_ID = lineageId(custodian.lineageId);
+export const INFINIFI_LINEAGE_ID = lineageId(infinifi.lineageId);
+export const erc4626FamilyManifest = definition.manifest as unknown as FamilyManifest<"protocol">;

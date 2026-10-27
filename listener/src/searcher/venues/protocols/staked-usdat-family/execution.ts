@@ -1,7 +1,11 @@
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { runtimeExecutor, runtimeLeg } from "../../runtime-execution.js";
-import { assertErc4626Invocation } from "../erc4626-family/binding.js";
-import { erc4626Execution, standardRecipientProgram } from "../erc4626-family/execution.js";
+import { standardRuntime } from "./standard-base.js";
+const assertErc4626Invocation = standardRuntime.assertInvocation;
+import { standardRecipientProgram } from "../erc4626-family/execution.js";
+import { standardFamily } from "./standard-base.js";
+import type { erc4626Execution as OriginalExecution } from "../erc4626-family/execution.js";
+const erc4626Execution = standardFamily.execution as unknown as typeof OriginalExecution;
 import type { Erc4626Descriptor, Erc4626Route, Erc4626ExactEvidence } from "../erc4626-family/types.js";
 import { STAKED_USDAT_INTERFACE } from "./identity-proof.js";
 

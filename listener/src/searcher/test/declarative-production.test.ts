@@ -11,13 +11,27 @@ import definition from "../venues/protocols/erc4626-family/erc4626.json";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const definitionFile = resolve(root, "src/searcher/venues/protocols/erc4626-family/erc4626.json");
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+// Preserve the v1 contract independently of the migrated production Family.
+const legacyDefinition: any = {
+  version: 1, scope: { family: "protocol:fixture" },
+  production: { domain: "protocol", activation: { enabled: true, envKey: "SEARCHER_FAMILY_FIXTURE_ENABLED" } },
+  ...Object.fromEntries(["manifest", "capture", "discovery", "identity", "instance", "routes", "pricing", "exact", "execution", "protocol"]
+    .map(slot => [slot, { binding: { module: `./${slot}.js`, export: slot } }])),
+  actionAdapters: [{ module: "./action.js", export: "action" }],
+};
 
-test("ERC4626 production registration is reproducible from its JSON, with direct semantic roots", async () => {
+test("ERC4626 production registration is reproducible from its JSON", async () => {
   const rendered = renderDeclarativeProductionEntry({ rootDirectory: root, definitionFile, document: definition });
   assert.equal(await readFile(rendered.entryFile, "utf8"), rendered.source);
-  assert.match(rendered.source, /export const plugin = defineProtocolFamily\(\{/);
-  for (const slot of ["manifest", "capture", "discovery", "identity", "instance", "routes", "pricing", "exact", "execution", "protocol"])
-    assert(rendered.source.includes(`${slot}: binding_${slot},`));
+  if (rendered.format === "protocol-json-v2") {
+    assert.match(rendered.source, /defineProtocolFamily\(compileDeclarativeProtocol\(definition, \[child0, child1\]\)\)/);
+    assert.doesNotMatch(rendered.source, /\bas binding_[A-Za-z0-9_]+\b|from ["'][^"'\n]*family\/[^"'\n]+\.js["']/);
+    assert.equal(rendered.childFiles.length, 2);
+  } else {
+    assert.match(rendered.source, /export const plugin = defineProtocolFamily\(\{/);
+    for (const slot of ["manifest", "capture", "discovery", "identity", "instance", "routes", "pricing", "exact", "execution", "protocol"])
+      assert(rendered.source.includes(`${slot}: binding_${slot},`));
+  }
   const reordered = Object.fromEntries(Object.entries(definition).reverse());
   assert.equal(renderDeclarativeProductionEntry({ rootDirectory: root, definitionFile, document: reordered }).source, rendered.source);
 });
@@ -34,7 +48,7 @@ test("production JSON rejects incomplete, executable, unknown and escaped declar
     d => { d.funding = { binding: d.exact.binding }; }, d => { d.actionAdapters = {}; },
   ];
   for (const mutate of mutations) {
-    const doc = clone(definition); mutate(doc);
+    const doc = clone(legacyDefinition); mutate(doc);
     assert.throws(() => renderDeclarativeProductionEntry({ rootDirectory: root, definitionFile, document: doc }));
   }
 });
@@ -52,7 +66,7 @@ async function fixture() {
   await put("src/searcher/venues/adapter-family-plugin.ts", "export const defineProtocolFamily = <T>(value:T):T => value;\n");
   await put("src/searcher/venues/production-families/activation.ts", "export const defineFamilyActivation = <T>(value:T):T => value;\n");
   await put("src/searcher/build-declarative-production.ts", "export const compilerRevision = 1;\n");
-  const doc: any = clone(definition); doc.scope.family = "protocol:fixture";
+  const doc: any = clone(legacyDefinition); doc.scope.family = "protocol:fixture";
   for (const [slot, block] of Object.entries(doc) as [string, any][]) {
     if (!block?.binding) continue;
     block.binding = { module: `./${slot}.js`, export: slot };
@@ -142,5 +156,153 @@ test("capability identities include JSON and compiler without merging Exact with
     await f.sync("write"); const jsonChange = await f.build(); compare(exactChange, jsonChange, (_cap, present) => present);
     await f.put("src/searcher/build-declarative-production.ts", "export const compilerRevision = 2;\n");
     compare(jsonChange, await f.build(), (_cap, present) => present);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+async function protocolFixture() {
+  const f = await fixture();
+  const doc = {
+    version: 2, scope: { family: "protocol:fixture" },
+    production: { domain: "protocol", activation: { enabled: true, envKey: "SEARCHER_FAMILY_FIXTURE_ENABLED" } },
+    manifest: { familyId: "protocol:fixture", domain: "protocol", ownedActionAdapterIds: ["fixture-convert"],
+      requiredInfraActionAdapterIds: ["erc20-approve"], supportedLineages: ["fixture:standard", "fixture:child"] },
+    discovery: { definition: {} }, identity: { definition: {}, memoReuse: "recheck-identity", key: "$identity.subject" },
+    instance: {}, routes: {}, pricing: {}, protocol: {},
+    standard: { id: "standard", lineageId: "fixture:standard", abi: {}, constants: {}, expressions: {},
+      pricing: {}, exact: {}, readPrograms: {}, execution: {} },
+    actionAdapters: [{ descriptor: { adapterId: "fixture-convert", edgeKind: "protocol", action: "convert" }, traces: [] }],
+    variantFiles: ["./child.json"],
+  };
+  for (const key of Object.keys(f.doc)) delete f.doc[key];
+  Object.assign(f.doc, doc);
+  await f.save();
+  const childPath = resolve(f.familyDirectory, "child.json");
+  const child: any = { version: 1, id: "child", lineageId: "fixture:child", abi: {}, constants: { allowance: "0" },
+    expressions: {}, admission: { version: 1,
+      ...Object.fromEntries(["match", "surface", "dependencies", "active"].map(name => [name, { reads: [] }])) },
+    models: { surface: { fields: [], output: { binding: "$evidence.binding" } } },
+    requestSets: { surface: [] }, readPrograms: { quote: { requests: [], result: "$missing" } } };
+  const saveChild = () => writeFile(childPath, JSON.stringify(child));
+  await saveChild();
+  await f.put("tsconfig.json", JSON.stringify({ compilerOptions: { target: "ES2022", module: "Node16", moduleResolution: "Node16",
+    strict: true, resolveJsonModule: true, esModuleInterop: true }, include: ["src"] }));
+  await f.put("src/searcher/venues/declarative-protocol.ts", "import { operation } from './fixture-operation.js';\nexport function compileDeclarativeProtocol(root: unknown, children: unknown[]) { return { root, children, operation }; }\n");
+  await f.put("src/searcher/venues/fixture-operation.ts", "export const operation = 1;\n");
+  return { ...f, child, childPath, saveChild };
+}
+
+test("v2 emits only shared compiler and static JSON imports; child data and transitive common code enter every present capability hash", async () => {
+  const f = await protocolFixture();
+  try {
+    const entries = await f.sync("write"), entry = entries.get(f.entryPath)!;
+    assert.equal(entry.format, "protocol-json-v2");
+    assert.deepEqual(entry.childFiles, [f.childPath]);
+    assert.deepEqual(entry.ownedActionAdapterIds, ["fixture-convert"]);
+    assert.match(entry.source, /compileDeclarativeProtocol\(definition, \[child0\]\)/);
+    assert.doesNotMatch(entry.source, /\bas binding_[A-Za-z0-9_]+\b|from ["'][^"'\n]*family\/[^"'\n]+\.js["']/);
+    const base = await f.build(); assert(base.complete, JSON.stringify(base.issues));
+    for (const row of base.exact.filter(row => row.root.absence === null)) {
+      assert.equal(row.root.entryExport, "compileDeclarativeProtocol");
+      // The compiler is the hashed entry, not a second dependency artifact.
+      assert.equal(row.root.entrySourceFile, "src/searcher/venues/declarative-protocol.ts");
+      for (const file of ["src/searcher/venues/protocols/fixture-family/child.json",
+        "src/searcher/venues/protocols/fixture-family/fixture.json",
+        "src/searcher/venues/fixture-operation.ts", "src/searcher/build-declarative-production.ts"])
+        assert(row.identity.semanticDependencies.includes(file), `${row.identity.capability}:${file}`);
+      assert(!row.identity.semanticDependencies.some(file => /fixture-family\/(?:exact|execution|identity)\.ts$/.test(file)));
+    }
+    const compare = (before: typeof base, after: typeof base) => {
+      assert(after.complete, JSON.stringify(after.issues));
+      for (const row of after.exact) {
+        const previous = before.exact.find(x => x.identity.capability === row.identity.capability)!;
+        assert.equal(previous.identity.contentHash !== row.identity.contentHash, row.root.absence === null, row.identity.capability);
+      }
+      assert.equal(after.exact.find(row => row.identity.capability === "victim")?.root.absence, "declared-absent");
+    };
+    f.child.constants.allowance = "1"; await f.saveChild();
+    const changedChild = await f.build(); compare(base, changedChild);
+    await f.put("src/searcher/venues/fixture-operation.ts", "export const operation = 2;\n");
+    const changedDependency = await f.build(); compare(changedChild, changedDependency);
+    await f.put("src/searcher/venues/declarative-protocol.ts", "import { operation } from './fixture-operation.js';\nexport function compileDeclarativeProtocol(root: unknown, children: unknown[]) { return { root, children, operation, revision: 2 }; }\n");
+    compare(changedDependency, await f.build());
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("authored variants accept admission/models/read results, preserve binding data and reject code or mixed formats", async () => {
+  const f = await protocolFixture();
+  try {
+    await f.sync("write");
+    const baseline = clone(f.child);
+    for (const mutate of [
+      (d: any) => { d.identity = {}; },
+      (d: any) => { d.programs = {}; },
+      (d: any) => { d.admission.version = 2; },
+      (d: any) => { delete d.admission.surface; },
+      (d: any) => { d.admission.surface.reads = {}; },
+      (d: any) => { d.admission.surface.requests = []; },
+      (d: any) => { delete d.models; },
+      (d: any) => { d.requestSets.surface = {}; },
+      (d: any) => { delete d.readPrograms.quote.result; },
+      (d: any) => { d.readPrograms.quote.decode = []; },
+      (d: any) => { d.models.surface.output.binding = { module: "./hidden.js" }; },
+      (d: any) => { d.models.surface.output.binding = { export: "hidden" }; },
+      (d: any) => { d.models.surface.output.binding = { handler: "hidden" }; },
+    ]) {
+      const changed = clone(baseline); mutate(changed);
+      await writeFile(f.childPath, JSON.stringify(changed));
+      await assert.rejects(f.sync("check"));
+    }
+    await writeFile(f.childPath, JSON.stringify(baseline));
+    await f.sync("check");
+    // The pre-normalization expanded format remains valid for older v2 users.
+    const expanded = clone(baseline);
+    delete expanded.admission; delete expanded.models; delete expanded.requestSets;
+    expanded.identity = { select: [], stages: {}, decide: [] };
+    expanded.readPrograms = { quote: { requests: [], decode: [] } };
+    await writeFile(f.childPath, JSON.stringify(expanded));
+    await f.sync("check");
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("v2 checks identity, action IDs and complete static child declarations before generation", async () => {
+  const f = await protocolFixture();
+  try {
+    const mutations: Array<(doc: any) => void> = [
+      d => { d.manifest.familyId = "protocol:other"; }, d => { d.manifest.domain = "swap"; },
+      d => { d.production.domain = "swap"; }, d => { d.actionAdapters[0].descriptor.adapterId = "wrong-action"; },
+      d => { d.actionAdapters.push(d.actionAdapters[0]); }, d => { d.standard.lineageId = "missing"; },
+      d => { delete d.standard.execution; }, d => { delete d.identity.definition; },
+      d => { d.standard.exact = { binding: { module: "./old.js", export: "old" } }; },
+      d => { d.variantFiles = ["../outside.json"]; }, d => { d.variantFiles = ["https://example.com/child.json"]; },
+      d => { d.variantFiles = ["./fixture.json"]; }, d => { d.variantFiles = ["./child.json", "./child.json"]; },
+      d => { d.variantFiles = []; }, d => { d.protocol.oracleVictim = {}; },
+    ];
+    for (const mutate of mutations) {
+      const doc = clone(f.doc); mutate(doc);
+      assert.throws(() => renderDeclarativeProductionEntry({ rootDirectory: f.directory, definitionFile: f.jsonPath, document: doc }));
+    }
+    await f.sync("write");
+    const original = await readFile(f.entryPath, "utf8");
+    f.child.variantFiles = ["./fixture.json"]; await f.saveChild();
+    await assert.rejects(f.sync("write"), /nested or cyclic/);
+    assert.equal(await readFile(f.entryPath, "utf8"), original);
+    delete f.child.variantFiles; f.child.lineageId = "fixture:standard"; await f.saveChild();
+    await assert.rejects(f.sync("write"), /variant identity\/lineage/);
+    f.child.lineageId = "fixture:child"; await f.saveChild();
+    await rm(f.childPath); await assert.rejects(f.sync("write"), /ENOENT/);
+    await symlink(f.jsonPath, f.childPath); await assert.rejects(f.sync("write"), /regular file/);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("v2 cannot bypass the strict constructor, shared export validation or generated-source equality", async () => {
+  const f = await protocolFixture();
+  try {
+    await f.sync("write"); const source = await readFile(f.entryPath, "utf8");
+    await writeFile(f.entryPath, source.replace("compileDeclarativeProtocol(definition, [child0])", "definition as any"));
+    await assert.rejects(f.build(), /stale/);
+    await f.sync("write");
+    await f.put("src/searcher/venues/declarative-protocol.ts", "export function otherCompiler(root: unknown) { return root; }\n");
+    const result = await f.build(); assert.equal(result.complete, false);
+    assert(result.issues.some(issue => issue.message.includes("resolvable framework export")));
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });
