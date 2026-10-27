@@ -53,6 +53,68 @@ flowchart TD
 }
 ```
 
+### Family 公共管线怎样处理这份 JSON
+
+**处理分成装配和调用两个时点。** 装配时把 JSON 变成统一的插件能力对象；调用时，中央通过这些对象上的固定接口推进发现、身份、定价与执行。不同 Family 更换定义和语义模块，共用流程保持同一套入口。
+
+| 处理环节 | 共用代码读取什么 | 做了什么 | 产物交给谁 |
+|---|---|---|---|
+| 读取文件 | `syncDeclarativeProductionEntries()` 扫描 `<name>-family/<name>.json` | `readFile()` → `JSON.parse()`；没有 `production` 块的文件不作为声明式生产入口 | 定义校验与入口生成器 |
+| 校验定义 | `renderDeclarativeProductionEntry()` 读取 `version`、`scope.family`、`production` 和能力块 | 根据 swap／protocol／funding／credit 模板检查必需槽、允许字段、绑定形式与启用声明；共用扫描器核对引用文件、重复入口及旧生成文件 | 可生成的 Family 声明 |
+| 装配能力 | 生成器读取每个 `binding.module`、`binding.export` 及 `actionAdapters` | 生成静态命名导入，将导出对象放到 `plugin.discovery`、`plugin.identity`、`plugin.pricing` 等固定槽位 | 共用 loader／catalog |
+| 编译发现定义 | `compileDeclarativeDiscovery()` 读取 `discovery.definition` | 签名转 selector／topic，字段转候选构造规则，再复用 `compileAddressDiscovery()` | `discovery` 能力对象 |
+| 展开身份流程 | `expandConversionDefinition()` 读取 `identity.definition` | 根据当前支持的 `workflow`，用本族 ABI、函数／事件映射和常量填入共用 `sampled-conversion-flow.json` | 展开后的身份流程文档 |
+| 编译身份接口 | `compileDeclarativeIdentity()` 读取展开文档的 `select`、`stages`、`requests`、`decode`、`decide` | 将声明包装成统一的 `requirements()`、`buildRequests()`、`decode()`、`decide()` 方法；表达式由共用解释器求值 | Family 的标准 identity variant |
+| 运行时调用 | catalog 中已装配的插件与已验证 route | 中央通过固定接口传入观测、实例、状态、金额；执行 Family 声明的请求，再将结果交还其解码／判定方法 | candidate、identity、instance、价格或执行能力产物 |
+
+这里不是运行时任意解析 `workflow` 为文件路径：当前 `expandConversionDefinition()` 明确支持 `sampled-conversion-v1`，导入的是固定的共用流程文件。增加一种通用流程，需要共用实现明确提供它；Family 仅选择已有流程并填写定义。
+
+### 看两个字段怎样一路变成调用
+
+**发现例子：`discovery.definition.calls[].signature`**
+
+```text
+JSON: deposit(uint256,address)
+  → compileDeclarativeDiscovery(): id(signature).slice(0, 10)
+  → compileAddressDiscovery(): 建立 call 匹配与候选构造规则
+  → catalog.matches(observation): 找到匹配的 Family / pattern
+  → coalesceCandidateMatches(): 调用该插件 decodeCandidate()
+  → 返回 vault 来自 call target 的 candidate
+```
+
+此时得到的是候选地址。它进入身份流程后，才能形成被准入的 instance；selector 匹配本身不负责准入。
+
+**身份例子：`identity.definition.parameters.calls.inputAsset = "asset"`**
+
+```text
+Family JSON: calls.inputAsset = asset
+  → expandConversionDefinition(): 将共用流程的 {{calls.inputAsset}} 换成 asset
+  → compileDeclarativeIdentity(): 从 identity.definition.abi 建立 Interface
+  → buildRequests(): 对当前阶段的 requests 求值
+  → 共用 encode 操作生成对 candidate.vault 的 asset() 调用数据
+  → executeAdapterWork(): 在指定 source 下执行请求
+  → variant.decode(): 解释结果并形成新证据
+  → resolveIdentity(): 携带新证据再次调用 decide()，按声明继续或结束
+```
+
+流程知道“这一轮要读取输入资产”，具体 getter 由 Family 参数提供。后续阶段可以引用这一轮的结果，再声明下一轮需要的请求。每个 Family 不必自己写一套“发第一次请求、等待、再发第二次请求”的调度循环。
+
+### 统一装配之后，中央实际调用什么
+
+| JSON 位置 | 中央最终调用的接口 | 当前 JSON 化程度 |
+|---|---|---|
+| `discovery.definition` | `plugin.discovery.decodeCandidate()` 等 | 发现规则由声明编译 |
+| `identity.definition` | `variant.buildRequests()`／`decode()`／`decide()` 等 | 标准身份流程由声明编译 |
+| `instance.binding`、`routes.binding` | `plugin.instance.compileDraft()`／`finalizeDescriptor()`、`plugin.routes.project()` | 当前只声明模块绑定，投影规则仍由代码提供 |
+| `pricing.binding` | `plugin.pricing.current.buildRequests()`／`decodeSnapshot()`／`deriveMids()` | 当前只声明模块绑定，读取与计算仍由代码提供 |
+| `exact.binding` | `plugin.exact.methods()`，再调用方法的请求程序 | 当前只声明模块绑定 |
+| `execution.binding` | `plugin.execution.buildRuntimeLeg()` 或 `buildFragment()` | 当前只声明模块绑定 |
+| `actionAdapters` | 注册后的 `adapter.encode()` | 当前只声明 action 导出，编码仍由代码提供 |
+
+**定义错误和业务结果分开处理。** 不支持的字段／版本、缺少必需能力、无效引用等在装配与检查阶段失败；运行时请求结果则交回 Family 的解码／判定接口。共用管线不会仅因“请求返回”就判身份通过，也不会把所有 revert 自行解释为同一种准入结论。
+
+下面的核心代码展示这条处理链的实际实现；后续各步继续对照同一份 JSON 的相应块。
+
 实际调用链：
 
 ```text
@@ -1155,7 +1217,7 @@ const fragment = input.family.plugin.execution.buildFragment(Object.freeze({
 
 ```text
 1. build-declarative-production.syncDeclarativeProductionEntries()
-   → JSON.parse() 读取 <family>-family/<family>.json
+   → visit() / readFile() / JSON.parse() 读取 <family>-family/<family>.json
 2. build-declarative-production.renderDeclarativeProductionEntry()
    → importBinding() 读取 binding.module / binding.export
    → 生成 production-families/erc4626.production.ts
