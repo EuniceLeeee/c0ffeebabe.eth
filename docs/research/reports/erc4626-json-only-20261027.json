@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "code_commit": "ec4e9b7a490611d59b827b692cddb9145da3244e",
+  "parent": "ac6f22d9f7c8d426f8416dd709d6e8dbb6f33ba5",
+  "removed_root_ts": 20,
+  "removed_unused_outer_entry": 1,
+  "family_definitions": [
+    "erc4626.json",
+    "custodian.json",
+    "infinifi.json"
+  ],
+  "actual_cloud": {
+    "build": {
+      "exit": 0,
+      "seconds": 9.15
+    },
+    "catalog_check": {
+      "exit": 0,
+      "seconds": 59.96
+    },
+    "target_tests": {
+      "tests": 350,
+      "failures": 0,
+      "exit": 0,
+      "seconds": 28.02
+    }
+  },
+  "scoped_commit": {
+    "build": "pass",
+    "catalog_check": "pass",
+    "tests": 29,
+    "failures": 0
+  },
+  "consumer_parity": {
+    "staked_checks": 43,
+    "assertions_retained": 1642,
+    "test_registrations_retained": 114,
+    "migrated_consumers": 28
+  },
+  "prior_historical_evidence": "reused, not rerun",
+  "live_started": false,
+  "signing_or_broadcast": false,
+  "performance_claim": false
+}

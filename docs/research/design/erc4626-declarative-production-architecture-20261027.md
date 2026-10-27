@@ -4,7 +4,7 @@
 
 每章只指定一个主公共文件。TypeScript 为实际源码核心片段，仅调整空白与换行；被省略的校验或周边代码在正文说明。片段不是可独立编译的完整模块。JSON 块从对应文件取字段节选，省略字段不表示可删除它们。
 
-源码以云端 `/opt/mev-cloud/family-runtime-20261007` 为基线，本文对应代码提交 `9e7c7cdd6cbbe501d26b0cbc53598db88de1b9c8`。以下路径均相对 `listener/src/searcher/`。
+源码以云端 `/opt/mev-cloud/family-runtime-20261007` 为基线，本文对应代码提交 `ec4e9b7a490611d59b827b692cddb9145da3244e`。以下路径均相对 `listener/src/searcher/`。
 
 | Family 作者维护的定义 | 职责 |
 |---|---|
@@ -47,7 +47,16 @@ const required = [
   "version", "scope", "production", "manifest", "discovery", "identity", "instance", "routes",
   "pricing", "protocol", "standard", "actionAdapters", "variantFiles"
 ];
-keys(doc, required, "declarative protocol");
+keys(doc, [...required, ...(Object.hasOwn(doc, "types") ? ["types"] : [])], "declarative protocol");
+if (Object.hasOwn(doc, "types")) {
+  validateDeclarativeTypeMetadata(doc.types);
+  const contracts = object(doc.types.contracts, "protocol type contracts");
+  keys(contracts, [
+    "candidate", "identity", "descriptor", "route",
+    "pricingDraft", "pricingDescriptor", "pricingStatic", "exactEvidence",
+    ...(Object.hasOwn(contracts, "identityEvidence") ? ["identityEvidence"] : [])
+  ], "protocol type contracts");
+}
 if (doc.production.domain !== "protocol")
   throw new Error("declarative v2 supports protocol domain only");
 for (const key of [
@@ -124,11 +133,11 @@ if (lineages.length !== childFiles.length + 1)
 
 **公共层怎样消费：** `production` 决定 domain 和启用声明；`manifest` 给出 action 所有权、lineage 与公共准入合同；`variantFiles` 只允许静态同目录 JSON。同步入口还检查真实文件、符号链接、越界路径、子定义格式及重复 ID；这些检查未全部展开在上面的片段里。
 
-生成的 `venues/production-families/erc4626.production.ts` 只导入公共构造器、公共编译器和三个 JSON，核心调用是：
+生成的 `venues/production-families/erc4626.production.ts` 只导入公共构造器、公共编译器、三个 JSON 和自动生成的编译期类型，核心调用是：
 
 ```ts
 export const plugin = defineProtocolFamily(
-  compileDeclarativeProtocol(definition, [child0, child1]),
+  compileDeclarativeProtocol<FamilyTypes>(definition, [child0, child1])
 );
 ```
 
@@ -137,6 +146,61 @@ export const plugin = defineProtocolFamily(
 注册时，`compileDeclarativeProtocol()` 调用 `createDeclarativeProtocolRuntime()`；公共格式展开器规范化主／子定义，公共值解释器校验字段引用和允许的操作，再组装全部能力对象。既有能力指纹生成流程同时纳入主／子 JSON、公共编译器及其代码依赖，声明变更不会沿用旧指纹。
 
 **输出：** `defineProtocolFamily` 消费的完整插件，包含 manifest、capture、discovery、identity、instance、routes、pricing、exact、execution、protocol、actionAdapters。
+
+
+原来的兼容出口已删除，调用方直接使用生成插件的 `plugin.identity`、`plugin.pricing`、`plugin.exact`、`plugin.execution` 等能力。ERC4626 Family 根目录只保留三个 JSON 和 `test/`，不再保留 `abi.ts`、`types.ts` 或执行转发文件。
+
+**编译期类型也来自同一份定义。** 主／子 JSON 的 `types.definitions` 描述必填字段、可选字段、字面值和公共基类；`types.contracts` 把这些结构对应到公共能力槽。公共 `venues/declarative-types.ts` 统一生成类型文件，Family 不维护手写类型副本。以下节选主 JSON：
+
+```json
+{
+  "types": {
+    "version": 1,
+    "definitions": {
+      "Erc4626Candidate": {
+        "type": "object",
+        "extends": [
+          "FamilyCandidate"
+        ],
+        "fields": {
+          "candidateKind": {
+            "literal": "erc4626-vault"
+          },
+          "vault": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "contracts": {
+      "candidate": "Erc4626Candidate",
+      "identityEvidence": "Erc4626IdentityEvidence",
+      "identity": "Erc4626Identity",
+      "descriptor": "Erc4626Descriptor",
+      "route": "Erc4626Route",
+      "pricingDraft": "Erc4626PricingDraft",
+      "pricingDescriptor": "Erc4626PricingDescriptor",
+      "pricingStatic": "Erc4626PricingStatic",
+      "exactEvidence": "Erc4626ExactEvidence"
+    }
+  }
+}
+```
+
+生成过程复用 `syncDeclarativeProductionEntries()`，同时写入生产入口和 `generated/declarative-family-types/erc4626.generated.ts`。`--check` 会检查缺失或过期产物；未知引用、循环、任意 TypeScript 文本和越界输出都会被拒绝。生成文件中的 `FamilyTypes` 只在编译时使用，不作为链上身份或行为证明。
+
+公共 `declarative-protocol.ts` 负责把现有能力合同与生成结构相连：
+
+```ts
+export function compileDeclarativeProtocol<
+  T extends DeclarativeFamilyTypes
+>(
+  raw: Data,
+  children?: readonly Data[]
+): TypedDeclarativeProtocol<T>;
+```
+
+因此新功能仍改公共 Family 管线；协议定义只提供字段和行为声明。生成类型本身不增加权限、不会使未验证实例获得准入。Custodian／InfiniFi 的类型结构由各自子 JSON 合并；StakedUSDat 的独立类型不再混入 ERC4626 的 descriptor、route 或 execution evidence。
 
 ## 2. 发现：从 selector、事件和地址资料生成候选
 
@@ -1055,7 +1119,7 @@ action 身份与 trace 匹配同样来自主 JSON，公共层用 `createDeclarat
 
 runtime 的金额来自交易内寄存器；quoted 的节点 `amount` 来自已经校验的指定输入，但实际调用、扣款与到账仍运行同一程序。`runtimeProjection` 返回公共的无额外投影值，未引入 quoted fallback。
 
-`actionAdapters[].descriptor` 定义动作所有权和边界，`traces` 定义可识别调用签名；公共 action 编码器消费节点里的 `runtimeAmountProgram`。旧 `action.ts` 只保留兼容出口，不再按 Custodian／InfiniFi 名称挑选专用编码器。
+`actionAdapters[].descriptor` 定义动作所有权和边界，`traces` 定义可识别调用签名；公共 action 编码器消费节点里的 `runtimeAmountProgram`。旧 `action.ts` 已删除，调用方直接读取生成插件的 `actionAdapters`；公共层不按 Custodian／InfiniFi 名称挑选专用编码器。
 
 当前这三种转换语义支持 direct output，没有声明回调结算能力；请求不支持的结算类型时明确拒绝，不因接口共用而冒称支持 callback。
 
@@ -1300,7 +1364,7 @@ if (debit.length !== 1 || credit.length !== 1 ||
 
 ## 原 Family 文件的完整迁移位置
 
-这张表覆盖原 ERC4626 Family 的生产能力文件。旧 TypeScript 可以为原测试和其他调用方保留兼容导出；生产入口直接由公共编译器读取 JSON，不经过这些出口拼装。
+这张表覆盖已删除的 20 个 ERC4626 顶层 TypeScript 文件。生产与验收调用方已迁移到公共入口或直接读取 JSON；没有保留旧文件转发链。目录外未使用的 `erc4626-family-plugin.ts` 也已删除。
 
 | 原文件／职责 | 当前声明位置 | 公共处理 |
 |---|---|---|
@@ -1324,8 +1388,8 @@ if (debit.length !== 1 || credit.length !== 1 ||
 | `infinifi-execution.ts` | `infinifi.json → execution` | 8：Gateway 调用与效果 |
 | `action.ts` | 主 JSON `actionAdapters` | 7、8：动作 descriptor、trace 与编码 |
 | `abi.ts` | 主／子 `abi` 及调用／事件签名 | 各阶段公共 ABI 编解码 |
-| `types.ts` | TypeScript 公共／兼容类型 | 编译期合同，不冒充运行时 JSON 能力 |
-| `test/` 与历史证据 | 原验收入口继续消费兼容接口或生产入口 | 验证定义迁移，不迁入 JSON 流程 |
+| `types.ts` | 主／子 JSON `types` | 公共类型生成器输出具名结构，公共 typed facade 连接能力槽 |
+| `test/` 与历史证据 | 直接消费生产插件、JSON 或公共解释器 | 原行为断言保留；测试辅助文件禁止被生产代码导入 |
 
 子 JSON 的 `version/id/lineageId` 标识变体；`inputs/expressions` 是输入与命名表达式；`match/context/boundState/assertions` 管理运行时绑定；`models/requestSets` 描述字段和读取；`pricing/exact/readPrograms/execution` 接回原能力槽。主 JSON 的 `standard` 直接提供标准语义，不额外包一个标准子文件。
 
@@ -1340,7 +1404,8 @@ if (debit.length !== 1 || credit.length !== 1 ||
   build-declarative-production.syncDeclarativeProductionEntries()
     → renderDeclarativeProductionEntry()
     → renderProtocolEntry()
-    → 生成 erc4626.production.ts
+    → declarative-types.renderDeclarativeFamilyTypes()
+    → 生成 erc4626.generated.ts 与 erc4626.production.ts
   生成入口
     → declarative-protocol.compileDeclarativeProtocol()
     → createDeclarativeProtocolRuntime()
@@ -1405,8 +1470,8 @@ quoted／runtime
 
 完整定义固定到本文对应提交：
 
-- [标准主 JSON：erc4626.json](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9e7c7cdd6cbbe501d26b0cbc53598db88de1b9c8/listener/src/searcher/venues/protocols/erc4626-family/erc4626.json)
-- [Custodian 子 JSON：custodian.json](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9e7c7cdd6cbbe501d26b0cbc53598db88de1b9c8/listener/src/searcher/venues/protocols/erc4626-family/custodian.json)
-- [InfiniFi 子 JSON：infinifi.json](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9e7c7cdd6cbbe501d26b0cbc53598db88de1b9c8/listener/src/searcher/venues/protocols/erc4626-family/infinifi.json)
+- [标准主 JSON：erc4626.json](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ec4e9b7a490611d59b827b692cddb9145da3244e/listener/src/searcher/venues/protocols/erc4626-family/erc4626.json)
+- [Custodian 子 JSON：custodian.json](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ec4e9b7a490611d59b827b692cddb9145da3244e/listener/src/searcher/venues/protocols/erc4626-family/custodian.json)
+- [InfiniFi 子 JSON：infinifi.json](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/ec4e9b7a490611d59b827b692cddb9145da3244e/listener/src/searcher/venues/protocols/erc4626-family/infinifi.json)
 
 本文节选直接来自这些定义，不需要手工拼接为第四份配置。公共模板与规范化内部表示由公共层维护，Family 作者只维护这三份协议定义及确有需要的数学。
