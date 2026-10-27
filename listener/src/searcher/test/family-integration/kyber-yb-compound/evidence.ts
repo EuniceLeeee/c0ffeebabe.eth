@@ -5,7 +5,7 @@ import { KYSWAP_POOL_INTERFACE as KYBER } from "../../../venues/swaps/kyberswap-
 import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra-integral-family/abi.js";
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
-import { ERC4626_INTERFACE as CUSTODIAN } from "../../../venues/protocols/erc4626-family/abi.js";
+
 import { successfulRedeemCalls, classifyRedeemLog } from "../../../venues/protocols/compound-ctoken-family/test/history-evidence.js";
 import { assertHistoricalPriceDirection } from "../three-family/historical-input-observations.js";
 import { originalEkuboLeg } from "../../../venues/swaps/ekubo-family/test/history-evidence.js";
@@ -15,6 +15,11 @@ import { originalEtherTokenLeg } from "../../../venues/protocols/ethertoken-nati
 import { originalSelfBurnLeg } from "../../../venues/protocols/self-burn-native-family/test/history-evidence.js";
 import { SAT1_SAMPLE, SAT1_INSTANCE, originalV4Leg, V4_OBSERVATION_ABI } from "../../../venues/swaps/univ4-family/test/history-evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
+import erc4626Json from "../../../venues/protocols/erc4626-family/erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+
+const CUSTODIAN = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+
 export { json, sha, word, observeBalance } from "../../../venues/protocols/set-redemption-family/test/historical-runtime-observations.js";
 
 export const SAMPLES = {

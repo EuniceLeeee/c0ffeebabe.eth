@@ -1,7 +1,8 @@
-import { lstat, readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { FAMILY_CAPABILITY_APPLICABILITY, type FamilyDomain } from "./venues/adapter-family-plugin.js";
 import { productionFamilySourceDirectory } from "./venues/production-families/tracked-sources.js";
+import { renderDeclarativeFamilyTypes, validateDeclarativeTypeMetadata } from "./venues/declarative-types.js";
 
 const MARKER = "// Generated from Family JSON by build-declarative-production.ts. Do not edit.";
 const CONSTRUCTORS = { swap: "defineSwapFamily", protocol: "defineProtocolFamily", funding: "defineFundingFamily", credit: "defineCreditFamily" } as const;
@@ -23,6 +24,7 @@ export interface DeclarativeProductionEntry {
   readonly dependencyFiles: readonly string[];
   readonly childFiles: readonly string[];
   readonly ownedActionAdapterIds: readonly string[];
+  readonly typesFile?: string;
 }
 function object(value: unknown, label: string): Record<string, any> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -99,7 +101,13 @@ function renderProtocolEntry(input: {
   dataOnly(doc);
   const required = ["version", "scope", "production", "manifest", "discovery", "identity", "instance", "routes",
     "pricing", "protocol", "standard", "actionAdapters", "variantFiles"];
-  keys(doc, required, "declarative protocol");
+  keys(doc, [...required, ...(Object.hasOwn(doc, "types") ? ["types"] : [])], "declarative protocol");
+  if (Object.hasOwn(doc, "types")) {
+    validateDeclarativeTypeMetadata(doc.types);
+    const contracts = object(doc.types.contracts, "protocol type contracts");
+    keys(contracts, ["candidate", "identity", "descriptor", "route", "pricingDraft", "pricingDescriptor", "pricingStatic", "exactEvidence",
+      ...(Object.hasOwn(contracts, "identityEvidence") ? ["identityEvidence"] : [])], "protocol type contracts");
+  }
   if (doc.production.domain !== "protocol") throw new Error("declarative v2 supports protocol domain only");
   for (const key of ["manifest", "discovery", "identity", "instance", "routes", "pricing", "protocol", "standard"])
     object(doc[key], `${key} declaration`);
@@ -139,19 +147,24 @@ function renderProtocolEntry(input: {
     const path = relative(dirname(entryFile), file).split(sep).join("/");
     return path.startsWith(".") ? path : `./${path}`;
   };
+  const typesFile = Object.hasOwn(doc, "types") ? resolve(root, "src/searcher/generated/declarative-family-types",
+    basename(definitionFile).replace(/\.json$/, ".generated.ts")) : undefined;
   const source = [MARKER, `// Definition: ${localPath(root, definitionFile)}`,
     '// Regenerate with: npm run family-capability-manifest:generate',
     'import { defineFamilyActivation } from "./activation.js";',
     'import { defineProtocolFamily } from "../adapter-family-plugin.js";',
     `import { compileDeclarativeProtocol } from ${JSON.stringify(relativeImport(compiler).replace(/\.ts$/, ".js"))};`,
+    ...(typesFile ? [`import type { FamilyTypes } from ${JSON.stringify(relativeImport(typesFile).replace(/\.ts$/, ".js"))};`] : []),
     `import definition from ${JSON.stringify(relativeImport(definitionFile))};`,
     ...childFiles.map((file: string, index: number) => `import child${index} from ${JSON.stringify(relativeImport(file))};`),
     "", `export const activation = defineFamilyActivation(${JSON.stringify(activation)});`, "",
-    `export const plugin = defineProtocolFamily(compileDeclarativeProtocol(definition, [${childFiles.map((_file: string, index: number) => `child${index}`).join(", ")}]));`, "",
+    `export const plugin = defineProtocolFamily(compileDeclarativeProtocol${typesFile ? "<FamilyTypes>" : ""}(definition, [${childFiles.map((_file: string, index: number) => `child${index}`).join(", ")}]));`, "",
   ].join("\n");
   return Object.freeze({ format: "protocol-json-v2", definitionFile, entryFile, familyId: doc.scope.family,
     domain: "protocol", source, childFiles: Object.freeze(childFiles), ownedActionAdapterIds: Object.freeze([...ownedActionAdapterIds]),
-    dependencyFiles: Object.freeze([definitionFile, ...childFiles, compiler, resolve(root, "src/searcher/build-declarative-production.ts")]) });
+    ...(typesFile ? { typesFile } : {}),
+    dependencyFiles: Object.freeze([definitionFile, ...childFiles, compiler, resolve(root, "src/searcher/build-declarative-production.ts"),
+      ...(typesFile ? [resolve(root, "src/searcher/venues/declarative-types.ts")] : [])]) });
 }
 export function renderDeclarativeProductionEntry(input: {
   rootDirectory: string; definitionFile: string; productionDirectory?: string; document: unknown;
@@ -231,6 +244,7 @@ export async function syncDeclarativeProductionEntries(input: {
   const root = resolve(input.rootDirectory), sourceRoot = resolve(root, "src");
   const productionDirectory = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root));
   const entries = new Map<string, DeclarativeProductionEntry>(), familyIds = new Set<string>();
+  const typeArtifacts = new Map<string, string>();
   async function regular(path: string): Promise<void> {
     const stat = await lstat(path);
     if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`production source must be a regular file: ${path}`);
@@ -241,6 +255,18 @@ export async function syncDeclarativeProductionEntries(input: {
     while (current !== sourceRoot) {
       localPath(sourceRoot, current);
       if ((await lstat(current)).isSymbolicLink()) throw new Error("production source ancestor must not be a symlink");
+      current = dirname(current);
+    }
+  }
+  async function generatedParent(path: string): Promise<void> {
+    let current = dirname(path);
+    while (current !== sourceRoot) {
+      localPath(sourceRoot, current);
+      try {
+        const stat = await lstat(current);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("generated type ancestor must be a directory, not a symlink");
+        localPath(await realpath(sourceRoot), await realpath(current));
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
       current = dirname(current);
     }
   }
@@ -262,6 +288,7 @@ export async function syncDeclarativeProductionEntries(input: {
       if (entries.has(entry.entryFile) || familyIds.has(entry.familyId)) throw new Error("duplicate declarative production entry or Family ID");
       if (entry.format === "protocol-json-v2") {
         const ids = new Set<string>([document.standard.id]), lineages = new Set<string>([document.standard.lineageId]);
+        const childTypes: unknown[] = [];
         for (const childFile of entry.childFiles) {
           await regular(childFile);
           const child = object(JSON.parse(await readFile(childFile, "utf8")), "variant JSON");
@@ -272,8 +299,13 @@ export async function syncDeclarativeProductionEntries(input: {
               !document.manifest.supportedLineages.includes(child.lineageId) || ids.has(child.id) || lineages.has(child.lineageId))
             throw new Error("invalid or duplicate variant identity/lineage");
           variantDeclaration(child);
+          if (Object.hasOwn(child, "types")) {
+            if (!entry.typesFile) throw new Error("child type metadata requires a root type declaration");
+            childTypes.push(child.types);
+          }
           ids.add(child.id); lineages.add(child.lineageId);
         }
+        if (entry.typesFile) typeArtifacts.set(entry.typesFile, renderDeclarativeFamilyTypes(document.types, childTypes));
         for (const dependency of entry.dependencyFiles) await regular(dependency);
       } else {
         const references = Object.keys(FAMILY_CAPABILITY_APPLICABILITY[entry.domain])
@@ -308,6 +340,30 @@ export async function syncDeclarativeProductionEntries(input: {
       pending.push(entry);
     }
   }
+  const pendingTypes: { path: string; source: string }[] = [];
+  const typesDirectory = resolve(sourceRoot, "searcher/generated/declarative-family-types");
+  for (const file of await readdir(typesDirectory).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [] as string[]; throw error;
+  })) {
+    if (!file.endsWith(".generated.ts")) continue;
+    const path = resolve(typesDirectory, file);
+    await regular(path);
+    if ((await readFile(path, "utf8")).startsWith("// Generated from Family JSON type metadata. Do not edit.") && !typeArtifacts.has(path))
+      throw new Error(`orphaned declarative Family types: ${path}`);
+  }
+  for (const [path, source] of typeArtifacts) {
+    await generatedParent(path);
+    let current: string | undefined;
+    try { await regular(path); current = await readFile(path, "utf8"); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    if (current !== undefined && !current.startsWith("// Generated from Family JSON type metadata. Do not edit."))
+      throw new Error(`refusing to overwrite handwritten type output: ${path}`);
+    if (current !== source) {
+      if (input.mode === "check") throw new Error(`declarative Family types are missing or stale: ${path}`);
+      pendingTypes.push({ path, source });
+    }
+  }
+  for (const { path, source } of pendingTypes) { await mkdir(dirname(path), { recursive: true }); await writeFile(path, source); }
   for (const entry of pending) await writeFile(entry.entryFile, entry.source);
   return entries;
 }

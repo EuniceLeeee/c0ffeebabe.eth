@@ -2,9 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
-import { custodianProgram } from "../custodian-execution.js";
-import { CUSTODIAN_ABI, CUSTODIAN_TOKEN } from "../custodian.js";
+
 import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
+import custodianJson from "../custodian.json";
+import { Interface as FamilyInterface } from "ethers";
+import { definitionProgram } from "./definition-fixture.js";
+
+const CUSTODIAN_ABI = new FamilyInterface(custodianJson.abi.vault);
+const CUSTODIAN_TOKEN = new FamilyInterface(custodianJson.abi.token);
+
 const addr=(n:number)=>ethers.getAddress(ethers.toBeHex(n,20));
 const d={vault:addr(101),asset:addr(102),share:addr(103)},actor=addr(107),external=addr(109);
 const same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase();
@@ -15,7 +21,12 @@ function run(direction:"deposit"|"redeem",recipient:string,amount:bigint,fault="
   const before=new Map(balances);let supply=10n**25n,allowance=13n,converted=false;const approvals:bigint[]=[];
   const get=(t:string,a:string)=>{const v=balances.get(key(t,a));assert(v!==undefined);return v;};
   const add=(t:string,a:string,n:bigint)=>balances.set(key(t,a),get(t,a)+n);
-  const program=savedProgram??ethers.hexlify(custodianProgram(d,actor,direction,1n,recipient,direct).bytes());
+  const program=savedProgram??ethers.hexlify(definitionProgram(custodianJson, {
+    descriptor: d, binding: d, executor: actor,
+    direction: direction, recipient: recipient, minAmountOut: 1n, settlementRequested: direct,
+    route: { tokenIn: (direction) === "deposit" ? (d).asset : (d).share,
+      tokenOut: (direction) === "deposit" ? (d).share : (d).asset },
+  }).bytes());
   const trace=inspectRuntime(program,amount,{nativeBalance:()=>17n+(converted?(fault==="native-plus"?1n:fault==="native-minus"?-1n:0n):0n),call(c){
     assert.equal(c.value,0n);assert.equal(c.incoming,0);assert.equal(c.outgoing,0);
     const vault=same(c.target,d.vault),abi=vault?CUSTODIAN_ABI:CUSTODIAN_TOKEN,x=abi.parseTransaction({data:c.data})!;
@@ -63,7 +74,12 @@ const golden=JSON.parse(readFileSync(new URL("./custodian-recipient-default.json
 for(const direction of ["deposit","redeem"] as const){
   const amount=direction==="deposit"?12345n:12345678n;
   const programs={baseline:golden.programs[direction] as string,
-    declarative:ethers.hexlify(custodianProgram(d,actor,direction).bytes())};
+    declarative:ethers.hexlify(definitionProgram(custodianJson, {
+    descriptor: d, binding: d, executor: actor,
+    direction: direction, recipient: actor, minAmountOut: 1n, settlementRequested: false,
+    route: { tokenIn: (direction) === "deposit" ? (d).asset : (d).share,
+      tokenOut: (direction) === "deposit" ? (d).share : (d).asset },
+  }).bytes())};
   test(`${direction} default declarative program preserves saved baseline effects`,()=>{
     assert.match(programs.baseline,/^0x01[0-9a-f]+$/i);
     for(const program of Object.values(programs))run(direction,actor,amount,"none",false,program);

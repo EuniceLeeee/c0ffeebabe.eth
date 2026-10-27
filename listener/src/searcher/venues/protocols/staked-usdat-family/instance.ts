@@ -1,5 +1,7 @@
 import { standardFamily } from "./standard-base.js";
-import type { erc4626Instance as OriginalShared } from "../erc4626-family/instance.js";
-const erc4626Instance = standardFamily.instance as unknown as typeof OriginalShared;
+import type { InstanceSemantics } from "../../adapter-family-plugin.js";
+import type { StakedUsdatIdentity, StakedUsdatDescriptor } from "./types.js";
 
-export const stakedUsdatInstance: typeof erc4626Instance = { ...erc4626Instance };
+export const stakedUsdatInstance: InstanceSemantics<StakedUsdatIdentity, StakedUsdatDescriptor> = {
+  ...standardFamily.instance as unknown as InstanceSemantics<StakedUsdatIdentity, StakedUsdatDescriptor>,
+};

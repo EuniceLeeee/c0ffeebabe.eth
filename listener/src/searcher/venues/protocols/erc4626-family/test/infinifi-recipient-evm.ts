@@ -5,11 +5,18 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { ethers } from "ethers";
 import { runtimeProgramScript } from "../../../../../adapters/runtime-amount-program.js";
-import { erc4626Instance } from "../instance.js";
-import { erc4626Routes } from "../routes.js";
-import { erc4626Execution } from "../execution.js";
-import { ERC4626_FAMILY_ID, INFINIFI_LINEAGE_ID } from "../manifest.js";
-import { INFINIFI_GATEWAY } from "../infinifi.js";
+
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import infinifiJson from "../infinifi.json";
+import { lineageId } from "../../../adapter-family-identifiers.js";
+
+const erc4626Instance = erc4626Plugin.instance;
+const erc4626Routes = erc4626Plugin.routes;
+const erc4626Execution = erc4626Plugin.execution;
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const INFINIFI_LINEAGE_ID = lineageId(infinifiJson.lineageId);
+const INFINIFI_GATEWAY = infinifiJson.constants.gateway;
+
 const addr = (i: number) => ethers.getAddress(ethers.toBeHex(i, 20));
 const actor = addr(107), receiver = addr(91), programs: Record<string,string> = {};
 const source = { number: 25944594, hash: "0x" + "11".repeat(32), generation: 3 };

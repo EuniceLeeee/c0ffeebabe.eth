@@ -11,9 +11,14 @@ import { createRebuildWiring } from "../../../../universe-rebuild-production.js"
 import { rebuildUniverse } from "../../../../universe-rebuild-runner.js";
 import { resolveStrictReadyRuntime } from "../../../../strict-ready-runtime.js";
 import { json, same, sha } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
-import { ERC4626_FAMILY_ID } from "../../erc4626-family/manifest.js";
-import { ERC4626_INTERFACE } from "../../erc4626-family/abi.js";
+
 import { STAKED_USDAT_FAMILY_ID } from "../manifest.js";
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import erc4626Json from "../../erc4626-family/erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
 
 const TX = "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7";
 const TARGET = "0xd166337499e176bbc38a1fbd113ab144e5bd2df7";

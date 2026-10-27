@@ -2,9 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
 import { assertInfiniFiRecipientEffects } from "./infinifi-historical-dual.js";
-import { ERC4626_INTERFACE } from "../abi.js";
-import { INFINIFI_GATEWAY } from "../infinifi.js";
+
 import type { ObservedEffects } from "../../../adapter-request-program.js";
+import erc4626Json from "../erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+import infinifiJson from "../infinifi.json";
+
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const INFINIFI_GATEWAY = infinifiJson.constants.gateway;
+
 const actor = "0x1000000000000000000000000000000000000002";
 const receiver = "0x1000000000000000000000000000000000000001";
 const vault = "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb", asset = "0x48f9e38f3070ad8945dfeae3fa70987722e3d89c";

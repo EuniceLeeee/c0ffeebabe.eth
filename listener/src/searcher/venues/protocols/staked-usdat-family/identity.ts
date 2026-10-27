@@ -4,8 +4,10 @@ import type { CanonicalSource } from "../../adapter-request-program.js";
 import { RequiredAdapterRequestError } from "../../adapter-request-failure.js";
 import { hashCanonical } from "../../canonical-value.js";
 import { assertSameSource, assertSource, codeRequest, requireRuntimeCode, returnedResult, sameAddress, successfulResult } from "../standard-family/common.js";
-import { createErc4626StandardIdentityVariant } from "../erc4626-family/identity.js";
-import type { Erc4626Candidate, Erc4626Identity } from "../erc4626-family/types.js";
+import { compileDeclarativeIdentity } from "../../declarative-identity.js";
+import { expandConversionDefinition } from "../../declarative-definition.js";
+import definition from "../erc4626-family/erc4626.json";
+import type { StakedUsdatCandidate, StakedUsdatIdentity } from "./types.js";
 import { STAKED_USDAT_FAMILY_ID, STAKED_USDAT_LINEAGE_ID } from "./manifest.js";
 import { decodeStakedUsdatBinding, isStakedUsdatProxy, stakedUsdatAddressWord, stakedUsdatBindingRequests,
   stakedUsdatSlot, STAKED_USDAT_IMPLEMENTATION_HASH, type StakedUsdatBinding,
@@ -15,12 +17,15 @@ type Proof = { readonly phase: "proxy" | "binding"; readonly source: CanonicalSo
   { readonly phase: "behavior"; readonly binding: StakedUsdatBinding; readonly feeWitness: StakedUsdatFeeWitness; readonly behavior?: unknown } |
   { readonly phase: "rejected"; readonly reason: string; readonly ids: readonly string[] };
 function standard(feeWitness: StakedUsdatFeeWitness) {
-  return createErc4626StandardIdentityVariant({ familyId: STAKED_USDAT_FAMILY_ID,
-    lineageId: STAKED_USDAT_LINEAGE_ID, id: "staked-usdat-standard-active-proof", excludeSpecialized: false,
-    depositEventAssets: grossAssets => stakedUsdatDepositEventAssets(feeWitness, grossAssets) });
+  return compileDeclarativeIdentity<StakedUsdatCandidate, StakedUsdatIdentity>(
+    expandConversionDefinition(definition.identity.definition), {
+      familyId: STAKED_USDAT_FAMILY_ID, lineageId: STAKED_USDAT_LINEAGE_ID,
+      id: "staked-usdat-standard-active-proof",
+      parameters: { excludeSpecialized: false, hasEventMath: true },
+    }, { depositEventAssets: grossAssets => stakedUsdatDepositEventAssets(feeWitness, grossAssets) });
 }
 
-const variant: IdentityVariant<Erc4626Candidate, Erc4626Identity, unknown> = {
+const variant: IdentityVariant<StakedUsdatCandidate, StakedUsdatIdentity, unknown> = {
   id: "source-bound-staked-usdat-deposit", kind: "standalone-contract", lineageId: STAKED_USDAT_LINEAGE_ID,
   applies: () => true,
   requirements(input) {
@@ -82,6 +87,6 @@ const variant: IdentityVariant<Erc4626Candidate, Erc4626Identity, unknown> = {
   },
 };
 
-export const stakedUsdatIdentity: IdentitySemantics<Erc4626Candidate, Erc4626Identity> = {
+export const stakedUsdatIdentity: IdentitySemantics<StakedUsdatCandidate, StakedUsdatIdentity> = {
   memoReuse: "recheck-identity", variants: [variant], identityKey: identity => identity.subject.toLowerCase(),
 };

@@ -2,14 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
 import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
-import { standardRecipientProgram } from "../execution.js";
+
+import erc4626Json from "../erc4626.json";
+import { definitionProgram } from "./definition-fixture.js";
+
 const addr=(n:number)=>ethers.toBeHex(n,20),executor=addr(20),external=addr(21),d={vault:addr(22),share:addr(22),asset:addr(23)};
 const abi=new ethers.Interface(["function balanceOf(address) view returns(uint256)","function allowance(address,address) view returns(uint256)","function approve(address,uint256) returns(bool)","function deposit(uint256,address) returns(uint256)","function redeem(uint256,address,address) returns(uint256)"]);
 function run(deposit:boolean,recipient:string,fault="none",amount=37n){
  const input=deposit?d.asset:d.share,output=deposit?d.share:d.asset,key=(t:string,a:string)=>`${t.toLowerCase()}:${a.toLowerCase()}`;
  const balances=new Map([[key(input,executor),1000n],[key(output,executor),2000n],[key(input,external),3000n],[key(output,external),4000n]]);let native=17n,allowance=0n,converted=false;
  const get=(t:string,a:string)=>balances.get(key(t,a))!,add=(t:string,a:string,n:bigint)=>balances.set(key(t,a),get(t,a)+n);
- const p=standardRecipientProgram(d,executor,deposit?"deposit":"redeem",recipient);
+ const p=definitionProgram(erc4626Json.standard, {
+    descriptor: d, binding: d, executor: executor,
+    direction: deposit?"deposit":"redeem", recipient: recipient, minAmountOut: 1n, settlementRequested: true,
+    route: { tokenIn: (deposit?"deposit":"redeem") === "deposit" ? (d).asset : (d).share,
+      tokenOut: (deposit?"deposit":"redeem") === "deposit" ? (d).share : (d).asset },
+  });
  inspectRuntime(ethers.hexlify(p.bytes()),amount,{nativeBalance:()=>native,call(c){const q=abi.parseTransaction({data:c.data})!;
   if(q.name==="balanceOf")return abi.encodeFunctionResult(q.fragment,[get(c.target,q.args[0])]);
   if(q.name==="allowance")return abi.encodeFunctionResult(q.fragment,[allowance]);

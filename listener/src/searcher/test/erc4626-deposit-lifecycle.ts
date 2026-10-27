@@ -6,9 +6,17 @@ import { executeAdapterFamilyLifecycleBatch } from "../venues/adapter-family-run
 import { capabilityManifestHash, FAMILY_CAPABILITY_NAMES, FamilyCapabilityCatalog } from "../venues/family-capability-catalog.js";
 import { defineProtocolFamily, definedFamilyPluginContractSummary } from "../venues/adapter-family-plugin.js";
 import { plugin } from "../venues/production-families/erc4626.production.js";
-import { erc4626Identity } from "../venues/protocols/erc4626-family/identity.js";
-import { ERC4626_INTERFACE, ERC4626_ERC20_INTERFACE, ERC4626_PROBE_ACTOR } from "../venues/protocols/erc4626-family/abi.js";
+
 import { CACHED_BYTECODE } from "../venues/protocols/erc4626-family/test/custodian-bytecode.js";
+import { plugin as erc4626Plugin } from "../venues/production-families/erc4626.production.js";
+import erc4626Json from "../venues/protocols/erc4626-family/erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+import { getAddress as familyGetAddress } from "ethers";
+
+const erc4626Identity = erc4626Plugin.identity;
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const ERC4626_ERC20_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.token);
+const ERC4626_PROBE_ACTOR = familyGetAddress(erc4626Json.identity.definition.parameters.constants.actor);
 
 const vault = "0x1111111111111111111111111111111111111111";
 const asset = "0x2222222222222222222222222222222222222222";

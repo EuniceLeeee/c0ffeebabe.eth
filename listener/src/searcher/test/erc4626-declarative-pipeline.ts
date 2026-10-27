@@ -10,11 +10,21 @@ import { PRODUCTION_STRICT_VERIFIED_ACTORS } from "../venues/production-verified
 import { buildFamilyExecutionFragment, buildFamilyRuntimeAmountLeg, executeFamilyExactQuote } from "../venues/adapter-family-runtime.js";
 import type { UnifiedObservation } from "../venues/adapter-family-plugin.js";
 import type { CanonicalSource } from "../venues/adapter-request-program.js";
-import { ERC4626_FAMILY_ID } from "../venues/protocols/erc4626-family/manifest.js";
-import { ERC4626_INTERFACE as vaultAbi, ERC4626_ERC20_INTERFACE as tokenAbi, ERC4626_PROBE_ACTOR as actor } from "../venues/protocols/erc4626-family/abi.js";
-import { INFINIFI_GATEWAY, INFINIFI_ABI } from "../venues/protocols/erc4626-family/infinifi.js";
-import type { Erc4626Descriptor } from "../venues/protocols/erc4626-family/types.js";
+
+import type { Erc4626Descriptor } from "../generated/declarative-family-types/erc4626.generated.js";
 import definition from "../venues/protocols/erc4626-family/erc4626.json";
+import { plugin as erc4626Plugin } from "../venues/production-families/erc4626.production.js";
+import erc4626Json from "../venues/protocols/erc4626-family/erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+import { getAddress as familyGetAddress } from "ethers";
+import infinifiJson from "../venues/protocols/erc4626-family/infinifi.json";
+
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const vaultAbi = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const tokenAbi = new FamilyInterface(erc4626Json.identity.definition.abi.token);
+const actor = familyGetAddress(erc4626Json.identity.definition.parameters.constants.actor);
+const INFINIFI_GATEWAY = infinifiJson.constants.gateway;
+const INFINIFI_ABI = new FamilyInterface(infinifiJson.abi.vault);
 
 // Synthetic transport only: catalog, discovery, identity, scheduling,
 // publication, Graph projection and execution builders are production code.

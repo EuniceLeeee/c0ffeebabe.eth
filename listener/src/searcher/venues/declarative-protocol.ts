@@ -1,5 +1,6 @@
 import { getAddress, hexlify } from "ethers";
 import { normalizeDeclarativeVariant, normalizeDeclarativeChecks, normalizeDeclarativeFieldModel } from "./declarative-variant.js";
+import { validateDeclarativeTypeMetadata } from "./declarative-types.js";
 import { compileDeclarativeDiscovery } from "./declarative-discovery.js";
 import { compileDeclarativeIdentity } from "./declarative-identity.js";
 import { expandConversionDefinition } from "./declarative-definition.js";
@@ -11,7 +12,7 @@ import { instanceKey, routeKey } from "./adapter-family-identifiers.js";
 import { localZeroExactMethod, NO_EXECUTION_RUNTIME_PROJECTION } from "./adapter-family-plugin.js";
 import type { FamilyCandidate, VerifiedIdentity, CompiledInstanceDescriptor, FamilyRouteDescriptor,
   IdentitySemantics, InstanceSemantics, RouteProjectionSemantics, PricingSemantics, ExactQuoteSemantics,
-  ExecutionSemantics, FamilyManifest, ProtocolDomainSemantics } from "./adapter-family-plugin.js";
+  ExecutionSemantics, FamilyManifest, ProtocolDomainSemantics, ProtocolFamilyPlugin } from "./adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult } from "./adapter-request-program.js";
 import { assertSameSource, assertSource, protocolMid, returnedResult, sameAddress,
   type ProtocolPricingSnapshot } from "./protocols/standard-family/common.js";
@@ -25,6 +26,21 @@ type Identity = VerifiedIdentity & Data;
 type Candidate = FamilyCandidate & Data;
 type Values = ReturnType<typeof compileDeclarativeValues>;
 type Variant = { document: Data; values: Values };
+export interface DeclarativeFamilyTypes {
+  readonly candidate: FamilyCandidate;
+  readonly identity: VerifiedIdentity;
+  readonly descriptor: CompiledInstanceDescriptor;
+  readonly route: FamilyRouteDescriptor;
+  readonly pricingDraft: object;
+  readonly pricingDescriptor: object;
+  readonly pricingStatic: object;
+  readonly exactEvidence: unknown;
+}
+export type TypedDeclarativeProtocol<T extends DeclarativeFamilyTypes> = ProtocolFamilyPlugin<
+  T["candidate"], T["identity"], T["descriptor"], T["route"],
+  T["pricingDescriptor"], ProtocolPricingSnapshot, T["exactEvidence"],
+  T["descriptor"], T["pricingDraft"], unknown, T["pricingStatic"]
+>;
 const forbidden = new Set(["__proto__", "prototype", "constructor", "module", "export", "handler"]);
 
 function data(value: unknown, label: string): asserts value is Data {
@@ -59,8 +75,9 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
   json(raw); children.forEach(json);
   validateDeclarativeValue(raw); children.forEach(v => validateDeclarativeValue(v));
   if (raw.version !== 2 || raw.production?.domain !== "protocol") throw new Error("unsupported declarative protocol version/domain");
-  const allowed = new Set(["version", "scope", "production", "manifest", "discovery", "identity", "instance", "routes", "pricing", "protocol", "standard", "variantFiles", "actionAdapters"]);
+  const allowed = new Set(["version", "scope", "production", "manifest", "discovery", "identity", "instance", "routes", "pricing", "protocol", "standard", "variantFiles", "actionAdapters", "types"]);
   if (Object.keys(raw).some(key => !allowed.has(key))) throw new Error("unknown declarative protocol field");
+  if (Object.hasOwn(raw, "types")) validateDeclarativeTypeMetadata(raw.types);
   for (const key of ["manifest", "discovery", "identity", "instance", "routes", "pricing", "protocol", "standard"]) data(raw[key], key);
   if (raw.manifest.familyId !== raw.scope?.family || raw.manifest.domain !== "protocol") throw new Error("declaration manifest identity mismatch");
   if (!Array.isArray(raw.variantFiles) || raw.variantFiles.length !== children.length) throw new Error("declaration child count mismatch");
@@ -82,7 +99,7 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
   if (new Set(documents.map(v => v.id)).size !== documents.length) throw new Error("duplicate declarative variant");
   const variants: Variant[] = documents.map(v => {
     shape(v, ["id", "lineageId", "abi", "constants", "expressions", "match", "context", "boundState", "pricing", "exact", "readPrograms", "execution"],
-      ["version", "identity", "identityParameters", "assertions", "programs", "inputs"], "variant declaration");
+      ["version", "identity", "identityParameters", "assertions", "programs", "inputs", "types"], "variant declaration");
     shape(v.pricing, ["refreshPolicy", "requirements", "dependencies", "mutationAddresses"],
       ["guardProgram", "guardPrefix", "finalizeChecks"], "variant pricing declaration");
     shape(v.exact, ["methodId", "requirements", "evidence"],
@@ -346,6 +363,10 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
   return { definition, assertInvocation, projection, executionProgram, variants, select, program, environment };
 }
 
-export function compileDeclarativeProtocol(raw: Data, children: readonly Data[] = []) {
-  return createDeclarativeProtocolRuntime(raw, children).definition;
+export function compileDeclarativeProtocol(raw: Data, children?: readonly Data[]): ReturnType<typeof createDeclarativeProtocolRuntime>["definition"];
+export function compileDeclarativeProtocol<T extends DeclarativeFamilyTypes>(raw: Data, children?: readonly Data[]): TypedDeclarativeProtocol<T>;
+export function compileDeclarativeProtocol(raw: Data, children: readonly Data[] = []): unknown {
+  // The only dynamic-to-declared type boundary. JSON registration validates the
+  // shared runtime contract; generated field contracts retain consumer checks.
+  return createDeclarativeProtocolRuntime(raw, children).definition as unknown as TypedDeclarativeProtocol<DeclarativeFamilyTypes>;
 }

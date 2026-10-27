@@ -3,17 +3,7 @@ import { test } from "node:test";
 import { ethers } from "ethers";
 import type { AdapterRequest, AdapterRequestResult } from "../../../adapter-request-program.js";
 import { declareRequestProgram } from "../../../adapter-request-program.js";
-import { INFINIFI_ABI as ABI, INFINIFI_GATEWAY, INFINIFI_MULTICALL, INFINIFI_VARIANT, INFINIFI_SLOT,
-  infinifiQuoteRequest, decodeInfiniFiQuote, checkInfiniFiGuard, infinifiGuardRequests } from "../infinifi.js";
-import { infinifiIdentity } from "../infinifi-identity.js";
-import { infinifiProgram } from "../infinifi-execution.js";
-import { ERC4626_INTERFACE, ERC4626_PROBE_ACTOR as actor } from "../abi.js";
-import { erc4626Instance } from "../instance.js";
-import { erc4626Routes } from "../routes.js";
-import { erc4626Exact } from "../exact.js";
-import { erc4626Pricing } from "../pricing.js";
-import { erc4626Execution } from "../execution.js";
-import { erc4626DepositFamilyOwnedAction, erc4626RedeemFamilyOwnedAction } from "../action.js";
+
 import { RequiredAdapterRequestError } from "../../../adapter-request-failure.js";
 import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
 import { RuntimeAmountProgram } from "../../../../../adapters/runtime-amount-program.js";
@@ -31,7 +21,32 @@ import { StrictProductionRuntimeRoot, type StrictProductionRuntimeSession } from
 import { blockScanEdgeKey, createVerifiedGraphView } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { UNIV2_PAIR_INTERFACE, UNIV2_TOKEN_INTERFACE } from "../../../swaps/univ2-family/codec.js";
-import { ERC4626_FAMILY_ID, INFINIFI_LINEAGE_ID } from "../manifest.js";
+
+import infinifiJson from "../infinifi.json";
+import { Interface as FamilyInterface } from "ethers";
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import erc4626Json from "../erc4626.json";
+import { getAddress as familyGetAddress } from "ethers";
+import { lineageId } from "../../../adapter-family-identifiers.js";
+import { definitionValues } from "./definition-fixture.js";
+
+const ABI = new FamilyInterface(infinifiJson.abi.vault);
+const INFINIFI_GATEWAY = infinifiJson.constants.gateway;
+const INFINIFI_MULTICALL = infinifiJson.constants.multicall;
+const INFINIFI_VARIANT = infinifiJson.id;
+const INFINIFI_SLOT = infinifiJson.constants.implementationSlot;
+const infinifiIdentity = erc4626Plugin.identity.variants.find(v => v.id === infinifiJson.id)!;
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const actor = familyGetAddress(erc4626Json.identity.definition.parameters.constants.actor);
+const erc4626Instance = erc4626Plugin.instance;
+const erc4626Routes = erc4626Plugin.routes;
+const erc4626Exact = erc4626Plugin.exact;
+const erc4626Pricing = erc4626Plugin.pricing;
+const erc4626Execution = erc4626Plugin.execution;
+const erc4626DepositFamilyOwnedAction = erc4626Plugin.actionAdapters[0]!;
+const erc4626RedeemFamilyOwnedAction = erc4626Plugin.actionAdapters[1]!;
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const INFINIFI_LINEAGE_ID = lineageId(infinifiJson.lineageId);
 
 // Synthetic contract tests only; no RPC or historical identity claim.
 const addr = (n: number) => ethers.getAddress(ethers.toBeHex(n, 20));
@@ -160,29 +175,29 @@ test("identity preserves transport failures, missing output observations, forged
 test("quote combines public reward distribution and the actual requested input; failed subcalls cannot price", () => {
   const { descriptor } = setup(), b = descriptor.infinifi!;
   for (const direction of ["deposit", "redeem"] as const) for (const n of [17n, amount, amount * 7n]) {
-    const req = infinifiQuoteRequest("quote", b, direction, n);
+    const req = definitionValues(infinifiJson).evaluate({ op: "program", args: ["quoteRequests", {}] }, { requestId: "quote", binding: b, direction: direction, amountIn: n });
     assert.equal(req.kind, "eth-call"); if (req.kind !== "eth-call") throw new Error("quote");
     assert.equal(lower(req.to), lower(INFINIFI_MULTICALL));
     const calls = ABI.decodeFunctionData("aggregate3", req.data)[0];
     assert.equal(calls.length, 2); assert(calls.every((r: any) => !r.allowFailure));
     assert.equal(ABI.parseTransaction({ data: calls[0].callData })!.name, "distributeInterpolationRewards");
     const preview = ABI.parseTransaction({ data: calls[1].callData })!;
-    assert.equal(preview.args[0], n); assert.equal(decodeInfiniFiQuote(quoteReply(direction === "deposit", n)), out(direction === "deposit", n));
+    assert.equal(preview.args[0], n); assert.equal(definitionValues(infinifiJson).evaluate({ op: "program", args: ["quoteData", {}] }, { data: quoteReply(direction === "deposit", n) }), out(direction === "deposit", n));
   }
-  assert.throws(() => decodeInfiniFiQuote(ABI.encodeFunctionResult("aggregate3", [[{ success: false, returnData: "0x" }, { success: true, returnData: word(1n) }]])));
+  assert.throws(() => definitionValues(infinifiJson).evaluate({ op: "program", args: ["quoteData", {}] }, { data: ABI.encodeFunctionResult("aggregate3", [[{ success: false, returnData: "0x" }, { success: true, returnData: word(1n) }]]) }));
 });
 test("current-source guards reject dependency/implementation changes, pause, lost role and unaccrued loss", () => {
-  const { descriptor } = setup(), b = descriptor.infinifi!, requests = infinifiGuardRequests("g", b), good = reads(requests);
-  checkInfiniFiGuard(good, "g", b, true, source);
+  const { descriptor } = setup(), b = descriptor.infinifi!, requests = definitionValues(infinifiJson).evaluate({ op: "expression", args: ["guardRequests", {}] }, { prefix: "g", binding: b }), good = reads(requests);
+  definitionValues(infinifiJson).evaluate({ op: "program", args: ["guard", {}] }, { results: good, prefix: "g", binding: b, redeem: true, source: source });
   for (const [id, value] of [
     ["g-entry-point", word(0n)], ["g-vault-paused", word(1n)], ["g-gateway-paused", word(1n)],
     ["g-loss", word(ethers.MaxUint256)], ["g-gateway-implementation", word(BigInt(addr(888)))],
     ["g-registry-receiptToken", word(BigInt(addr(777)))], ["g-code-yieldSharingImplementation", "0x6002"],
   ]) {
     const bad = good.map(r => r.id === id ? returned(id, value) : r);
-    assert.throws(() => checkInfiniFiGuard(bad, "g", b, true, source), id);
+    assert.throws(() => definitionValues(infinifiJson).evaluate({ op: "program", args: ["guard", {}] }, { results: bad, prefix: "g", binding: b, redeem: true, source: source }), id);
   }
-  assert.throws(() => checkInfiniFiGuard(good, "g", b, true, { ...source, hash: "0x" + "22".repeat(32) }), /source/);
+  assert.throws(() => definitionValues(infinifiJson).evaluate({ op: "program", args: ["guard", {}] }, { results: good, prefix: "g", binding: b, redeem: true, source: { ...source, hash: "0x" + "22".repeat(32) } }), /source/);
   assert.equal(erc4626Pricing.refreshPolicyForInstance!({ descriptor } as any), "each-block");
 });
 test("production Exact and raw pricing use Gateway quotes; snapshots keep source and time refresh requirements", () => {

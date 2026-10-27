@@ -18,8 +18,15 @@ import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from ".
 import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
 import { splicedProductionAmount, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integration/three-family/historical-input-observations.js";
-import { ERC4626_FAMILY_ID, INFINIFI_LINEAGE_ID } from "../manifest.js";
-import { INFINIFI_ABI } from "../infinifi.js";
+
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import infinifiJson from "../infinifi.json";
+import { lineageId } from "../../../adapter-family-identifiers.js";
+import { Interface as FamilyInterface } from "ethers";
+
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const INFINIFI_LINEAGE_ID = lineageId(infinifiJson.lineageId);
+const INFINIFI_ABI = new FamilyInterface(infinifiJson.abi.vault);
 
 const N = 25944594, HASH = "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e";
 const VAULT = "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb";

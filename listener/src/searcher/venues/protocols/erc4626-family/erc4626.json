@@ -578,5 +578,392 @@
         }
       ]
     }
-  ]
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "Erc4626Candidate": {
+        "type": "object",
+        "extends": [
+          "FamilyCandidate"
+        ],
+        "fields": {
+          "candidateKind": {
+            "literal": "erc4626-vault"
+          },
+          "vault": {
+            "type": "string"
+          }
+        }
+      },
+      "Erc4626EvidenceFields": {
+        "type": "object",
+        "fields": {
+          "vault": {
+            "type": "string"
+          },
+          "vaultCodeHash": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "assetCodeHash": {
+            "type": "string"
+          },
+          "totalAssets": {
+            "type": "bigint"
+          },
+          "totalSupply": {
+            "type": "bigint"
+          },
+          "sampleAssets": {
+            "type": "bigint"
+          },
+          "sampleShares": {
+            "type": "bigint"
+          },
+          "previewDeposit": {
+            "type": "bigint"
+          },
+          "previewRedeem": {
+            "type": "bigint"
+          },
+          "alternateDepositSample": {
+            "type": "object",
+            "fields": {
+              "amount": {
+                "type": "bigint"
+              },
+              "preview": {
+                "type": "bigint"
+              }
+            }
+          },
+          "baseValid": {
+            "type": "boolean"
+          },
+          "evidenceRequestIds": {
+            "array": {
+              "type": "string"
+            }
+          },
+          "custodianCheck": {
+            "union": [
+              {
+                "literal": "slot"
+              },
+              {
+                "literal": "code"
+              }
+            ]
+          },
+          "custodianImplementation": {
+            "type": "string"
+          },
+          "custodianCheckSource": {
+            "ref": "CanonicalSource"
+          },
+          "stakedUsdatCheck": {
+            "ref": "Erc4626ImplementationExclusionEvidence"
+          }
+        },
+        "optional": [
+          "alternateDepositSample",
+          "evidenceRequestIds",
+          "custodianCheck",
+          "custodianImplementation",
+          "custodianCheckSource",
+          "stakedUsdatCheck"
+        ]
+      },
+      "Erc4626BaseEvidence": {
+        "type": "object",
+        "extends": [
+          "Erc4626EvidenceFields"
+        ],
+        "fields": {
+          "phase": {
+            "literal": "base"
+          }
+        }
+      },
+      "Erc4626ActiveEvidence": {
+        "type": "object",
+        "extends": [
+          "Erc4626EvidenceFields"
+        ],
+        "fields": {
+          "phase": {
+            "literal": "active"
+          },
+          "erc20SurfacesValid": {
+            "type": "boolean"
+          },
+          "depositVerified": {
+            "type": "boolean"
+          },
+          "redeemVerified": {
+            "type": "boolean"
+          },
+          "behaviorProofHash": {
+            "type": "string"
+          },
+          "depositRetry": {
+            "type": "object",
+            "fields": {
+              "amount": {
+                "type": "bigint"
+              },
+              "preview": {
+                "type": "bigint"
+              },
+              "source": {
+                "ref": "CanonicalSource"
+              }
+            }
+          },
+          "depositRetryCompleted": {
+            "type": "boolean"
+          }
+        },
+        "optional": [
+          "depositRetry",
+          "depositRetryCompleted"
+        ]
+      },
+      "Erc4626IdentityEvidence": {
+        "union": [
+          {
+            "ref": "Erc4626BaseEvidence"
+          },
+          {
+            "ref": "Erc4626ActiveEvidence"
+          }
+        ]
+      },
+      "Erc4626VerifiedDirections": {
+        "type": "object",
+        "fields": {
+          "deposit": {
+            "type": "boolean"
+          },
+          "redeem": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Erc4626Identity": {
+        "type": "object",
+        "extends": [
+          "VerifiedIdentity"
+        ],
+        "fields": {
+          "infinifi": {
+            "ref": "InfiniFiBinding"
+          },
+          "custodian": {
+            "ref": "CustodianBinding"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "verifiedDirections": {
+            "ref": "Erc4626VerifiedDirections"
+          }
+        },
+        "optional": [
+          "infinifi",
+          "custodian"
+        ]
+      },
+      "Erc4626Descriptor": {
+        "type": "object",
+        "extends": [
+          "CompiledInstanceDescriptor"
+        ],
+        "fields": {
+          "infinifi": {
+            "ref": "InfiniFiBinding"
+          },
+          "custodian": {
+            "ref": "CustodianBinding"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "verifiedDirections": {
+            "ref": "Erc4626VerifiedDirections"
+          }
+        },
+        "optional": [
+          "infinifi",
+          "custodian"
+        ]
+      },
+      "Erc4626Route": {
+        "type": "object",
+        "extends": [
+          "FamilyRouteDescriptor"
+        ],
+        "fields": {
+          "target": {
+            "type": "string"
+          },
+          "direction": {
+            "union": [
+              {
+                "literal": "deposit"
+              },
+              {
+                "literal": "redeem"
+              }
+            ]
+          },
+          "adapterId": {
+            "union": [
+              {
+                "literal": "erc4626-deposit"
+              },
+              {
+                "literal": "erc4626-redeem"
+              }
+            ]
+          }
+        }
+      },
+      "Erc4626PricingDraft": {
+        "type": "object",
+        "fields": {
+          "infinifi": {
+            "ref": "InfiniFiBinding"
+          },
+          "custodian": {
+            "ref": "CustodianBinding"
+          },
+          "instanceKey": {
+            "ref": "InstanceKey"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "routes": {
+            "array": {
+              "ref": "Erc4626Route"
+            }
+          }
+        },
+        "optional": [
+          "infinifi",
+          "custodian"
+        ]
+      },
+      "Erc4626PricingStatic": {
+        "type": "object",
+        "fields": {
+          "oneAsset": {
+            "type": "bigint"
+          },
+          "oneShare": {
+            "type": "bigint"
+          }
+        }
+      },
+      "Erc4626PricingDescriptor": {
+        "type": "object",
+        "extends": [
+          "Erc4626PricingDraft",
+          "Erc4626PricingStatic"
+        ],
+        "fields": {}
+      },
+      "Erc4626ExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {
+            "union": [
+              {
+                "literal": "erc4626-preview"
+              },
+              {
+                "literal": "frax-custodian-preview"
+              },
+              {
+                "literal": "infinifi-gateway-preview"
+              }
+            ]
+          },
+          "executor": {
+            "type": "string"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "direction": {
+            "union": [
+              {
+                "literal": "deposit"
+              },
+              {
+                "literal": "redeem"
+              }
+            ]
+          },
+          "amountIn": {
+            "type": "bigint"
+          },
+          "amountOut": {
+            "type": "bigint"
+          },
+          "bindingFingerprint": {
+            "type": "string"
+          }
+        },
+        "optional": [
+          "executor"
+        ]
+      },
+      "Erc4626ImplementationExclusionEvidence": {
+        "type": "object",
+        "fields": {
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "proxyCodeHash": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "implementationMatched": {
+            "literal": true
+          }
+        },
+        "optional": [
+          "implementation",
+          "implementationMatched"
+        ]
+      }
+    },
+    "contracts": {
+      "candidate": "Erc4626Candidate",
+      "identityEvidence": "Erc4626IdentityEvidence",
+      "identity": "Erc4626Identity",
+      "descriptor": "Erc4626Descriptor",
+      "route": "Erc4626Route",
+      "pricingDraft": "Erc4626PricingDraft",
+      "pricingDescriptor": "Erc4626PricingDescriptor",
+      "pricingStatic": "Erc4626PricingStatic",
+      "exactEvidence": "Erc4626ExactEvidence"
+    }
+  }
 }

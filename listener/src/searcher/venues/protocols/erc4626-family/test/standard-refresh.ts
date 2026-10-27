@@ -14,10 +14,18 @@ import { StrictProductionRuntimeRoot, type StrictProductionRuntimeSession } from
 import { blockScanEdgeKey, createVerifiedGraphView } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { UNIV2_PAIR_INTERFACE, UNIV2_TOKEN_INTERFACE } from "../../../swaps/univ2-family/codec.js";
-import { ERC4626_INTERFACE, ERC4626_ERC20_INTERFACE, ERC4626_PROBE_ACTOR } from "../abi.js";
-import { ERC4626_FAMILY_ID } from "../manifest.js";
+
 import { ERC4626_SILO_REDEEM_FAMILY_ID } from "../../erc4626-silo-redeem-family/manifest.js";
 import { ERC4626_SILO_INTERFACE, ERC4626_SILO_PAYOUT_INTERFACE } from "../../erc4626-silo-redeem-family/shared.js";
+import erc4626Json from "../erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+import { getAddress as familyGetAddress } from "ethers";
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const ERC4626_ERC20_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.token);
+const ERC4626_PROBE_ACTOR = familyGetAddress(erc4626Json.identity.definition.parameters.constants.actor);
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
 
 // Offline transport fixtures exercise the unchanged production lifecycle,
 // Family, Exact, coordinator and publication. No RPC, EVM or pricing formula claim.

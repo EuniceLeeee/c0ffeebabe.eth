@@ -1,5 +1,6 @@
 import { expandConversionAdmission } from "./declarative-conversion-admission.js";
 import { validateDeclarativeValue, validateDeclarativeStatements } from "./declarative-values.js";
+import { validateDeclarativeTypeMetadata } from "./declarative-types.js";
 
 type Data = any;
 // Field models describe decoded facts and constraints. They are expanded once,
@@ -131,6 +132,7 @@ export function normalizeDeclarativeVariant<T extends Record<string, Data>>(raw:
   identity: Data; programs: Record<string, readonly Data[]>;
 } {
   const definition = snapshot(raw);
+  if (Object.hasOwn(definition, "types")) validateDeclarativeTypeMetadata(definition.types, true);
   if (Object.hasOwn(definition, "assertions")) definition.assertions = normalizeDeclarativeChecks(definition.assertions);
   if (definition.pricing) {
     if (Object.hasOwn(definition.pricing, "finalizeChecks"))

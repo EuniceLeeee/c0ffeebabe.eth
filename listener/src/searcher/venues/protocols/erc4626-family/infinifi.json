@@ -1426,5 +1426,82 @@
         }
       }
     ]
+  },
+  "types": {
+    "version": 1,
+    "definitions": {
+      "InfiniFiSurface": {
+        "type": "object",
+        "fields": {
+          "proofSource": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "gateway": {
+            "type": "string"
+          },
+          "core": {
+            "type": "string"
+          },
+          "yieldSharing": {
+            "type": "string"
+          },
+          "gatewayImplementation": {
+            "type": "string"
+          },
+          "shareDecimals": {
+            "type": "number"
+          },
+          "vaultCodeHash": {
+            "type": "string"
+          },
+          "gatewayCodeHash": {
+            "type": "string"
+          }
+        }
+      },
+      "InfiniFiBinding": {
+        "type": "object",
+        "extends": [
+          "InfiniFiSurface"
+        ],
+        "fields": {
+          "yieldSharingImplementation": {
+            "type": "string"
+          },
+          "assetDecimals": {
+            "type": "number"
+          },
+          "codeHashes": {
+            "type": "object",
+            "fields": {
+              "asset": {
+                "type": "string"
+              },
+              "core": {
+                "type": "string"
+              },
+              "yieldSharing": {
+                "type": "string"
+              },
+              "gatewayImplementation": {
+                "type": "string"
+              },
+              "yieldSharingImplementation": {
+                "type": "string"
+              },
+              "multicall": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }

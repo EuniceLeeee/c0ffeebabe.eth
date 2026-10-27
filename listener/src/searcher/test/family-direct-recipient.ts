@@ -6,8 +6,7 @@ import { ethers } from "ethers";
 import { inspectRuntime, type RuntimeCall } from "./runtime-program-testkit.js";
 import { depositProgram } from "../venues/protocols/yieldbasis-lt-family/deposit.js";
 import { withdrawRecipientProgram } from "../venues/protocols/yieldbasis-lt-family/execution.js";
-import { standardRecipientProgram } from "../venues/protocols/erc4626-family/execution.js";
-import { custodianProgram } from "../venues/protocols/erc4626-family/custodian-execution.js";
+
 import { legacyIssueRuntime } from "../venues/protocols/set-redemption-family/issuance.js";
 import { execution as setExecution } from "../venues/protocols/set-redemption-family/execution.js";
 import { routes as setRoutes } from "../venues/protocols/set-redemption-family/routes.js";
@@ -100,7 +99,17 @@ for (const variant of ["standard", "custodian"] as const) for (const direction o
     for (const fault of ["none", "wrong-recipient", "short-output", "under-debit", "over-debit", "frozen"] as const) {
       const input = direction === "deposit" ? d.asset : d.share, output = direction === "deposit" ? d.share : d.asset;
       const m = model(input, output), amountOut = 71n, frozenReads: string[] = [];
-      const p = variant === "standard" ? standardRecipientProgram(d, actor, direction, recipient) : custodianProgram(d, actor, direction, 1n, recipient);
+      const p = variant === "standard" ? definitionProgram(erc4626Json.standard, {
+    descriptor: d, binding: d, executor: actor,
+    direction: direction, recipient: recipient, minAmountOut: 1n, settlementRequested: true,
+    route: { tokenIn: (direction) === "deposit" ? (d).asset : (d).share,
+      tokenOut: (direction) === "deposit" ? (d).share : (d).asset },
+  }) : definitionProgram(custodianJson, {
+    descriptor: d, binding: d, executor: actor,
+    direction: direction, recipient: recipient, minAmountOut: 1n, settlementRequested: false,
+    route: { tokenIn: (direction) === "deposit" ? (d).asset : (d).share,
+      tokenOut: (direction) === "deposit" ? (d).share : (d).asset },
+  });
       const run = () => inspectRuntime(ethers.hexlify(p.bytes()), m.amount, {
         nativeBalance: m.nativeBalance,
         allowance(grant) { assert(same(grant.token, d.asset)); assert(same(grant.spender, d.vault)); assert.equal(grant.minimum, m.amount); },
@@ -210,3 +219,6 @@ test("Set unary issueTo uses caller component/Vault credit; recipient fee identi
 
 // Ordinary swap recipient controls are kept separate from protocol models.
 import "./family-direct-recipient-swaps.js";
+import erc4626Json from "../venues/protocols/erc4626-family/erc4626.json";
+import { definitionProgram } from "../venues/protocols/erc4626-family/test/definition-fixture.js";
+import custodianJson from "../venues/protocols/erc4626-family/custodian.json";

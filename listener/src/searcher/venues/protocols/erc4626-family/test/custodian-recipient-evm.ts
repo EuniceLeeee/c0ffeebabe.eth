@@ -5,13 +5,21 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { ethers } from "ethers";
 import { runtimeProgramScript } from "../../../../../adapters/runtime-amount-program.js";
-import { custodianProgram } from "../custodian-execution.js";
+
 import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
+import custodianJson from "../custodian.json";
+import { definitionProgram } from "./definition-fixture.js";
+
 const addr=(n:number)=>ethers.getAddress(ethers.toBeHex(n,20));
 const d={vault:addr(101),asset:addr(102),share:addr(103)},actor=addr(107),receiver=addr(109);
 const programs:Record<string,string>={};
 for(const direction of ["deposit","redeem"] as const)for(const [kind,recipient] of [["self",actor],["external",receiver]] as const){
-  const program=custodianProgram(d,actor,direction,1n,recipient,true).bytes();
+  const program=definitionProgram(custodianJson, {
+    descriptor: d, binding: d, executor: actor,
+    direction: direction, recipient: recipient, minAmountOut: 1n, settlementRequested: true,
+    route: { tokenIn: (direction) === "deposit" ? (d).asset : (d).share,
+      tokenOut: (direction) === "deposit" ? (d).share : (d).asset },
+  }).bytes();
   for(const amount of direction==="deposit"?[0n,100n]:[0n,1n,100000n])programs[`${direction}_${kind}_${amount}`]=ethers.hexlify(runtimeProgramScript(program,amount));
 }
 const i = process.argv.indexOf("--forge-bin"), forge = i < 0 ? "forge" : process.argv[i + 1]; assert(forge);

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
-import { ERC4626_INTERFACE as EVENTS } from "../abi.js";
+
+import erc4626Json from "../erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+
+const EVENTS = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+
 const same=(a:string,b:string)=>a.toLowerCase()===b.toLowerCase();
 const WETH="0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const WRAP=new ethers.Interface(["event Deposit(address indexed dst,uint256 wad)","event Transfer(address indexed from,address indexed to,uint256 value)"]);

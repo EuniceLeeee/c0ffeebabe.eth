@@ -24,7 +24,7 @@ test("ERC4626 production registration is reproducible from its JSON", async () =
   const rendered = renderDeclarativeProductionEntry({ rootDirectory: root, definitionFile, document: definition });
   assert.equal(await readFile(rendered.entryFile, "utf8"), rendered.source);
   if (rendered.format === "protocol-json-v2") {
-    assert.match(rendered.source, /defineProtocolFamily\(compileDeclarativeProtocol\(definition, \[child0, child1\]\)\)/);
+    assert.match(rendered.source, /defineProtocolFamily\(compileDeclarativeProtocol<FamilyTypes>\(definition, \[child0, child1\]\)\)/);
     assert.doesNotMatch(rendered.source, /\bas binding_[A-Za-z0-9_]+\b|from ["'][^"'\n]*family\/[^"'\n]+\.js["']/);
     assert.equal(rendered.childFiles.length, 2);
   } else {

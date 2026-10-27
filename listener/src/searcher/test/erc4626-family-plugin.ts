@@ -10,21 +10,24 @@ import {
 } from "../venues/adapter-request-program.js";
 import { RequiredAdapterRequestError } from
   "../venues/adapter-request-failure.js";
-import {
-  ERC4626_ERC20_INTERFACE,
-  ERC4626_INTERFACE,
-  ERC4626_PROBE_ACTOR,
-} from "../venues/protocols/erc4626-family/abi.js";
-import { erc4626Identity } from
-  "../venues/protocols/erc4626-family/identity.js";
-import { erc4626Instance } from "../venues/protocols/erc4626-family/instance.js";
-import { erc4626Routes } from "../venues/protocols/erc4626-family/routes.js";
-import { erc4626Exact } from "../venues/protocols/erc4626-family/exact.js";
+
 import type {
   Erc4626ActiveEvidence,
   Erc4626BaseEvidence,
   Erc4626Candidate,
-} from "../venues/protocols/erc4626-family/types.js";
+} from "../generated/declarative-family-types/erc4626.generated.js";
+import erc4626Json from "../venues/protocols/erc4626-family/erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+import { getAddress as familyGetAddress } from "ethers";
+import { plugin as erc4626Plugin } from "../venues/production-families/erc4626.production.js";
+
+const ERC4626_ERC20_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.token);
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const ERC4626_PROBE_ACTOR = familyGetAddress(erc4626Json.identity.definition.parameters.constants.actor);
+const erc4626Identity = erc4626Plugin.identity;
+const erc4626Instance = erc4626Plugin.instance;
+const erc4626Routes = erc4626Plugin.routes;
+const erc4626Exact = erc4626Plugin.exact;
 
 const VAULT = ethers.getAddress("0x1111111111111111111111111111111111111111");
 const ASSET = ethers.getAddress("0x2222222222222222222222222222222222222222");

@@ -1,16 +1,15 @@
 import type { ExactQuoteSemantics, ExactRequestProgram } from "../../adapter-family-plugin.js";
 import { standardFamily } from "./standard-base.js";
-import type { erc4626Exact as OriginalShared } from "../erc4626-family/exact.js";
-const erc4626Exact = standardFamily.exact as unknown as typeof OriginalShared;
-import type { Erc4626Descriptor, Erc4626Route, Erc4626ExactEvidence } from "../erc4626-family/types.js";
+import type { StakedUsdatDescriptor, StakedUsdatRoute, StakedUsdatExactEvidence } from "./types.js";
 import { checkStakedUsdatGuard, stakedUsdatGuardRequests } from "./identity-proof.js";
+const conversionExact = standardFamily.exact as unknown as ExactQuoteSemantics<StakedUsdatDescriptor, StakedUsdatRoute, StakedUsdatExactEvidence>;
 
 export const stakedUsdatExact = {
-  ...erc4626Exact,
-  methods: () => Object.freeze(erc4626Exact.methods().map(method => {
+  ...conversionExact,
+  methods: input => Object.freeze(conversionExact.methods(input).map(method => {
     if (method.kind !== "request-program") return method;
     const base = method.program;
-    const program: ExactRequestProgram<Erc4626Descriptor, Erc4626Route, Erc4626ExactEvidence> = {
+    const program: ExactRequestProgram<StakedUsdatDescriptor, StakedUsdatRoute, StakedUsdatExactEvidence> = {
       ...base,
       requirements: () => ({ transports: ["get-code" as const, "get-storage" as const, "eth-call" as const] }),
       buildRequests(input) {
@@ -30,4 +29,4 @@ export const stakedUsdatExact = {
     };
     return Object.freeze({ ...method, program });
   })),
-} satisfies ExactQuoteSemantics<Erc4626Descriptor, Erc4626Route, Erc4626ExactEvidence>;
+} satisfies ExactQuoteSemantics<StakedUsdatDescriptor, StakedUsdatRoute, StakedUsdatExactEvidence>;

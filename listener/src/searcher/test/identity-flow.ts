@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ethers } from "ethers";
-import { erc4626Identity } from "../venues/protocols/erc4626-family/identity.js";
+
+const erc4626Identity = erc4626Plugin.identity;
+const erc4626Discovery = erc4626Plugin.discovery;
 
 const vault = ethers.getAddress("0x1111111111111111111111111111111111111111");
 const asset = ethers.getAddress("0x2222222222222222222222222222222222222222");
@@ -50,7 +52,9 @@ test("malformed or conflicting stages cannot silently become active proof", () =
 });
 
 import { compileAddressDiscovery } from "../venues/address-discovery.js";
-import { erc4626Discovery } from "../venues/protocols/erc4626-family/discovery.js";
+
+import { plugin as erc4626Plugin } from "../venues/production-families/erc4626.production.js";
+
 
 test("address discovery uses declared selectors, topics and surfaces without admitting an identity", () => {
   const observations = [

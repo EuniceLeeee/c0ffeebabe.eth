@@ -9,8 +9,13 @@ import { createRebuildWiring } from "../../../../universe-rebuild-production.js"
 import { rebuildUniverse } from "../../../../universe-rebuild-runner.js";
 import { runAtBlock } from "../../../../blockscan-at-block-cli.js";
 import { resolveStrictReadyRuntime } from "../../../../strict-ready-runtime.js";
-import { ERC4626_FAMILY_ID } from "../manifest.js";
-import { ERC4626_WITHDRAW_TOPIC } from "../abi.js";
+
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import erc4626Json from "../erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const ERC4626_WITHDRAW_TOPIC = new FamilyInterface(erc4626Json.identity.definition.abi.vault).getEvent(erc4626Json.discovery.definition.events[1]!.signature)!.topicHash.toLowerCase();
 
 async function main() {
   const args = new Map<string, string>();

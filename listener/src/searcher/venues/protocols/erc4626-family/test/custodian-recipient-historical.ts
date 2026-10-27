@@ -29,10 +29,18 @@ import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-acti
 import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
 import { assertPriceInput, constructionGuard, assertExecutorCode, assertOriginAccountCode, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integration/three-family/historical-input-observations.js";
-import { ERC4626_FAMILY_ID as FAMILY } from "../manifest.js";
-import { CUSTODIAN_ABI as ABI, CUSTODIAN_IMPLEMENTATION_SLOT } from "../custodian.js";
-import { ERC4626_INTERFACE as EVENTS } from "../abi.js";
-import type { Erc4626Descriptor as Descriptor, Erc4626Route as Route } from "../types.js";
+
+import type { Erc4626Descriptor as Descriptor, Erc4626Route as Route } from "../../../../generated/declarative-family-types/erc4626.generated.js";
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import custodianJson from "../custodian.json";
+import { Interface as FamilyInterface } from "ethers";
+import erc4626Json from "../erc4626.json";
+
+const FAMILY = erc4626Plugin.manifest.familyId;
+const ABI = new FamilyInterface(custodianJson.abi.vault);
+const CUSTODIAN_IMPLEMENTATION_SLOT = custodianJson.constants.implementationSlot;
+const EVENTS = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+
 const N=26017168,HASH="0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350";
 const TX="0x02bf41c595d08e397b90edaaee8a00f4521d1d7c2b0f538b1d1597e4e1ccacec";
 const TARGET="0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c";

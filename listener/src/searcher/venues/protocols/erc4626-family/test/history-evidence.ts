@@ -1,7 +1,12 @@
 // Evidence decoder only: no discovery, pricing, simulation or production policy.
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
-import { ERC4626_INTERFACE as STANDARD } from "../abi.js";
+
+import erc4626Json from "../erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+
+const STANDARD = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+
 const VAULT = new ethers.Interface([...STANDARD.fragments,
   "function withdraw(uint256 assets,address receiver,address owner) returns(uint256 shares)",
   "function depositNative(address receiver) payable returns(uint256 shares)"]);

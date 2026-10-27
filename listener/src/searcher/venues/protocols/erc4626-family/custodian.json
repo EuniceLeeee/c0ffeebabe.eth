@@ -1344,5 +1344,89 @@
         }
       }
     ]
+  },
+  "types": {
+    "version": 1,
+    "definitions": {
+      "CustodianBinding": {
+        "type": "object",
+        "fields": {
+          "proofSource": {
+            "ref": "CanonicalSource"
+          },
+          "proxyCodeHash": {
+            "type": "string"
+          },
+          "proxyAdmin": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "shareDecimals": {
+            "type": "number"
+          },
+          "assetDecimals": {
+            "type": "number"
+          },
+          "shareCodeHash": {
+            "type": "string"
+          },
+          "assetCodeHash": {
+            "type": "string"
+          }
+        }
+      },
+      "CustodianSurface": {
+        "type": "object",
+        "fields": {
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "proxyCodeHash": {
+            "type": "string"
+          },
+          "proxyAdmin": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "shareDecimals": {
+            "type": "number"
+          },
+          "assetDecimals": {
+            "type": "number"
+          },
+          "inventory": {
+            "type": "bigint"
+          },
+          "capacity": {
+            "type": "bigint"
+          },
+          "depositCapacity": {
+            "type": "bigint"
+          },
+          "mintCapacity": {
+            "type": "bigint"
+          }
+        }
+      }
+    }
   }
 }

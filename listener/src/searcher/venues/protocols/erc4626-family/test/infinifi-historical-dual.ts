@@ -29,10 +29,19 @@ import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-acti
 import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
 import { assertPriceInput, productionAmount, splicedProductionAmount, splicedMissingProductionAmount, constructionGuard, assertExecutorCode, assertOriginAccountCode, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integration/three-family/historical-input-observations.js";
-import { ERC4626_FAMILY_ID, INFINIFI_LINEAGE_ID } from "../manifest.js";
-import { ERC4626_INTERFACE } from "../abi.js";
-import { INFINIFI_ABI, INFINIFI_GATEWAY } from "../infinifi.js";
+
 import { manualFourHopInput } from "../../../../test/family-integration/manual-forward-input.js";
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import infinifiJson from "../infinifi.json";
+import { lineageId } from "../../../adapter-family-identifiers.js";
+import erc4626Json from "../erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const INFINIFI_LINEAGE_ID = lineageId(infinifiJson.lineageId);
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const INFINIFI_ABI = new FamilyInterface(infinifiJson.abi.vault);
+const INFINIFI_GATEWAY = infinifiJson.constants.gateway;
 
 const N = 25944594, HASH = "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e";
 const ACCRUED = { number: 25944595, generation: 25944595,

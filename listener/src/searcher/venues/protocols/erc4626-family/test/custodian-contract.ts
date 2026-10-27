@@ -3,20 +3,9 @@ import test from "node:test";
 import { ethers } from "ethers";
 import type { AdapterRequest, AdapterRequestResult } from "../../../adapter-request-program.js";
 import { RequiredAdapterRequestError } from "../../../adapter-request-failure.js";
-import { ERC4626_INTERFACE, ERC4626_PROBE_ACTOR } from "../abi.js";
-import { erc4626Identity } from "../identity.js";
-import { custodianIdentity } from "../custodian-identity.js";
-import { erc4626Instance } from "../instance.js";
-import { erc4626Routes } from "../routes.js";
-import { erc4626Exact } from "../exact.js";
-import { erc4626Pricing } from "../pricing.js";
-import { erc4626Execution } from "../execution.js";
-import { erc4626RedeemFamilyOwnedAction, erc4626DepositFamilyOwnedAction } from "../action.js";
-import { CUSTODIAN_ABI, CUSTODIAN_IMPLEMENTATION_HASH, CUSTODIAN_IMPLEMENTATION_SLOT,
-  proveCustodianProxy, CUSTODIAN_TOKEN } from "../custodian.js";
-import { custodianRedeemProgram, custodianProgram } from "../custodian-execution.js";
+
 import { CACHED_BYTECODE } from "./custodian-bytecode.js";
-import type { Erc4626Descriptor, Erc4626Identity, Erc4626Route } from "../types.js";
+import type { Erc4626Descriptor, Erc4626Identity, Erc4626Route } from "../../../../generated/declarative-family-types/erc4626.generated.js";
 import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
 import { StrictProductionRuntimeRoot, type StrictProductionRuntimeSession } from "../../../../strict-production-runtime-session.js";
 import { StrictCurrentRuntimeCoordinator } from "../../../../strict-current-runtime-coordinator.js";
@@ -28,8 +17,32 @@ import { executeAdapterFamilyLifecycleBatch } from "../../../adapter-family-runt
 import { capabilityManifestHash, FAMILY_CAPABILITY_NAMES, FamilyCapabilityCatalog } from "../../../family-capability-catalog.js";
 import { definedFamilyPluginContractSummary } from "../../../adapter-family-plugin.js";
 import { plugin } from "../../../production-families/erc4626.production.js";
-import { ERC4626_FAMILY_ID } from "../manifest.js";
+
 import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
+import erc4626Json from "../erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+import { getAddress as familyGetAddress } from "ethers";
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import custodianJson from "../custodian.json";
+import { definitionValues } from "./definition-fixture.js";
+import { definitionProgram } from "./definition-fixture.js";
+
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const ERC4626_PROBE_ACTOR = familyGetAddress(erc4626Json.identity.definition.parameters.constants.actor);
+const erc4626Identity = erc4626Plugin.identity;
+const custodianIdentity = erc4626Plugin.identity.variants.find(v => v.id === custodianJson.id)!;
+const erc4626Instance = erc4626Plugin.instance;
+const erc4626Routes = erc4626Plugin.routes;
+const erc4626Exact = erc4626Plugin.exact;
+const erc4626Pricing = erc4626Plugin.pricing;
+const erc4626Execution = erc4626Plugin.execution;
+const erc4626RedeemFamilyOwnedAction = erc4626Plugin.actionAdapters[1]!;
+const erc4626DepositFamilyOwnedAction = erc4626Plugin.actionAdapters[0]!;
+const CUSTODIAN_ABI = new FamilyInterface(custodianJson.abi.vault);
+const CUSTODIAN_IMPLEMENTATION_HASH = custodianJson.constants.implementationHash;
+const CUSTODIAN_IMPLEMENTATION_SLOT = custodianJson.constants.implementationSlot;
+const CUSTODIAN_TOKEN = new FamilyInterface(custodianJson.abi.token);
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
 
 // Only bytecode/provenance is real saved evidence. Every reply/effect below is
 // synthetic: no RPC/EVM, strict admission or historical acceptance is claimed.
@@ -38,7 +51,7 @@ const implementation = "0x0a2d27a86a2ea07bcc34e457c65aeca7631c0f10";
 const share = "0xcacd6fd266af91b8aed52accc382b4e165586e29";
 const asset = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const executor = "0x1111111111111111111111111111111111111111";
-const proxyAdmin = proveCustodianProxy(CACHED_BYTECODE.proxy).proxyAdmin;
+const proxyAdmin = definitionValues(custodianJson).evaluate({ op: "program", args: ["proxy", {}] }, { code: CACHED_BYTECODE.proxy }).proxyAdmin;
 const source = { number: CACHED_BYTECODE.provenance.blockNumber, hash: CACHED_BYTECODE.provenance.blockHash, generation: 1 };
 const candidate = { candidateKind: "erc4626-vault" as const, vault };
 const word = (n: bigint) => ethers.toBeHex(n, 32);
@@ -121,10 +134,10 @@ function decodedQuote(input = quoteInput()) {
 
 test("cached runtime identities authenticate the saved bytecode; targets are not allowlisted", () => {
   assert.equal(ethers.keccak256(CACHED_BYTECODE.implementation), CUSTODIAN_IMPLEMENTATION_HASH);
-  assert.equal(proveCustodianProxy(CACHED_BYTECODE.proxy).proxyCodeHash, ethers.keccak256(CACHED_BYTECODE.proxy));
+  assert.equal(definitionValues(custodianJson).evaluate({ op: "program", args: ["proxy", {}] }, { code: CACHED_BYTECODE.proxy }).proxyCodeHash, ethers.keccak256(CACHED_BYTECODE.proxy));
   const changedAdmin = CACHED_BYTECODE.proxy.slice(0, 34) + ethers.zeroPadValue(executor, 32).slice(2) + CACHED_BYTECODE.proxy.slice(98);
-  assert.equal(proveCustodianProxy(changedAdmin).proxyAdmin.toLowerCase(), executor);
-  assert.throws(() => proveCustodianProxy("0x61" + CACHED_BYTECODE.proxy.slice(4)), /template/);
+  assert.equal(definitionValues(custodianJson).evaluate({ op: "program", args: ["proxy", {}] }, { code: changedAdmin }).proxyAdmin.toLowerCase(), executor);
+  assert.throws(() => definitionValues(custodianJson).evaluate({ op: "program", args: ["proxy", {}] }, { code: "0x61" + CACHED_BYTECODE.proxy.slice(4) }), /template/);
   for (const target of [vault, "0x2222222222222222222222222222222222222222"]) {
     const { descriptor, route } = setup(target);
     assert.equal(lower(descriptor.share), share); assert.notEqual(lower(descriptor.share), lower(target));
@@ -337,16 +350,31 @@ test("runtime never reads amountIn/Exact/quoted; quoted action executes the same
 for (const behavior of ["partialInput", "excessInput", "noReceipt", "shortReceipt", "falseReturn", "noBurn", "falseApproval", "dirtyAllowance",
   "noMinter", "paused", "frozen", "malformedBool", "missingBool", "wrongShare"]) {
   test(`runtime rejects ${behavior} without borrowing old input/output inventory`, () => {
-    const { descriptor } = setup(), program = ethers.hexlify(custodianRedeemProgram(descriptor, executor).bytes());
+    const { descriptor } = setup(), program = ethers.hexlify(definitionProgram(custodianJson, {
+    descriptor: descriptor, binding: descriptor, executor: executor,
+    direction: "redeem", recipient: executor, minAmountOut: 1n, settlementRequested: false,
+    route: { tokenIn: descriptor.share,
+      tokenOut: descriptor.asset },
+  }).bytes());
     assert.throws(() => run(program, 10n ** 18n, { [behavior]: true }));
   });
 }
 test("runtime enforces capacity/positive output/minimum receipt and rejects incompatible bindings", () => {
-  const { descriptor, route } = setup(), p = ethers.hexlify(custodianRedeemProgram(descriptor, executor).bytes());
+  const { descriptor, route } = setup(), p = ethers.hexlify(definitionProgram(custodianJson, {
+    descriptor: descriptor, binding: descriptor, executor: executor,
+    direction: "redeem", recipient: executor, minAmountOut: 1n, settlementRequested: false,
+    route: { tokenIn: descriptor.share,
+      tokenOut: descriptor.asset },
+  }).bytes());
   assert.throws(() => run(p, 10n ** 18n, { capacity: 10n ** 18n - 1n }));
   assert.throws(() => run(p, 10n ** 18n, { inventory: 999999n }));
   assert.throws(() => run(p, 1n));
-  assert.throws(() => run(ethers.hexlify(custodianRedeemProgram(descriptor, executor, 1000001n).bytes()), 10n ** 18n));
+  assert.throws(() => run(ethers.hexlify(definitionProgram(custodianJson, {
+    descriptor: descriptor, binding: descriptor, executor: executor,
+    direction: "redeem", recipient: executor, minAmountOut: 1000001n, settlementRequested: false,
+    route: { tokenIn: descriptor.share,
+      tokenOut: descriptor.asset },
+  }).bytes()), 10n ** 18n));
   assert.throws(() => erc4626Execution.buildRuntimeLeg!({ descriptor, route, executor, runtimeEvidence: [] }), /source/);
   assert.throws(() => erc4626Execution.buildRuntimeLeg!({ descriptor, route, executor: proxyAdmin, source, runtimeEvidence: [] }), /executor/);
   assert.throws(() => erc4626Execution.buildRuntimeLeg!({ descriptor, route: { ...route, direction: "deposit" }, executor, source, runtimeEvidence: [] }), /direction|binding/);

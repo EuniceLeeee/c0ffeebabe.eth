@@ -1,7 +1,5 @@
-import { ERC4626_PROBE_ACTOR } from
-  "./protocols/erc4626-family/abi.js";
-import { ERC4626_PROBE_ACTOR_EVIDENCE_ID } from
-  "./protocols/erc4626-family/identity.js";
+import { getAddress } from "ethers";
+import erc4626Definition from "./protocols/erc4626-family/erc4626.json";
 import {
   ERC4626_SILO_PROBE_ACTOR,
   ERC4626_SILO_PROBE_ACTOR_EVIDENCE_ID,
@@ -36,7 +34,8 @@ import {
 export const PRODUCTION_STRICT_VERIFIED_ACTORS: Readonly<
   Record<string, string>
 > = Object.freeze({
-  [ERC4626_PROBE_ACTOR_EVIDENCE_ID]: ERC4626_PROBE_ACTOR,
+  [erc4626Definition.identity.definition.parameters.constants.caller.evidenceId]:
+    getAddress(erc4626Definition.identity.definition.parameters.constants.actor),
   [ERC4626_SILO_PROBE_ACTOR_EVIDENCE_ID]: ERC4626_SILO_PROBE_ACTOR,
   [SELF_BURN_NATIVE_PROBE_ACTOR_EVIDENCE_ID]:
     SELF_BURN_NATIVE_PROBE_ACTOR,

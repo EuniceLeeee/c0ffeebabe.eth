@@ -155,23 +155,11 @@ import type {
   Erc4626SiloRedeemDescriptor,
   Erc4626SiloRedeemRoute,
 } from "./venues/protocols/erc4626-silo-redeem-family/types.js";
-import { ERC4626_FAMILY_ID } from
-  "./venues/protocols/erc4626-family/manifest.js";
-import {
-  ERC4626_ERC20_INTERFACE,
-  ERC4626_INTERFACE,
-  ERC4626_PROBE_ACTOR,
-} from "./venues/protocols/erc4626-family/abi.js";
-import { ERC4626_PROBE_ACTOR_EVIDENCE_ID } from
-  "./venues/protocols/erc4626-family/identity.js";
-import { erc4626Exact } from
-  "./venues/protocols/erc4626-family/exact.js";
-import { erc4626Execution } from
-  "./venues/protocols/erc4626-family/execution.js";
+
 import type {
   Erc4626Descriptor,
   Erc4626Route,
-} from "./venues/protocols/erc4626-family/types.js";
+} from "./generated/declarative-family-types/erc4626.generated.js";
 import { ETHERTOKEN_NATIVE_FAMILY_ID } from
   "./venues/protocols/ethertoken-native-redeem-family/manifest.js";
 import {
@@ -371,6 +359,19 @@ import type { UniV4ExactEvidence } from
   "./venues/swaps/univ4-family/types.js";
 import type { ExpectedEffect } from
   "./venues/adapter-family-plugin.js";
+import { plugin as erc4626Plugin } from "./venues/production-families/erc4626.production.js";
+import erc4626Json from "./venues/protocols/erc4626-family/erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+import { getAddress as familyGetAddress } from "ethers";
+
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const ERC4626_ERC20_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.token);
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const ERC4626_PROBE_ACTOR = familyGetAddress(erc4626Json.identity.definition.parameters.constants.actor);
+const ERC4626_PROBE_ACTOR_EVIDENCE_ID = erc4626Json.identity.definition.parameters.constants.caller.evidenceId;
+const erc4626Exact = erc4626Plugin.exact;
+const erc4626Execution = erc4626Plugin.execution;
+
 // Localized capture-harness stage contract (the harness itself is
 // retired; fixture replay keeps the stage envelope for strict tests).
 export const ARCHITECTURE_MIGRATION_STAGES = Object.freeze([
@@ -440,7 +441,6 @@ export function exercisedStage(
     blocker: null,
   });
 }
-
 
 const CATALOG = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 const FAMILY = CATALOG.forFamily(UNIV2_FAMILY_ID);
@@ -6326,7 +6326,7 @@ async function buildErc4626CaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/protocols/erc4626-family/types.js")
+      readonly evidence: import("./generated/declarative-family-types/erc4626.generated.js")
         .Erc4626ExactEvidence;
     }
   >();
@@ -11245,7 +11245,6 @@ async function buildFluidCreditCaseCapture(input: {
     }),
   });
 }
-
 
 /**
  * F8: fixture simulation transport for strict identity attestation tests.

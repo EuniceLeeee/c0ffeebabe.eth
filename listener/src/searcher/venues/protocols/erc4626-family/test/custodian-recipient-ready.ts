@@ -14,7 +14,10 @@ import { createRebuildWiring } from
   "../../../../universe-rebuild-production.js";
 import { rebuildUniverse } from
   "../../../../universe-rebuild-runner.js";
-import { ERC4626_FAMILY_ID as FAMILY } from "../manifest.js";
+
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+
+const FAMILY = erc4626Plugin.manifest.familyId;
 
 /** Called only after the production checkpoint reader authenticates the file. */
 export function readyReuseScope(prior: StartupCheckpointEnvelope | null, block: number, hash: string) {

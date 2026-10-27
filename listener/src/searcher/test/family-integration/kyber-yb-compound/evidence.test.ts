@@ -7,11 +7,15 @@ import { KYSWAP_POOL_INTERFACE as KYBER } from "../../../venues/swaps/kyberswap-
 import { ALGEBRA_POOL_INTERFACE as ALGEBRA } from "../../../venues/swaps/algebra-integral-family/abi.js";
 import { LT_INTERFACE as LT } from "../../../venues/protocols/yieldbasis-lt-family/abi.js";
 import { CTOKEN_INTERFACE as CT } from "../../../venues/protocols/compound-ctoken-family/abi.js";
-import { ERC4626_INTERFACE as VAULT } from "../../../venues/protocols/erc4626-family/abi.js";
+
 import { options, SAMPLES, ERC20, assertHeader, assertPriceInput, productionAmount, splicedProductionAmount, splicedMissingProductionAmount, originalLeg, originalLegs, originalDirections, historicalAmountTrials,
   assertReceipt, observeBalance, assertDeltas, constructionGuard, word, assertOriginAccountCode, matchesBalanceSlotProbe, isLocalBalanceProbeRevert, assertNativeInventory, assertExecutorCode } from "./evidence.js";
 import { blockScanEdgeKey } from "../../../venues/blockscan-state-capability.js";
 import { infiniFiHistoricalBorrowedInput } from "../../../venues/protocols/erc4626-family/test/infinifi-historical-dual.js";
+import erc4626Json from "../../../venues/protocols/erc4626-family/erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+
+const VAULT = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
 
 const actor = "0x1000000000000000000000000000000000000001";
 const asset = "0x1000000000000000000000000000000000000002";

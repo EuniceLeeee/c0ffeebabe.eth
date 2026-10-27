@@ -8,8 +8,11 @@ import { ethers } from "ethers";
 import { UniverseRebuildCheckpointStore, activeReadyMemos } from "../../../../universe-rebuild-checkpoint.js";
 import { createRebuildWiring } from "../../../../universe-rebuild-production.js";
 import { rebuildUniverse } from "../../../../universe-rebuild-runner.js";
-import { ERC4626_FAMILY_ID as FAMILY } from "../manifest.js";
+
 import { sha } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+
+const FAMILY = erc4626Plugin.manifest.familyId;
 
 async function main() {
   const names = ["--from-block", "--to-block", "--block-hash", "--rpc-file", "--out", "--executor", "--owner", "--revm-bin", "--prior-ready"];

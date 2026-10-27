@@ -1,5 +1,7 @@
 import { standardFamily } from "./standard-base.js";
-import type { erc4626Routes as OriginalShared } from "../erc4626-family/routes.js";
-const erc4626Routes = standardFamily.routes as unknown as typeof OriginalShared;
+import type { RouteProjectionSemantics } from "../../adapter-family-plugin.js";
+import type { StakedUsdatDescriptor, StakedUsdatRoute } from "./types.js";
 
-export const stakedUsdatRoutes: typeof erc4626Routes = { ...erc4626Routes };
+export const stakedUsdatRoutes: RouteProjectionSemantics<StakedUsdatDescriptor, StakedUsdatRoute> = {
+  ...standardFamily.routes as unknown as RouteProjectionSemantics<StakedUsdatDescriptor, StakedUsdatRoute>,
+};

@@ -1,19 +1,14 @@
 import type { ExecutionSemantics } from "../../adapter-family-plugin.js";
 import { runtimeExecutor, runtimeLeg } from "../../runtime-execution.js";
-import { standardRuntime } from "./standard-base.js";
-const assertErc4626Invocation = standardRuntime.assertInvocation;
-import { standardRecipientProgram } from "../erc4626-family/execution.js";
-import { standardFamily } from "./standard-base.js";
-import type { erc4626Execution as OriginalExecution } from "../erc4626-family/execution.js";
-const erc4626Execution = standardFamily.execution as unknown as typeof OriginalExecution;
-import type { Erc4626Descriptor, Erc4626Route, Erc4626ExactEvidence } from "../erc4626-family/types.js";
+import { standardFamily, standardRuntime } from "./standard-base.js";
+import type { StakedUsdatDescriptor, StakedUsdatRoute, StakedUsdatExactEvidence } from "./types.js";
 import { STAKED_USDAT_INTERFACE } from "./identity-proof.js";
 
-export const stakedUsdatExecution: ExecutionSemantics<Erc4626Descriptor, Erc4626Route, Erc4626ExactEvidence> = {
-  ...erc4626Execution,
+export const stakedUsdatExecution: ExecutionSemantics<StakedUsdatDescriptor, StakedUsdatRoute, StakedUsdatExactEvidence> = {
+  ...standardFamily.execution as unknown as ExecutionSemantics<StakedUsdatDescriptor, StakedUsdatRoute, StakedUsdatExactEvidence>,
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor, source } = input;
-    assertErc4626Invocation(d, r);
+    standardRuntime.assertInvocation(d, r);
     if (!d.stakedUsdat || input.runtimeEvidence.length) throw new Error("StakedUSDat runtime binding/evidence mismatch");
     if (!source || !Number.isSafeInteger(source.number) || source.number < 0 ||
         !Number.isSafeInteger(source.generation) || source.generation < 0 || !/^0x[0-9a-fA-F]{64}$/.test(source.hash))
@@ -22,7 +17,8 @@ export const stakedUsdatExecution: ExecutionSemantics<Erc4626Descriptor, Erc4626
     const recipient = input.settlement ? runtimeExecutor(input.settlement.recipient, d.vault, d.asset) : executor;
     // This is the shared ERC4626 receipt program: r0 alone supplies input;
     // payer debit and recipient's fresh receipt are independently checked.
-    const program = standardRecipientProgram(d, executor, "deposit", recipient);
+    const program = standardRuntime.executionProgram({ descriptor: d, route: r, executor,
+      source, recipient, minAmountOut: 1n, settlementRequested: true });
     for (const [name, expected] of [["asset", d.asset], ["getStrcOracle", d.stakedUsdat.oracle],
       ["getWithdrawalQueue", d.stakedUsdat.withdrawalQueue]] as const) {
       program.call(d.vault, STAKED_USDAT_INTERFACE.encodeFunctionData(name), { static: true })

@@ -32,13 +32,20 @@ import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integr
 import { assertRecipientEvent, savedExecutionReplay } from "./standard-recipient-observations.js";
 import { createInsufficientFork, restoreSavedEffects } from "./standard-insufficient-evidence.js";
 import { assertHistoricalPriceRowSource, assertHistoricalPriceState } from "./standard-price-state.js";
-import { ERC4626_FAMILY_ID } from "../manifest.js";
+
 import type { FamilyId } from "../../../adapter-family-identifiers.js";
 const ABI=new ethers.Interface(["function previewDeposit(uint256) view returns(uint256)","function previewRedeem(uint256) view returns(uint256)"]);
 const IMPLEMENTATION_SLOT="0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 const BEACON_SLOT="0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50";
-import { ERC4626_INTERFACE as EVENTS } from "../abi.js";
-import type { Erc4626Descriptor as Descriptor, Erc4626Route as Route } from "../types.js";
+
+import type { Erc4626Descriptor as Descriptor, Erc4626Route as Route } from "../../../../generated/declarative-family-types/erc4626.generated.js";
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import erc4626Json from "../erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const EVENTS = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+
 const ROOT=fileURLToPath(new URL("../../../../../../../",import.meta.url));
 const TOKEN=new ethers.Interface(["function balanceOf(address) view returns(uint256)","event Transfer(address indexed from,address indexed to,uint256 value)"]);
 const effects=["return-data","revert-data","token-delta","total-supply-delta","native-delta","logs"] as const;

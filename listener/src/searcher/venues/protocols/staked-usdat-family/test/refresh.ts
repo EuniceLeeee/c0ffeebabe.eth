@@ -14,12 +14,22 @@ import { executeAdapterFamilyLifecycleBatch } from "../../../adapter-family-runt
 import type { FamilyId } from "../../../adapter-family-identifiers.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { UNIV2_PAIR_INTERFACE, UNIV2_TOKEN_INTERFACE } from "../../../swaps/univ2-family/codec.js";
-import { ERC4626_ERC20_INTERFACE, ERC4626_INTERFACE, ERC4626_PROBE_ACTOR } from "../../erc4626-family/abi.js";
-import { ERC4626_FAMILY_ID } from "../../erc4626-family/manifest.js";
-import { INFINIFI_ABI, INFINIFI_GATEWAY } from "../../erc4626-family/infinifi.js";
+
 import { STAKED_USDAT_INTERFACE, STAKED_USDAT_IMPLEMENTATION_SLOT, STAKED_USDAT_PROXY_CODE } from "../identity-proof.js";
 import { STAKED_USDAT_FAMILY_ID } from "../manifest.js";
 import { STAKED_USDAT_IMPLEMENTATION_CODE } from "./implementation-bytecode.js";
+import erc4626Json from "../../erc4626-family/erc4626.json";
+import { Interface as FamilyInterface } from "ethers";
+import { getAddress as familyGetAddress } from "ethers";
+import { plugin as erc4626Plugin } from "../../../production-families/erc4626.production.js";
+import infinifiJson from "../../erc4626-family/infinifi.json";
+
+const ERC4626_ERC20_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.token);
+const ERC4626_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.vault);
+const ERC4626_PROBE_ACTOR = familyGetAddress(erc4626Json.identity.definition.parameters.constants.actor);
+const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
+const INFINIFI_ABI = new FamilyInterface(infinifiJson.abi.vault);
+const INFINIFI_GATEWAY = infinifiJson.constants.gateway;
 
 // Real code identity plus synthetic transport and token effects. This exercises
 // production admission/scheduling/publication, not a new EVM or formula claim.
