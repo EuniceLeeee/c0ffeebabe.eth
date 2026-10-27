@@ -1,0 +1,19 @@
+{
+  "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+  "beforeSha256": "35bbfa1b09757a73e27736a6d9c54753c34b9799b08702589655781b2cff43cc",
+  "afterSha256": "4d7b45e310e56737abba8b9c08ab2dd3a2b02b5737b3b5a0f5ae77de7c78050c",
+  "implementationCommit": "9e7c7cdd6cbbe501d26b0cbc53598db88de1b9c8",
+  "updatedCells": [
+    {
+      "line": 17,
+      "column": 3,
+      "added": "2026-10-27 18:36 UTC+8：**ERC4626 全槽公共管线＋JSON 迁移完成。**标准主 JSON＋Custodian／InfiniFi 子 JSON，生产不再绑定专用 TS；StakedUSDat 保持独立。当前构建、226 项目标测试通过；当前历史标准 N25887370：32 正／84 预期拒绝，InfiniFi N25944594：16 正／32 预期拒绝，报价与实扣实收独立核对。runtime 构造 Exact/RPC=0、无 quoted fallback。输入来自原 TX／控制金额，本次 InfiniFi pendingRewards=0；自然估值、全标准实例迁移认证、机会及性能不由代表样本升级。[本次源码与证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9e7c7cdd6cbbe501d26b0cbc53598db88de1b9c8/docs/research/reports/erc4626-thin-migration-20261027.md)。"
+    },
+    {
+      "line": 19,
+      "column": 3,
+      "added": "2026-10-27 18:36 UTC+8：**Custodian 已迁为子 JSON＋Family 公共管线。**当前 N26017168 Ready 重验及双向 quoted/runtime/direct 合计32正／86预期拒绝，完整扣款与实际到账一致，独立复核通过。保留原TX和借入生产行 amountIn 来源，不升级自然估值、原机会、正式合入门或时效性。[本次迁移及历史证据](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/9e7c7cdd6cbbe501d26b0cbc53598db88de1b9c8/docs/research/reports/erc4626-thin-migration-20261027.md)。"
+    }
+  ],
+  "preservation": "All other lines unchanged; old findings preserved, replaced obsolete timestamp in Custodian progress cell."
+}

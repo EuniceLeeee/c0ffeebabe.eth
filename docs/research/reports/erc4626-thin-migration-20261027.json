@@ -53,7 +53,7 @@
     "listener/src/searcher/generated/family-capability-shadow.generated.json": "4b9039bc3afa616fcc3848212937711defde9cf469678bf83cb272acc5f2e6cf",
     "listener/src/searcher/venues/production-families/erc4626.production.ts": "7074e13b46be61807075c6f25c792280b1414c2ee0f1fb9c75df2693f54298ee"
   },
-  "architectureSha256": "7a56dc48890d878e89d9ac2fa05b7760179239d2855a9952bfdb505daecb44af",
+  "architectureSha256": "12e8b1dfdc84ef9d08498aa979bd2e2ddb73abd3605cb26474f2b07cf4ec300d",
   "localCommitReview": [
     {
       "cmd": [
@@ -449,5 +449,6 @@
     "issues": 0,
     "complete": true,
     "artifactHash": "f6f3b71b92cc1436c0ed7cf57799f207184fba4f20c9cec66215d75a762ef5bb"
-  }
+  },
+  "architectureRevisionNote": "Documentation reorganized into eight public-file/core-code plus JSON chapters; runtime source and acceptance evidence unchanged."
 }

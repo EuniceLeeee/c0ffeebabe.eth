@@ -1,0 +1,22 @@
+{
+  "format": "family-document-source-verification-v1",
+  "implementationCommit": "9e7c7cdd6cbbe501d26b0cbc53598db88de1b9c8",
+  "documentSha256": "12e8b1dfdc84ef9d08498aa979bd2e2ddb73abd3605cb26474f2b07cf4ec300d",
+  "sections": 8,
+  "typescriptExcerpts": 17,
+  "jsonExcerpts": 18,
+  "sourceExcerptVerification": "16 core TS segments token-equivalent after whitespace normalization to actual common source; generated entry also matches committed source.",
+  "parentJsonVerification": "All 18 JSON excerpts recursively matched actual main or child definitions; no invented field/value.",
+  "formatValidation": {
+    "sourceCommit": "9e7c7cdd6cbbe501d26b0cbc53598db88de1b9c8",
+    "path": "/Users/eunice/src/MEV/logs/erc4626-production-json-20261027/thin-docs/architecture-full-flow.md",
+    "sha256": "12e8b1dfdc84ef9d08498aa979bd2e2ddb73abd3605cb26474f2b07cf4ec300d",
+    "steps": 8,
+    "jsonBlocks": 18,
+    "tsBlocks": 17,
+    "coreSnippetsSourceMatched": 16,
+    "generatedEntryMatched": true,
+    "trailingWhitespace": 0,
+    "codeMaxWidthLimit": 105
+  }
+}
