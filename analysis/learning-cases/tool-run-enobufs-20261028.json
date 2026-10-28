@@ -1,6 +1,6 @@
 {
   "learning_case_id": "tooling-tool-run-enobufs-20261028",
-  "status": "open",
+  "status": "applied",
   "strategy_kind": "block-scan",
   "edge_kinds": [],
   "trigger": "bundle_not_included",
@@ -25,7 +25,8 @@
     "issue": "Whole-output spawnSync buffering kills long-running indexed historical tools at the 64 MiB combined stdout/stderr limit and reports the error as exit 127.",
     "evidence": "Independent real subprocess reproduction plus the measured run's 67109518 output bytes crossing its 67108864 cap; no OOM evidence.",
     "codify_target": "Stream raw-byte hashes and bounded-memory redacted output with backpressure; preserve exit and signal status and terminate only the owned child group on cancellation; regression above 64 MiB.",
-    "status": "open"
+    "codify_commit": "8bc3f48a",
+    "status": "codified"
   },
   "replay_gate": {
     "command": "cd analysis && node --import tsx --test src/test/tool-run-output.ts src/test/tool-run-security.ts",
