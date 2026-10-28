@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { LivePricingContinuationStore, liveContinuationEnabled, validateLiveContinuationAnchors, liveContinuationIdentity,
-  liveContinuationFiles, compatibleLiveContinuationIdentity } from "../blockscan-live-continuation.js";
+  liveContinuationFiles, compatibleLiveContinuationIdentity, compatibleLiveContinuationIdentities } from "../blockscan-live-continuation.js";
 import { BlockScanAmountReference } from "../blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveRowAmountReference, exportEffectiveMidReplayState,
   restoreEffectiveMidReplayState } from "../blockscan-effective-mid.js";
@@ -164,6 +164,8 @@ test("reviewed migration binds both complete file inventories, exact changes and
     const change = async (name: string) => writeFile(join(consumer, name),
       (await readFile(join(consumer, name), "utf8")) + "\n// migration fixture\n");
     await change("searcher/blockscan-live-continuation.ts");
+    for (const name of ["bounded-live-session", "submission-fees", "profit-mode"])
+      await change(`shared/${name}.ts`);
     await writeFile(join(directory, "review.txt"), "fixture review evidence");
     const before = liveContinuationFiles(producer);
     const manifest = join(directory, "compatibility.json");
@@ -184,6 +186,30 @@ test("reviewed migration binds both complete file inventories, exact changes and
       review: { ...proof().review, evidenceSha256: sha(thresholdReview) } }));
     assert.equal(compatibleLiveContinuationIdentity(thresholdContext, manifest, consumer),
       liveContinuationIdentity({ ...thresholdContext, spreadBps: 0 }, producer));
+    const earlier = join(directory, "earlier.json");
+    await cp(manifest, earlier);
+    const current = join(directory, "current.json");
+    await writeFile(current, JSON.stringify({ ...proof(), review: { ...proof().review, evidenceSha256: sha(thresholdReview) } }));
+    const setPath = join(directory, "set.json");
+    const refs = await Promise.all([earlier, current].map(async path => ({ path, sha256: sha(await readFile(path)) })));
+    await writeFile(setPath, JSON.stringify({ schema: "reviewed-live-continuation-set-v1", manifests: refs }));
+    assert.deepEqual(compatibleLiveContinuationIdentities(thresholdContext, setPath, consumer), [
+      liveContinuationIdentity({ ...thresholdContext, spreadBps: 0 }, producer),
+      liveContinuationIdentity(thresholdContext, producer),
+    ]);
+    assert.deepEqual(compatibleLiveContinuationIdentities(thresholdContext, earlier, consumer), [
+      liveContinuationIdentity({ ...thresholdContext, spreadBps: 0 }, producer),
+    ], "single-producer manifests remain supported");
+    await writeFile(current, (await readFile(current, "utf8")) + "\n");
+    assert.throws(() => compatibleLiveContinuationIdentities(thresholdContext, setPath, consumer), /proof changed/);
+    await writeFile(setPath, JSON.stringify({ schema: "reviewed-live-continuation-set-v1", manifests: [
+      { path: current, sha256: sha(await readFile(current)) }, { path: earlier, sha256: sha(await readFile(earlier)) },
+    ] }));
+    const nested = join(directory, "nested.json");
+    await writeFile(nested, JSON.stringify({ schema: "reviewed-live-continuation-set-v1", manifests: [
+      { path: setPath, sha256: sha(await readFile(setPath)) },
+    ] }));
+    assert.throws(() => compatibleLiveContinuationIdentities(thresholdContext, nested, consumer), /invalid continuation compatibility manifest/);
     for (const fixedWethInput of [null, undefined, "0", "101"]) {
       assert.throws(() => compatibleLiveContinuationIdentity({ ...thresholdContext, fixedWethInput }, manifest, consumer), /threshold change/);
     }

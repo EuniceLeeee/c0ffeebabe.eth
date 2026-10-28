@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { BlockScanStartupCache, startupCacheNamespace } from "./blockscan-startup-cache.js";
-import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveContinuationIdentity, compatibleLiveContinuationIdentity, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
+import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveContinuationIdentity, compatibleLiveContinuationIdentities, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
 import { createBlockScanActivityTransport } from "./blockscan-activity-transport.js";
 import { startupRevertFilterEnabled } from "./blockscan-startup-filter.js";
 import { writeEffectiveMidProgress } from "./effective-mid-progress-file.js";
@@ -2756,7 +2756,7 @@ async function main(): Promise<void> {
     const identity = liveContinuationIdentity(continuationContext);
     const compatibilityPath = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY;
     const previousIdentity = continuePrices && compatibilityPath
-      ? compatibleLiveContinuationIdentity(continuationContext, compatibilityPath) : undefined;
+      ? compatibleLiveContinuationIdentities(continuationContext, compatibilityPath) : undefined;
     const store = new LivePricingContinuationStore(continuationDirectory, identity, previousIdentity);
     if (!continuePrices) {
       const archived = await store.beginFreshRound();

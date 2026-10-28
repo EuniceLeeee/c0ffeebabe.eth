@@ -123,6 +123,10 @@ export function compatibleLiveContinuationIdentity(context: unknown, manifestPat
     "blockscan-startup-filter"].map(name => `searcher/${name}.ts`));
   eligible.add("searcher/simulator/eth-simulate-v1.ts");
   eligible.add("searcher/simulator/direct-revert-hop.ts");
+  // Submission policy is not persisted execution authority. These files still
+  // require an exact source diff and independent review, like all migrations.
+  for (const name of ["bounded-live-session", "submission-fees", "profit-mode"])
+    eligible.add(`shared/${name}.ts`);
   assert(changes.length && changes.every(change => eligible.has(change.file) && change.afterSha256 !== null),
     "continuation migration changed execution semantics or an unreviewed file");
   assert.deepEqual(changes, proof.changes, "continuation changes differ from reviewed manifest");
@@ -144,14 +148,37 @@ export function compatibleLiveContinuationIdentity(context: unknown, manifestPat
   return liveContinuationIdentity(context, proof.producerSourceRoot);
 }
 
+/** A journal can retain a baseline and deltas from multiple reviewed producers.
+ * Each producer must be checked directly against this consumer, not transitively
+ * trusted via another release. Nested sets and bare identity lists are rejected. */
+export function compatibleLiveContinuationIdentities(context: unknown, manifestPath: string,
+  root = fileURLToPath(new URL("../", import.meta.url))): readonly string[] {
+  const proof = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (proof.schema === "reviewed-live-continuation-v1")
+    return [compatibleLiveContinuationIdentity(context, manifestPath, root)];
+  assert(proof.schema === "reviewed-live-continuation-set-v1" && Array.isArray(proof.manifests) &&
+    proof.manifests.length > 0 && proof.manifests.length <= 16, "invalid continuation compatibility set");
+  return [...new Set<string>(proof.manifests.map((entry: { path: string; sha256: string }) => {
+    assert(typeof entry?.path === "string" && /^[a-f0-9]{64}$/.test(entry.sha256),
+      "invalid continuation compatibility reference");
+    const path = resolve(dirname(manifestPath), entry.path);
+    assert(sha(readFileSync(path)) === entry.sha256, "continuation compatibility proof changed");
+    return compatibleLiveContinuationIdentity(context, path, root);
+  }))];
+}
+
 /** One immutable baseline, then hash-chained, atomic delta commits. There is
  * deliberately no periodic full-table write or full-table fallback. */
 export class LivePricingContinuationStore {
   private pointer: JournalPointer | null = null;
   private source: EffectiveMidSnapshot["source"] | null = null;
+  private readonly acceptedIdentities: ReadonlySet<string>;
   constructor(private readonly directory: string, readonly identity: string,
-    private readonly compatibleIdentity?: string) {
+    compatibleIdentity?: string | readonly string[]) {
     assert(isAbsolute(directory) && /^[a-f0-9]{64}$/.test(identity), "invalid live continuation location");
+    const previous = typeof compatibleIdentity === "string" ? [compatibleIdentity] : compatibleIdentity ?? [];
+    assert(previous.every(value => /^[a-f0-9]{64}$/.test(value)), "invalid compatible continuation identity");
+    this.acceptedIdentities = new Set([identity, ...previous]);
   }
   private async privatePath(path: string, directory: boolean) {
     const stat = await lstat(path);
@@ -205,7 +232,7 @@ export class LivePricingContinuationStore {
       assert(current.version === 2, "invalid continuation pointer version");
       pointer = current.pointer;
       if (!pointer) return null; // Explicit fresh round, even if an old v1 file remains.
-      assert(pointer.version === 2 && pointer.identity === this.identity, "live continuation is incompatible");
+      assert(pointer.version === 2 && this.acceptedIdentities.has(pointer.identity), "live continuation is incompatible");
     } else {
       if (!await this.exists("latest.bin")) return null;
       const old = await this.decode("latest.bin");
@@ -225,7 +252,7 @@ export class LivePricingContinuationStore {
       data = { ...seed, pricing: baseline.pricing };
     } else data = legacy ?? (await this.decode(pointer.baseline.file, pointer.baseline.digest)).value;
     assert(data.version === 1 && data.identity === pointer.baseline.identity &&
-      (data.identity === this.identity || data.identity === this.compatibleIdentity),
+      this.acceptedIdentities.has(data.identity),
       "live continuation is incompatible; use fresh-prices explicitly");
     assert(data.pricing.pricing.effectiveMids?.complete && data.startup.version === 1 && data.simRejects?.version === 1,
       "live continuation is incomplete");
@@ -236,7 +263,8 @@ export class LivePricingContinuationStore {
     while (head) {
       assert(Number.isSafeInteger(head.sequence) && head.sequence > 0, "invalid continuation sequence");
       const record = (await this.decode(head.file, head.digest)).value;
-      assert(record.version === 2 && record.identity === this.identity && record.sequence === head.sequence &&
+      assert(record.version === 2 && this.acceptedIdentities.has(record.identity) && record.sequence === head.sequence &&
+        (chain.length !== 0 || record.identity === pointer.identity) &&
         record.baseline === sha(JSON.stringify(pointer.baseline)) &&
         (record.previous === null ? head.sequence === 1 : record.previous.sequence === head.sequence - 1),
       "broken continuation chain");
@@ -309,7 +337,7 @@ export class LivePricingContinuationStore {
       baseline: sha(JSON.stringify(pointer.baseline)), previous: pointer.head, delta }));
     const digest = sha(payload), file = `delta-${sequence}-${digest}.bin`;
     await this.atomic(file, payload);
-    await this.commit({ ...pointer, head: { file, digest, sequence } });
+    await this.commit({ ...pointer, identity: this.identity, head: { file, digest, sequence } });
     this.source = delta.source;
     return payload.length;
   }

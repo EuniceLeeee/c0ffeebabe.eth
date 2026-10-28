@@ -194,6 +194,48 @@ test("disk failure retains the last commit and never falls back to a full-table 
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
+test("reviewed v2 producers resume one journal without rewriting baseline or old deltas", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "continuation-multi-producer-"));
+  try {
+    const a = "a".repeat(64), b = "b".repeat(64), c = "c".repeat(64);
+    const first = await build(10), initial = new LivePricingContinuationStore(dir, a);
+    await initial.write(baseline(first, a));
+    const second = await build(11, first), prior = new LivePricingContinuationStore(dir, b, a);
+    await prior.read();
+    await prior.append({ version: 2, previous: first.source, source: second.source,
+      effective: exportEffectiveMidReplayDelta(second, first), ...aux(),
+      simRejects: { reset: false, routes: ["route-old"], pools: ["pool-3"] } });
+    const immutable = new Map(await Promise.all((await readdir(dir)).filter(f => f !== "current.bin")
+      .map(async file => [file, await readFile(join(dir, file))] as const)));
+    await assert.rejects(new LivePricingContinuationStore(dir, c, a).read(), /incompatible/);
+    await assert.rejects(new LivePricingContinuationStore(dir, c, b).read(), /incompatible/);
+    const next = new LivePricingContinuationStore(dir, c, [a, b]);
+    const restored = (await next.read())!;
+    assert.equal(restored.identity, a, "do not relabel the original baseline");
+    assert.deepEqual(restored.pricing.pricing.effectiveMids!.rows, second.rows);
+    assert.deepEqual(restored.simRejects.pools, ["pool-3"]);
+    const third = await build(12, second);
+    await next.append({ version: 2, previous: second.source, source: third.source,
+      effective: exportEffectiveMidReplayDelta(third, second), ...aux() });
+    const resumed = (await new LivePricingContinuationStore(dir, c, [a, b]).read())!;
+    assert.equal(resumed.identity, a);
+    assert.deepEqual(resumed.pricing.pricing.effectiveMids!.rows, third.rows);
+    assert.deepEqual(resumed.simRejects.routes, ["route-old"]);
+    await assert.rejects(new LivePricingContinuationStore(dir, c, a).read(), /broken continuation chain/);
+    for (const [file, bytes] of immutable) assert.deepEqual(await readFile(join(dir, file)), bytes);
+    const pointerBytes = await readFile(join(dir, "current.bin"));
+    const pointer = deserialize(pointerBytes.subarray(65));
+    assert.equal(pointer.pointer.identity, c);
+    assert.equal(pointer.pointer.baseline.identity, a);
+    pointer.pointer.identity = b;
+    const payload = serialize(pointer);
+    await writeFile(join(dir, "current.bin"), Buffer.concat([
+      Buffer.from(createHash("sha256").update(payload).digest("hex") + "\n"), payload,
+    ]));
+    await assert.rejects(new LivePricingContinuationStore(dir, c, [a, b]).read(), /broken continuation chain/);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
 test("a missing committed delta is rejected, not silently skipped", async () => {
   const dir = await mkdtemp(join(tmpdir(), "continuation-missing-"));
   try {
