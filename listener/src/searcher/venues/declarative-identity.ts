@@ -1,5 +1,5 @@
 import { compileDeclarativeValues, validateDeclarativeValue, validateDeclarativeStatements } from "./declarative-values.js";
-import type { FamilyCandidate, VerifiedIdentity, IdentityVariant } from "./adapter-family-plugin.js";
+import type { FamilyCandidate, VerifiedIdentity, IdentityVariant, IdentityVariantKind } from "./adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult } from "./adapter-request-program.js";
 import { RequiredAdapterRequestError } from "./adapter-request-failure.js";
 
@@ -29,9 +29,12 @@ function freeze<T>(x: T): T { if (x && typeof x === "object") { Object.values(x)
 
 export function compileDeclarativeIdentity<C extends FamilyCandidate, I extends VerifiedIdentity>(
   raw: DeclarativeIdentityDocument,
-  profile: { id: string; familyId: I["familyId"]; lineageId: I["lineageId"]; parameters?: Readonly<Record<string, unknown>> },
+  profile: { id: string; familyId: I["familyId"]; lineageId: I["lineageId"]; parameters?: Readonly<Record<string, unknown>>; kind?: IdentityVariantKind },
   math: Readonly<Record<string, (value: bigint) => bigint>> = {},
+  models: Readonly<Record<string, (value: any) => any>> = {},
 ): IdentityVariant<C, I, unknown> {
+  if (profile.kind !== undefined && !["factory-child", "registry-member", "standalone-contract", "singleton-subinstance", "custom"].includes(profile.kind))
+    throw new Error("unknown declarative identity kind");
   validateDeclarativeValue(raw);
   if (Object.keys(raw).some(key => !["version", "inputs", "scope", "abi", "constants", "discovery", "expressions", "programs", "identity"].includes(key)))
     throw new Error("unknown definition field");
@@ -80,7 +83,7 @@ export function compileDeclarativeIdentity<C extends FamilyCandidate, I extends 
   }
   if (raw.version !== 1) throw new Error("unsupported declarative identity version");
   const doc = freeze(JSON.parse(JSON.stringify(raw))) as DeclarativeIdentityDocument;
-  const values = compileDeclarativeValues(doc, math);
+  const values = compileDeclarativeValues(doc, math, models);
   const evaluate = values.evaluate, run = values.run;
   const environment = (step: Value, results: readonly AdapterRequestResult[] = []) => ({ candidate: step.candidate,
     evidence: step.evidence, results, missing: undefined, profile: { id: profile.id, familyId: profile.familyId, lineageId: profile.lineageId, ...profile.parameters }, constants: doc.constants });
@@ -90,7 +93,7 @@ export function compileDeclarativeIdentity<C extends FamilyCandidate, I extends 
     return doc.identity.stages[id];
   };
   return {
-    id: profile.id, kind: "standalone-contract", lineageId: profile.lineageId, applies: () => true,
+    id: profile.id, kind: profile.kind ?? "standalone-contract", lineageId: profile.lineageId, applies: () => true,
     requirements: step => stage(step).requirements,
     buildRequests: step => {
       const selected = stage(step);

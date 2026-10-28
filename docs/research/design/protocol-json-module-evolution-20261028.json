@@ -6217,5 +6217,94 @@
       "validationLimit": "No on-chain calls, execution tests, live process changes, or code changes. Source facts do not establish new behavior acceptance or performance pass."
     }
   ],
-  "changes": "Documentation only; public module mechanism and fact verdict code remain to be implemented; no live/RPC/Ready work."
+  "changes": "Documentation only; public module mechanism and fact verdict code remain to be implemented; no live/RPC/Ready work.",
+  "agreedDesignRevision": {
+    "date": "2026-10-28",
+    "scope": "shared Family TypeScript framework only; protocol JSON migration and protocol acceptance owned by separate window",
+    "math": "independent statically registered TS math entry; JSON binds model/version/inputs/results, no protocol formulas",
+    "steps": "ordered calls/number/dependencies defined in JSON; common TS interprets with existing request scheduling and executor",
+    "acceptance": "reuse existing protocol fact tests and trusted evidence checks; change module/coverage status reporting only",
+    "emptyModules": "absent or {} is undefined; preserve old supported scope; no autofilling of protocol semantics; runtime only an example"
+  },
+  "implementationReceipt": {
+    "date": "2026-10-28",
+    "base": "ea06b7fdf90bd61db04662a620241631d7ebfd19",
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "scope": "Shared Family TS framework only; protocol definitions and protocol acceptance remain delegated to migration window",
+    "sourcePins": {
+      "listener/src/searcher/build-declarative-production.ts": "4fd8ecb9b41d56ebc932bedde200e0a24be2cbdcb5f26035815b370a6c79ef61",
+      "listener/src/searcher/test/declarative-callback.test.ts": "8b4170df07bb76717c7d05e746dccccd94653b0b80b7361c99e191ffb559161c",
+      "listener/src/searcher/test/declarative-discovery-mapping.test.ts": "77a2b9005d3590e0d13e93e8ba243f90324483319de621c83c3f61e533514fbb",
+      "listener/src/searcher/test/declarative-module-pipeline.test.ts": "e5b48b5936a6dcb7a8cc848e3d546b070648c1de86221c186cc566eb20724fdf",
+      "listener/src/searcher/test/declarative-modules.test.ts": "ae5485ef9b65772720ecf60b17973b06298463b2541ab0312e826dc1f7639081",
+      "listener/src/searcher/test/declarative-multistep-execution.test.ts": "b1a2d88482c746c6dec53b51ddf959d5ed97f6ab862ac864ab4e201bc67158a4",
+      "listener/src/searcher/test/declarative-quote-proof.test.ts": "1bf41bf19f0341417ae084dc4ecd83b9298b2c337023d2742b95383ea20f5ed8",
+      "listener/src/searcher/test/declarative-read-flow.test.ts": "a6da37b47b245c0ed332e541e04b70928cc43895372adde256f11417e531c7ba",
+      "listener/src/searcher/test/declarative-runtime-math.test.ts": "0fff5032989521f066f03ce890e41f389edcd10a7aec0d470bb13055dd08e09e",
+      "listener/src/searcher/test/declarative-trial-state.test.ts": "b91b74a858e4ba9ec591a8edd7c3c0c8d344c5dae66253a756c2ac2c5a6eb1de",
+      "listener/src/searcher/venues/declarative-call-codec.ts": "913c060132344e2f7849866cc7f5b9d4af8daf986da5bf0a5266ff3e90426975",
+      "listener/src/searcher/venues/declarative-callback.ts": "9159d0e0321a4c0993ef5f18edb3570b48155aaf3e364a74d21c0ca038605acc",
+      "listener/src/searcher/venues/declarative-discovery.ts": "6cf00b681517731e1359fec201c5d90b2260997e222e5ff7bcdb81b990b93b99",
+      "listener/src/searcher/venues/declarative-execution.ts": "8cc0fbbda4f97f63bbb1d3497c13affbb9ab887aeeba161bb4fa3dc9ea469f49",
+      "listener/src/searcher/venues/declarative-identity.ts": "1b2bbeb88261e1a3270a4ae36b54332ff930fa061516629076bdf871df466de9",
+      "listener/src/searcher/venues/declarative-math-models.ts": "4f9193fea574d28b9409a1ed3b1ec9ee29b3ae72a281b58272431c81cf5290f3",
+      "listener/src/searcher/venues/declarative-math.ts": "bbb2413a08fe4d380489422d30f87256755addcc0da591b0f0d1afbccdfb1213",
+      "listener/src/searcher/venues/declarative-modules.ts": "0b8f4e7461b56dcc4af72bfab0e7c13e8b27245ff3994f01a0f23562d4868944",
+      "listener/src/searcher/venues/declarative-protocol-modules.ts": "591de1cbc8bef776aab6b5a5512993e2fab84a93f04b04897aa03911af01b9d7",
+      "listener/src/searcher/venues/declarative-protocol.ts": "38520f29fa763b0d7272050400a4238c439b6128cd5b02e9448b742cd47923cf",
+      "listener/src/searcher/venues/declarative-quote-proof.ts": "b733c6519371ce771adce71bb2126fd93224d5667b0b490642fdfb4681d95d3b",
+      "listener/src/searcher/venues/declarative-read-flow.ts": "d84936623cbaa0185aacbe68eebc9e521a5f3d5e37c3c1aa4fa4ed2c74585ec1",
+      "listener/src/searcher/venues/declarative-runtime-math-models.ts": "ed92f14c123903b0877747610532a91e2dc160280f0a943d94011bcb3934e968",
+      "listener/src/searcher/venues/declarative-runtime-math.ts": "ec938c6165b8b5ebf6572d420a629be7d8a58071192022dced5785287558d7bd",
+      "listener/src/searcher/venues/declarative-trial-state.ts": "19cc25717f8d44908568cd0905942478d93d7f444fb34201bbe03d8ea4bc8597",
+      "listener/src/searcher/venues/declarative-values.ts": "24353b694dd89bac05fc85b503ec186a3338ede6afd1f44511ef334803df9e85",
+      "listener/src/searcher/venues/tx-evidence-nomination.ts": "cf19c5e1f588951b4566548df6e43f805c1db823de869acfc65938aa4ac31acd"
+    },
+    "modules": [
+      "math",
+      "executionMath",
+      "quoteFlow",
+      "pricingFlow",
+      "trialState"
+    ],
+    "coverageStates": [
+      "undefined",
+      "blocked",
+      "compiled"
+    ],
+    "actualWorkspaceTests": {
+      "passed": 208,
+      "failed": 0,
+      "skipped": 0,
+      "strictTypecheck": "pass",
+      "productionBuild": "pass",
+      "generatedCatalogCheck": "pass"
+    },
+    "commitArtifactTests": {
+      "passed": 26,
+      "failed": 0,
+      "productionBuild": "pass",
+      "generatedCatalogCheck": "pass"
+    },
+    "sourceBoundary": {
+      "protocolJsonChanged": false,
+      "liveStarted": false,
+      "protocolAcceptanceRun": false,
+      "performanceRun": false
+    },
+    "limits": [
+      "No protocol JSON migration or real protocol execution acceptance.",
+      "Retained reverse-discovery remains explicitly unsupported.",
+      "Local trial-state currently accepts plain records/arrays, not Map-containing old protocol state.",
+      "Runtime ABI leaves limited to uint256/bytes32; other types require static values.",
+      "Native deferred callback, debt-sized continuation input and external native-output recipient are unsupported.",
+      "Effect quote proof validates ERC20 deltas only.",
+      "Math entry registries contain no new concrete protocol models."
+    ],
+    "evidenceRoot": "logs/protocol-json-framework-20261028",
+    "actualGeneratedPins": {
+      "listener/src/searcher/generated/family-capability-shadow.generated.json": "6b4df87ac1848f32418bc75f514c3c0672eb912b3000719f24cc6cdfdc7d53a8",
+      "listener/src/searcher/generated/production-family-entries.generated.ts": "32b474946f0466235c4ee6301823cf7ad29fb2cb7072334b3785e1f739728974"
+    }
+  }
 }

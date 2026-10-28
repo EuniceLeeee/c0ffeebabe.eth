@@ -18,12 +18,12 @@ export interface DeclarativeValuesDocument {
   readonly expressions: Record<string, Value>;
   readonly programs?: Record<string, readonly Value[]>;
 }
-const ops = new Set(["mul", "max", "program", "number", "lower", "unique", "decodeAll", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "requestFailure"]);
+const ops = new Set(["mul", "max", "program", "number", "lower", "unique", "decodeAll", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "model", "requestFailure"]);
 const arity: Record<string, [number, number]> = Object.fromEntries([
   ["mul", [2, 2]], ["max", [2, 2]],
   ...["number", "lower", "unique", "successful", "word", "bool", "objectEntries", "objectFromEntries"].map(k => [k, [1, 1]]), ["program", [2, 2]], ["pow", [2, 2]], ["decodeAll", [3, 3]],
   ...["uint", "address", "hash", "codeHash", "defined", "not", "length", "string", "sortId", "result", "returned", "code", "shape", "wordSurface", "source", "effects", "tokenDelta", "supplyDelta", "event", "requestFailure"].map(k => [k, [1, 1]]),
-  ...["get", "sameAddress", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "omit", "at", "join", "assertSource", "maskHash", "matches", "expression", "math"].map(k => [k, [2, 2]]),
+  ...["get", "sameAddress", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "omit", "at", "join", "assertSource", "maskHash", "matches", "expression", "math", "model"].map(k => [k, [2, 2]]),
   ...["if", "map", "flatMap", "filter", "some", "every", "encode", "bytes"].map(k => [k, [3, 3]]),
   ["decode", [4, 4]], ["addressWord", [1, 2]],
   ...["and", "or", "merge", "concat"].map(k => [k, [1, 10000]]),
@@ -66,6 +66,7 @@ export function validateDeclarativeStatements(items: readonly Value[]): void {
 export function compileDeclarativeValues(
   raw: DeclarativeValuesDocument,
   math: Readonly<Record<string, (value: bigint) => bigint>> = {},
+  models: Readonly<Record<string, (value: any) => any>> = {},
 ) {
   validateDeclarativeValue(raw);
   const doc = freeze(JSON.parse(JSON.stringify(raw))) as DeclarativeValuesDocument;
@@ -77,6 +78,8 @@ export function compileDeclarativeValues(
   visit(doc, node => {
     if (!node || typeof node !== "object") return;
     if (["map", "flatMap", "filter", "some", "every"].includes(node.op)) binding(node.args[1]);
+    if (node.op === "model" && (typeof node.args[0] !== "string" || !Object.hasOwn(models, node.args[0])))
+      throw new Error("unknown math model");
     if (node.op === "expression" || node.op === "program") {
       if (!node.args[1] || typeof node.args[1] !== "object" || Array.isArray(node.args[1])) throw new Error("declaration arguments must be named");
       Object.keys(node.args[1]).forEach(binding);
@@ -200,7 +203,8 @@ export function compileDeclarativeValues(
       case "maskHash": { let code = e(0); for (const [offset, size] of e(1)) code = code.slice(0, 2 + offset * 2) + "0".repeat(size * 2) + code.slice(2 + (offset + size) * 2); return keccak256(code); }
       case "matches": return new RegExp(e(1)).test(e(0));
       case "expression": { const name = e(0); if (!(name in doc.expressions)) throw new Error(`unknown named expression ${name}`); return evaluateInternal(doc.expressions[name], { ...env, ...e(1) }); }
-      case "math": { const name = e(0); const amount = e(1); if (typeof amount !== "bigint" || !math[name]) throw new Error("unknown scalar math function"); const result = math[name](amount); if (typeof result !== "bigint") throw new Error("scalar math output"); return result; }
+      case "math": { const name = e(0); const amount = e(1); if (typeof amount !== "bigint" || !Object.hasOwn(math, name)) throw new Error("unknown scalar math function"); const result = math[name](amount); if (typeof result !== "bigint") throw new Error("scalar math output"); return result; }
+      case "model": { const name = e(0); if (typeof name !== "string" || !Object.hasOwn(models, name)) throw new Error("unknown math model"); return models[name](e(1)); }
       case "requestFailure": { const r = e(0); if (!r || r.ok) throw new Error("expected request failure"); throw new RequiredAdapterRequestError(r); }
       default: throw new Error(`unknown operation ${x.op}`);
     }

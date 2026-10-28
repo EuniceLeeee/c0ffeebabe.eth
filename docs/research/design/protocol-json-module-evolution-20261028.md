@@ -2,19 +2,19 @@
 
 ## 1. 范围与当前事实
 
-本轮是源码盘点和验收契约设计，**尚未实施下文的新模块机制、修改生产验收判定或迁移其他 Protocol**。不把设计完成写成适配通过。
+本文前半部分记录源码盘点与目标契约，末节区分公共框架实现和协议迁移。**本窗口负责公共 Family TS 框架与合同回归；具体协议 JSON 适配及协议验收由另一窗口负责。** 不把设计、框架构建或 fixture 通过写成协议适配通过。
 
-云端工作区 `/opt/mev-cloud/family-runtime-20261007`，HEAD `6295825b23cf53688d112162579f07235ca7a2aa`；仍有未提交修改。809 个相关源文件以 SHA-256 与只读审查副本逐一匹配。当前生产 loader 枚举 33 个 Protocol，issues=0；代码默认 22 开、11 关，不推断当前 live 参数。Swap/Credit 不在本轮改造范围。
+初次盘点基线：云端工作区 `/opt/mev-cloud/family-runtime-20261007`，HEAD `6295825b23cf53688d112162579f07235ca7a2aa` 加当时未提交修改；809 个相关源文件与只读审查副本逐一匹配。该次 loader 枚举 33 个 Protocol，issues=0，代码默认 22 开、11 关。下列盘点保留此历史来源，不推断当前 live 参数。本轮公共框架修改基于设计提交 `ea06b7fdf90bd61db04662a620241631d7ebfd19` 与云端实际未提交基线。Swap/Credit 不在改造范围。
 
 ERC4626 是 1 个 Family：主 `erc4626.json` 与 Custodian/InfiniFi 两个子 JSON。它已由公共 Family TS 编译生产注册、发现、身份、实例/方向、价格/报价和执行。其他 32 个 Protocol 的迁移需求见第 6 节；本表是架构清单，不替代原 IMPL 进度表。
 
 用户的兼容性要求：TS 新增模块后可识别 JSON 缺失/空块，统一格式中可展示对应空块；**不自动补协议实现、不推断支持、不专门新增 runtime 功能**。runtime 只是扩展机制的例子。
 
-## 2. 现有公共能力与真实限制
+## 2. 迁移前公共能力与限制（历史盘点）
 
 已有可复用部分包括 `declarative-discovery.ts`、`declarative-identity.ts` 的多阶段 request/decode/decide、`declarative-values.ts` 的受限表达式、变体归一化、类型生成、ABI 读写、授权和余额/供给断言。不要再造逐协议流程或把每族 TS 移进公共目录冒充共用。
 
-实际限制：
+盘点时的限制；本次公共框架已补部分见第 8 节，不能将这里的旧状态视为当前实现：
 
 - `build-declarative-production.ts:102` 和 `declarative-protocol.ts:77` 固定字段集合；当前既不能任意添加新模块，也不能直接将必要块清空。
 - `declarative-discovery.ts:24` 主要提取 call target，候选键是单地址；反向发现为 explicit unsupported。
@@ -28,19 +28,45 @@ ERC4626 是 1 个 Family：主 `erc4626.json` 与 Custodian/InfiniFi 两个子 J
 
 | 公共能力 | 必要扩展 | JSON 保留什么 |
 |---|---|---|
-| 模块目录/兼容读取 | 每模块注册 key、schema、版本、适用条件、依赖、编译器和证据要求；统一生成格式、类型与缺项视图 | 该 Family 的定义；未定义块为 `{}` |
+| 模块目录/兼容读取 | 每模块注册 key、字段契约、版本、依赖和编译器；输出统一空块与缺项视图；事实要求继续由原验收负责 | 该 Family 的定义；未定义块为 `{}` |
 | 发现与反向关系 | calldata/log 字段映射、参数谓词、复合键、factory/registry/proxy 关系核对 | selector/event、字段、关系调用、约束 |
 | 身份与证明流程 | 复用现有阶段机；扩充 clone/存储/相互引用证明和 effect proof 模板 | 分阶段读取、解码、判定、每实例证明要求 |
 | 状态读取/报价/刷新 | 多轮依赖、call/log 触碰、view/effect-simulation/local-math 三类来源、必要 trial-state 与 prefix projection | 依赖、函数、轮次引用、刷新条件、纯数学模型输入 |
 | 调用与资产效果 | 多步动作、动态 tuple/array ABI、调用时金额计算、篮子、多资产 effects、全额/预算内扣款 | ABI、参数、动作依赖、资产和金额约束 |
 | 结算 | native 实收/包装、指定收款方、callback 鉴权/债务/先后顺序、返回码/拒绝语义 | 协议参数、callback/recipient 声明、错误码含义 |
-| 事实验收 | 按已承诺范围匹配可信 producer 事实证据，区别格式/局部/实际行为结论；复用现有验收入口 | 不把自填 `passed:true` 或证据路径存在当成成功 |
+| 完成状态汇总 | 复用原有事实验收及其可信 producer、校验器；仅将既有结果与声明能力/空模块按范围对齐 | 不新增“事实验收框架”；不把自填 `passed:true` 或路径存在当成成功 |
 
-复杂数学仍可保留纯数学模块，JSON 引用版本化模型及输入。普通 ABI、授权、调用顺序、金额传递和结果断言不能藏进所谓数学函数。公共 Family 层调用已有 issuer/executor/调度，不建立另一套 live 管线。
+**本地数学是独立 TS 数学模块的入口，不是 JSON 中的公式。** 简单比例和复杂不变量都通过已注册、版本化的数学入口执行；JSON 声明模型、输入来源和结果用途，公共 Family TS 负责读状态、校验输入、调用模块、校验结果。普通 ABI、授权、调用顺序、回调和结算不能藏进数学函数。已有声明中的通用值绑定与整数边界操作保留兼容，不借此继续把协议公式塞进 JSON。
+
+**调用几步，由 JSON 决定。** JSON 列出有序步骤、调用目标/函数、参数、保存结果以及下一步引用；公共 TS 遍历、校验并编译步骤，既不写死“两步/三步”，也不按 Family ID 分支。一次读取可声明同轮多个独立请求，有前后结果依赖时才分轮；复用当前生产请求调度。执行动作同样由步骤定义，共用授权清理、实扣/实收和旧库存保护不能逐族重写。VM/请求预算仍是通用上限，不是协议步骤数。
+
+以下是多步读取的**契约示意**，具体字段以末节实际 API 为准；不是已适配协议或执行证据：
+
+```json
+{
+  "steps": [
+    {
+      "id": "relationship",
+      "function": "asset()",
+      "target": "$instance",
+      "save": "asset"
+    },
+    {
+      "id": "balance",
+      "function": "balanceOf(address)",
+      "target": "$steps.relationship.asset",
+      "args": ["$executor"],
+      "save": "balance"
+    }
+  ]
+}
+```
+
+公共 Family 层调用已有 issuer/executor/调度，不建立另一套 live 管线。
 
 ## 4. 新模块为空的兼容机制
 
-公共模块目录是唯一能力目录。**新增 TS 实现时登记一次**；系统根据目录生成统一 schema/类型/覆盖视图，不扫描函数名字猜协议语义，也不是实例地址 allowlist。
+公共模块目录是唯一能力目录。**新增 TS 实现时登记一次**；系统根据目录生成字段契约与覆盖视图；TS 类型继续由公共模块定义，不扫描函数名字猜协议语义，也不是实例地址 allowlist。
 
 处理顺序：读取旧格式 → 按已支持版本做确定性归一化 → 逐模块校验 → 编译已定义能力 → 输出能力状态。默认只读，不改原 JSON。明确要求输出新格式时，才生成保留旧内容的新表示；新增模块可以是空块，不填 selector、公式或动作。
 
@@ -77,6 +103,8 @@ ERC4626 是 1 个 Family：主 `erc4626.json` 与 Custodian/InfiniFi 两个子 J
 
 按适用情况核查：自然发现及反向身份、指定金额报价、同状态实际扣款到账、已有 quoted/交易内实收接口、recipient/callback、返回码、容量/舍入、零扣款/旧库存/少到账/原生币/失败回滚等。并非每族都必须支持 callback、native 或队列；不适用要有事实依据。没有实际实例的变体不强造样本；这不等于它被执行验收通过。
 
+**原来的真实执行测试已经是事实验收，不另造测试框架，也不替换既有测试。** 调整的是完成状态汇总：旧支持范围继续用原验收；新增空模块显示未定义，不抹掉旧范围的有效结论；填好以后再跑对应既有验收。
+
 现有事实入口复用：各 Family 历史 dual/recipient harness、生产 strict，以及 `family-settlement-review.ts` 的 source closure 与 behavior evidence 校验。结构检查、合成 fixture 和 source-pinned 历史事实分别展示；某些 `behaviorValid` 仅来自视图/公式，不能作为余额执行证明。保留已有 gate 的可信 producer 边界，不另收一份可任意手填成功的报告来替代事实。
 
 统一结果按 `family × 实际变体 × 方向 × 能力` 给 `通过 / 失败 / 未验证 / 有依据不适用`。新增空模块显示“未定义”，不追溯否定已有 scope 的有效证据；若该模块已是承诺范围的必需项，则该范围尚未完成。通过结论绑定源码、状态、金额、执行环境和证据有效性。
@@ -97,7 +125,7 @@ ERC4626 是 1 个 Family：主 `erc4626.json` 与 Custodian/InfiniFi 两个子 J
 | `protocol:erc4626-silo-redeem` | 开 | calldata/log 参数发现；结果驱动的多轮读取；份额、底层、payout 资产分别建模。 |
 | `protocol:erc4626` | 开 | 已有完整 JSON 样本；先补公共模块目录、兼容读取和能力/事实状态，不新增专用 TS。 |
 | `protocol:ethertoken-native-redeem` | 开 | native 实收与 ERC20 burn 分别计量；接已有公共 ETH/WETH 资产边界。 |
-| `protocol:goldx` | 开 | 命名纯数学及不支持原因；声明式整数算式，不从单位报价推导执行事实。 |
+| `protocol:goldx` | 开 | 命名 TS 数学入口及不支持原因；JSON 只绑定输入/结果，不从单位报价推导执行事实。 |
 | `protocol:mellow-queue` | 开 | 复合事件/调用候选；动态 bytes32[] ABI；队列权限/延迟到账边界。 |
 | `protocol:metronome-hgusdc` | 开 | 前轮结果驱动后轮报价；多步合约/代币转款；中间余额和总实收约束。 |
 | `protocol:metronome-synth` | 开 | 同时支持 pool log 与 OracleForwarder call 的依赖触碰；indexed/fallback 行为一致。 |
@@ -133,8 +161,96 @@ ERC4626 是 1 个 Family：主 `erc4626.json` 与 Custodian/InfiniFi 两个子 J
 - 旧范围移除、方向漏测、source/状态/金额错配、证据过期或仅 fixture 的“成功”不得作为实际行为通过。
 - quote/view、本地数学与 simulation 事实分类正确；实际扣款、实收和旧库存保护继续由独立断言验证。
 
-这些是待落地的公共判定测试要求。本轮只执行了源码指纹与 production loader 清单读取，没有改写判定代码，也没有重新运行 33 族实际执行验收。
+这些是模块兼容、公共流程和完成状态汇总的回归要求；不另造协议事实 producer。协议数学/执行/strict 等已有测试继续复用，33 族实际执行验收由协议迁移窗口负责。
 
-## 8. 实施顺序
+## 8. 本轮公共框架交付与协议迁移接口
 
-先实现统一模块目录、旧格式兼容读取、空块/能力报告和条件必填校验；再把现有可信事实入口接成共同覆盖判定。用原 ERC4626 三个 JSON 验证无语义变化后，从简单标量转换族逐个迁移；多轮读取、多资产、native/callback 等通用能力由真实族需求驱动增加。每族保留旧能力，按事实验收再切换生产入口。关闭项保留关闭状态。
+仅实现 Family 公共解释器及必要模块，不修改 33 个 Protocol 的业务定义、开关、Ready 或 live。ERC4626 主/子三个 JSON 原样用于兼容回归。新增能力没有协议事实验收时，保持“公共框架已实现 / 协议未迁移、未验收”。
+
+### 调用顺序与公共文件
+
+| 顺序 | 公共文件 / 核心入口 | 消费的定义与职责 |
+|---|---|---|
+| 1 | `build-declarative-production.ts` → `createDeclarativeProtocolRuntime()` | 继续生成共同生产入口；校验根定义和子定义的 `modules`。不生成新的逐族 TS 行为。 |
+| 2 | `declarative-modules.ts` → `createDeclarativeModuleCatalog().read()`；`declarative-protocol-modules.ts` → `readProtocolModules()` | 按版本验证、解析依赖、编译可用块；`moduleViews` 展示统一 `{}`，`moduleCoverage` 展示 `undefined / blocked / compiled`。这些状态不是适配通过。 |
+| 3 | `declarative-discovery.ts` → `compileDeclarativeDiscovery()` | 旧版保持原义；新版定义 call/log 参数、目标/发出方、谓词、复合候选键。一次观察允许多个独立候选。 |
+| 4 | `declarative-identity.ts` → `compileDeclarativeIdentity()` | 根/子变体均可直接使用已有通用阶段机；读取、关系和行为证明由 JSON 定义，不要求 conversion 专用 workflow。 |
+| 5 | `declarative-read-flow.ts` → `compileDeclarativeReadFlow()`；`declarative-trial-state.ts`；`declarative-protocol.ts` 的 pricing/exact | `quoteFlow / pricingFlow` 按 JSON `steps` 生成初始与依赖轮次请求；来源、轮次、请求 ID 必须一致。调用现有 issuer 与调度，不自行发送 RPC。`trialState` 复用原状态提交器，读取当前状态并声明变化。 |
+| 6 | `declarative-math.ts`；`declarative-runtime-math.ts` | `math / executionMath` 仅绑定已静态注册的 TS 模型及版本。前者作本地纯计算，后者将 TS 算术模型展开为现有 VM 运算；JSON 不承载协议公式。 |
+| 7 | `declarative-execution.ts`、`declarative-call-codec.ts`、`declarative-callback.ts` | `execution.version:2` 定义有序调用/数学步骤、结果引用、授权、资产 effects 和结算。quoted/runtime 共用编译器；旧 v1 定义保留。 |
+| 8 | `declarative-quote-proof.ts` 与既有验收入口 | chain quote 声明必须指向实际请求：ABI 输入等于请求金额、返回等于结果；effect simulation 核查扣款/到账。继续使用既有协议测试，框架不生成自证“通过”。 |
+
+### 新模块的空块与继承
+
+```json
+{
+  "modules": {
+    "math": {},
+    "executionMath": {},
+    "quoteFlow": {},
+    "pricingFlow": {},
+    "trialState": {}
+  }
+}
+```
+
+这是公共读取器生成的统一展示，不会改写原 JSON。根块由子变体继承；子变体显式 `{}` 表示未定义该块。非法非空根块不能被子块遮住。依赖尚未定义时标为 `blocked`，调用该能力明确失败；独立的原有能力继续可用。
+
+目录扩展只需公共 TS 登记新模块，旧 JSON 自动看见新的空块；不自动生成选择器、数学参数或执行动作。旧核心身份、安全、路由字段仍按原版本的必需契约校验。
+
+### 多步读取的实际格式
+
+下面是字段形式示例，不是已验收协议。`requirements / requests` 使用现有 AdapterRequest 合同；`data` 可由现有 ABI 值绑定生成。
+
+```json
+{
+  "version": 1,
+  "steps": [
+    {
+      "id": "relationship",
+      "requirements": { "transports": ["eth-call"] },
+      "requests": "$relationshipRequests",
+      "result": "$relationshipResult"
+    },
+    {
+      "id": "quote",
+      "requirements": { "transports": ["eth-call"] },
+      "requests": "$dependentQuoteRequests",
+      "result": "$dependentQuoteResult"
+    }
+  ],
+  "result": "$steps.quote"
+}
+```
+
+每步 `result` 或 `decode` 二选一；后一步用 `$steps.relationship` 引用前步结果。公共层遍历步骤，拒绝前向引用、缺轮次、重复/丢失请求、来源错配。多步不是固定两步；128 步是解释器结构保护，实际请求和 VM 预算继续由原管线约束。
+
+`quoteFlow` 在上述结构之外要求 `sourceKind`。`view` / `effect-simulation` 还要求 `chainQuote` 指定证据步骤/请求；view 再声明 ABI 签名、输入金额和输出金额的路径。`local-math` 不能声明 `chainQuote` 或取得 `chainAmountQuote` 标记；它需要有效 `trialState`，或明确的 `localStateUnsupportedReason`。
+
+`trialState` 用 `reads` 声明有序状态引用、初始读数与依赖，用 `model / input` 调用纯数学入口，用 `amountOut / stateChanges / stateEffects` 映射结果。首次缺状态才走原 readflow；后续已有 trial cell 必须优先于新 source baseline。绑定或依赖失效直接抛错；不会清空状态继续报价。需要链上 guard 的本地命中返回 `not-applicable`，继续原带 guard 的读取路径。状态提交仍由原 issuer 负责。
+
+### 执行与结算边界
+
+多步调用可以引用前一步保存值；固定形状的 tuple/array 可包含运行时金额。运行时 ABI 叶子目前只支持 `uint256 / bytes32`，其他 ABI 类型可用静态值；窄整数、动态长度或字节填充不能凭声明伪装已支持。
+
+公共编译器强制正输入、真实扣款/实收、旧库存和原生币余额边界。最大预算必须明确声明，不能用零扣款冒充成功。native 原始资产由方向声明，包装继续交给共用中央资产边界；当前 native 输出只接受执行器收款。
+
+声明的 deferred callback 使用共用调用方/回调数据鉴权、债务上限、实际输出及支付检查。只支持已明确编码的回调形状；不自动猜测任意协议回调，不据接口存在宣称协议通过。
+
+### 仍由迁移窗口负责
+
+- 为具体协议写 JSON、注册纯 TS 数学模型及版本；两个数学注册清单目前不含新的协议业务模型。
+- 迁移 retained reverse-discovery 需先核对既有公共能力；当前声明式发现的该接口仍明确 unsupported，identity 阶段的链上关系证明不能冒称已实现反向发现。
+- 队列、非即时资产、多资产路线及原生币 effect proof 等具体语义须逐项核对；目前 effect quote proof 只对 ERC20 扣款/到账给出支持，不泛化为 native 证明。
+- 新 trial-state 数学边界目前仅接受普通对象/数组；含 `Map` 的旧状态会明确拒绝，尚无通用表示转换器，因此不能把 xWin 的现有组合回归写成 xWin 已完成 JSON 迁移。
+- 保留每族原版本/方向/变体和已有有效证据，补新增能力对应的原测试；没有实际实例的变体按既定口径记录，不强造通过。
+- 完成状态仍由既有验收报告维护。本轮不引入新的事实 producer，不把 `compiled` 写成“适配已通过”，不自动跑 live。
+
+### 验证记录
+
+- 云端实际 dirty 基线：公共解释器、ERC4626 原 JSON 接线、生成边界、native/最大输入/结算和 trial-state 相关回归 **208/208**；新增目标严格 TypeScript 检查、`npm run build:live`、生成清单及其一致性检查通过。
+- 仅含本次修改的提交内容校验副本：生产构建、生成清单检查及模块/生产接线/trial-state 回归 **26/26** 通过。
+- 独立复核已关闭回调最低输出遗漏、运行时 ABI 类型误报、native 收款能力误报、交易 origin 透传和缺依赖导致旧能力启动失败等问题。旧 v1 字节码兼容回归通过。
+- 测试前后未更改任何具体协议 JSON；未运行新 live、协议链上验收或性能测试。结果只证明公共框架与现有接线合同，不能推导 33 个 Protocol 已迁移。
+
+本地证据目录 `logs/protocol-json-framework-20261028/`；云端同名目录保留全部初次失败、修复后成功、原生成清单和日志。历史盘点的旧 `sourcePins` 原样保留；本次框架指纹与验证范围另记在同名 JSON 的 `implementationReceipt`。当前含其他未提交代码的云端清单与提交内容清单分别按各自真实源码生成，不手改旧 hash 过门。

@@ -21,6 +21,11 @@ export function createTxEvidenceNomination(input: {
   readonly callPatterns?: readonly CallPattern[];
   readonly logPatterns?: readonly LogPattern[];
   readonly traceTransaction?: boolean;
+  /** Composite declarations may nominate every relevant subject in one TX.
+   * Default remains the original first-observation behavior. Filtering is
+   * observation decoding only; strict identity still owns admission. */
+  readonly allMatches?: boolean;
+  readonly acceptObservation?: (observation: UnifiedObservation) => boolean;
 }): {
   nominate(input: {
     readonly nominations: readonly CaptureNominationInput[];
@@ -28,19 +33,46 @@ export function createTxEvidenceNomination(input: {
     readonly provider: CaptureNominationProvider;
   }): Promise<readonly UnifiedObservation[]>;
 } {
+  if (input.acceptObservation && input.allMatches !== true)
+    throw new Error("nomination observation filtering requires allMatches");
   const labels = new Set(input.opaqueLabels.map((label) => label.toLowerCase()));
   const calls = input.callPatterns ?? [];
   const logs = input.logPatterns ?? [];
   return {
     async nominate({ nominations, source, provider }) {
       const results: UnifiedObservation[] = [];
+      const readTransactions = new Set<string>();
       for (const nomination of nominations) {
         if (!matchesOpaqueLabel(nomination.opaque, labels)) continue;
         const txHash = opaqueTxHash(nomination.opaque);
         if (txHash === null) continue;
+        if (input.allMatches && readTransactions.has(txHash.toLowerCase())) continue;
+        if (input.allMatches) readTransactions.add(txHash.toLowerCase());
         try {
           const receipt = await provider.getTransactionReceipt(txHash);
           if (receipt === null) continue;
+          if (input.allMatches) {
+            const accept = (observation: UnifiedObservation) => {
+              if (!input.acceptObservation || input.acceptObservation(observation)) results.push(observation);
+            };
+            const topics = new Set(logs.map(pattern => pattern.topic.toLowerCase()));
+            for (const log of receipt.logs) {
+              if (!topics.has(log.topics[0]?.toLowerCase() ?? "")) continue;
+              accept(Object.freeze({ kind: "log" as const, source,
+                address: ethers.getAddress(log.address).toLowerCase(),
+                topics: Object.freeze(log.topics.map(topic => topic.toLowerCase())), data: log.data.toLowerCase(),
+                transactionHash: txHash.toLowerCase() }));
+            }
+            if (input.traceTransaction !== false && provider.traceTransaction && calls.length) {
+              const trace = await provider.traceTransaction(txHash);
+              for (const call of matchAllCalls(calls, trace)) {
+                accept(Object.freeze({ kind: "call" as const, source, target: call.target.toLowerCase(),
+                  ...(call.sender === null ? {} : { sender: call.sender.toLowerCase() }),
+                  data: call.data.toLowerCase(), transactionHash: txHash.toLowerCase() }));
+              }
+            }
+            continue;
+          }
           const logObservation = await matchLogs(logs, receipt.logs, source);
           if (logObservation !== null) {
             results.push(logObservation);
@@ -176,4 +208,24 @@ export function matchCalls(
     }
   }
   return null;
+}
+
+/** The same call-pattern predicate as matchCalls, preserving trace order while
+ * retaining all subjects. Used only by explicit all-observation declarations. */
+function matchAllCalls(
+  patterns: readonly CallPattern[], raw: unknown,
+): Array<{ readonly target: string; readonly sender: string | null; readonly data: string }> {
+  const found: Array<{ target: string; sender: string | null; data: string }> = [];
+  const walk = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    const frame = value as { to?: unknown; from?: unknown; input?: unknown; calls?: unknown };
+    if (typeof frame.to === "string" && ethers.isAddress(frame.to) &&
+        typeof frame.input === "string" && ethers.isHexString(frame.input) && frame.input.length >= 10 &&
+        patterns.some(pattern => pattern.selector.toLowerCase() === (frame.input as string).slice(0, 10).toLowerCase())) {
+      found.push({ target: ethers.getAddress(frame.to), sender: typeof frame.from === "string" && ethers.isAddress(frame.from)
+        ? ethers.getAddress(frame.from) : null, data: frame.input });
+    }
+    if (Array.isArray(frame.calls)) frame.calls.forEach(walk);
+  };
+  walk(raw); return found;
 }

@@ -3,6 +3,7 @@ import { basename, dirname, relative, resolve, sep } from "node:path";
 import { FAMILY_CAPABILITY_APPLICABILITY, type FamilyDomain } from "./venues/adapter-family-plugin.js";
 import { productionFamilySourceDirectory } from "./venues/production-families/tracked-sources.js";
 import { renderDeclarativeFamilyTypes, validateDeclarativeTypeMetadata } from "./venues/declarative-types.js";
+import { protocolModuleCatalog, readProtocolModules } from "./venues/declarative-protocol-modules.js";
 
 const MARKER = "// Generated from Family JSON by build-declarative-production.ts. Do not edit.";
 const CONSTRUCTORS = { swap: "defineSwapFamily", protocol: "defineProtocolFamily", funding: "defineFundingFamily", credit: "defineCreditFamily" } as const;
@@ -65,6 +66,9 @@ function dataOnly(value: unknown): void {
 /** Validate the authored format here; the shared compiler alone expands and
  * interprets its semantics. Ordinary evidence fields named binding are data. */
 function variantDeclaration(child: Record<string, any>): void {
+  // A child can depend on a root module; validate its own fields here and
+  // resolve inherited capabilities in the common production compiler.
+  if (Object.hasOwn(child, "modules")) protocolModuleCatalog().read(child.modules);
   if (!Object.hasOwn(child, "admission")) {
     object(child.identity, "variant identity"); // Existing expanded v2 declarations.
     return;
@@ -101,7 +105,8 @@ function renderProtocolEntry(input: {
   dataOnly(doc);
   const required = ["version", "scope", "production", "manifest", "discovery", "identity", "instance", "routes",
     "pricing", "protocol", "standard", "actionAdapters", "variantFiles"];
-  keys(doc, [...required, ...(Object.hasOwn(doc, "types") ? ["types"] : [])], "declarative protocol");
+  keys(doc, [...required, ...(Object.hasOwn(doc, "types") ? ["types"] : []), ...(Object.hasOwn(doc, "modules") ? ["modules"] : [])], "declarative protocol");
+  readProtocolModules(doc.modules, doc.standard.modules);
   if (Object.hasOwn(doc, "types")) {
     validateDeclarativeTypeMetadata(doc.types);
     const contracts = object(doc.types.contracts, "protocol type contracts");
