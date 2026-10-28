@@ -92,6 +92,44 @@ test("top-K matches exhaustive ranking, K=1 matches old best pair, stable ties/o
   }
 });
 
+test("seed pruning retains exact values and ordered top-K, including ties and one dominant row", () => {
+  for (const mode of ["varied", "ties", "dominant"] as const) {
+    const { edges, mids } = fixture(160, false, 29);
+    for (const [i, key] of [...mids.keys()].entries()) {
+      const q = mids.get(key)!;
+      if (mode === "ties") mids.set(key, { ...q, quoteAmountIn: 100n, quoteAmountOut: 101n });
+      if (mode === "dominant" && i === 0) mids.set(key, { ...q, quoteAmountOut: q.quoteAmountOut * 1000n });
+    }
+    for (const limit of [1, 2, 7, 50, 200]) for (const allowRepeatedPools of [true, false]) {
+      const view = buildBlockScanEthView(edges, mids, limit, allowRepeatedPools);
+      const expected = oracle(view, limit).map(s => ({ token: s.token, buy: s.buy, sell: s.sell, num: s.num, den: s.den }))
+        .sort((a, b) => cmp(b, a) || a.token.localeCompare(b.token));
+      assert.deepEqual(view.signals, expected, `${mode}/${limit}/${allowRepeatedPools}`);
+    }
+  }
+});
+
+test("pool exclusions must not prune rows by the unconstrained buy ordering", () => {
+  const token = address(700);
+  const specs = [
+    ["x", weth, token, 1n, 1n], ["y", weth, token, 2n, 1n], ["z", weth, token, 3n, 1n],
+    ["x", token, weth, 1n, 100n], ["w", token, weth, 1n, 2n],
+  ] as const;
+  const edges: TokenEdge[] = specs.map(([instanceKey, tokenIn, tokenOut], i) => ({
+    instanceKey, executionVariantKey: `seed-${i}`, adapterId: `test-${i}`, target: address(900),
+    tokenIn, tokenOut, slotKind: "swap", ...deriveEdgeTaxonomy("swap"),
+  }));
+  const mids = new Map<string, ResolvedBlockScanQuote>(edges.map((edge, i) => [blockScanEdgeKey(edge), {
+    kind: "test", pool: edge.target, edges: [edge], mid: Number(specs[i]![4]) / Number(specs[i]![3]),
+    feeBps: 0, quoteAmountIn: specs[i]![3], quoteAmountOut: specs[i]![4], depthProxy: 1e20,
+  }]));
+  const view = buildBlockScanEthView(edges, mids, 2, false);
+  const pairs = view.signals.filter(s => s.token === token);
+  assert.deepEqual(pairs.map(s => s.buy), [blockScanEdgeKey(edges[1]!), blockScanEdgeKey(edges[2]!)]);
+  assert.deepEqual(pairs.map(s => [s.num, s.den]), [[100n, 2n], [100n, 3n]]);
+  assert.deepEqual(identities(view.signals), identities(oracle(view, 2)));
+});
+
 test("counts tokens separately from signal pairs; no same-pool or zero-spread signal", () => {
   const {edges, mids} = fixture(36);
   const view = buildBlockScanEthView(edges, mids, 20), stats = ethViewStatistics(view, 0);
@@ -257,4 +295,104 @@ test("large many-pool input returns only top 20 pairs per token", () => {
   const {edges, mids} = fixture(4000);
   const view = buildBlockScanEthView(edges, mids, 20);
   assert.equal(view.quotes.length, 4000); assert.equal(view.signals.length, 40);
+});
+
+test("cross-publication view equals a fresh build through updates, removal, reorg and configuration changes", () => {
+  const inputs = fixture(64);
+  // Include multi-hop references: an unchanged quote can acquire a new value
+  // because a DIFFERENT pair changed its best path to WETH.
+  const branch = fixture(20, false, 37, address(701));
+  inputs.edges.push(...branch.edges.map((edge, i) => ({ ...edge,
+    adapterId: `branch-${i}`, tokenIn: edge.tokenIn === weth ? usdc : edge.tokenIn,
+    tokenOut: edge.tokenOut === weth ? usdc : edge.tokenOut })));
+  for (let i = 0; i < branch.edges.length; i++) {
+    const edge = inputs.edges[64 + i]!, mid = [...branch.mids.values()][i]!;
+    inputs.mids.set(blockScanEdgeKey(edge), { ...mid, edges: [edge] });
+  }
+  const base = publication(inputs);
+  let rows = new Map(base.effectiveMids!.rows), random = 7;
+  const keys = [...rows.keys()];
+  for (let round = 0; round < 80; round++) {
+    random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
+    const key = keys[random % keys.length]!, original = base.effectiveMids!.rows.get(key)!;
+    rows = new Map(rows);
+    if (round % 11 === 0) rows.delete(key);
+    else if (round % 7 === 0) rows.set(key, { ...original, status: "quote-failed", amountOut: null, effectiveMid: null });
+    else rows.set(key, { ...original, amountOut: original.amountOut! + BigInt(random % 100) });
+    const source = { number: 1 + round % 9, generation: round + 2, hash: `0x${String(round).padStart(64, "0")}` };
+    const current = { ...base, graph: { ...base.graph, edges: inputs.edges.map(edge => ({ ...edge })) },
+      sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
+      effectiveMids: { ...base.effectiveMids!, source, rows } };
+    for (const [cap, repeats] of [[20, true], [1, false], [20, true]] as const) {
+      const actual = effectiveEthPricing(current, cap, repeats);
+      assert.deepEqual(actual.view, buildBlockScanEthView(inputs.edges, effectiveEnumerationMids(current), cap, repeats));
+    }
+  }
+  // The same array may be mutable in a diagnostic; removals/reorders are not
+  // inferred from its identity, and a retained old result is not overwritten.
+  const old = effectiveEthPricing(base), saved = structuredClone(old.view);
+  inputs.edges.reverse();
+  inputs.edges.pop();
+  const changed = { ...base, effectiveMids: { ...base.effectiveMids!, rows: new Map(
+    inputs.edges.map(edge => [blockScanEdgeKey(edge), base.effectiveMids!.rows.get(blockScanEdgeKey(edge))!]),
+  ) } };
+  assert.deepEqual(effectiveEthPricing(changed).view, buildBlockScanEthView(inputs.edges, effectiveEnumerationMids(changed)));
+  assert.deepEqual(old.view, saved);
+});
+
+test("unchanged offers are reused but changed upstream marks invalidate dependent offers", () => {
+  const inputs = fixture(8), base = publication(inputs);
+  const first = effectiveEthPricing(base);
+  const next = { ...base, effectiveMids: { ...base.effectiveMids!, rows: new Map(base.effectiveMids!.rows) } };
+  const second = effectiveEthPricing(next);
+  assert(second.view.quotes.every((quote, i) => quote === first.view.quotes[i]));
+  assert(second.view.signals.every((signal, i) => signal === first.view.signals[i]));
+  assert([...second.mids].every(([key, mid]) => mid === first.mids.get(key)));
+  const [key, old] = [...next.effectiveMids.rows][1]!; // USDC -> WETH
+  next.effectiveMids.rows.set(key, { ...old, amountOut: old.amountOut! * 100n });
+  const changed = effectiveEthPricing({ ...next });
+  assert.deepEqual(changed.view, buildBlockScanEthView(inputs.edges, effectiveEnumerationMids(next)));
+  assert.notDeepEqual(changed.view.referenceEthPerRaw, first.view.referenceEthPerRaw);
+  assert.notEqual(changed.view.quotes[0], first.view.quotes[0], "clean WETH -> USDC edge has a changed reference value");
+});
+
+test("copied production topology reuses unchanged offers without retaining removed prices or old authority", () => {
+  const inputs = fixture(40), base = publication(inputs);
+  const first = effectiveEthPricing(base, 7, false), saved = structuredClone(first.view);
+  const source = { number: 2, hash: `0x${"cd".repeat(32)}`, generation: 2 };
+  const edges = inputs.edges.map(edge => ({ ...edge }));
+  const next = { ...base, graph: { ...base.graph, edges }, sourceBlock: source.number,
+    sourceBlockHash: source.hash, generation: source.generation,
+    effectiveMids: { ...base.effectiveMids!, source, rows: new Map(base.effectiveMids!.rows) } };
+  const second = effectiveEthPricing(next, 7, false);
+  assert.notEqual(second, first);
+  assert(second.view.quotes.every((quote, i) => quote === first.view.quotes[i]));
+  assert(second.view.signals.length > 0);
+  assert(second.view.signals.every((signal, i) => signal === first.view.signals[i]));
+  assert.deepEqual(second.view, buildBlockScanEthView(edges, effectiveEnumerationMids(next), 7, false));
+  const removed = blockScanEdgeKey(edges[0]!);
+  const rows = new Map(next.effectiveMids.rows);
+  rows.set(removed, { ...rows.get(removed)!, status: "quote-failed", amountOut: null, effectiveMid: null });
+  const reduced = { ...next, graph: { ...next.graph, edges: [...edges].reverse() },
+    effectiveMids: { ...next.effectiveMids, rows } };
+  const third = effectiveEthPricing(reduced, 7, false);
+  assert(!third.view.quotes.some(quote => quote.id === removed));
+  assert(!third.view.signals.some(signal => signal.buy === removed || signal.sell === removed));
+  assert.deepEqual(third.view, buildBlockScanEthView(reduced.graph.edges, effectiveEnumerationMids(reduced), 7, false));
+  effectiveEthPricing(publication(fixture(16, false, 3, address(970))), 7, false);
+  assert.deepEqual(effectiveEthPricing({ ...next }, 7, false).view, second.view,
+    "an unrelated topology can replace the private work slot without contaminating either result");
+  assert.throws(() => effectiveEthPricing({ ...next, sourceBlock: 3 }, 7, false), /mismatched source/);
+  assert.deepEqual(first.view, saved);
+});
+
+test("projection reuse still validates source, changed amounts, mutable rows and edge identity", () => {
+  const base = publication(fixture(4)), first = effectiveEnumerationMids(base);
+  const [key, row] = [...base.effectiveMids!.rows][0]!;
+  Object.assign(row, { amountOut: row.amountOut! + 1n });
+  assert.notEqual(effectiveEnumerationMids(base).get(key), first.get(key));
+  assert.equal(effectiveEnumerationMids(base).get(key)!.quoteAmountOut, row.amountOut);
+  Object.assign(row, { instanceKey: "wrong" });
+  assert.throws(() => effectiveEnumerationMids(base), /invalid effective enumeration row/);
+  assert.throws(() => effectiveEnumerationMids({ ...base, sourceBlock: 2 }), /mismatched source/);
 });

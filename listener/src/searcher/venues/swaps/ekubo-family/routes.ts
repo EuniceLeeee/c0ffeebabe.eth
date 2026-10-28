@@ -11,6 +11,10 @@ import { EKUBO_ACTION_ID, EKUBO_FAMILY_ID, EKUBO_LINEAGE } from "./manifest.js";
 import type { EkuboDescriptor, EkuboRoute } from "./types.js";
 
 const key = (poolId: string, isToken1: boolean) => `${EKUBO_FAMILY_ID}:${poolId}:${Number(isToken1)}`;
+const executionAssets = (descriptor: EkuboDescriptor, isToken1: boolean) => Object.freeze({
+  input: descriptor.poolKey.token0 === ethers.ZeroAddress && !isToken1 ? "native" as const : "erc20" as const,
+  output: descriptor.poolKey.token0 === ethers.ZeroAddress && isToken1 ? "native" as const : "erc20" as const,
+});
 function assertBehavior(descriptor: EkuboDescriptor): void {
   const extension = ekuboPoolExtension(descriptor.poolKey.config);
   if ((extension !== ethers.ZeroAddress && descriptor.extensionCodeHash !== EKUBO_SUPPORTED_TWAMM_HASH) ||
@@ -26,6 +30,7 @@ export function assertRoute(descriptor: EkuboDescriptor, route: EkuboRoute): voi
       descriptor.poolId !== ekuboPoolId(poolKey) || descriptor.instanceKey !== descriptor.poolId ||
       route.familyId !== descriptor.familyId || route.lineageId !== descriptor.lineageId || route.instanceKey !== descriptor.instanceKey ||
       route.poolId !== descriptor.poolId || typeof route.isToken1 !== "boolean" ||
+      hashCanonical(route.executionAssets ?? null) !== hashCanonical(executionAssets(descriptor, route.isToken1)) ||
       ekuboDirection(route.tokenIn, route.tokenOut, poolKey) !== route.isToken1 ||
       route.bindingRef.bindingKey !== descriptor.poolId || route.bindingRef.fingerprint !== hashCanonical(staticBinding(descriptor)) ||
       route.routeKey !== key(descriptor.poolId, route.isToken1) || route.taxonomy.slotKind !== "swap") throw new Error("ekubo route does not match descriptor");
@@ -39,6 +44,7 @@ export const ekuboRoutes = {
       familyId: descriptor.familyId, lineageId: descriptor.lineageId, instanceKey: descriptor.instanceKey,
       routeKey: routeKey(key(descriptor.poolId, isToken1)), poolId: descriptor.poolId, isToken1,
       tokenIn: ekuboGraphToken(isToken1 ? poolKey.token1 : poolKey.token0), tokenOut: ekuboGraphToken(isToken1 ? poolKey.token0 : poolKey.token1),
+      executionAssets: executionAssets(descriptor, isToken1),
       taxonomy: { slotKind: "swap" as const }, bindingRef: { bindingKey: descriptor.poolId, fingerprint },
       runtimeRequirements: descriptor.runtimeRequirements,
     })));

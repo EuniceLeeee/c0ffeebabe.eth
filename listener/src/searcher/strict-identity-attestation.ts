@@ -223,6 +223,8 @@ export async function attestPoolIdentitiesStrict<
    * The plugin never decides this order.
    */
   readonly channelOrder?: "reverse-binding-first" | "nominate-first";
+  /** Explicit binding for callers that already own one Family candidate. */
+  readonly onlyFamilyId?: FamilyId;
 }): Promise<{
   readonly accepted: readonly StrictAttestedPool<Pool>[];
   readonly rejected: readonly StrictRejectedPool<Pool>[];
@@ -285,6 +287,16 @@ export async function attestPoolIdentitiesStrict<
   const processPool = async (index: number): Promise<void> => {
     const pool = input.pools[index];
     const address = ethers.getAddress(pool.address);
+    const adapterFamilyId = poolAdapterFamily(input.catalog, pool.adapter);
+    const onlyFamilyId = input.onlyFamilyId ?? adapterFamilyId;
+    if (input.onlyFamilyId !== undefined && adapterFamilyId !== undefined && input.onlyFamilyId !== adapterFamilyId) {
+      rejected[index] = { ...pool, adapter: pool.adapter ?? "", reason: "candidate_family_adapter_mismatch" };
+      return;
+    }
+    // Reuse the existing nomination skip-set; this narrows capability work,
+    // and does not grant admission to the skipped Families.
+    const excludedFamilies = onlyFamilyId === undefined ? undefined : new Set(input.catalog.listAll()
+      .map(family => family.plugin.manifest.familyId).filter(id => id !== onlyFamilyId));
     try {
       // Universal fact check (no protocol semantics): an address with no
       // deployed code cannot carry an on-chain identity observation.
@@ -318,6 +330,7 @@ export async function attestPoolIdentitiesStrict<
           source: input.source,
           nominations,
           provider: nominationProvider,
+          onlyFamilyId,
         });
         if (observations.length === 0) {
           observations = await executeCatalogCaptureNominations({
@@ -325,6 +338,7 @@ export async function attestPoolIdentitiesStrict<
             source: input.source,
             nominations,
             provider: nominationProvider,
+            alreadyAdmitted: excludedFamilies,
           });
         }
       } else {
@@ -333,6 +347,7 @@ export async function attestPoolIdentitiesStrict<
           source: input.source,
           nominations,
           provider: nominationProvider,
+          alreadyAdmitted: excludedFamilies,
         });
       }
       let observation: UnifiedObservation | undefined = observations[0];
@@ -816,33 +831,28 @@ function entryOpaque(pool: { readonly address: string; readonly adapter?: string
   return opaque;
 }
 
+function poolAdapterFamily(catalog: FamilyCapabilityCatalog, adapter?: string): FamilyId | undefined {
+  if (adapter === undefined) return undefined;
+  try { return catalog.ownerOfPoolAdapter(adapter); }
+  catch {
+    try { return catalog.ownerOfAction(adapter); }
+    catch { return undefined; }
+  }
+}
+
 function matchFor(
   input: {
     readonly catalog: FamilyCapabilityCatalog;
+    readonly onlyFamilyId?: FamilyId;
   },
   pool: { readonly address: string; readonly adapter?: string },
   matches: readonly { readonly familyId: FamilyId; readonly patternId: string }[],
 ): { readonly familyId: FamilyId; readonly patternId: string } | null {
-  if (pool.adapter !== undefined) {
-    // Prefer the family that owns the pool-adapter label (plugin-declared
-    // manifest field; catalog-projected, never a central label table),
-    // then the action-owner hint, then the first catalog match.
-    try {
-      const familyId = input.catalog.ownerOfPoolAdapter(pool.adapter);
-      const match = matches.find((candidate) => candidate.familyId === familyId);
-      if (match !== undefined) return match;
-    } catch {
-      // fall through to action-owner hint
-    }
-    try {
-      const familyId = input.catalog.ownerOfAction(pool.adapter);
-      const match = matches.find((candidate) => candidate.familyId === familyId);
-      if (match !== undefined) return match;
-    } catch {
-      // fall through to first match
-    }
-  }
-  return matches[0] ?? null;
+  const familyId = input.onlyFamilyId ?? poolAdapterFamily(input.catalog, pool.adapter);
+  // A known candidate may fail its own identity; it cannot become a different
+  // Family merely because that Family returned the first observation.
+  return familyId === undefined ? matches[0] ?? null
+    : matches.find(candidate => candidate.familyId === familyId) ?? null;
 }
 
 

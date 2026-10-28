@@ -8,6 +8,7 @@ export const XWIN_ABI = new Interface([
   "function baseToken() view returns(address)", "function xWinSwap() view returns(address)",
   "function priceMaster() view returns(address)", "function lockingAddress() view returns(address)",
   "function getTargetNamesAddress() view returns(address[])",
+  "function paused() view returns(bool)",
   "function deposit(uint256,uint32) returns(uint256)", "function withdraw(uint256,uint32) returns(uint256)",
 ]);
 export const XWIN_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";

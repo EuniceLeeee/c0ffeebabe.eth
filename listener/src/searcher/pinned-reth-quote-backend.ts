@@ -5,13 +5,15 @@ import {
   fsyncSync,
   lstatSync,
   openSync,
-  readFileSync,
+  readSync,
   statSync,
   truncateSync,
   writeSync,
 } from "node:fs";
 import { open as openFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
+import { StringDecoder } from "node:string_decoder";
+import { setTimeout as retryDelay } from "node:timers/promises";
 import { ethers } from "ethers";
 import {
   decodeUintCall,
@@ -34,6 +36,7 @@ import {
   type RethTransportLease,
   type RethTransportLoad,
   type RethTransportRetryState,
+  type RethTransportRetryBatch,
 } from "./reth-transport-scheduler.js";
 import { isRpcQuotaExhaustedError, isRpcThrottleError } from "./rpc-throttle-guard.js";
 
@@ -75,10 +78,10 @@ export function isPassScopedExactStateBackend(
 export interface PinnedRethQuoteBackendOptions {
   readonly maxBatchSize?: number;
   readonly maxConcurrentBatches?: number;
-  /** Opt into shared throughput recovery; physical timeouts always use it. */
+  /** Opt into failed-batch recovery; physical timeouts always use it. */
   readonly retryRpcThrottle?: boolean;
   /** Physical lane used when acquiring the shared reth transport permit. */
-  readonly transportLane?: "producer-bulk" | "exact";
+  readonly transportLane?: "producer-critical" | "producer-bulk" | "exact";
   /** Human-readable scope included in diagnostics and abort errors. */
   readonly scopeLabel?: string;
   /**
@@ -95,10 +98,11 @@ export interface PinnedRethQuoteBackendOptions {
   readonly onRpcThrottle?: (error: Error) => void;
   readonly transportScheduler?: Pick<RethTransportScheduler, "run">;
   /**
-   * Replay-only durable cache for successful deterministic eth_call results.
-   * Ordinary live passes never supply this option.
+   * Durable cache for successful deterministic source-pinned eth_call results.
+   * Replay and ordinary startup may opt in; hot passes remain memory-only.
    */
   readonly persistentEthCallCachePath?: string;
+  readonly onPersistentCacheError?: (error: Error) => void;
 }
 
 interface SharedPendingCall {
@@ -119,7 +123,11 @@ export class PinnedRethQuoteBackend
   private transportLoad: RethTransportLoad | undefined;
   private throttleRetries = 0;
   private timeoutRetries = 0;
-  private readonly transportLane: "producer-bulk" | "exact";
+  private readonly transportLane: "producer-critical" | "producer-bulk" | "exact";
+  private criticalBackend?: PinnedRethQuoteBackend;
+  /** Parent of a critical-call view. Identity stays structural: a view
+   *  and its owner are the same logical pricing backend. */
+  private ownerBackend?: PinnedRethQuoteBackend;
   private readonly scopeLabel: string;
   private readonly allowSingleCallFallback: boolean;
   private readonly pending: PendingQuoteItem[] = [];
@@ -130,6 +138,8 @@ export class PinnedRethQuoteBackend
 
   private flushScheduled = false;
   private inFlightBatches = 0;
+  private readonly activeRetryBatches = new Map<RethTransportRetryBatch, number>();
+  private retryWake: {timer: ReturnType<typeof setTimeout>; promise: Promise<void>; resolve: () => void} | undefined;
   private nextId = 1;
   private readonly diagnosticBackendId = nextDiagnosticBackendId++;
   private closed = false;
@@ -190,6 +200,7 @@ export class PinnedRethQuoteBackend
       : new PersistentPinnedEthCallCache(
           options.persistentEthCallCachePath,
           this.blockSpecifier.blockHash,
+          options.onPersistentCacheError,
         );
 
     if (options.signal) {
@@ -339,6 +350,11 @@ export class PinnedRethQuoteBackend
     return cached;
   }
 
+  /** Durable attempt boundary without retiring the shared startup backend. */
+  async checkpoint(): Promise<void> {
+    await this.persistentCallCache?.closeAndDrain();
+  }
+
   private callControlError(control: StateCallControl, label: string): StateCallAbortedError | null {
     if (this.closed || this.scopeController.signal.aborted) return this.scopeAbortError(label);
     if (control.signal?.aborted) {
@@ -384,9 +400,16 @@ export class PinnedRethQuoteBackend
       const error = this.callControlError(control, label);
       if (error) { finish(error); return; }
       if (control.deadlineAtMs !== undefined) {
-        timer = setTimeout(() => finish(new StateCallAbortedError(
-          `eth_call ${label} aborted: absolute deadline reached`, "deadline",
-        )), Math.max(1, control.deadlineAtMs - Date.now()));
+        const expire = (): void => {
+          const remaining = control.deadlineAtMs! - Date.now();
+          // Node timers may fire just before the wall-clock millisecond. Do
+          // not turn that early callback into a completed quote rejection.
+          if (remaining > 0) { timer = setTimeout(expire, remaining); return; }
+          finish(new StateCallAbortedError(
+            `eth_call ${label} aborted: absolute deadline reached`, "deadline",
+          ));
+        };
+        timer = setTimeout(expire, Math.max(1, control.deadlineAtMs - Date.now()));
       }
     });
   }
@@ -518,6 +541,35 @@ export class PinnedRethQuoteBackend
       this.rejectItem(item, error);
     }
     this.pending.length = 0;
+    this.clearRetryWake();
+  }
+
+  /** Separate pending batches for critical source preparation; physical
+   * permits, source, cancellation and retry policy remain shared. This cannot
+   * preempt an HTTP request already on the wire. The parent owns its lifetime. */
+  /** The backend this view was derived from, or undefined for a root backend. */
+  quoteBackendOwner(): PinnedRethQuoteBackend | undefined {
+    return this.ownerBackend;
+  }
+
+  criticalCalls(): PinnedRethQuoteBackend {
+    if (this.criticalBackend !== undefined) return this.criticalBackend;
+    const view = new PinnedRethQuoteBackend(this.rpcUrl, this.sourceBlockHash, {
+      transportLane: "producer-critical",
+      transportScheduler: this.transportScheduler,
+      maxBatchSize: 32,
+      maxConcurrentBatches: 2,
+      signal: this.scopeController.signal,
+      deadlineAtMs: this.options.deadlineAtMs,
+      retryRpcThrottle: this.options.retryRpcThrottle,
+      allowSingleCallFallback: false,
+      scopeLabel: `${this.scopeLabel} critical preparation`,
+      onSourceUnavailable: this.options.onSourceUnavailable,
+      onRpcThrottle: this.options.onRpcThrottle,
+    });
+    view.ownerBackend = this;
+    this.criticalBackend = view;
+    return view;
   }
 
   async closeAndDrain(
@@ -525,7 +577,7 @@ export class PinnedRethQuoteBackend
   ): Promise<number> {
     const startedAtMs = Date.now();
     this.abort(reason);
-    await this.drain();
+    await Promise.all([this.drain(), this.criticalBackend?.closeAndDrain(reason)]);
 
     await this.persistentCallCache?.closeAndDrain();
 
@@ -545,14 +597,15 @@ export class PinnedRethQuoteBackend
       // Include the partial batch whose setImmediate flush has not run yet.
       // Callers stop issuing phase work before awaiting this boundary.
       this.pump();
-      const active = [...this.activeFlushes, ...this.activeTransports];
+      const active = [...this.activeFlushes, ...this.activeTransports,
+        ...(this.retryWake ? [this.retryWake.promise] : [])];
       if (active.length === 0) return;
       await Promise.allSettled(active);
     }
   }
 
   stats(): Readonly<{
-    lane: "producer-bulk" | "exact";
+    lane: "producer-critical" | "producer-bulk" | "exact";
     scopeLabel: string;
     allowSingleCallFallback: boolean;
     maxBatchSize: number;
@@ -700,7 +753,12 @@ export class PinnedRethQuoteBackend
     // waiting for the setImmediate tail flush. This keeps wide exact fan-out
     // from fragmenting into many half-filled HTTP batches while preserving a
     // zero-delay flush for the final partial batch.
-    if (this.pending.length >= this.currentBatchSizeLimit) this.pump();
+    let freshItems = 0;
+    for (const pending of this.pending) {
+      if (!pending.settled && pending.kind === item.kind && !pending.transportRetryBatch) freshItems++;
+      if (freshItems >= this.currentBatchSizeLimit) break;
+    }
+    if (freshItems >= this.currentBatchSizeLimit) this.pump();
     else this.scheduleFlush();
   }
 
@@ -800,7 +858,8 @@ export class PinnedRethQuoteBackend
     else this.throttleRetries++;
     const marker = isRethTransportTimeout(error) ? "transport-timeout-retry" : "rpc-throttle-retry status=429";
     const atOne = Math.max(...items.map(item => item.transportRetriesAtOne ?? 0));
-    console.warn(`[pinned-reth-quote-backend] ${marker} concurrency=${attempt.concurrency}->${this.currentConcurrentBatchLimit} retry_at_one=${atOne}/3 delay_ms=${this.transportLoad.retryDelayMs()} items=${items.length}`);
+    const next = this.transportLoad.limits(this.maxBatchSize, this.maxConcurrentBatches, items);
+    console.warn(`[pinned-reth-quote-backend] ${marker} concurrency=${attempt.concurrency}->${next.concurrency} retry_at_one=${atOne}/${this.transportLoad.maxRetriesAtOne ?? 3} delay_ms=${this.transportLoad.retryDelayMs(items)} items=${items.length} retry_scope=batch batch_size=${next.batchSize}`);
     return true;
   }
 
@@ -818,6 +877,7 @@ export class PinnedRethQuoteBackend
   }
 
   private pump(): void {
+    this.clearRetryWake();
     const concurrencyLimit = this.currentConcurrentBatchLimit;
     while (
       !this.closed &&
@@ -825,7 +885,26 @@ export class PinnedRethQuoteBackend
       this.inFlightBatches < concurrencyLimit
     ) {
       const now = Date.now();
-      const batch = this.pending.splice(0, this.currentBatchSizeLimit);
+      // Skip cooling or locally saturated retries: fresh work retains its
+      // configured limit, while every physical request still shares permits.
+      const firstIndex = this.pending.findIndex(item => {
+        if (item.settled) return true;
+        const group = item.transportRetryBatch;
+        const limits = this.transportLoad?.limits(this.maxBatchSize, this.maxConcurrentBatches, [item]);
+        return !group || (group.notBeforeMs <= now &&
+          (this.activeRetryBatches.get(group) ?? 0) < limits!.concurrency);
+      });
+      if (firstIndex < 0) break;
+      const first = this.pending[firstIndex]!;
+      const group = first.transportRetryBatch;
+      const limits = this.transportLoad?.limits(this.maxBatchSize, this.maxConcurrentBatches, [first]);
+      const batchSize = limits?.batchSize ?? this.maxBatchSize;
+      const batch: PendingQuoteItem[] = [];
+      for (let i = firstIndex; i < this.pending.length && batch.length < batchSize;) {
+        const item = this.pending[i]!;
+        if (item.kind === first.kind && item.transportRetryBatch === group) batch.push(...this.pending.splice(i, 1));
+        else i++;
+      }
       const alive: PendingQuoteItem[] = [];
       for (const item of batch) {
         if (item.settled) continue;
@@ -861,12 +940,18 @@ export class PinnedRethQuoteBackend
       if (alive.length === 0) continue;
 
       this.inFlightBatches++;
+      if (group) this.activeRetryBatches.set(group, (this.activeRetryBatches.get(group) ?? 0) + 1);
       this.peakInFlightBatches = Math.max(
         this.peakInFlightBatches,
         this.inFlightBatches,
       );
-      const task = this.flushBatch(alive, concurrencyLimit).finally(() => {
+      const task = this.flushBatch(alive, limits?.concurrency ?? concurrencyLimit).finally(() => {
         this.inFlightBatches--;
+        if (group) {
+          const remaining = this.activeRetryBatches.get(group)! - 1;
+          if (remaining) this.activeRetryBatches.set(group, remaining);
+          else this.activeRetryBatches.delete(group);
+        }
         this.activeFlushes.delete(task);
         this.scheduleFlush();
       });
@@ -876,6 +961,29 @@ export class PinnedRethQuoteBackend
         // rejections from surfacing as unhandled.
       });
     }
+    if (!this.closed) {
+      const now = Date.now();
+      const next = this.pending.reduce((time, item) => item.settled ? time :
+        Math.min(time, (item.transportRetryBatch?.notBeforeMs ?? 0) > now
+          ? item.transportRetryBatch!.notBeforeMs : Infinity), Infinity);
+      if (Number.isFinite(next)) {
+        let resolve!: () => void;
+        const promise = new Promise<void>(done => { resolve = done; });
+        const timer = setTimeout(() => {
+          this.retryWake = undefined;
+          resolve();
+          this.scheduleFlush();
+        }, Math.max(1, next - now));
+        this.retryWake = {timer, promise, resolve};
+      }
+    }
+  }
+
+  private clearRetryWake(): void {
+    if (!this.retryWake) return;
+    clearTimeout(this.retryWake.timer);
+    this.retryWake.resolve();
+    this.retryWake = undefined;
   }
 
   private async flushBatch(alive: PendingQuoteItem[], scheduledLimit: number): Promise<void> {
@@ -895,6 +1003,7 @@ export class PinnedRethQuoteBackend
     signal: AbortSignal,
     work: (wireSignal: AbortSignal, attempt: RethTransportAttempt, lease: RethTransportLease) => Promise<JsonRpcHttpResponse>,
     retry?: (error: unknown, attempt: RethTransportAttempt) => boolean,
+    items: readonly RethTransportRetryState[] = [],
   ): Promise<JsonRpcHttpResponse> {
     const checkedWork = async (lease: RethTransportLease): Promise<JsonRpcHttpResponse> => {
       // Legacy run-only test doubles may not provide load. Real shared
@@ -910,7 +1019,7 @@ export class PinnedRethQuoteBackend
       if (this.options.deadlineAtMs !== undefined && Date.now() >= this.options.deadlineAtMs) {
         throw new StateCallAbortedError("scope absolute deadline reached", "deadline");
       }
-      const attempt = lease.load.limits(this.maxBatchSize, this.maxConcurrentBatches);
+      const attempt = lease.load.limits(this.maxBatchSize, this.maxConcurrentBatches, items);
       const wire = new AbortController();
       const onAbort = (): void => wire.abort(signal.reason);
       signal.addEventListener("abort", onAbort, { once: true });
@@ -1040,10 +1149,10 @@ export class PinnedRethQuoteBackend
     try {
       if (controller.signal.aborted) throw controller.signal.reason;
       response = await this.runTransport(controller.signal, async (wireSignal, attempt, lease) => {
-        // A shared permit may arrive after another batch lowered our limit.
-        // This envelope has not reached the wire: return it to the same pump,
-        // rather than letting pre-admitted work bypass the new limit/backoff.
-        if (items.length > attempt.batchSize || scheduledLimit > attempt.concurrency) {
+        // Only split siblings can change this envelope's local retry tier
+        // while it waits for a shared permit. Never send abandoned items.
+        if (items.some(item => item.settled) || items.length > attempt.batchSize || scheduledLimit > attempt.concurrency ||
+            (attempt.batch?.notBeforeMs ?? 0) > Date.now()) {
           this.pending.unshift(...items.filter(item => !item.settled));
           throw new QueuedTransportRetry();
         }
@@ -1119,7 +1228,7 @@ export class PinnedRethQuoteBackend
           }
         }
         return response;
-      }, (error, attempt) => this.queueTransportRetry(items, error, attempt) === "queued");
+      }, (error, attempt) => this.queueTransportRetry(items, error, attempt) === "queued", items);
     } catch (transportError) {
       if (transportError instanceof QueuedTransportRetry) return;
       /*
@@ -1379,6 +1488,13 @@ export class PinnedRethQuoteBackend
       for (;;) {
         if (controller.signal.aborted) throw controller.signal.reason;
         if (Date.now() >= deadlineAtMs) throw new StateCallAbortedError("absolute deadline reached", "deadline");
+        const remainingMs = (retryState.transportRetryBatch?.notBeforeMs ?? 0) - Date.now();
+        if (remainingMs > 0) {
+          // Backoff owns no shared physical permit and remains cancellable.
+          try { await retryDelay(remainingMs, undefined, {signal:controller.signal}); }
+          catch (error) { throw controller.signal.aborted ? controller.signal.reason : error; }
+          continue;
+        }
         let response: JsonRpcHttpResponse;
         try {
           response = await this.runTransport(controller.signal, wireSignal =>
@@ -1396,6 +1512,7 @@ export class PinnedRethQuoteBackend
             // recovery here; the prior opt-in 429 policy is batch-only.
             (error, attempt) => isRethTransportTimeout(error) && !controller.signal.aborted && Date.now() < deadlineAtMs &&
               this.retryTransport(error, [retryState], attempt),
+            [retryState],
           );
         } catch (error) {
           if (error instanceof QueuedTransportRetry) continue;
@@ -1591,10 +1708,13 @@ class PersistentPinnedEthCallCache {
   private hits = 0;
   private writes = 0;
   private contentSha256: string;
+  private flushTimer: ReturnType<typeof setTimeout> | undefined;
+  private writeError: Error | undefined;
 
   constructor(
     private readonly path: string,
     private readonly sourceBlockHash: string,
+    private readonly onError?: (error: Error) => void,
   ) {
     if (!isAbsolute(path)) {
       throw new Error("persistent eth_call cache path must be absolute");
@@ -1610,14 +1730,43 @@ class PersistentPinnedEthCallCache {
       createPersistentCallCache(path, normalizedSource);
     }
     assertOwnerOnlyRegularFile(path);
-    const contents = readFileSync(path, "utf8");
-    const repair = this.load(contents, normalizedSource);
+    // Validate bounded groups of complete rows, never one giant JS string.
+    // The map is authoritative only after all rows have passed validation.
+    const fdRead = openSync(path, "r"), buffer = Buffer.alloc(1024 * 1024);
+    const decoder = new StringDecoder("utf8");
+    let header: string | undefined, tail = "", completeBytes = 0;
+    let repair: "truncate" | "newline" | null = null;
+    try {
+      for (;;) {
+        const count = readSync(fdRead, buffer);
+        tail += count === 0 ? decoder.end() : decoder.write(buffer.subarray(0, count));
+        if (header === undefined) {
+          const end = tail.indexOf("\n");
+          if (end >= 0) {
+            header = tail.slice(0, end);
+            completeBytes = Buffer.byteLength(tail.slice(0, end + 1));
+            tail = tail.slice(end + 1);
+            this.load(header + "\n", normalizedSource);
+          }
+        }
+        if (header !== undefined) {
+          const end = tail.lastIndexOf("\n");
+          if (end >= 0) {
+            const rows = tail.slice(0, end + 1);
+            this.load(header + "\n" + rows, normalizedSource);
+            completeBytes += Buffer.byteLength(rows);
+            tail = tail.slice(end + 1);
+          }
+        }
+        if (Buffer.byteLength(tail) > 16 * 1024 * 1024) throw new Error("persistent eth_call cache row exceeds 16 MiB");
+        if (count === 0) {
+          repair = this.load(header === undefined ? tail : header + "\n" + tail, normalizedSource);
+          break;
+        }
+      }
+    } finally { closeSync(fdRead); }
     if (repair === "truncate") {
-      const validPrefix = contents.slice(
-        0,
-        contents.lastIndexOf("\n") + 1,
-      );
-      truncateSync(path, Buffer.byteLength(validPrefix, "utf8"));
+      truncateSync(path, completeBytes);
       const fd = openSync(path, "r+");
       try {
         fsyncSync(fd);
@@ -1633,10 +1782,11 @@ class PersistentPinnedEthCallCache {
         closeSync(fd);
       }
     }
-    this.contentSha256 = sha256(readFileSync(path));
+    this.contentSha256 = sha256CacheFile(path);
   }
 
   get(identity: PersistentCallIdentity): string | undefined {
+    if (this.writeError) throw this.writeError;
     this.assertIdentitySource(identity);
     const result = this.entries.get(identity.key);
     if (result !== undefined) this.hits++;
@@ -1644,6 +1794,7 @@ class PersistentPinnedEthCallCache {
   }
 
   record(identity: PersistentCallIdentity, result: string): void {
+    if (this.writeError) throw this.writeError;
     this.assertIdentitySource(identity);
     const normalizedResult = normalizedHex(
       result,
@@ -1663,18 +1814,21 @@ class PersistentPinnedEthCallCache {
     this.pendingRows.push(`${JSON.stringify(row)}\n`);
     this.writes++;
     if (this.pendingRows.length >= PERSISTENT_CALL_CACHE_FLUSH_ROWS) {
-      void this.flush().catch(() => {
-        // closeAndDrain awaits the same writeTail and reports the failure at
-        // the replay attempt boundary; avoid a detached rejection meanwhile.
-      });
+      void this.flush().catch(error => this.fail(error));
+    } else if (this.flushTimer === undefined) {
+      this.flushTimer = setTimeout(() => {
+        this.flushTimer = undefined;
+        void this.flush().catch(error => this.fail(error));
+      }, 1000);
+      this.flushTimer.unref();
     }
   }
 
   async closeAndDrain(): Promise<void> {
-    await this.flush();
-    await this.writeTail;
+    try { await this.flush(); await this.writeTail; }
+    catch (error) { this.fail(error); throw error; }
     assertOwnerOnlyRegularFile(this.path);
-    this.contentSha256 = sha256(readFileSync(this.path));
+    this.contentSha256 = sha256CacheFile(this.path);
   }
 
   stats(): Readonly<{
@@ -1694,12 +1848,20 @@ class PersistentPinnedEthCallCache {
   }
 
   private flush(): Promise<void> {
+    clearTimeout(this.flushTimer);
+    this.flushTimer = undefined;
     if (this.pendingRows.length === 0) return this.writeTail;
     const payload = this.pendingRows.splice(0).join("");
     this.writeTail = this.writeTail.then(() =>
       serializedOwnerOnlyAppend(this.path, payload)
     );
     return this.writeTail;
+  }
+
+  private fail(error: unknown): void {
+    if (this.writeError) return;
+    this.writeError = error instanceof Error ? error : new Error("persistent call cache write failed");
+    this.onError?.(this.writeError);
   }
 
   private assertIdentitySource(identity: PersistentCallIdentity): void {
@@ -2041,6 +2203,18 @@ function sha256CanonicalTuple(value: readonly unknown[]): string {
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function sha256CacheFile(path: string): string {
+  const hash = createHash("sha256"), fd = openSync(path, "r");
+  const buffer = Buffer.alloc(1024 * 1024);
+  try {
+    for (;;) {
+      const count = readSync(fd, buffer);
+      if (count === 0) return hash.digest("hex");
+      hash.update(buffer.subarray(0, count));
+    }
+  } finally { closeSync(fd); }
 }
 
 class QueuedTransportRetry extends Error {}

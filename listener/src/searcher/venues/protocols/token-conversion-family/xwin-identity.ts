@@ -1,14 +1,15 @@
 import type { IdentityVariant } from "../../adapter-family-plugin.js";
 import { hashCanonical } from "../../canonical-value.js";
-import { assertSource, codeRequest, requireRuntimeCode, returnedResult } from "../standard-family/common.js";
+import { assertSource, callRequest, codeRequest, requireRuntimeCode, returnedResult } from "../standard-family/common.js";
 import { FAMILY, XWIN_LINEAGE } from "./manifest.js";
 import { xwinSimulationRequirements as simulationRequirements } from "./xwin.js";
-import { checkXwinDependencies, decodeXwinReceipt, decodeXwinSurface, proveXwinProxy, xwinDependencyRequests, xwinSimulation, xwinStateRequests, type XwinSurface } from "./xwin.js";
+import { XWIN_ABI, checkXwinDependencies, decodeXwinReceipt, decodeXwinSurface, proveXwinProxy, xwinDependencyRequests, xwinSimulation, xwinStateRequests, type XwinSurface } from "./xwin.js";
 import type { ConversionCandidate, ConversionIdentity } from "./types.js";
 
 type Evidence =
   | { phase: "rejected" }
   | { phase: "surface"; surface: XwinSurface }
+  | { phase: "paused" }
   | { phase: "probe"; surface: XwinSurface; unit: bigint; redeemAmount: bigint }
   | { phase: "actor"; surface: XwinSurface; actor: string; proofHash: string }
   | { phase: "verified"; surface: XwinSurface; proofHash: string };
@@ -21,7 +22,8 @@ export const xwinIdentity = {
   },
   buildRequests({ candidate, evidence: p }) {
     if (!p) return xwinStateRequests("identity-xwin", candidate.target).map((r, i) => i === 0 ? r : { ...r, required: false });
-    if (p.phase === "surface") return xwinDependencyRequests("identity-xwin", p.surface);
+    if (p.phase === "surface") return [...xwinDependencyRequests("identity-xwin", p.surface),
+      callRequest("identity-xwin-paused", p.surface.target, XWIN_ABI.encodeFunctionData("paused"), { kind: "executor" })];
     if (p.phase === "probe") return [xwinSimulation("identity-xwin-mint", p.surface, "mint", p.unit),
       xwinSimulation("identity-xwin-redeem", p.surface, "redeem", p.redeemAmount)];
     if (p.phase === "actor") return [codeRequest("identity-xwin-actor-code", p.actor)];
@@ -36,6 +38,11 @@ export const xwinIdentity = {
     }
     if (p.phase === "surface") {
       const unit = checkXwinDependencies(results, "identity-xwin", p.surface);
+      // Dependencies bind every result to the surface source before interpreting
+      // this dynamic guard. Only a canonical returned boolean can mean paused.
+      const paused = returnedResult(results, "identity-xwin-paused").data;
+      if (!/^0x0{63}[01]$/i.test(paused)) throw new Error("invalid xWin paused response");
+      if (BigInt(paused) === 1n) return { phase: "paused" };
       return { ...p, phase: "probe", unit, redeemAmount: p.surface.supply < 10n ** 18n ? p.surface.supply : 10n ** 18n };
     }
     if (p.phase === "probe") {
@@ -53,6 +60,7 @@ export const xwinIdentity = {
   },
   decide({ candidate, evidence: p }) {
     if (p?.phase === "rejected") return { status: "chain-proven-rejected", reasonCode: "unsupported_xwin_proxy", evidenceRequestIds: ["identity-xwin-proxy"] };
+    if (p?.phase === "paused") return { status: "retryable", reasonCode: "xwin_paused" };
     if (p?.phase === "probe" && p.redeemAmount === 0n) return { status: "retryable", reasonCode: "xwin_no_backed_redeem_probe" };
     if (p?.phase !== "verified") return { status: "continue" };
     return { status: "verified", identity: {

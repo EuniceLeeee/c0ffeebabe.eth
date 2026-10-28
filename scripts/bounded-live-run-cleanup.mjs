@@ -7,7 +7,8 @@ import { spawnSync } from 'node:child_process';
 
 export const MANUAL_RUNS = '/opt/mev-cloud/manual-live/runs';
 export const LIVE_LOG_NAMES = Object.freeze([
-  'live.log', 'events.jsonl', 'routes.jsonl', 'mids.jsonl', 'reverts.jsonl', 'solver-inputs.jsonl',
+  // Price baselines/deltas are retained replay inputs, not disposable live logs.
+  'live.log', 'events.jsonl', 'routes.jsonl', 'reverts.jsonl', 'solver-inputs.jsonl',
 ]);
 const RUN_NAME = /^live-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[a-f0-9]{8}$/;
 const UNIT = 'mev-manual-bounded-live.service';

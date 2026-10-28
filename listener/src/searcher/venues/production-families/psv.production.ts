@@ -1,0 +1,15 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../protocols/psv-family/manifest.js";
+import { discovery } from "../protocols/psv-family/discovery.js";
+import { identity } from "../protocols/psv-family/identity.js";
+import { instance } from "../protocols/psv-family/instance.js";
+import { routes } from "../protocols/psv-family/routes.js";
+import { pricing } from "../protocols/psv-family/pricing.js";
+import { exact } from "../protocols/psv-family/exact.js";
+import { execution } from "../protocols/psv-family/execution.js";
+import { protocol } from "../protocols/psv-family/protocol.js";
+import { capture } from "../protocols/psv-family/capture.js";
+import { action } from "../protocols/psv-family/action.js";
+export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [action] });
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_PSV_ENABLED" });

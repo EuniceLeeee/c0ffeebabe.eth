@@ -67,6 +67,7 @@ import { ExactAmountRejectedError } from "./adapter-amount-rejection.js";
 import { applyExactTrialState, emptyExactTrialState, ExactTrialStateConflictError,
   type ExactTrialSnapshot } from "../exact-trial-state.js";
 import { compileExactPrefix } from "../exact-prefix-plan.js";
+import { applyRuntimeAssetBoundary, mapRuntimeAssetSettlementRequest, applyQuotedAssetBoundary } from "../execution-asset-boundary.js";
 import type {
   FamilyCapabilityCatalog,
   LoadedFamilyBox,
@@ -364,7 +365,7 @@ const issuedSealedFamilyExactQuoteHandles = new WeakMap<
 >();
 
 const DEFAULT_LIMITS: AdapterFamilyLifecycleLimits = Object.freeze({
-  maxIdentityStepsPerVariant: 4,
+  maxIdentityStepsPerVariant: 5,
   maxDependentReadRounds: 4,
 });
 
@@ -2769,10 +2770,12 @@ export function buildFamilyRuntimeAmountLeg(input: {
   input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
   const builder = input.family.plugin.execution.buildRuntimeLeg;
   if (!builder) return null;
+  const requested = mapRuntimeAssetSettlementRequest({ route: record.route, executor: input.executor, request: input.settlement });
+  if (requested === null) return null;
   const leg = builder(Object.freeze({ descriptor: record.instance.descriptor, route: record.route,
     source: Object.freeze({ ...input.source }),
     executor: input.executor, runtimeEvidence: Object.freeze([...input.runtimeEvidence]),
-    ...(input.settlement === undefined ? {} : { settlement: Object.freeze({ ...input.settlement }) }),
+    ...(requested === undefined ? {} : { settlement: Object.freeze({ ...requested }) }),
     ...(caller.transactionOrigin === undefined ? {} : { transactionOrigin: caller.transactionOrigin }) }));
   input.runtime.generationFence.assertCurrent(input.source.generation, input.source);
   const current = snapshotCentralCallerAuthority(input.runtime.callerAuthority.bind(binding));
@@ -2782,7 +2785,7 @@ export function buildFamilyRuntimeAmountLeg(input: {
   if (leg === null) return null;
   // An old emitter that ignores the request cannot silently claim a different
   // recipient or deferred debt. Fallback remains the original execution path.
-  if (!isDeepStrictEqual(leg.settlementRequest, input.settlement)) return null;
+  if (!isDeepStrictEqual(leg.settlementRequest, requested)) return null;
   if (!input.family.plugin.manifest.ownedActionAdapterIds.includes(leg.actionAdapterId) ||
       input.actionOwnership.ownerOfAction(leg.actionAdapterId) !== input.family.plugin.manifest.familyId ||
       typeof leg.program !== "string" || !/^0x01(?:[a-fA-F0-9]{2})+$/.test(leg.program) || leg.program.length > 131074) {
@@ -2795,9 +2798,9 @@ export function buildFamilyRuntimeAmountLeg(input: {
       leg.settlement?.quoteOutput !== undefined && leg.settlement.quoteOutput !== true) {
     throw new Error("runtime settlement capabilities");
   }
-  return Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program,
+  return applyRuntimeAssetBoundary({ route: record.route, executor: input.executor, leg: Object.freeze({ actionAdapterId: leg.actionAdapterId, program: leg.program,
     ...(leg.settlement === undefined ? {} : { settlement: Object.freeze({ ...leg.settlement }) }),
-    ...(input.settlement === undefined ? {} : { settlementRequest: Object.freeze({ ...input.settlement }) }) });
+    ...(input.settlement === undefined ? {} : { settlementRequest: Object.freeze({ ...input.settlement }) }) }) });
 }
 
 interface ResolvedFamilyExecutionInvocation {
@@ -2854,7 +2857,10 @@ export function buildFamilyExecutionFragment(
     if (!Array.isArray(expectedEffects)) {
       throw new Error("execution expectedEffects must return an array");
     }
-    const sealedFragment = sealPlanFragment(fragment);
+    const rawFragment = sealPlanFragment(fragment);
+    const boundedFragment = applyQuotedAssetBoundary({ route: routeRecord.route, executor: exactRecord.executor,
+      amountIn: exactRecord.amountIn, minimum: input.minAmountOut, fragment: rawFragment });
+    const sealedFragment = boundedFragment === rawFragment ? rawFragment : sealPlanFragment(boundedFragment);
     const sealedEffects = Object.freeze(expectedEffects.map((effect) =>
       Object.freeze({ ...effect })
     ));

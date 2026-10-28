@@ -2,13 +2,15 @@ import type { DiscoverySemantics } from "../../adapter-family-plugin.js";
 import { MODULE, MODULE_CODE_HASH, address, uint } from "./codec.js";
 import { bindingObservation, nomination, SURFACE } from "./nomination.js";
 import type { Candidate } from "./types.js";
+import { decodeLegacyCandidate, legacyCallPatterns, legacyLogPatterns } from "./legacy.js";
 export const discovery = {
   evidenceChannel: "nominate", sources: ["landed-log", "observed-call", "address-surface"],
   addressSurfaces: [{ id: "set-binding", kind: "interface", fingerprint: SURFACE }],
-  logPatterns: [{ id: "set-redeemed", topic: MODULE.getEvent("SetTokenRedeemed")!.topicHash as `0x${string}`, signature: "SetTokenRedeemed(address,address,address,uint256)" }],
+  logPatterns: [{ id: "set-redeemed", topic: MODULE.getEvent("SetTokenRedeemed")!.topicHash as `0x${string}`, signature: "SetTokenRedeemed(address,address,address,uint256)" }, ...legacyLogPatterns],
   callPatterns: [{ id: "set-redeem-call", selector: MODULE.getFunction("redeem")!.selector as `0x${string}`,
-    signature: "redeem(address,uint256,address)", candidateAddress: { from: "call-target" } }],
+    signature: "redeem(address,uint256,address)", candidateAddress: { from: "call-target" } }, ...legacyCallPatterns],
   decodeCandidate({ observation: o, matchedPatternId: id }) {
+    if (id.startsWith("legacy-")) return decodeLegacyCandidate(o, id);
     try {
       let set: string, module: string;
       if (o.kind === "call" && id === "set-redeem-call") {

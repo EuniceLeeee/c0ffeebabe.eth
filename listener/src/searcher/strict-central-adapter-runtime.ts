@@ -16,6 +16,7 @@ import {
 } from "./transport-schedule-policy.js";
 import type { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { createHash } from "node:crypto";
+import { recordAdapterRequestCompletion } from "./adapter-request-observation.js";
 import { ethers } from "ethers";
 import { getEthersCallRpcError, isRpcThrottleError } from "./rpc-throttle-guard.js";
 import {
@@ -53,6 +54,17 @@ interface StrictProvider {
 }
 
 export interface StrictSimulationTransport {
+  /** Standalone execution, not an Exact quote or a profitable-plan verdict. */
+  simulateStandalone?(input: {
+    readonly source: CanonicalSource;
+    readonly callerAuthority: CentralCallerAuthority;
+    readonly control?: AdapterWorkControl;
+    readonly scriptHex: string;
+    readonly inputToken: string;
+    readonly inputAmount: bigint;
+  }): Promise<import("./simulator/eth-simulate-v1.js").StandaloneExecutionResult & {
+    readonly inputPreparationMs: number; readonly simulationMs: number; readonly reusedInputFunding: boolean;
+  }>;
   simulatePrefix?(input: ExactPrefixReadInput): Promise<ExactPrefixReadResult>;
   simulate(input: {
     readonly request: Extract<
@@ -315,6 +327,7 @@ export function createStrictCentralAdapterRuntime(input: {
               // executor use without executeAdapterWork's outer fence.
               try {
                 assertCurrent();
+                recordAdapterRequestCompletion(requestOutcome);
               } catch (error) {
                 requestOutcome = "fenced";
                 throw error;

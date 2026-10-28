@@ -115,7 +115,9 @@ interface CatalogEntry {
   readonly locatorKey: string;
 }
 
-const MAX_MID_ENTRIES = 100_000;
+// Large production graphs exceed 100k directions. Keep a bounded structural
+// guard; encoded record/file byte caps and the disk reserve remain authoritative.
+const MAX_MID_ENTRIES = 1_000_000;
 const MID_KINDS = new Set([
   "v2",
   "v3",

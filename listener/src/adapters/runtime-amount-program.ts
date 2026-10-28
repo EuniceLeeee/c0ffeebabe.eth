@@ -16,8 +16,8 @@ export class RuntimeAmountProgram {
     if (value < 0n || value > ethers.MaxUint256) throw new Error("runtime constant uint256");
     return this.push(new Uint8Array([0, reg(dst)]), uint256ToBytes(value));
   }
-  math(op: "add" | "sub" | "mul" | "div" | "shr" | "and" | "neg", dst: number, a: number, b = a): this {
-    return this.push(new Uint8Array([2, ["add", "sub", "mul", "div", "shr", "and", "neg"].indexOf(op), reg(dst), reg(a), reg(b)]));
+  math(op: "add" | "sub" | "mul" | "div" | "shr" | "and" | "neg" | "eq" | "min", dst: number, a: number, b = a): this {
+    return this.push(new Uint8Array([2, ["add", "sub", "mul", "div", "shr", "and", "neg", "eq", "min"].indexOf(op), reg(dst), reg(a), reg(b)]));
   }
   equal(a: number, b: number): this { return this.push(new Uint8Array([3, reg(a), reg(b)])); }
   /** Explicit new-runtime encoding of an ordinary CALL, with no value,
@@ -239,7 +239,7 @@ export interface RuntimeSettlementCapabilities {
   readonly deferredDebtInput?: true;
 }
 export type RuntimeSettlementRequest =
-  | { readonly kind: "quote-output" }
+  | { readonly kind: "quote-output"; readonly recipient?: string }
   | { readonly kind: "direct-output"; readonly recipient: string }
   | { readonly kind: "settle-output"; readonly recipient: string; readonly amountIn: bigint }
   | { readonly kind: "deferred-input"; readonly paymentProgram: string; readonly paymentAmount: bigint;

@@ -18,6 +18,36 @@ function validateQuotes(quotes: readonly DfsQuote[]): void {
   }
 }
 
+/** Exact top-K under the same total ordering, without sorting discarded items. */
+function topRanked<T>(values: Iterable<T>, limit: number, compare: (a: T, b: T) => number): T[] {
+  const heap: T[] = []; // Worst retained item first.
+  for (const value of values) {
+    if (heap.length < limit) {
+      let i = heap.length;
+      heap.push(value);
+      while (i > 0) {
+        const parent = (i - 1) >> 1;
+        if (compare(value, heap[parent]!) <= 0) break;
+        heap[i] = heap[parent]!;
+        i = parent;
+      }
+      heap[i] = value;
+    } else {
+      if (compare(value, heap[0]!) >= 0) continue;
+      let i = 0;
+      while (i * 2 + 1 < heap.length) {
+        let child = i * 2 + 1;
+        if (child + 1 < heap.length && compare(heap[child + 1]!, heap[child]!) > 0) child++;
+        if (compare(heap[child]!, value) <= 0) break;
+        heap[i] = heap[child]!;
+        i = child;
+      }
+      heap[i] = value;
+    }
+  }
+  return heap.sort(compare);
+}
+
 /**
  * Heuristic projection of the immutable effective table, not an exact amount
  * quote or a certified return bound. Tokens follow DfsQuote's normalized contract.
@@ -95,7 +125,7 @@ export function selectTopHopTokens(quotes: readonly DfsQuote[], limit: number): 
     }
     const selected = new Set<string>();
     for (const neighbors of roots.values()) {
-      const ranked = [...neighbors].sort(([a, left], [b, right]) => {
+      const ranked = topRanked(neighbors, limit, ([a, left], [b, right]) => {
         const l = left.value.num * right.value.den, r = right.value.num * left.value.den;
         if (l !== r) return l > r ? -1 : 1;
         return a < b ? -1 : a > b ? 1 : 0;

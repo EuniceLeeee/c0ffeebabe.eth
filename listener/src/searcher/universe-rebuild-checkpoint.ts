@@ -383,7 +383,7 @@ export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly 
     canonicalJson(keys) !== canonicalJson([...ready.activeInstanceKeys].sort()) ||
     ready.candidateAccounting.verified !== keys.length ||
     ready.candidateAccounting.remainingUnaccounted !== 0 ||
-    canonicalJson(buildReadyCatalogSnapshot(memos)) !== canonicalJson(ready.catalogSnapshot) ||
+    ready.catalogHash !== readyRootHash("catalog-v1:", buildReadyCatalogSnapshot(memos)) ||
     ready.graphHash !== readyRootHash("graph-v2:", ready.graphSnapshot) ||
     ready.catalogHash !== readyRootHash("catalog-v1:", ready.catalogSnapshot) ||
     ready.publicationSetHash !== readyRootHash("publications-v2:", ready.catalogSnapshot)) {
@@ -505,7 +505,7 @@ function assertReadyFamilyPartitions(
 }
 
 function readyRootHash(prefix: string, value: unknown): string {
-  return createHash("sha256").update(prefix + canonicalJson(value)).digest("hex");
+  return canonicalJsonFingerprint(value, prefix);
 }
 
 export interface ReadyFamilyUpdateInput {
@@ -750,8 +750,15 @@ export function envelopeFingerprint(
 }
 
 function fingerprintProjection(projection: unknown): string {
+  return canonicalJsonFingerprint(projection);
+}
+
+/** Same digest as sha256(prefix + canonicalJson(value)), including legacy
+ * roots, without concatenating a catalog or graph into a single string. */
+export function canonicalJsonFingerprint(value: unknown, prefix = ""): string {
   const hash = createHash("sha256");
-  canonicalWrite(hash, projection);
+  hash.update(prefix);
+  canonicalWrite(hash, value);
   return hash.digest("hex");
 }
 
@@ -897,49 +904,82 @@ function parseEnvelopeValue(parsed: unknown): StartupCheckpointEnvelope {
   });
 }
 
-/**
- * Parse one top-level JSON field at a time. A production checkpoint contains
- * two independently large objects (verified memos and the last ready graph),
- * and their combined file can exceed V8's maximum string length even though
- * each field is valid and individually parseable. This reader never creates
- * a string for the whole file; it retains only the current field's source
- * text until JSON.parse has materialized that field.
+/** Materialize containers incrementally: even one nested memo map can exceed
+ * V8's string limit. Only scalar tokens, never whole containers, are joined.
+ * JSON.parse remains the authority for scalar syntax and escape decoding.
  */
 async function readTopLevelJsonObject(
   path: string,
   chunkBytes: number,
 ): Promise<Record<string, unknown> | null> {
-  const fields: Record<string, unknown> = {};
-  let rootStarted = false;
-  let done = false;
-  let depth = 0;
-  let inString = false;
+  type Frame = {
+    value: Record<string, unknown> | unknown[];
+    state: "key-or-end" | "key" | "colon" | "value-or-end" | "value" | "comma-or-end";
+    key?: string;
+  };
+  const stack: Frame[] = [];
+  let root: Record<string, unknown> | null = null;
+  let token: "string" | "atom" | null = null;
+  let parts: string[] = [];
   let escape = false;
-  let sawNonWhitespace = false;
-  let fieldParts: string[] = [];
 
   const whitespace = (char: string): boolean =>
     char === " " || char === "\n" || char === "\r" || char === "\t";
   const invalid = (detail: string): never => {
     throw new Error("universe rebuild checkpoint is not valid JSON: " + detail);
   };
-  const completeField = (): void => {
-    const raw = fieldParts.join("").trim();
-    fieldParts = [];
-    if (raw.length === 0) invalid("empty top-level field");
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse("{" + raw + "}") as Record<string, unknown>;
-    } catch (error) {
-      invalid(error instanceof Error ? error.message : String(error));
+  const accept = (value: unknown): void => {
+    const frame = stack.at(-1);
+    if (!frame) invalid("top-level value must be an object");
+    if (frame!.state !== "value" && frame!.state !== "value-or-end") {
+      invalid("unexpected value");
     }
-    const keys = Object.keys(parsed!);
-    if (keys.length !== 1) invalid("top-level field is malformed");
-    const key = keys[0]!;
-    if (Object.prototype.hasOwnProperty.call(fields, key)) {
-      invalid("duplicate top-level field " + key);
+    if (Array.isArray(frame!.value)) frame!.value.push(value);
+    else {
+      // Match JSON.parse for own __proto__ keys and nested duplicate keys.
+      Object.defineProperty(frame!.value, frame!.key!, {
+        value, enumerable: true, writable: true, configurable: true,
+      });
     }
-    fields[key] = parsed![key];
+    frame!.state = "comma-or-end";
+  };
+  const scalar = (): void => {
+    let value: unknown;
+    try { value = JSON.parse(parts.join("")); }
+    catch (error) { invalid(error instanceof Error ? error.message : String(error)); }
+    parts = [];
+    token = null;
+    const frame = stack.at(-1);
+    if (frame && (frame.state === "key" || frame.state === "key-or-end")) {
+      if (typeof value !== "string") invalid("object key must be a string");
+      if (stack.length === 1 && Object.hasOwn(frame.value, value as string)) {
+        invalid("duplicate top-level field " + value);
+      }
+      frame.key = value as string;
+      frame.state = "colon";
+    } else accept(value);
+  };
+  const punctuation = (char: string): void => {
+    const frame = stack.at(-1);
+    if (char === "{" || char === "[") {
+      const value = char === "{" ? {} : [];
+      if (root === null && stack.length === 0 && char === "{") root = value;
+      else accept(value);
+      stack.push({ value, state: char === "{" ? "key-or-end" : "value-or-end" });
+    } else if (char === "}" || char === "]") {
+      if (!frame || Array.isArray(frame.value) !== (char === "]") ||
+        (frame.state !== "comma-or-end" &&
+         frame.state !== (char === "}" ? "key-or-end" : "value-or-end"))) {
+        invalid("unexpected closing delimiter");
+      }
+      stack.pop();
+    } else if (char === ":") {
+      if (!frame || frame.state !== "colon") invalid("unexpected colon");
+      frame!.state = "value";
+    } else {
+      if (!frame || frame.state !== "comma-or-end") invalid("unexpected comma");
+      frame!.state = Array.isArray(frame!.value) ? "value" : "key";
+    }
   };
 
   const stream = createReadStream(path, {
@@ -949,86 +989,86 @@ async function readTopLevelJsonObject(
   for await (const rawChunk of stream) {
     const chunk = String(rawChunk);
     let index = 0;
-    let segmentStart = rootStarted && !done ? 0 : -1;
+    let segmentStart = 0;
     while (index < chunk.length) {
       const char = chunk[index]!;
-      if (!whitespace(char)) sawNonWhitespace = true;
-
-      if (!rootStarted) {
-        if (whitespace(char)) {
+      if (token === "string") {
+        if (escape) escape = false;
+        else if (char === "\\") escape = true;
+        else if (char === "\"") {
+          parts.push(chunk.slice(segmentStart, index + 1));
+          scalar();
+        }
+        index++;
+        continue;
+      }
+      const delimiter = "{}[],:".includes(char);
+      if (token === "atom") {
+        if (!whitespace(char) && !delimiter && char !== "\"") {
           index++;
           continue;
         }
-        if (char !== "{") invalid("top-level value must be an object");
-        rootStarted = true;
-        depth = 1;
-        segmentStart = index + 1;
+        parts.push(chunk.slice(segmentStart, index));
+        scalar();
+      }
+      if (whitespace(char)) {
         index++;
         continue;
       }
-
-      if (done) {
-        if (!whitespace(char)) invalid("trailing content after top-level object");
-        index++;
-        continue;
-      }
-
-      if (inString) {
-        if (escape) {
-          escape = false;
-        } else if (char === "\\") {
-          escape = true;
-        } else if (char === "\"") {
-          inString = false;
-        }
-        index++;
-        continue;
-      }
-      if (char === "\"") {
-        inString = true;
-        index++;
-        continue;
-      }
-      if (char === "{" || char === "[") {
-        depth++;
-        index++;
-        continue;
-      }
-      if (char === "}" && depth === 1) {
-        const tail = chunk.slice(segmentStart, index);
-        if (tail.trim().length > 0 || fieldParts.length > 0) {
-          fieldParts.push(tail);
-          completeField();
-        }
-        segmentStart = -1;
-        depth = 0;
-        done = true;
-        index++;
-        continue;
-      }
-      if (char === "}" || char === "]") {
-        depth--;
-        if (depth < 1) invalid("unbalanced JSON container");
-        index++;
-        continue;
-      }
-      if (char === "," && depth === 1) {
-        fieldParts.push(chunk.slice(segmentStart, index));
-        completeField();
-        segmentStart = index + 1;
-        index++;
-        continue;
+      if (root !== null && stack.length === 0) invalid("trailing content after top-level object");
+      if (delimiter) punctuation(char);
+      else {
+        token = char === "\"" ? "string" : "atom";
+        segmentStart = index;
       }
       index++;
     }
-    if (rootStarted && !done && segmentStart >= 0) {
-      fieldParts.push(chunk.slice(segmentStart));
+    if (token !== null) parts.push(chunk.slice(segmentStart));
+  }
+  if (token !== null || stack.length !== 0) invalid("unexpected end of file");
+  return root;
+}
+
+/** The envelope is already sealed/JSON-safe. Keep ordinary JSON.stringify
+ * ordering and encoding without constructing any container-sized string. */
+function* jsonTokens(value: unknown): Generator<string> {
+  if (value === null || typeof value !== "object") {
+    yield JSON.stringify(value);
+  } else if (Array.isArray(value)) {
+    yield "[";
+    for (let i = 0; i < value.length; i++) {
+      if (i) yield ",";
+      yield* jsonTokens(value[i]);
+    }
+    yield "]";
+  } else {
+    yield "{";
+    let first = true;
+    for (const key of Object.keys(value)) {
+      if (!first) yield ",";
+      first = false;
+      yield JSON.stringify(key) + ":";
+      yield* jsonTokens((value as Record<string, unknown>)[key]);
+    }
+    yield "}";
+  }
+}
+
+/** Bounded serialization shared by durable writes and the raw-JSON status
+ * export. Containers may exceed the single-string limit; scalars may not. */
+export function* checkpointJsonChunks(value: unknown): Generator<string> {
+  let parts: string[] = [];
+  let length = 0;
+  for (const token of jsonTokens(value)) {
+    parts.push(token);
+    length += token.length;
+    if (length >= 1024 * 1024) {
+      yield parts.join("");
+      parts = [];
+      length = 0;
     }
   }
-
-  if (!sawNonWhitespace) return null;
-  if (!done || inString || depth !== 0) invalid("unexpected end of file");
-  return fields;
+  if (parts.length) yield parts.join("");
 }
 
 interface AttestationJournalRecord {
@@ -1259,6 +1299,23 @@ export class UniverseRebuildCheckpointStore {
     });
   }
 
+  /** Seed a new run directory with an existing completed Ready checkpoint.
+   * This is the same rolling-rebuild state, not a new cache or admission path.
+   * The runner still creates fresh source receipts and checks every reused memo.
+   */
+  async inheritReadyFrom(
+    source: UniverseRebuildCheckpointStore,
+  ): Promise<StartupCheckpointEnvelope> {
+    const checkpoint = await source.load();
+    if (checkpoint === null || checkpoint.readyGeneration === null ||
+      checkpoint.inProgressRun !== null) {
+      throw new Error("Ready inheritance requires a completed source checkpoint");
+    }
+    activeReadyMemos(checkpoint);
+    // Never overwrite either an existing destination or the source itself.
+    return this.#cas(0, () => checkpoint);
+  }
+
   async #fileSignature(path: string): Promise<string | null> {
     try {
       const value = await stat(path);
@@ -1322,9 +1379,9 @@ export class UniverseRebuildCheckpointStore {
   async #replayAttestationJournal(
     base: StartupCheckpointEnvelope | null,
   ): Promise<StartupCheckpointEnvelope | null> {
-    let raw: Buffer;
+    let file: Awaited<ReturnType<typeof open>>;
     try {
-      raw = await readFile(this.#journalPath);
+      file = await open(this.#journalPath, "r");
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error
         ? String((error as { code?: unknown }).code)
@@ -1336,14 +1393,11 @@ export class UniverseRebuildCheckpointStore {
       }
       throw error;
     }
-    this.#journalTotalBytes = raw.byteLength;
-    const lastNewline = raw.lastIndexOf(0x0a);
-    this.#journalCommittedBytes = lastNewline < 0 ? 0 : lastNewline + 1;
-    const committed = raw.subarray(0, this.#journalCommittedBytes)
-      .toString("utf8");
+    this.#journalTotalBytes = 0;
+    this.#journalCommittedBytes = 0;
     let current = base;
-    for (const line of committed.split("\n")) {
-      if (line.length === 0) continue;
+    const applyLine = (line: string): void => {
+      if (line.length === 0) return;
       const record = parseJournalRecord(line);
       if (current === null) {
         throw new Error(
@@ -1356,7 +1410,7 @@ export class UniverseRebuildCheckpointStore {
             "universe rebuild attestation journal compacted-state mismatch",
           );
         }
-        continue;
+        return;
       }
       if (
         record.expectedRevision !== current.revision ||
@@ -1381,38 +1435,52 @@ export class UniverseRebuildCheckpointStore {
         ...next,
         checkpointFingerprint: record.resultCheckpointFingerprint,
       });
+    };
+    try {
+      const buffer = Buffer.allocUnsafe(this.#readChunkBytes);
+      let pending: Buffer[] = [];
+      while (true) {
+        const { bytesRead } = await file.read(buffer, 0, buffer.length, null);
+        if (bytesRead === 0) break;
+        const chunk = buffer.subarray(0, bytesRead);
+        let start = 0;
+        let end: number;
+        while ((end = chunk.indexOf(0x0a, start)) !== -1) {
+          pending.push(chunk.subarray(start, end));
+          // Decode only after joining a complete line; UTF-8 may cross chunks.
+          applyLine(Buffer.concat(pending).toString("utf8"));
+          pending = [];
+          this.#journalCommittedBytes = this.#journalTotalBytes + end + 1;
+          start = end + 1;
+        }
+        if (start < bytesRead) pending.push(Buffer.from(chunk.subarray(start)));
+        this.#journalTotalBytes += bytesRead;
+      }
+      // No LF means uncommitted. A later append truncates only this byte tail.
+    } finally {
+      await file.close();
     }
     return current;
   }
 
-  /**
-   * Write the envelope one top-level field per chunk. Stringifying the
-   * whole envelope (verifiedMemos + run outcomes + a ready generation with
-   * its catalog/graph snapshots) pretty-printed exceeds V8's single-string
-   * limit ("Invalid string length"); each field alone stays well under it.
-   * The file remains plain JSON (JSON.parse-compatible).
-   */
+  /** Stream nested containers too; one memo dictionary can exceed V8's limit. */
   async #writeEnvelope(
     path: string,
     envelope: StartupCheckpointEnvelope,
   ): Promise<void> {
-    const field = (key: string, value: unknown): string =>
-      JSON.stringify(key) + ":" + JSON.stringify(value);
     const file = await open(path, "w", 0o600);
     try {
-      await file.write("{");
-      await file.write(field("revision", envelope.revision) + ",");
-      await file.write(field("verifiedMemos", envelope.verifiedMemos) + ",");
-      await file.write(field("inProgressRun", envelope.inProgressRun) + ",");
-      await file.write(
-        field(
-          "retryableAttemptsByCandidateKey",
-          envelope.retryableAttemptsByCandidateKey,
-        ) + ",",
-      );
-      await file.write(field("readyGeneration", envelope.readyGeneration) + ",");
-      await file.write(field("checkpointFingerprint", envelope.checkpointFingerprint));
-      await file.write("}\n");
+      for (const chunk of checkpointJsonChunks({
+        revision: envelope.revision,
+        verifiedMemos: envelope.verifiedMemos,
+        inProgressRun: envelope.inProgressRun,
+        retryableAttemptsByCandidateKey: envelope.retryableAttemptsByCandidateKey,
+        readyGeneration: envelope.readyGeneration,
+        checkpointFingerprint: envelope.checkpointFingerprint,
+      })) {
+        await file.writeFile(chunk);
+      }
+      await file.writeFile("\n");
     } finally {
       await file.close();
     }
@@ -2559,16 +2627,10 @@ function assertReadyPromotion(
       run.observedThrough.hash.toLowerCase();
   const appliedAtCutoff = ready.appliedThrough.number === run.cutoff.number &&
     ready.appliedThrough.hash.toLowerCase() === run.cutoff.hash.toLowerCase();
-  const graphRootMatches = ready.graphHash === createHash("sha256")
-    .update("graph-v2:" + canonicalJson(ready.graphSnapshot))
-    .digest("hex");
-  const catalogRootMatches = ready.catalogHash === createHash("sha256")
-    .update("catalog-v1:" + canonicalJson(ready.catalogSnapshot))
-    .digest("hex");
+  const graphRootMatches = ready.graphHash === readyRootHash("graph-v2:", ready.graphSnapshot);
+  const catalogRootMatches = ready.catalogHash === readyRootHash("catalog-v1:", ready.catalogSnapshot);
   const publicationRootMatches = ready.publicationSetHash ===
-    createHash("sha256")
-      .update("publications-v2:" + canonicalJson(ready.catalogSnapshot))
-      .digest("hex");
+    readyRootHash("publications-v2:", ready.catalogSnapshot);
   const sourceReceipts = run.sourceReceipts;
   assertCompleteSourceReceipts(sourceReceipts);
   assertSourceReceiptsBindRun(sourceReceipts, run);

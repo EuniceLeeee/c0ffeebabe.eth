@@ -3,10 +3,6 @@ import { routeKey } from "../../adapter-family-identifiers.js";
 import { hashCanonical } from "../../canonical-value.js";
 import { lowerAddress } from "../standard-family/common.js";
 import { erc4626StaticProjection } from "./binding.js";
-import {
-  ERC4626_FAMILY_ID,
-  ERC4626_LINEAGE_ID,
-} from "./manifest.js";
 import type { Erc4626Descriptor, Erc4626Route } from "./types.js";
 
 export const erc4626Routes: RouteProjectionSemantics<
@@ -45,10 +41,10 @@ function makeRoute(
   const deposit = direction === "deposit";
   return Object.freeze({
     routeKey: routeKey(
-      `${ERC4626_FAMILY_ID}\u001f${lowerAddress(descriptor.vault)}\u001f${direction}`,
+      `${descriptor.familyId}\u001f${lowerAddress(descriptor.vault)}\u001f${direction}`,
     ),
-    familyId: ERC4626_FAMILY_ID,
-    lineageId: ERC4626_LINEAGE_ID,
+    familyId: descriptor.familyId,
+    lineageId: descriptor.lineageId,
     instanceKey: descriptor.instanceKey,
     tokenIn: deposit ? descriptor.asset : descriptor.share,
     tokenOut: deposit ? descriptor.share : descriptor.asset,
@@ -63,6 +59,7 @@ function makeRoute(
     runtimeRequirements: descriptor.runtimeRequirements,
     target: descriptor.vault,
     direction,
-    adapterId: deposit ? "erc4626-deposit" : "erc4626-redeem",
+    adapterId: descriptor.stakedUsdat !== undefined && deposit
+      ? "staked-usdat-deposit" : deposit ? "erc4626-deposit" : "erc4626-redeem",
   });
 }

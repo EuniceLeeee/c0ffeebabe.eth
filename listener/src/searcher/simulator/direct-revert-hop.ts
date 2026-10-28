@@ -31,8 +31,9 @@ export function directRevertedRuntimeHop(plan: ResolvedPlan, edges: readonly Tok
     // Rebuild the canonical snapshot: the route witness must bind the actual
     // calldata and simulation payload, not only a parallel scriptHex field.
     const input = validateEthSimulateV1ExecutionInput(saved.executionInput);
-    if ((input.schemaVersion !== 4 && input.schemaVersion !== 6) || !input.diagnosticKey || /^0x0{64}$/i.test(input.diagnosticKey) || !input.executorRuntimeCode ||
-        !supportsHopDiagnostics(input.executorRuntimeCode.code)) return null;
+    const code = input.executorRuntimeCode ?? ("chainExecutorRuntimeCode" in input ? input.chainExecutorRuntimeCode : undefined);
+    if (!("diagnosticKey" in input) || !input.diagnosticKey || /^0x0{64}$/i.test(input.diagnosticKey) ||
+        !code || !supportsHopDiagnostics(code.code)) return null;
     // Providers may put bytes in either field. Conflicting nonempty results
     // cannot supply a trustworthy attribution.
     if (saved.errorData && saved.errorData !== "0x" && saved.returnData !== "0x" &&

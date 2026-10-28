@@ -25,7 +25,7 @@
     "issue": "Whole-output spawnSync buffering kills long-running indexed historical tools at the 64 MiB combined stdout/stderr limit and reports the error as exit 127.",
     "evidence": "Independent real subprocess reproduction plus the measured run's 67109518 output bytes crossing its 67108864 cap; no OOM evidence.",
     "codify_target": "Stream raw-byte hashes and bounded-memory redacted output with backpressure; preserve exit and signal status and terminate only the owned child group on cancellation; regression above 64 MiB.",
-    "codify_commit": "8bc3f48a",
+    "codify_commit": "6d2dcbf7",
     "status": "codified"
   },
   "replay_gate": {

@@ -22,6 +22,7 @@ import type {
   StateReadResult,
 } from "./venues/blockscan-state-capability.js";
 import { ethers } from "ethers";
+import { setTimeout as retryDelay } from "node:timers/promises";
 import {
   deterministicHash,
   mutationQueryDescriptorFingerprint,
@@ -1962,16 +1963,25 @@ export class JsonRpcBlockScanStateReadBackend
       const pending = body.map(payload => ({ payload, retry: {} as RethTransportRetryState }));
       const responses: JsonRpcResponse[] = [];
       while (pending.length > 0) {
+        const remainingMs = (pending[0]!.retry.transportRetryBatch?.notBeforeMs ?? 0) - Date.now();
+        if (remainingMs > 0) {
+          // The failed envelope cools without holding a shared wire permit.
+          try { await retryDelay(remainingMs, undefined, {signal:admission.signal}); }
+          catch (error) { throw admission.signal.aborted ? admission.signal.reason : error; }
+          continue;
+        }
         const send = async (lease?: RethTransportLease): Promise<void> => {
           if (admission.signal.aborted) {
             throw admission.signal.reason ?? new DOMException("Aborted", "AbortError");
           }
           sharedQueueWaitMs += lease?.queueWaitMs ?? 0;
           const load = lease?.load;
-          // Read limits at admission, not before queueing. The configured
-          // limits (never active counts) identify the shared retry tier.
-          const attempt = load?.limits(this.maxBatchSize, this.maxConcurrentBatches);
-          const chunk = pending.slice(0, attempt?.batchSize ?? pending.length);
+          // Retry state belongs to this failed envelope, not other requests.
+          const attempt = load?.limits(this.maxBatchSize, this.maxConcurrentBatches, [pending[0]!.retry]);
+          const group = pending[0]!.retry.transportRetryBatch;
+          const differentGroup = pending.findIndex(item => item.retry.transportRetryBatch !== group);
+          const chunk = pending.slice(0, Math.min(attempt?.batchSize ?? pending.length,
+            differentGroup < 0 ? pending.length : differentGroup));
           if (!physicalStarted) {
             physicalStarted = true;
             this.withHardRequestTimeout(physicalLifetime, signal).then(
@@ -2004,14 +2014,13 @@ export class JsonRpcBlockScanStateReadBackend
             pending.splice(0, chunk.length);
           } catch (error) {
             // Do not extend existing 429/revert/source/proof-error policy.
-            // Only typed physical wire timeouts notify the shared controller.
+            // Only typed physical wire timeouts reduce this envelope's tier.
             if (admission.signal.aborted || !load || !attempt ||
                 !isRethTransportTimeout(error) ||
                 !load.retry(error, chunk.map(item => item.retry), attempt)) throw error;
           }
         };
-        // Each retry/sub-batch releases the old physical lease and reacquires;
-        // the scheduler alone owns reduction/backoff. No local retry timer.
+        // Each retry/sub-batch reacquires the unchanged shared physical cap.
         if (this.transportScheduler) {
           await this.transportScheduler.run(lane, admission.signal, send);
         } else {

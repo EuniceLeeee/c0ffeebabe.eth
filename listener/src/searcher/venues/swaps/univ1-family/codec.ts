@@ -5,12 +5,19 @@ export const MAX_UINT = (1n << 256n) - 1n;
 export const MAX_VALUE = (1n << 96n) - 1n;
 export const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 export const MULTICALL = "0xca11bde05977b3631167028862be2a173976ca11";
-// Verified Vyper 0.1.0b4 implementation linked by both cached exchange pages.
-// Infrastructure provenance, NOT an exchange admission list. This is the
-// Anyswap V1 fork with an additional ceil(input/1000) issuer fee. Canonical
-// Uniswap V1 and arbitrary ABI-compatible implementations are not inferred.
+// Implementation address is provenance only. Admission binds the complete
+// immutable delegate bytecode plus bidirectional factory registration.
 export const IMPLEMENTATION = "0x575ba30c7b77fa0eebd34cc5416538323c4e5612";
 export const MODEL = "anyswap-v1-issuer-fee-001";
+export const STANDARD_MODEL = "uniswap-v1-997";
+export type Model = typeof MODEL | typeof STANDARD_MODEL;
+// Captured at canonical source 26144845; test/implementation-bytecode.json
+// retains the complete implementations. Unknown bytecode is not ABI-inferred.
+export const ISSUER_CODE_HASH = "0x149aa36e02a2583973be13ac2161eb3ada7ce722d148f1dfa04c94a680957b1b";
+export const STANDARD_CODE_HASH = "0xb9205fc3f30b0ad30c6f03a0f464f8fd435fbf28cdbb6071054d62fb506a4b96";
+export function implementationModel(codeHash: string): Model | null {
+  return codeHash === ISSUER_CODE_HASH ? MODEL : codeHash === STANDARD_CODE_HASH ? STANDARD_MODEL : null;
+}
 export const POOL = new ethers.Interface([
   "function tokenAddress() view returns(address)", "function factoryAddress() view returns(address)",
   "function issuer() view returns(address)",

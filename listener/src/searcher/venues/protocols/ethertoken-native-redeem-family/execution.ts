@@ -1,12 +1,12 @@
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
-import { runtimeLeg, runtimeExecutor, runtimeWrapReceipt, RUNTIME_WRAP } from "../../runtime-execution.js";
-import { ADDR } from "../../../../shared/constants/addresses.js";
+import { runtimeLeg, runtimeExecutor, assertProjectedRuntimeRoute } from "../../runtime-execution.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
 } from "../../adapter-family-plugin.js";
-import { sameAddress } from "../standard-family/common.js";
-import { assertEtherTokenNativeInvocation } from "./shared.js";
+import { sameAddress, MAX_UINT256 } from "../standard-family/common.js";
+import { assertEtherTokenNativeInvocation, ETHERTOKEN_NATIVE_INTERFACE } from "./shared.js";
+import { etherTokenNativeRedeemRoutes } from "./routes.js";
 import type {
   EtherTokenNativeRedeemDescriptor,
   EtherTokenNativeRedeemExactEvidence,
@@ -17,18 +17,23 @@ export const etherTokenNativeRedeemExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertEtherTokenNativeInvocation(d, r); runtimeExecutor(executor, d.token);
-    const p = new RuntimeAmountProgram().nativeBalance(13)
-      .call(d.token, RUNTIME_WRAP.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 0 }] });
-    runtimeWrapReceipt(p, d.nativeAnchor);
+    assertProjectedRuntimeRoute(r, etherTokenNativeRedeemRoutes.project({ descriptor: d }));
+    // This withdraw burns the protocol token; it is not the WETH boundary.
+    const p = new RuntimeAmountProgram()
+      .call(d.token, ETHERTOKEN_NATIVE_INTERFACE.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 0 }] });
     return runtimeLeg(r.adapterId, p);
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {
     assertEtherTokenNativeInvocation(input.descriptor, input.route);
+    assertProjectedRuntimeRoute(input.route, etherTokenNativeRedeemRoutes.project({ descriptor: input.descriptor }));
+    runtimeExecutor(input.executor, input.descriptor.token);
     const evidence = input.exactEvidence;
     if (
       input.amountIn <= 0n ||
+      input.amountIn > MAX_UINT256 ||
       input.quotedAmountOut !== input.amountIn ||
+      input.minAmountOut < 0n || input.minAmountOut > input.quotedAmountOut ||
       evidence.kind !== "ethertoken-native-one-to-one" ||
       evidence.amountIn !== input.amountIn ||
       evidence.amountOut !== input.quotedAmountOut ||
@@ -47,17 +52,8 @@ export const etherTokenNativeRedeemExecution = {
           adapterId: input.route.adapterId,
           target: input.descriptor.token,
           tokenIn: input.descriptor.token,
-          tokenOut: input.descriptor.token,
+          tokenOut: input.route.tokenOut,
           amount: input.amountIn,
-          params: {},
-          children: [],
-        }),
-        Object.freeze({
-          adapterId: "weth-deposit-value",
-          target: input.descriptor.nativeAnchor,
-          tokenIn: ADDR.ZERO,
-          tokenOut: input.descriptor.nativeAnchor,
-          amount: input.quotedAmountOut,
           params: {},
           children: [],
         }),

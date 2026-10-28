@@ -29,6 +29,8 @@ import {
 } from "../universe-rebuild-runner.js";
 import { strictEdgeCollectionFromBlock } from
   "../strict-edge-collection-policy.js";
+import { ReadyRpcRateError, ReadyRpcThrottle } from "../ready-rpc-throttle.js";
+import { RevmFatalError } from "../revm-sim-client.js";
 
 const SOURCE = Object.freeze({
   number: 25_750_000,
@@ -205,8 +207,8 @@ function makeFixture(
           stage: "identity",
           failureCode: "rpc",
           reasonCode: "factory-child-reverse-binding:rpc",
-          candidateSnapshot: Object.freeze({ id }),
-        });
+          candidateSnapshot: input.candidate,
+        } as const);
       }
       return Object.freeze({
         status: "verified",
@@ -317,6 +319,129 @@ async function main(): Promise<void> {
   );
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
+    {
+      const f = makeFixture(join(dir, "adaptive-recovery"));
+      const control = new ReadyRpcThrottle(4, () => {});
+      let rateAttempts = 0;
+      const ready = await rebuildUniverse({ ...f.input, readyThrottle: control, attestationConcurrency: 4,
+        attestFamilyInstanceOnce: async input => {
+          if ((input.candidate as { id: string }).id === "b" && rateAttempts++ < 3) {
+            throw new RevmFatalError({ kind: "rpc-throttle", category: "rpc-limit-code", rpcCode: 429 });
+          }
+          return f.input.attestFamilyInstanceOnce(input);
+        } });
+      assert.equal(control.concurrency, 3);
+      assert.equal(rateAttempts, 4);
+      assert.equal(ready.candidateAccounting.verified, 3);
+      assert.equal(ready.candidateAccounting.terminalRejected, 0);
+      assert.equal(ready.candidateAccounting.retryable, 0);
+      assert.equal(activeReadyMemos((await f.store.load())!).length, 3);
+    }
+    {
+      const f = makeFixture(join(dir, "adaptive-swallowed-error"));
+      const control = new ReadyRpcThrottle(4, () => {});
+      let failures = 0, seals = 0;
+      const ready = await rebuildUniverse({ ...f.input, readyThrottle: control, attestationConcurrency: 4,
+        attestFamilyInstanceOnce: async input => {
+          if ((input.candidate as { id: string }).id === "b" && failures++ < 3) control.markFailure(new ReadyRpcRateError());
+          return f.input.attestFamilyInstanceOnce(input);
+        }, sealDurableVerifiedMemo: input => { seals++; return f.input.sealDurableVerifiedMemo(input); } });
+      assert.equal(failures, 4);
+      assert.equal(seals, 3, "swallowed rate errors must be fenced before memo/outcome writes");
+      assert.equal(ready.candidateAccounting.verified, 3);
+    }
+    {
+      const f = makeFixture(join(dir, "adaptive-exhaustion"));
+      const control = new ReadyRpcThrottle(1, () => {});
+      let requests = 0;
+      await assert.rejects(rebuildUniverse({ ...f.input, readyThrottle: control, attestationConcurrency: 1,
+        attestFamilyInstanceOnce: async () => { requests++; throw new ReadyRpcRateError(); } }), /persisted at concurrency=1 batch=1/);
+      assert.equal(requests, 12);
+      const failed = (await f.store.load())!;
+      assert.equal(failed.readyGeneration, null);
+      assert.equal(Object.keys(failed.inProgressRun!.outcomesByCandidateKey).length, 0);
+      assert.equal(Object.keys(failed.verifiedMemos).length, 0);
+      const ready = await rebuildUniverse({ ...f.input, readyThrottle: new ReadyRpcThrottle(1, () => {}), attestationConcurrency: 1 });
+      assert.equal(ready.candidateAccounting.verified, 3);
+      assert.equal(f.scanCalls(), 1, "recovery continues the same sealed range without rescanning");
+    }
+    // Separate Ready directories inherit the ordinary rolling-rebuild state.
+    // No old outcome, coverage receipt or Graph is treated as the new run.
+    {
+      const oldDir = join(dir, "prior-ready"), newDir = join(dir, "next-ready");
+      const old = makeFixture(oldDir);
+      old.failKeys.add("b");
+      old.terminalKeys.add("c");
+      const partitions = {
+        candidateFamilyId: () => "univ2", familyDiscoveryDefinitionHash: () => "d".repeat(64),
+        dedupeFamilyCandidates: (observations: readonly unknown[]) => old.input.dedupeFamilyCandidates(observations)
+          .map(candidate => ({ ...(candidate as { id: string }), familyId: "univ2" })),
+      };
+      await rebuildUniverse({ ...old.input, ...partitions });
+      const before = await readFile(join(oldDir, "checkpoint.json"), "utf8");
+      const previous = (await old.store.load())!;
+      assert.equal(previous.readyGeneration!.familyPartitions!.univ2!.outcomesByCandidateKey["cand:c"]!.status,
+        "terminal-rejected", "the inherited snapshot includes the actual rejection, not only counters");
+      const nextSource = Object.freeze({ ...SOURCE, number: SOURCE.number + 10,
+        hash: "0x" + "b2".repeat(32), generation: 2 });
+      const freshReceipts = sourceReceipts(nextSource.number).map(receipt => ({
+        ...receipt, toBlock: nextSource.number, cutoffNumber: nextSource.number,
+        cutoffHash: nextSource.hash,
+        completedChunks: [{ ...receipt.completedChunks[0]!, toBlock: nextSource.number }],
+        observedThrough: { number: nextSource.number, hash: nextSource.hash },
+        appliedThrough: { number: nextSource.number, hash: nextSource.hash },
+      }));
+      const next = makeFixture(newDir, { runId: "different-ready",
+        scanSwapWindow: async () => ({
+          observations: ["a", "b", "c", "d"].map(id => ({ id, block: nextSource.number })),
+          sourceReceipts: freshReceipts,
+        }),
+      });
+      const inherited = await next.store.inheritReadyFrom(old.store);
+      assert.deepEqual(inherited, previous, "inherit the existing state without rewriting proofs");
+      await assert.rejects(next.store.inheritReadyFrom(old.store), /CAS conflict/);
+      await assert.rejects(old.store.inheritReadyFrom(old.store), /CAS conflict/);
+      next.failKeys.add("b");
+      const ready = await rebuildUniverse({ ...next.input, ...partitions,
+        freezeCanonicalHead: async () => nextSource,
+        observationRange: { fromBlock: nextSource.number, toBlock: nextSource.number },
+      });
+      assert.equal(next.attestCalls.has("a"), false, "unchanged proof skips full strict across directories");
+      for (const id of ["b", "c", "d"]) {
+        assert.equal(next.attestCalls.get(id), 1, "retryable, old rejection and new instance use existing strict rules");
+      }
+      assert.equal(next.scanCalls(), 1, "new source coverage must be obtained normally");
+      assert.equal(ready.generation, previous.readyGeneration!.generation + 1);
+      assert.deepEqual(ready.cutoff, nextSource);
+      assert.equal(ready.candidateAccounting.verified, 3);
+      assert.equal((await next.store.load())!.retryableAttemptsByCandidateKey["cand:b"]!.attemptCount, 2,
+        "retry history carries across Ready without suppressing the new attempt");
+      assert.equal(await readFile(join(oldDir, "checkpoint.json"), "utf8"), before,
+        "the original Ready and its rejected results remain untouched");
+
+      const stale = makeFixture(join(dir, "stale-ready"));
+      await stale.store.inheritReadyFrom(old.store);
+      stale.invalidReusableKeys.add("a");
+      await rebuildUniverse(stale.input);
+      assert.equal(stale.attestCalls.get("a"), 1, "existing invalidation still forces strict");
+
+      const empty = new UniverseRebuildCheckpointStore({ path: join(dir, "empty", "checkpoint.json") });
+      await assert.rejects(empty.inheritReadyFrom(empty), /completed source checkpoint/);
+      await mkdir(join(dir, "corrupt"));
+      await writeFile(join(dir, "corrupt", "checkpoint.json"), before.replace('"revision":', '"revision":999'));
+      await assert.rejects(empty.inheritReadyFrom(new UniverseRebuildCheckpointStore({
+        path: join(dir, "corrupt", "checkpoint.json"),
+      })), /fingerprint/);
+      const run = await old.store.beginOrResumeRun({
+        expectedRevision: previous.revision, runId: "unfinished-next-run", cutoff: SOURCE,
+        fromBlock: SOURCE.number, universeHash: "u", candidateSetHash: "c", candidateCount: 0,
+        candidatesByKey: {}, observedThrough: SOURCE, sourceReceipts: sourceReceipts(SOURCE.number),
+      });
+      assert(run.inProgressRun);
+      await assert.rejects(empty.inheritReadyFrom(old.store), /completed source checkpoint/);
+      assert.equal(await empty.load(), null, "failed imports cannot create a destination checkpoint");
+    }
+
     // A: retryable counts as an accounted outcome: the verified partition is
     // published, the completed run clears, and retryable work moves to the
     // independent probe queue.

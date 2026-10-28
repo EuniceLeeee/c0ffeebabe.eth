@@ -23,6 +23,9 @@ assert.equal(PRODUCTION_FAMILY_ACTIVATIONS.length, expectedFamilyCount);
 const defaultDisabledSources = new Set([
   "balancer-v2.production.ts", "balancer-v3.production.ts",
   "curve-plain.production.ts", "curve-underlying.production.ts",
+  "algebra-integral.production.ts", "compound-ctoken.production.ts",
+  "kyberswap-elastic.production.ts", "oneswap.production.ts",
+  "peapods-debond.production.ts", "precision-pool.production.ts", "psv.production.ts",
 ]);
 for (const activation of PRODUCTION_FAMILY_ACTIVATIONS) {
   assert.equal(activation.envKey, "SEARCHER_FAMILY_" +

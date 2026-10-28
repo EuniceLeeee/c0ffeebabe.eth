@@ -237,6 +237,50 @@ async function pendingCallTests(): Promise<void> {
     catch (error) { failures.push(error); console.error(`[pinned-reth-quote-backend] ${args[0]}: FAIL`, error); }
   };
   const request = { to: OK_A, data: "0xcafe" };
+  await testCase("critical preparation bypasses queued bulk without exceeding shared capacity", async ({ state, backend }) => {
+    state.pauseResponses = true;
+    const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+    const client = backend({ transportLane: "producer-bulk", transportScheduler: scheduler,
+      maxBatchSize: 1, maxConcurrentBatches: 3 });
+    const bulk = ["0x01", "0x02", "0x03"].map(data => observe(client.call({ to: OK_A, data })));
+    await until(() => state.batches.length === 2, "bulk fills both physical permits");
+    const critical = client.criticalCalls();
+    check.strictEqual(client.criticalCalls(), critical, "one owned critical queue per pass");
+    const funding = observe(critical.call({ to: OK_B, data: "0x04" }));
+    await nextTurn(); await nextTurn();
+    check.equal(state.batches.length, 2, "priority cannot preempt active HTTP or exceed capacity");
+    state.heldResponses.shift()!.send();
+    await until(() => state.batches.length === 3, "next free permit serves critical funding");
+    check.equal((state.batches[2]![0]!.params as [{ to: string }])[0].to.toLowerCase(), OK_B);
+    check.equal(critical.stats().lane, "producer-critical");
+    check.equal(state.maxActiveBatches, 2);
+    for (const batch of state.batches) {
+      check.equal(batch.length, 1, "funding never joins a bulk batch");
+      check.deepEqual((batch[0]!.params as unknown[])[1], { blockHash: HASH, requireCanonical: true });
+    }
+    await client.closeAndDrain();
+    (await Promise.all([...bulk.slice(1), funding])).forEach(result => aborted(result));
+    check.equal((await bulk[0]!).status, "fulfilled");
+    for (const backend of [client, critical]) {
+      const s = backend.stats();
+      check.deepEqual([s.activeTransports, s.pendingItems, s.inFlightBatches, s.liveItems], [0, 0, 0, 0]);
+    }
+    aborted(await observe(critical.call({ to: OK_B, data: "0x05" })));
+  });
+  for (const mode of ["signal", "deadline"] as const) {
+    await testCase(`critical preparation inherits parent ${mode}`, async ({ state, backend }) => {
+      state.pauseResponses = true;
+      const controller = new AbortController();
+      const client = backend({ signal: controller.signal, ...(mode === "deadline" ? { deadlineAtMs: Date.now() + 100 } : {}) });
+      const critical = client.criticalCalls();
+      const result = observe(critical.call(request));
+      await until(() => state.batches.length === 1, "critical transport active");
+      if (mode === "signal") controller.abort();
+      aborted(await result);
+      await client.closeAndDrain();
+      check.equal(critical.stats().activeTransports, 0);
+    });
+  }
   for (const failure of ["source", "http429", "plaintext429", "rpc429"] as const) {
    for (const lane of ["exact", "producer-bulk"] as const) {
     await testCase(`${lane} ${failure} cancels active and queued work once; successor survives`,
@@ -782,6 +826,39 @@ async function adaptiveRetryTests(): Promise<void> {
   const limited = { code: 429, message: "Your app has exceeded its compute units per second capacity" };
   const results = (items: Array<Record<string, unknown>>) => items.map(item =>
     ({ jsonrpc: "2.0", id: item.id, result: RESULT }));
+  await pendingCase("failed batch backs off while eight fresh batches retain the shared eight-permit cap", async ({state,backend,release}) => {
+    const scheduler = new RethTransportScheduler({capacity:8,producerReserved:1,retryDelayMs:500});
+    const b=backend({transportScheduler:scheduler,transportLane:"producer-bulk",retryRpcThrottle:true,
+      maxBatchSize:8,maxConcurrentBatches:8,deadlineAtMs:Date.now()+10_000});
+    state.replyBatch=items=>({status:200,body: (items[0]!.params as any[])[0].data.startsWith("0xaa") && items.length>=4
+      ? items.map(item=>({id:item.id,error:limited})) : results(items)});
+    const original=Promise.all(Array.from({length:8},(_,i)=>b.call({to:OK_A,data:`0xaa${i.toString(16).padStart(2,"0")}`})));
+    void original.catch(()=>{});
+    await until(()=>b.stats().throttleRetries===1,"original batch in backoff");
+    let drained=false;
+    const draining=b.drain().then(()=>{drained=true;});
+    await nextTurn();
+    check.equal(drained,false,"drain must include locally cooling pending work");
+    state.pauseResponses=true;
+    const fresh=Promise.all(Array.from({length:64},(_,i)=>b.call({to:OK_B,data:`0xbb${i.toString(16).padStart(2,"0")}`})));
+    void fresh.catch(()=>{});
+    await until(()=>state.heldResponses.length===8,"eight fresh physical batches during failed batch cooldown");
+    check.equal(scheduler.snapshot().activeTotal,8);
+    check.equal(state.maxActiveBatches,8);
+    check.deepEqual(state.batches.slice(1).map(items=>items.length),Array(8).fill(8));
+    check.equal(b.stats().currentConcurrentBatchLimit,8);
+    state.pauseResponses=false;release();await fresh;
+    await nextTurn();state.maxActiveBatches=0;state.holdResponses=true;
+    check.deepEqual(await original,Array(8).fill(RESULT));await draining;await b.drain();
+    check.ok(state.maxActiveBatches<=2,"split retries exceeded their local reduced concurrency");
+    const retries=state.batches.slice(9);
+    check.deepEqual(retries.map(items=>items.length),[4,4,2,2,2,2]);
+    for(const item of state.batches[0]!) check.equal(retries.flat().filter(x=>JSON.stringify(x)===JSON.stringify(item)).length,2);
+    check.equal(b.stats().currentBatchSizeLimit,8);
+    check.equal(b.stats().peakInFlightBatches,8);
+    check.equal(scheduler.snapshot().activeTotal,0);
+    check.equal(state.singles.length,0);
+  });
   for (const mode of ["cancel", "deadline", "live", "source", "quota", "unhandled"] as const) {
     for (const reverse of [false, true]) {
       await pendingCase(`adaptive mixed ${mode} response reverse=${reverse} preserves sibling and fatal boundaries`, async ({ state, backend, release }) => {
@@ -825,10 +902,10 @@ async function adaptiveRetryTests(): Promise<void> {
         if (mode === "live") check.deepEqual(state.batches[1], [state.batches[0]![1]]);
         check.equal(b.stats().throttleRetries, mode === "live" ? 1 : 0);
         check.equal(b.stats().timeoutRetries, 0);
-        check.equal(scheduler.snapshot().reductionVersion, mode === "live" ? 1 : 0,
-          "abandoned recoverable errors and fatal errors must not lower shared load");
-        check.equal(b.stats().currentConcurrentBatchLimit, mode === "live" ? 2 : 4);
-        check.equal(b.stats().currentBatchSizeLimit, mode === "live" ? 2 : 4);
+        check.equal(scheduler.snapshot().reductionVersion, 0,
+          "no response may lower unrelated envelopes' shared load");
+        check.equal(b.stats().currentConcurrentBatchLimit, 4);
+        check.equal(b.stats().currentBatchSizeLimit, 4);
         check.equal(state.singles.length, 0);
         check.equal(b.stats().pendingItems, 0);
         check.equal(b.stats().liveItems, 0);
@@ -851,13 +928,13 @@ async function adaptiveRetryTests(): Promise<void> {
     try {
       check.deepEqual(await Promise.all([b.call(first), b.call(second)]), [RESULT, RESULT]);
     } finally { console.warn = warn; }
-    check.ok(warnings.some(line => /^\[pinned-reth-quote-backend\] rpc-throttle-retry status=429 concurrency=\d+->\d+ retry_at_one=[0-3]\/3 delay_ms=(1000|2000|4000) items=\d+$/.test(line)),
+    check.ok(warnings.some(line => /^\[pinned-reth-quote-backend\] rpc-throttle-retry status=429 concurrency=\d+->\d+ retry_at_one=[0-3]\/3 delay_ms=(1000|2000|4000) items=\d+ retry_scope=batch batch_size=\d+$/.test(line)),
       "handled 429 marker must remain compatible with the historical fatal guard");
     await b.drain();
     check.equal(state.batches.length, 2);
     check.deepEqual(state.batches[1], [state.batches[0]![1]]);
     check.deepEqual(state.batches[1]![0]!.params, [second, { blockHash: HASH, requireCanonical: true }]);
-    check.equal(b.stats().currentConcurrentBatchLimit, 2);
+    check.equal(b.stats().currentConcurrentBatchLimit, 4);
     check.equal(b.stats().throttleRetries, 1);
     check.equal(await b.call(first), RESULT);
     check.equal(state.batches.length, 2);
@@ -873,7 +950,7 @@ async function adaptiveRetryTests(): Promise<void> {
         : { status: 200, body: results(items) };
     };
     check.equal(await b.call({ to: OK_A, data: "0xcafe" }), RESULT);
-    check.deepEqual(limits, [4, 2, 1]);
+    check.deepEqual(limits, [4, 4, 4], "fresh limits are not the local retry tier");
     check.ok(times[1]! - times[0]! >= 900 && times[2]! - times[1]! >= 900);
     check.equal(state.singles.length, 0);
   });
@@ -888,16 +965,17 @@ async function adaptiveRetryTests(): Promise<void> {
     await until(() => state.heldResponses.length === 4, "four initial physical batches");
     release();
     await until(() => b.stats().throttleRetries === 4, "initial failure wave queued");
-    check.equal(state.batches.length, 4);
-    check.equal(b.stats().currentConcurrentBatchLimit, 2, "one shared tier per original in-flight failure wave");
+    check.ok(state.batches.length >= 4);
+    check.equal(b.stats().currentConcurrentBatchLimit, 4, "each failed envelope owns its own tier");
     state.maxActiveBatches = 0; state.pauseResponses = false; state.holdResponses = true;
+    release();
     check.deepEqual(await work, Array(8).fill(RESULT));
     await b.drain();
-    check.equal(state.maxActiveBatches, 1);
+    check.ok(state.maxActiveBatches <= 4);
     check.equal(state.singles.length, 0);
     check.equal(scheduler.snapshot().activeTotal, 0);
   });
-  await pendingCase("adaptive backoff also bars batches already waiting for a shared permit", async ({ state, backend }) => {
+  await pendingCase("batch backoff does not bar unrelated batches waiting for a shared permit", async ({ state, backend }) => {
     const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
     const b = backend({ retryRpcThrottle: true, maxBatchSize: 1, maxConcurrentBatches: 4, transportScheduler: scheduler });
     const times: number[] = [];
@@ -909,7 +987,8 @@ async function adaptiveRetryTests(): Promise<void> {
     check.deepEqual(await Promise.all(Array.from({ length: 4 }, (_, i) =>
       b.call({ to: OK_A, data: `0x${i.toString(16).padStart(2, "0")}` }))), Array(4).fill(RESULT));
     await b.drain();
-    check.ok(times[1]! - times[0]! >= 900, "scheduler-queued work bypassed cooldown");
+    check.ok(times.at(-1)! - times[0]! >= 900, "failed envelope bypassed its own cooldown");
+    check.ok(times[1]! < times.at(-1)! - 500, "fresh queued work inherited another batch's cooldown");
     check.equal(state.batches.length, 5);
     check.equal(scheduler.snapshot().activeTotal, 0);
   });
@@ -996,7 +1075,7 @@ async function sharedTimeoutTests(): Promise<void> {
       check.equal(scheduler.snapshot().reductionVersion, 0); empty(scheduler);
     });
   }
-  await pendingCase("shared wire timeout rebatches old peers and new generation through run-only wrapper", async ({ state, backend }) => {
+  await pendingCase("wire timeout only rebatches its failed envelope through run-only wrapper", async ({ state, backend, release }) => {
     const scheduler = new RethTransportScheduler({ capacity: 4, producerReserved: 3, transportTimeoutMs: 80, retryDelayMs: 30 });
     const wrapper: Pick<RethTransportScheduler, "run"> = { run: (lane, signal, work) => scheduler.run(lane, signal, work) };
     const options = { maxBatchSize: 4, maxConcurrentBatches: 4, transportScheduler: wrapper };
@@ -1010,16 +1089,16 @@ async function sharedTimeoutTests(): Promise<void> {
     await until(() => scheduler.snapshot().queuedByLane.exact === 2, "old peer envelopes queued");
     cancel.abort(new Error("cancel queued item"));
     await until(() => first.stats().timeoutRetries === 1, "physical timeout reported");
-    check.equal(scheduler.snapshot().capacity, 2);
-    check.equal(scheduler.snapshot().reductionVersion, 1);
-    check.equal(state.batches.length, 1, "failure did not bar queued sends before release");
+    check.equal(scheduler.snapshot().capacity, 4);
+    check.equal(scheduler.snapshot().reductionVersion, 0);
     state.pauseResponses = false;
+    release();
     check.equal((await firstWork).status, "fulfilled");
     const peers = await Promise.all(peerWork);
     aborted(peers[0]!); check.ok(peers.slice(1).every(item => item.status === "fulfilled"));
     await Promise.all([first.drain(), peer.drain()]);
-    check.equal(first.stats().currentBatchSizeLimit, 2); check.equal(peer.stats().currentConcurrentBatchLimit, 2);
-    check.ok(state.batches.slice(1).every(batch => batch.length <= 2));
+    check.equal(first.stats().currentBatchSizeLimit, 4); check.equal(peer.stats().currentConcurrentBatchLimit, 4);
+    check.ok(state.batches.slice(1).filter(batch => (batch[0]!.params as any[])[0].to === OK_A).every(batch => batch.length <= 2));
     check.equal(state.batches.slice(1).flat().some(item => (item.params as any[])[0].data === "0x2000"), false);
     for (const original of state.batches[0]!) {
       check.equal(state.batches.slice(1).flat().filter(item => JSON.stringify(item) === JSON.stringify(original)).length, 1,
@@ -1029,12 +1108,12 @@ async function sharedTimeoutTests(): Promise<void> {
     const successor = backend(options, successorHash);
     check.deepEqual(await Promise.all(requests.map(req => successor.call(req))), Array(4).fill(RESULT));
     await successor.drain();
-    check.ok(state.batches.slice(start).every(batch => batch.length <= 2));
+    check.deepEqual(state.batches.slice(start).map(batch=>batch.length), [4]);
     for (const item of state.batches.slice(start).flat()) check.deepEqual((item.params as any[])[1], { blockHash: successorHash, requireCanonical: true });
-    check.equal(successor.stats().currentConcurrentBatchLimit, 2);
+    check.equal(successor.stats().currentConcurrentBatchLimit, 4);
     check.equal(state.singles.length, 0); empty(scheduler);
   });
-  await pendingCase("tiny preassembled envelopes cannot bypass reduced owner limit under large shared cap", async ({ state, backend }) => {
+  await pendingCase("unrelated held-permit failure cannot shrink fresh owner or global capacity", async ({ state, backend }) => {
     const scheduler = new RethTransportScheduler({ capacity: 20, producerReserved: 1, retryDelayMs: 20 });
     let release!: () => void;
     const held = new Promise<void>(resolve => { release = resolve; });
@@ -1050,8 +1129,8 @@ async function sharedTimeoutTests(): Promise<void> {
       state.holdResponses = true; state.replyBatch = response;
       release(); await Promise.all(holders);
       check.equal((await work).status, "fulfilled"); await client.drain();
-      check.equal(scheduler.snapshot().capacity, 10);
-      check.equal(state.maxActiveBatches, 2, "old scheduled limit bypassed per-owner reduction");
+      check.equal(scheduler.snapshot().capacity, 20);
+      check.equal(state.maxActiveBatches, 4, "fresh owner must retain its configured limit");
       check.equal(state.batches.length, 8); empty(scheduler);
     } finally { release(); await Promise.allSettled(holders); }
   });
@@ -1744,6 +1823,28 @@ async function run(): Promise<void> {
       console.log(
         "[pinned-reth-quote-backend] persistent replay cache: PASS",
       );
+    }
+    {
+      const backend = new PinnedRethQuoteBackend(rpcUrl, HASH);
+      const originalNow = Date.now;
+      let now = originalNow();
+      state.pauseResponses = true;
+      try {
+        Date.now = () => now;
+        let done = false;
+        const result = backend.call({ to: OK_A, data: "0xeeee" }, { deadlineAtMs: now + 20 })
+          .then(() => { done = true; return null; }, error => { done = true; return error; });
+        await new Promise(resolve => setTimeout(resolve, 40));
+        assert(!done, "an early timer cannot retire a still-open absolute deadline");
+        now += 21;
+        const error = await result;
+        assert(isStateCallAbortedError(error) && error.kind === "deadline", "absolute deadline eventually retires the waiter");
+      } finally {
+        Date.now = originalNow;
+        state.pauseResponses = false;
+        await backend.closeAndDrain();
+      }
+      console.log("[pinned-reth-quote-backend] early deadline timer: PASS");
     }
     await pendingCallTests();
     await adaptiveRetryTests();

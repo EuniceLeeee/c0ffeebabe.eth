@@ -221,6 +221,8 @@ library RuntimeAmountKernel {
                         case 4 { if gt(b, 255) { fail("runtime shift") } value := shr(b, a) }
                         case 5 { value := and(a, b) }
                         case 6 { if shr(255, a) { fail("runtime signed range") } value := sub(0, a) }
+                        case 7 { value := eq(a, b) }
+                        case 8 { value := b if lt(a, b) { value := a } }
                         default { fail("runtime math opcode") }
                         mstore(dst, value) p := add(p, 4)
                     }

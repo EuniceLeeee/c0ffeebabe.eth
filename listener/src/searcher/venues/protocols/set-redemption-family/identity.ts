@@ -4,6 +4,8 @@ import type { CanonicalSource } from "../../adapter-request-program.js";
 import { hashCanonical } from "../../canonical-value.js";
 import { address, call, code, CONTROLLER, decode, members, MODULE, MODULE_CODE_HASH, rows, SET, SET_CODE_HASH, TOKEN } from "./codec.js";
 import { FAMILY, LINEAGE } from "./manifest.js";
+import { legacyIdentity } from "./legacy.js";
+import { binding } from "./instance.js";
 import type { Binding, Candidate, Identity } from "./types.js";
 interface Proof { phase: "code" | "binding" | "complete"; source: CanonicalSource; binding?: Binding; rejection?: string; unavailable?: string; ids: readonly string[] }
 const bindingRequests = (c: Candidate) => [call("set-controller", c.set, SET.encodeFunctionData("controller")), call("module-controller", c.module, MODULE.encodeFunctionData("controller")),
@@ -20,7 +22,7 @@ function identityRequests(c: Candidate, p?: Proof) {
 export const identity = {
   memoReuse: "recheck-identity", identityKey: i => `${i.binding.set}:${i.binding.module}`,
   variants: [{ id: "basic-issuance-runtime-and-reciprocal-registration", kind: "standalone-contract", lineageId: LINEAGE,
-    applies: c => c.candidateKind === "set-redemption",
+    applies: c => c.candidateKind === "set-redemption" && !c.legacyCore,
     requirements: ({ evidence }) => ({ transports: evidence ? ["get-code", "eth-call"] : ["get-code"] }),
     buildRequests: ({ candidate, evidence }) => identityRequests(candidate, evidence as Proof | undefined),
     decode({ step, results }): Proof {
@@ -54,7 +56,7 @@ export const identity = {
       if (p?.phase !== "complete" || !p.binding) return { status: "continue" };
       return { status: "verified", identity: { familyId: FAMILY, lineageId: LINEAGE, subject: p.binding.set, binding: p.binding,
         provenance: [{ kind: "source-bound-direct-runtime-and-current-controller-registration", subject: p.binding.module,
-          evidenceHash: hashCanonical({ ...p.binding, source: { ...p.source }, setCodeHash: SET_CODE_HASH, moduleCodeHash: MODULE_CODE_HASH }) }] } };
+          evidenceHash: hashCanonical({ ...binding(p.binding), source: { ...p.source }, setCodeHash: SET_CODE_HASH, moduleCodeHash: MODULE_CODE_HASH }) }] } };
     },
-  }],
+  }, legacyIdentity],
 } satisfies IdentitySemantics<Candidate, Identity>;

@@ -20,17 +20,17 @@ function fixture(t) {
   save('permit.json', { runId: OLD, status: 'stopped', validUntilMs: 0 });
   save('process.json', { pid: 2147483647, unit: 'mev-manual-bounded-live.service' });
   for (const name of LIVE_LOG_NAMES) writeFileSync(join(run, name), 'fixture-live-log', { mode: 0o600 });
-  for (const name of ['checkpoint.json', 'config.json', 'window.json', 'run-contract.json', 'old-runs-cleanup.jsonl', 'evidence.json']) save(name, { preserve: true });
+  for (const name of ['mids.jsonl', 'checkpoint.json', 'config.json', 'window.json', 'run-contract.json', 'old-runs-cleanup.jsonl', 'evidence.json']) save(name, { preserve: true });
   mkdirSync(join(run, 'diagnostics')); writeFileSync(join(run, 'diagnostics/events.jsonl'), 'independent-evidence');
   const options = { inUse: () => false };
   return { temp, root, run, current, save, options };
 }
 const linux = { skip: process.platform !== 'linux' };
 
-test('preview is read-only and includes only six exact direct log names', t => {
+test('preview is read-only and includes only five disposable logs, not price history', t => {
   const f = fixture(t), before = readdirSync(f.run);
   const r = cleanupOldRunLogs(f.root, f.current, f.options);
-  assert.equal(r.mode, 'preview'); assert.equal(r.files.length, 6); assert.equal(r.deletedFiles, 0);
+  assert.equal(r.mode, 'preview'); assert.equal(r.files.length, 5); assert.equal(r.deletedFiles, 0);
   assert(r.eligibleBytes > 0); assert(r.eligibleAllocatedBytes > 0);
   assert.deepEqual(readdirSync(f.run), before); assert.deepEqual(readdirSync(f.current), []);
 });
@@ -38,12 +38,13 @@ test('apply deletes only allowlisted logs and leaves checkpoints, metadata and n
   const f = fixture(t), kept = readdirSync(f.run).filter(name => !LIVE_LOG_NAMES.includes(name));
   const checkpoint = readFileSync(join(f.run, 'checkpoint.json'));
   const r = cleanupOldRunLogs(f.root, f.current, { ...f.options, apply: true });
-  assert.equal(r.deletedFiles, 6); assert.equal(r.deletedBytes, r.eligibleBytes);
+  assert.equal(r.deletedFiles, 5); assert.equal(r.deletedBytes, r.eligibleBytes);
+  assert.deepEqual(JSON.parse(readFileSync(join(f.run, 'mids.jsonl'), 'utf8')), { preserve: true });
   assert.deepEqual(readdirSync(f.run), kept); assert.deepEqual(readFileSync(join(f.run, 'checkpoint.json')), checkpoint);
   assert.equal(readFileSync(join(f.run, 'diagnostics/events.jsonl'), 'utf8'), 'independent-evidence');
   const audit = readFileSync(r.audit, 'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(audit[0].type, 'plan'); assert.equal(audit.filter(x => x.type === 'delete-intent').length, 6);
-  assert.equal(audit.filter(x => x.type === 'deleted').length, 6); assert.equal(audit.at(-1).type, 'completed');
+  assert.equal(audit[0].type, 'plan'); assert.equal(audit.filter(x => x.type === 'delete-intent').length, 5);
+  assert.equal(audit.filter(x => x.type === 'deleted').length, 5); assert.equal(audit.at(-1).type, 'completed');
 });
 for (const mode of ['unfinished', 'active-permit', 'pid-exists', 'malformed', 'request-mismatch', 'occupied']) {
   test('preserve uncertain or occupied old run: ' + mode, t => {
@@ -94,7 +95,7 @@ test('symlink, hardlinked and nonregular log targets are protected', t => {
   rmSync(join(f.run, 'events.jsonl')); linkSync(join(f.run, 'checkpoint.json'), join(f.run, 'events.jsonl'));
   rmSync(join(f.run, 'routes.jsonl')); mkdirSync(join(f.run, 'routes.jsonl'));
   const r = cleanupOldRunLogs(f.root, f.current, f.options);
-  assert.equal(r.files.length, 3); assert.equal(r.skipped.filter(x => x.reason === 'unsafe-log-file').length, 3);
+  assert.equal(r.files.length, 2); assert.equal(r.skipped.filter(x => x.reason === 'unsafe-log-file').length, 3);
 });
 test('occupancy query errors are fail closed', t => {
   const f = fixture(t);
@@ -111,7 +112,7 @@ test('real lsof detects an open log, then allows read-only preview after close',
   const f = fixture(t), fd = openSync(join(f.run, 'live.log'), 'r');
   try { assert(runHasOpenFiles(f.run)); assert.equal(cleanupOldRunLogs(f.root, f.current).files.length, 0); }
   finally { closeSync(fd); }
-  assert.equal(cleanupOldRunLogs(f.root, f.current).files.length, 6);
+  assert.equal(cleanupOldRunLogs(f.root, f.current).files.length, 5);
 });
 test('new occupancy at deletion recheck preserves the run', linux, t => {
   const f = fixture(t); let calls = 0;
@@ -148,7 +149,7 @@ test('audit file and both new directory entries are persisted before deletion', 
     },
     remove(path) { assert.deepEqual(persisted, [f.current, f.root]); unlinkSync(path); },
   });
-  assert.equal(r.deletedFiles, 6);
+  assert.equal(r.deletedFiles, 5);
 });
 test('directory persistence failure aborts before any deletion', t => {
   const f = fixture(t); let removed = 0;

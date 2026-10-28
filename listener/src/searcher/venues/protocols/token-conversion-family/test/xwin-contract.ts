@@ -10,6 +10,7 @@ import { ABI, MAX_UINT } from "../variants.js";
 import { FAMILY } from "../manifest.js";
 import { discovery } from "../discovery.js";
 import { xwinIdentity } from "../xwin-identity.js";
+import { identity as conversionIdentity } from "../identity.js";
 import { instance } from "../instance.js";
 import { routes } from "../routes.js";
 import { pricing } from "../pricing.js";
@@ -97,6 +98,7 @@ function fixture(source = SOURCE, options: {
   actor?: string; eoa?: boolean; missingCode?: string; malformedReceipt?: boolean; supply?: bigint;
   output?: (direction: Direction, input: bigint) => bigint;
   nav?: bigint;
+  paused?: boolean; pauseData?: string; pauseError?: Error;
   nativeDeltas?: ObservedEffects["nativeDeltas"];
   sequence?: boolean;
 } = {}) {
@@ -128,6 +130,10 @@ function fixture(source = SOURCE, options: {
         const addresses: Record<string, string> = { baseToken: s.asset, xWinSwap: s.swap, priceMaster: s.oracle, lockingAddress: s.locking };
         if (addresses[parsed.name]) return XWIN_ABI.encodeFunctionResult(parsed.name, [addresses[parsed.name]]);
         if (parsed.name === "getTargetNamesAddress") return XWIN_ABI.encodeFunctionResult(parsed.name, [s.targets]);
+        if (parsed.name === "paused") {
+          if (options.pauseError) throw options.pauseError;
+          return options.pauseData ?? XWIN_ABI.encodeFunctionResult("paused", [options.paused ?? false]);
+        }
         if (parsed.name === "totalSupply") return ABI.encodeFunctionResult(parsed.name, [s.supply]);
         if (parsed.name === "decimals") return ABI.encodeFunctionResult(parsed.name, [tx.to.toLowerCase() === ASSET.toLowerCase() ? 6 : 18]);
         if (parsed.name === "getUnitPrice") return NAV_ABI.encodeFunctionResult(parsed.name, [options.nav ?? 2n * 10n ** 18n]);
@@ -243,6 +249,72 @@ test("xWin identity requires actual executor effects and code, not only selector
   await assert.rejects(identify(fixture(SOURCE, { eoa: true })), /runtime code/);
   await assert.rejects(identify(fixture(SOURCE, { actor: PROXY.proxyAdmin })), /baseToken did not return/);
   await assert.rejects(identify(fixture(SOURCE, { supply: 0n })), /retryable/);
+});
+test("active xWin checks pause once in the existing surface round before both effect probes", async () => {
+  const f = fixture();
+  assert.equal((await identify(f)).variant, "xwin-allocations-v1");
+  const pause = f.requests.filter(request => request.id === "identity-xwin-paused");
+  assert.equal(pause.length, 1);
+  assert(pause[0]!.kind === "eth-call");
+  assert.equal(pause[0]!.to, TARGET);
+  assert.deepEqual(pause[0]!.caller, { kind: "executor" });
+  assert.equal(pause[0]!.data, XWIN_ABI.encodeFunctionData("paused"));
+  assert(f.requests.indexOf(pause[0]!) < f.requests.findIndex(request => request.kind === "effect-delta-simulation"));
+  assert.equal(f.simulated.length, 2);
+});
+test("paused xWin is retryable before effect probes and can verify at a later active source", async () => {
+  const f = fixture(SOURCE, { paused: true });
+  await assert.rejects(identify(f), /identity retryable: xwin_paused$/);
+  assert.equal(f.requests.filter(request => request.id === "identity-xwin-paused").length, 1);
+  assert.equal(f.requests.some(request => request.kind === "effect-delta-simulation"), false);
+  assert.equal(f.simulated.length, 0);
+  const next = fixture({ number: SOURCE.number + 1, hash: `0x${"62".repeat(32)}`, generation: SOURCE.generation + 1 });
+  assert.equal((await identify(next)).variant, "xwin-allocations-v1");
+  assert.equal(next.simulated.length, 2);
+});
+test("unavailable or malformed xWin pause evidence never becomes a paused decision or an effect probe", async () => {
+  for (const pauseData of ["0x", "0x01", zeroPadValue("0x02", 32), `${zeroPadValue("0x01", 32)}00`]) {
+    const f = fixture(SOURCE, { pauseData });
+    await assert.rejects(identify(f), /invalid xWin paused response/);
+    assert.equal(f.simulated.length, 0);
+  }
+  for (const pauseError of [new Error("pause read unavailable"),
+    Object.assign(new Error("pause getter reverted"), { code: "CALL_EXCEPTION", data: "0x" })]) {
+    const f = fixture(SOURCE, { pauseError });
+    await assert.rejects(identify(f), (error: unknown) => {
+      assert(error instanceof Error);
+      assert.doesNotMatch(error.message, /xwin_paused/);
+      return true;
+    });
+    assert.equal(f.requests.filter(request => request.id === "identity-xwin-paused").length, 1);
+    assert.equal(f.simulated.length, 0);
+  }
+});
+test("xWin pause evidence must be present and match the surface block, hash and generation", async () => {
+  const f = fixture(SOURCE, { paused: true });
+  const candidate = { candidateKind: "token-conversion" as const, target: TARGET, variantHint: "xwin-allocations-v1" as const };
+  const initial = { candidate, step: 0 };
+  const evidence = xwinIdentity.decode({ step: initial,
+    results: await f.round(xwinIdentity.buildRequests(initial), xwinIdentity.requirements(initial)) });
+  const step = { candidate, step: 1, evidence };
+  const results = await f.round(xwinIdentity.buildRequests(step), xwinIdentity.requirements(step));
+  const decoded = xwinIdentity.decode({ step, results });
+  assert.deepEqual(xwinIdentity.decide({ ...step, evidence: decoded }), { status: "retryable", reasonCode: "xwin_paused" });
+  assert.throws(() => xwinIdentity.decode({ step, results: results.filter(result => result.id !== "identity-xwin-paused") }), /missing/);
+  for (const source of [{ ...SOURCE, number: SOURCE.number + 1 }, { ...SOURCE, hash: `0x${"62".repeat(32)}` },
+    { ...SOURCE, generation: SOURCE.generation + 1 }]) {
+    assert.throws(() => xwinIdentity.decode({ step, results: results.map(result =>
+      result.id === "identity-xwin-paused" ? { ...result, source } : result) }), /foreign source/);
+  }
+  assert.equal(f.simulated.length, 0);
+});
+test("xWin pause admission leaves the non-xWin identity variant isolated", () => {
+  const candidate = { candidateKind: "token-conversion" as const, target: TARGET, variantHint: "btb-bear-v1" as const };
+  const variants = conversionIdentity.variants.filter(variant => variant.applies(candidate));
+  assert.deepEqual(variants.map(variant => variant.id), ["btb-bear-code-and-effects"]);
+  assert.equal(xwinIdentity.applies(candidate), false);
+  const requests = variants[0]!.buildRequests({ candidate, step: 0 });
+  assert.deepEqual(requests.map(request => request.id), ["identity-code"]);
 });
 test("xWin explicit simulation Exact preserves each amount, re-reads dependencies, binds actor and encodes the same call", async () => {
   const { descriptor: d, routes: rs } = await descriptors();

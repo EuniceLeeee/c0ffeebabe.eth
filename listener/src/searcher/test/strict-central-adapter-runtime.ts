@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JsonRpcProvider } from "ethers";
+import { observeAdapterRequests } from "../adapter-request-observation.js";
 import {
   createStrictCentralAdapterRuntime,
   type StrictSimulationTransport,
@@ -111,7 +112,10 @@ test("ethers RPC wrappers do not turn transport failures into admission reverts"
         generationFence: Object.freeze({ assertCurrent() {} }),
       });
       const issued = runtime.scheduler.issueExecutor({} as never);
-      const [result] = await issued.executor.execute({ requests: [request], source: SOURCE } as never);
+      const observation = { revertedResults: 0 };
+      const [result] = await observeAdapterRequests(observation,
+        () => issued.executor.execute({ requests: [request], source: SOURCE } as never));
+      assert.equal(observation.revertedResults, 0, "transport errors are not revert evidence");
       assert.equal(calls, 2, "transport failures use the existing bounded retry");
       assert.equal(result!.ok, recovers);
       if (result!.ok) { assert.equal(result.completion, "returned"); assert.equal(result.data, "0x1234"); }
@@ -129,7 +133,10 @@ test("ethers RPC wrappers do not turn transport failures into admission reverts"
         generationFence: Object.freeze({ assertCurrent() {} }),
       });
       const issued = runtime.scheduler.issueExecutor({} as never);
-      const [result] = await issued.executor.execute({ requests: [request], source: SOURCE } as never);
+      const observation = { revertedResults: 0 };
+      const [result] = await observeAdapterRequests(observation,
+        () => issued.executor.execute({ requests: [request], source: SOURCE } as never));
+      assert.equal(observation.revertedResults, 1, "fenced EVM revert is observed once");
       assert.equal(calls, 1, "deterministic empty/data reverts never retry");
       assert(result!.ok);
       assert.equal(result.completion, "reverted-as-declared");

@@ -31,7 +31,7 @@ export const pricing = {
         // Raw sampling only. Effective and Solver retain their requested input.
         const amountIn = depthIn / 100_000n;
         if (amountIn <= 1n || depthOut === 0n) continue;
-        const amountOut = quoteAmount(snapshot, r.buy, amountIn);
+        const amountOut = quoteAmount(snapshot, r.buy, amountIn, descriptor.instance.model);
         if (amountOut === 0n) continue;
         mids.set(r.routeKey, quotedPoolMid({ kind: "external-swap", amountIn, amountOut, depthIn, depthOut,
           edge: { adapterId: ACTION, instanceKey: r.instanceKey, target: r.pool, tokenIn: r.tokenIn, tokenOut: r.tokenOut,

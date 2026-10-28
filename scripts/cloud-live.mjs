@@ -16,22 +16,31 @@ export function normalizeOwnerPrivateKey(value) {
 }
 
 export function parseClientArgs(args) {
-  let mode = 'check', blocks = 2500;
+  let mode = 'check', blocks = 2500, resumePrices;
   const modes = args.filter(value => ['--check', '--broadcast', '--status', '--stop'].includes(value));
   assert(modes.length <= 1, 'choose one mode');
   if (modes.length) mode = modes[0].slice(2);
   const other = args.filter(value => !modes.includes(value));
-  if (other.length) {
-    assert(other.length === 2 && other[0] === '--blocks' && /^[1-9][0-9]*$/.test(other[1]), 'usage: [--check|--broadcast|--status|--stop] [--blocks 1..2500]');
-    blocks = Number(other[1]);
+  const seen = new Set();
+  for (let i = 0; i < other.length; i += 2) {
+    const key = other[i], value = other[i + 1];
+    assert(!seen.has(key), 'duplicate option'); seen.add(key);
+    if (key === '--blocks') {
+      assert(/^[1-9][0-9]*$/.test(value ?? ''), 'invalid block count');
+      blocks = Number(value);
+    } else if (key === '--resume-prices') {
+      assert(['0', '1'].includes(value), '--resume-prices must be 0 or 1');
+      resumePrices = value;
+    } else throw new Error('unknown option');
   }
   assert(Number.isSafeInteger(blocks) && blocks >= 1 && blocks <= 2500);
-  return { mode, blocks };
+  assert(resumePrices === undefined || ['check', 'broadcast'].includes(mode), 'resume-prices is a start/check option');
+  return { mode, blocks, resumePrices };
 }
 
 export async function main(args) {
   failureStage = 'argument validation';
-  const { mode, blocks } = parseClientArgs(args);
+  const { mode, blocks, resumePrices } = parseClientArgs(args);
   failureStage = 'reading public launcher configuration';
   const folder = dirname(new URL(import.meta.url).pathname);
   const config = JSON.parse(readFileSync(join(folder, 'cloud-live-client.json'), 'utf8'));
@@ -53,7 +62,8 @@ export async function main(args) {
     input = JSON.stringify({ OWNER_PRIVATE_KEY: normalizeOwnerPrivateKey(secrets.OWNER_PRIVATE_KEY), confirmation: 'human-start' });
   }
   failureStage = 'connecting to cloud';
-  const remote = ['sudo', '-n', config.node, config.launcher, '--' + mode, '--blocks', String(blocks)].join(' ');
+  const remote = ['sudo', '-n', config.node, config.launcher, '--' + mode, '--blocks', String(blocks),
+    ...(resumePrices === undefined ? [] : ['--resume-prices', resumePrices])].join(' ');
   const child = spawn('gcloud', ['--configuration=' + config.configuration, 'compute', 'ssh', config.instance,
     '--project=' + config.project, '--zone=' + config.zone, '--tunnel-through-iap', '--quiet', '--command=' + remote, '--', '-T'],
     { stdio: [input === undefined ? 'ignore' : 'pipe', 'inherit', 'inherit'] });

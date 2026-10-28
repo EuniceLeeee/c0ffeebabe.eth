@@ -1,7 +1,11 @@
-import { keccak256 } from "ethers";
+import { getBytes, keccak256 } from "ethers";
+import { buildSubscriptCalldata } from "../shared/executor/botvm-program-entry.js";
+import { EthSimulateV1Simulator } from "./simulator/eth-simulate-v1.js";
+import { readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { snapshotCentralCallerAuthority, type AdapterWorkControl,
   type CentralCallerAuthority } from "./adapter-work-intent.js";
 import { RevmFatalError, RevmStrictError, type RevmFatalReason,
+  validateInputFundingOverrides, type InputFundingOverrides,
   type ExecutorRuntimeCode, type RevmSourcePin, type StrictSimulateRequest } from "./revm-sim-client.js";
 import type { RevmStrictSourceLease } from "./revm-strict-source-owner.js";
 import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
@@ -83,7 +87,7 @@ export function createRevmStrictSimulationTransport(input: {
     } catch { return fatal({ kind: "source-fault" }, "transport-lease-pin"); }
   }
   async function execute(invocation: Parameters<StrictSimulationTransport["simulate"]>[0] |
-    Parameters<NonNullable<StrictSimulationTransport["simulatePrefix"]>>[0], prefix: boolean) {
+    Parameters<NonNullable<StrictSimulationTransport["simulatePrefix"]>>[0], prefix: boolean, prepareInput = false) {
       open();
       // All caller-owned values are validated and detached before leaseFor can
       // yield. Source controls stay with the resolver; only quote controls go
@@ -101,7 +105,8 @@ export function createRevmStrictSimulationTransport(input: {
       const lease = await owned(() => leaseFor(source), control);
       const pin = leasePin(lease, source);
       open(control);
-      const request = freeze({ ...wire, rpcUrl, blockNumber: source.number, sourcePin: pin });
+      const request = freeze({ ...wire, ...(prepareInput ? { inputStateOnly: true as const } : {}),
+        rpcUrl, blockNumber: source.number, sourcePin: pin });
       const response = await owned(() => lease.strictSimulate(request, control), control);
       const currentPin = leasePin(lease, source);
       if (currentPin.chainId !== pin.chainId || currentPin.blockHash !== pin.blockHash || currentPin.stateRoot !== pin.stateRoot) {
@@ -113,7 +118,54 @@ export function createRevmStrictSimulationTransport(input: {
       open(control);
       return { ...checked, reportEffects };
   }
+  // Only immutable initialization is reused. Each node simulation starts from
+  // the pinned source, never from a previous leg's modified state.
+  let fundingSource = "";
+  let header: Promise<Awaited<ReturnType<typeof readBlockScanObservedHeader>>> | undefined;
+  const funding = new Map<string, Promise<InputFundingOverrides>>();
   return Object.freeze({
+    async simulateStandalone(invocation: Parameters<NonNullable<StrictSimulationTransport["simulateStandalone"]>>[0]) {
+      open();
+      const source = sourceSnapshot(invocation.source), control = controlSnapshot(invocation.control);
+      const authority = snapshotCentralCallerAuthority(invocation.callerAuthority);
+      if (!authority.transactionOrigin || !control?.signal || control.deadlineAtMs === undefined) invalid();
+      const executor = address(authority.executor);
+      const scriptHex = bytes(invocation.scriptHex), inputToken = address(invocation.inputToken);
+      const inputAmount = amount(invocation.inputAmount);
+      if (inputAmount === "0" || scriptHex === "0x" || /^0x0{40}$/.test(inputToken)) invalid();
+      const started = performance.now();
+      const lease = await owned(() => leaseFor(source), control);
+      const pin = leasePin(lease, source);
+      const sourceKey = JSON.stringify([source, pin]);
+      if (fundingSource !== sourceKey) { fundingSource = sourceKey; funding.clear(); header = undefined; }
+      open(control);
+      header ??= readBlockScanObservedHeader(rpcUrl, BigInt(pin.chainId), source.number, control);
+      const key = JSON.stringify([authority.executor, authority.transactionOrigin, inputToken, inputAmount]);
+      const reusedInputFunding = funding.has(key);
+      let prepared = funding.get(key);
+      if (!prepared) {
+        prepared = execute({ source, control, callerAuthority: authority,
+          prefix: { executor, calldata: buildSubscriptCalldata(getBytes(scriptHex)),
+            inputToken, inputAmount: BigInt(inputAmount) },
+          request: { id: "standalone-input", kind: "eth-call", to: executor, data: "0x",
+            caller: { kind: "executor" }, completion: "return-data" } }, true, true)
+          .then(result => { if (!result.funding) invalid(); return result.funding; });
+        funding.set(key, prepared);
+        void prepared.catch(() => { if (funding.get(key) === prepared) funding.delete(key); });
+        if (funding.size > 256) funding.delete(funding.keys().next().value!);
+      }
+      const [stateOverrides, observed] = await Promise.all([prepared, header]);
+      if (observed.hash.toLowerCase() !== source.hash) fatal({ kind: "source-fault" });
+      open(control);
+      const inputPreparationMs = performance.now() - started;
+      const simulator = new EthSimulateV1Simulator(rpcUrl, executor, authority.transactionOrigin, executorRuntimeCode);
+      const simStarted = performance.now();
+      const result = await simulator.simulateStandalone({ source, header: observed, scriptHex, inputToken,
+        inputAmount: BigInt(inputAmount), funding: stateOverrides }, { signal: control.signal, deadlineAtMs: control.deadlineAtMs });
+      if (JSON.stringify([source, leasePin(lease, source)]) !== sourceKey) fatal({ kind: "source-fault" });
+      open(control);
+      return freeze({ ...result, inputPreparationMs, simulationMs: performance.now() - simStarted, reusedInputFunding });
+    },
     async simulate(invocation: Parameters<StrictSimulationTransport["simulate"]>[0]) {
       const checked = await execute(invocation, false);
       if (checked.kind === "Revert") {
@@ -253,7 +305,7 @@ function callerSnapshot(value: unknown, authority: CentralCallerAuthority): { ke
 
 function responseSnapshot(value: unknown, request: StrictSimulateRequest, source: CanonicalSource,
   observe: ReadonlySet<string>, fatal: (reason: RevmFatalReason, stage?: RevmFaultStage) => never): {
-    kind: string; data: string; effects: ObservedEffects; failure?: ExactPrefixFailure;
+    kind: string; data: string; effects: ObservedEffects; failure?: ExactPrefixFailure; funding?: InputFundingOverrides;
   } {
   const bad = (): never => fatal({ kind: "protocol-fault" }, "transport-response");
   const r = object(value) ? value : bad();
@@ -278,7 +330,17 @@ function responseSnapshot(value: unknown, request: StrictSimulateRequest, source
       const proof = record(s.counterfactualExecutorCode, ["address", "keccak256"]);
       if (address(proof.address) !== request.trialPrefix!.executor || proof.keccak256 !== code.keccak256) invalid();
     } else if (s.counterfactualExecutorCode !== undefined) invalid();
-    const o = record(s.outcome, ["kind", "phase", "preCallIndex", "output", "reason"]);
+    const o = record(s.outcome, ["kind", "phase", "preCallIndex", "output", "reason", "stateOverrides"]);
+    if (request.inputStateOnly) {
+      record(o, ["kind", "stateOverrides"]);
+      if (o.kind !== "InputPrepared" || s.executionGasUsed !== "0" ||
+        [r.success, r.gasUsed, r.output, r.error, r.errorKind, r.revertReason].some(v => v !== undefined) ||
+        [s.tokenDeltas, s.nativeDeltas, s.totalSupplyDeltas, s.logs].some(v => array(v).length)) invalid();
+      validateInputFundingOverrides(o.stateOverrides);
+      return freeze({ kind: "InputPrepared", data: "0x", effects: {},
+        funding: JSON.parse(JSON.stringify(o.stateOverrides)) as InputFundingOverrides });
+    }
+    if (o.stateOverrides !== undefined) invalid();
     if (typeof o.kind !== "string" || !["Success", "Revert", "Halt"].includes(o.kind) || r.success !== (o.kind === "Success") ||
       r.error !== undefined || r.errorKind !== undefined || !uint(s.executionGasUsed) || r.gasUsed !== s.executionGasUsed ||
       BigInt(s.executionGasUsed) > BigInt(request.executionGasLimit!) ||
@@ -375,7 +437,7 @@ function freeze<T>(value: T): T {
 }
 function fatalSnapshot(reason: RevmFatalReason): RevmFatalReason {
   if (reason?.kind === "source-fault" || reason?.kind === "protocol-fault") return { kind: reason.kind };
-  if (reason?.kind === "rpc-throttle" && ["http429", "rpc-limit-code", "rpc-rate-limit", "rpc-quota"].includes(reason.category) &&
+  if (reason?.kind === "rpc-throttle" && ["http429", "rpc-limit-code", "rpc-rate-limit", "rpc-quota", "rpc-quota-exhausted"].includes(reason.category) &&
     (reason.httpStatus === undefined || reason.httpStatus === 429) && (reason.rpcCode === undefined || Number.isSafeInteger(reason.rpcCode))) {
     return { kind: reason.kind, category: reason.category, ...(reason.httpStatus === undefined ? {} : { httpStatus: reason.httpStatus }),
       ...(reason.rpcCode === undefined ? {} : { rpcCode: reason.rpcCode }) };
