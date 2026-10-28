@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { constants } from "node:os";
 import path from "node:path";
 import {
   bindToolWindowArguments,
@@ -13,8 +14,8 @@ import {
 import {
   assertNoSecretBearingToolArgs,
   redactToolArgv,
-  redactToolOutput,
 } from "../tool-run-security.js";
+import { forwardToolOutput } from "../tool-run-output.js";
 
 const args = process.argv.slice(2);
 const separator = args.indexOf("--");
@@ -77,18 +78,45 @@ if (tool.package === "analysis" || tool.package === "listener") {
 }
 
 const startedAt = new Date().toISOString();
-const result = spawnSync(executable, childArgs, {
-  cwd,
-  encoding: "utf8",
-  env: process.env,
-  maxBuffer: 64 * 1024 * 1024,
+// npm itself starts another process. Keep this invocation in its own group so
+// cancellation or broken output cannot leave the actual analysis running.
+const ownProcessGroup = process.platform !== "win32";
+const child = spawn(executable, childArgs, { cwd, env: process.env,
+  stdio: ["ignore", "pipe", "pipe"], detached: ownProcessGroup });
+let spawnError: NodeJS.ErrnoException | undefined;
+let cancellation: NodeJS.Signals | undefined;
+let killTimer: NodeJS.Timeout | undefined;
+const signalChild = (signal: NodeJS.Signals): void => {
+  try {
+    if (ownProcessGroup && child.pid) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+};
+const cancel = (signal: NodeJS.Signals): void => {
+  cancellation ??= signal;
+  signalChild(signal);
+  killTimer ??= setTimeout(() => signalChild("SIGKILL"), 1000).unref();
+};
+const onTerm = () => cancel("SIGTERM"), onInt = () => cancel("SIGINT");
+process.on("SIGTERM", onTerm); process.on("SIGINT", onInt);
+const closed = new Promise<number>(resolve => {
+  child.once("error", error => { spawnError = error; });
+  child.once("close", (code, signal) => resolve(spawnError ? 127 : cancellation
+    ? 128 + constants.signals[cancellation] : code ?? (128 + (signal ? constants.signals[signal] : 0))));
 });
+const [exitCode, stdout, stderr] = await Promise.all([
+  closed,
+  forwardToolOutput(child.stdout, process.stdout),
+  forwardToolOutput(child.stderr, process.stderr),
+]).catch(async error => { cancel("SIGTERM"); await closed; throw error; })
+  .finally(() => {
+    if (killTimer) clearTimeout(killTimer);
+    process.off("SIGTERM", onTerm); process.off("SIGINT", onInt);
+  });
 const finishedAt = new Date().toISOString();
-const stdout = result.stdout ?? "";
-const stderr = result.stderr ?? "";
-if (stdout) process.stdout.write(redactToolOutput(stdout));
-if (stderr) process.stderr.write(redactToolOutput(stderr));
-const exitCode = result.error ? 127 : (result.status ?? 128);
+if (spawnError) console.error(`tool-run spawn failed: ${spawnError.code ?? "unknown"}`);
 const exactArgv = [executable, ...childArgs];
 const receipt: ToolExecutionReceipt = {
   schema_version: 1,
@@ -101,10 +129,10 @@ const receipt: ToolExecutionReceipt = {
   argv_sha256: createHash("sha256").update(JSON.stringify(exactArgv)).digest("hex"),
   argv_redacted: redactToolArgv(exactArgv),
   ...(window ? { window } : {}),
-  stdout_sha256: createHash("sha256").update(stdout).digest("hex"),
-  stderr_sha256: createHash("sha256").update(stderr).digest("hex"),
-  stdout_bytes: Buffer.byteLength(stdout),
-  stderr_bytes: Buffer.byteLength(stderr),
+  stdout_sha256: stdout.sha256,
+  stderr_sha256: stderr.sha256,
+  stdout_bytes: stdout.bytes,
+  stderr_bytes: stderr.bytes,
 };
 manifest.executions.push(receipt);
 manifest.updated_at = finishedAt;
