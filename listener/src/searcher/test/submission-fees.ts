@@ -24,6 +24,18 @@ assert.ok(next.maxBribeWei > bid);
 assert.ok(next.netAtGasLimitWei! < 0n); // Expected positive EV is NOT a worst-gas profit guarantee.
 assert.equal(next.walletLimited, false);
 
+const grossInput = { ...input, profitMode: "positive-gross-profit" as const, basis: "measured-gas" as const,
+  bribeWei: profit * 9900n / 10000n };
+const grossFees = computeSubmissionFees(grossInput);
+assert.equal(grossFees.priorityFee, grossInput.bribeWei / gas);
+assert.equal(grossFees.estimatedBribeWei, profit * 9900n / 10000n);
+assert.equal(grossFees.estimatedNetWei, profit / 100n - gas * base);
+assert.ok(grossFees.estimatedNetWei! < 0n);
+for (const overrides of [{ basis: "gas-limit" as const }, { expectedProfitEth: 0n },
+  { bribeWei: bid }, { bribeWei: profit }, { walletBalance: BRIBE_WALLET_RESERVE + base * grossFees.gasLimit }]) {
+  assert.throws(() => computeSubmissionFees({ ...grossInput, ...overrides }));
+}
+
 let cases = 0;
 for (const g of [1n, 100_001n, 1_000_003n, 20_000_000n]) {
   for (const baseFee of [1n, 1_000_000_000n]) {

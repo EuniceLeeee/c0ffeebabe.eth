@@ -214,8 +214,22 @@ test("CLI explicit source-block flag; live cannot opt into historical execution"
   assert.throws(() => parseAtBlockArgs([...args, "--execution-mode", "anything"]));
   await assert.rejects(maybeSubmitBlockScanAtomic({ historicalExecutionMode: "source-block" } as any), /requires historical read-only/);
 });
+test("profit mode is explicit, preserves positive-EV defaults, and cannot affect backrun", () => {
+  assert.equal(resolveBlockScanAtomicPolicy({}).blockScanProfitMode, "positive-ev");
+  const env = { SEARCHER_BLOCKSCAN_PROFIT_MODE: "positive-gross-profit", SEARCHER_EV_GATE: "1",
+    SEARCHER_BRIBE_BPS: "9900", SEARCHER_ENABLE_BACKRUN: "0" };
+  assert.equal(resolveBlockScanAtomicPolicy(env).blockScanProfitMode, "positive-gross-profit");
+  for (const patch of [{ SEARCHER_EV_GATE: "0" }, { SEARCHER_BRIBE_BPS: "10000" },
+    { SEARCHER_ENABLE_BACKRUN: "1" }, { SEARCHER_ENABLE_BACKRUN: undefined }, { SEARCHER_ENABLE_BACKRUN: "garbage" },
+    { SEARCHER_ENABLE_MEMPOOL: "1" }, { SEARCHER_BLOCKSCAN_PROFIT_MODE: "unknown" }]) {
+    assert.throws(() => resolveBlockScanAtomicPolicy({ ...env, ...patch }));
+  }
+});
 
-for (const profit of [25n, 0n]) test(`production final gate records successful source-block execution at profit ${profit} without submission`, async () => {
+for (const [profit, profitMode, valueScale] of [
+  [25n, "positive-ev", 1_000_000_000n], [0n, "positive-ev", 1_000_000_000n],
+  [25n, "positive-ev", 1n], [25n, "positive-gross-profit", 1n], [0n, "positive-gross-profit", 1n],
+] as const) test(`production final gate: profit=${profit} policy=${profitMode} scale=${valueScale}, no submission`, async () => {
   const r = response(); r.strict!.tokenDeltas[0]!.delta = profit.toString();
   const sim = reconcile(input, r, trace(), [profit.toString(), ...traceDeltas.slice(1)]);
   const raw = { number: "0x12c", hash: source.hash, parentHash: header.parentHash, stateRoot: input.stateRoot,
@@ -227,7 +241,8 @@ for (const profit of [25n, 0n]) test(`production final gate records successful s
   let evaluation: any;
   try {
     const result = await maybeSubmitBlockScanAtomic({ historicalReadOnly: true, historicalExecutionMode: "source-block",
-      config: { ...resolveBlockScanAtomicPolicy({}), dryRun: true, blockScanSubmit: false, evGate: true, finalVerifyFloorBps: 0n },
+      config: { ...resolveBlockScanAtomicPolicy({ SEARCHER_BLOCKSCAN_PROFIT_MODE: profitMode,
+        SEARCHER_EV_GATE: "1", SEARCHER_BRIBE_BPS: "9900", SEARCHER_ENABLE_BACKRUN: "0" }), dryRun: true, blockScanSubmit: false, finalVerifyFloorBps: 0n },
       provider: { async getBlock() { throw new Error("cached numeric provider must not be used"); }, async send(method: string, params: unknown[]) {
         methods.push(method); assert.equal(method, "eth_getBlockByNumber"); assert.equal(params[0], "0x12c"); return raw;
       } } as any,
@@ -237,17 +252,23 @@ for (const profit of [25n, 0n]) test(`production final gate records successful s
         profitToken: token, flashAmount: 100n, netProfit: 25n, templateName: "fixture" },
       bundleRouter: { async submit() { throw new Error("must not submit"); } }, submissionCoordinator: { offer() { throw new Error("must not submit"); } },
       ring: "fixture", protoRing: false, plans: 1, passDeadlineAtMs: Date.now() + 5000, simRejects: new BlockScanSimRejectCache(),
-      profitTokenValuation: { valueInEth: (_t: string, n: bigint) => n * 1_000_000_000n } as any,
+      profitTokenValuation: { valueInEth: (_t: string, n: bigint) => n * valueScale } as any,
       signal: new AbortController().signal, collectBlindAudit: true, strategyVersions: { strategy_view_version: "fixture", blockscan_view_hash: source.hash },
       onHistoricalEv(e) { evaluation = e; },
     });
     assert.equal(result.finalSimStatus, "succeeded");
-    assert.equal(result.decision, profit > 0n ? "blockscan_submit_disabled" : "final_verify_failed");
+    assert.equal(result.decision, profit <= 0n ? "final_verify_failed" :
+      valueScale === 1n && profitMode === "positive-ev" ? "below_ev_gate" : "blockscan_submit_disabled");
     assert(!result.submitted);
     if (profit > 0n) {
       assert.equal(evaluation.evaluation.maxBaseFeePerGas, 1000n);
       assert.equal(evaluation.evaluation.gasUnits, 25000n); assert.equal(evaluation.calldata, input.calldata);
       assert.equal(methods.length, 4);
+      if (profitMode === "positive-gross-profit") {
+        assert.equal(evaluation.evaluation.bidEth, 24n); // floor(25 * 99%), no gas subtraction.
+        assert.equal(evaluation.evaluation.netEvWei, 1n - 25_000_000n);
+        assert.equal(result.audit?.ev.reason, "positive_gross_profit_gate_pass");
+      }
     } else {
       assert.equal(evaluation, undefined); assert.equal(methods.length, 1);
     }

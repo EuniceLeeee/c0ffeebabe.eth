@@ -2,6 +2,7 @@ import {
   DEFAULT_PROFIT_TOKEN_VALUATION,
   type ProfitTokenValuation,
 } from "./profit-token-valuation.js";
+import { positiveGrossProfitBid, resolveProfitMode, validatePositiveGrossProfitMode, type ProfitMode } from "../shared/profit-mode.js";
 
 const CHAINLINK_ETH_USD = "0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419";
 const LATEST_ROUND_DATA_SELECTOR = "0xfeaf968c";
@@ -13,6 +14,7 @@ const BLOCK_HASH = /^0x[0-9a-fA-F]{64}$/;
 export type EvFeeEnvironment = { mode: "source-block"; sourceBlockHash: string };
 
 export interface EvPolicy {
+  profitMode?: ProfitMode;
   profitHaircutBps: number;
   evGate: boolean;
   bribeAllAboveGas: boolean;
@@ -68,8 +70,11 @@ export function valueInEth(
 export function computeBidEth(
   expectedProfitEth: bigint,
   gasCostEth: bigint,
-  policy: Pick<EvPolicy, "bribeAllAboveGas" | "bribeBps">,
+  policy: Pick<EvPolicy, "bribeAllAboveGas" | "bribeBps" | "profitMode">,
 ): bigint {
+  if (resolveProfitMode(policy.profitMode) === "positive-gross-profit") {
+    return positiveGrossProfitBid(expectedProfitEth);
+  }
   const surplus = expectedProfitEth > gasCostEth
     ? expectedProfitEth - gasCostEth
     : 0n;
@@ -175,6 +180,7 @@ export async function evaluateEv(
   sourceBlock?: number,
   feeEnvironment?: EvFeeEnvironment,
 ): Promise<EvEvaluation> {
+  validatePositiveGrossProfitMode(policy);
   if (feeEnvironment !== undefined && (feeEnvironment.mode !== "source-block" ||
       !BLOCK_HASH.test(feeEnvironment.sourceBlockHash) || !Number.isSafeInteger(sourceBlock) || sourceBlock! < 0)) {
     throw new Error("source-block EV requires an explicit source number and hash");

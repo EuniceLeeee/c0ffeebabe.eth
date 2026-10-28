@@ -34,7 +34,24 @@
   BotVM `0x4aF9495C…5BCe` = empty.
 - Even bounded, only broadcast a bundle that passed a **profitable on-fork / EV-gated simulation**
   (`sim.success` + net-EV + the assert-balance flash-repay guard). Never broadcast from an unverified or
-  half-modified pipeline. Default is still dry-run; live is the marked exception.
+  half-modified pipeline. The explicit dated positive-gross-profit experiment below is the sole exception
+  to the net-EV threshold, not to simulation or repayment. Default is still dry-run.
+
+### 2026-10-28 — explicit positive-gross-profit competition experiment
+
+The user authorized a bounded, manually started block-scan test using **positive gross profit**, distinct
+from the default **positive EV** mode. `positive-ev` retains the existing post-gas bid and net-EV threshold.
+`positive-gross-profit` requires successful mandatory final simulation with positive profit after atomic
+repayment, values that profit at the pinned source, and bids **99% of gross profit before gas**. Estimated
+retained value is `gross - floor(gross * 9900 / 10000) - gas`; it may be negative. No profit haircut applies.
+This is not permission to disable `SEARCHER_EV_GATE`, valuation, measured gas, canonical-source checks,
+repayment/conservation, or wallet/permit protection. No standing positions or backrun are authorized by it.
+The launcher defaults to `positive-ev`; `--profit-mode positive-gross-profit` requires explicit terminal
+confirmation and binds the mode into the run request, config and immutable signing permit. The original
+wallet cap, half-baseline floor, reserve, block limit, expiry and no-auto-restart rules remain unchanged.
+The existing measured-gas priority-fee mechanism is retained: rounding and actual gas usage can change the
+actual bribe, so gas-only loss is an estimate, not a guaranteed loss bound. Wallet affordability still uses
+the full gas limit. This policy change does not itself restart or extend any already-running session.
 
 ### Dual-live A/B sub-envelope (all required)
 - A is the bounded-live champion wallet `0xb8578B6de173C8554FF0390dB5a7effA567DDA3c` with BotVM

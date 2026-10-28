@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync 
 import { join } from "node:path";
 import type { ethers } from "ethers";
 import { captureBoundedLiveSession } from "../../shared/bounded-live-session.js";
+import { createBundleRouter } from "../execution/bundle-router.js";
 import { buildSignedBackrunTx, submitBundle, submitMevShareBundle, submitStandaloneBundle } from "../../submitter.js";
 
 // No private key, Wallet instance, provider connection, or real fetch is used.
@@ -119,6 +120,48 @@ async function main(): Promise<void> {
     assert.equal(sends, 0);
     checks++;
 
+    // Real production router → signer → relay plumbing, with mock I/O only.
+    // A positive simulation now bids 99% of gross even when net EV is negative.
+    const positiveGrossProfit = 27_191_084_219_357n;
+    const grossParams = { ...params, profitMode: "positive-gross-profit" as const,
+      bribeGasBasis: "measured-gas" as const, expectedProfitEth: positiveGrossProfit,
+      bribeWei: positiveGrossProfit * 9900n / 10000n };
+    reset();
+    await assert.rejects(buildSignedBackrunTx(grossParams), /profit-mode-mismatch/);
+    assert.equal(signs + sends, 0);
+    delete process.env.SEARCHER_LIVE_SESSION_PATH;
+    await assert.rejects(buildSignedBackrunTx(grossParams), /gross-profit-requires-permit/);
+    assert.equal(signs + sends, 0);
+    reset(); write({ profitMode: "positive-gross-profit" });
+    const router = createBundleRouter({ dryRun: false, wallet, provider, botvmAddress: EXECUTOR,
+      defaultGasUsed: params.gasUsed, bribeGasBasis: "measured-gas" });
+    const grossResult = await router.submit({ mode: "standalone", profitMode: "positive-gross-profit",
+      victimTxHash: "", backrunCalldata: params.calldataHex, targetBlock: params.targetBlock,
+      expectedProfit: 64_001n, expectedProfitEth: positiveGrossProfit, bribeWei: grossParams.bribeWei,
+      maxBaseFeePerGas: params.maxBaseFeePerGas, gasUsed: params.gasUsed });
+    assert.equal(grossResult.filter(r => r.accepted).length, 5);
+    assert.equal(signs, 1); assert.equal(sends, 5);
+    for (const [patch, message] of [
+      [{ status: "stopped" }, "inactive"], [{ validUntilMs: NOW }, "expired"],
+      [{ firstTargetBlock: 102, lastTargetBlock: 351 }, "target-outside-window"],
+    ] as const) {
+      reset(); write({ profitMode: "positive-gross-profit", ...patch });
+      await assert.rejects(buildSignedBackrunTx(grossParams), new RegExp(message));
+      assert.equal(signs + sends, 0);
+    }
+    reset(); write({ profitMode: "positive-gross-profit" });
+    balance = BASELINE / 2n;
+    await assert.rejects(buildSignedBackrunTx(grossParams), /balance-limit/);
+    assert.equal(signs + sends, 0);
+    reset(); write({ profitMode: "positive-gross-profit" });
+    onNonce = () => write({ profitMode: "positive-ev" });
+    await assert.rejects(buildSignedBackrunTx(grossParams), /permit-changed/);
+    assert.equal(signs + sends, 0);
+    reset(); write({ profitMode: "positive-gross-profit" });
+    await assert.rejects(buildSignedBackrunTx({ ...grossParams, submissionMode: "victim" }), /standalone-only/);
+    assert.equal(signs + sends, 0);
+    checks++;
+
     reset();
     const result = await submitStandaloneBundle(params);
     assert.equal(signs, 1);
@@ -188,6 +231,7 @@ async function main(): Promise<void> {
       [{ status: "stopped" }, "inactive"],
       [{ chainId: 10 }, "invalid-permit"],
       [{ mode: "dual" }, "invalid-permit"],
+      [{ profitMode: "unknown" }, "invalid-permit"],
       [{ runId: "other-run" }, "identity-mismatch"],
       [{ wallet: EXECUTOR }, "identity-mismatch"],
       [{ executor: WALLET }, "identity-mismatch"],

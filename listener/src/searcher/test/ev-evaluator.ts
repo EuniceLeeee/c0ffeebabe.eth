@@ -1,4 +1,6 @@
 import { ethers } from "ethers";
+import strictAssert from "node:assert/strict";
+import { resolveProfitMode } from "../../shared/profit-mode.js";
 import {
   computeBidEth,
   evaluateEv,
@@ -111,6 +113,28 @@ async function main(): Promise<void> {
     bribeAllAboveGas: false,
     bribeBps: 5_000,
   };
+  const competitionPolicy = { ...policy, profitMode: "positive-gross-profit" as const,
+    bribeBps: 9900, profitHaircutBps: 0 };
+  strictAssert.equal(resolveProfitMode(undefined), "positive-ev");
+  strictAssert.throws(() => resolveProfitMode("off"));
+  // Observed positive-sim / negative-net-EV controls, valued in ETH wei.
+  for (const [gross, gasUnits, gasCost] of [
+    [27_191_084_219_357n, 321_925n, 37_515_737_194_700n],
+    [27_040_261_030_690n, 546_801n, 63_721_806_674_844n],
+  ]) {
+    const baseFee = gasCost / gasUnits;
+    const evaluation = await evaluateEv({ async getBlock() { return {
+      ...parent, baseFeePerGas: baseFee, gasUsed: 15_000_000n, gasLimit: 30_000_000n,
+    }; } }, WETH, gross, gasUnits, competitionPolicy, undefined, SOURCE_BLOCK);
+    strictAssert.equal(computeBidEth(gross, gasCost, { ...competitionPolicy, profitMode: "positive-ev" }), 0n);
+    strictAssert.equal(evaluation.bidEth, gross * 9900n / 10000n);
+    strictAssert.equal(evaluation.netEvWei, gross - evaluation.bidEth - gasCost);
+    strictAssert.ok(evaluation.netEvWei < 0n);
+    strictAssert.ok(evaluation.valuationAvailable && evaluation.gasMeasurementAvailable && evaluation.feeStateAvailable);
+  }
+  for (const overrides of [{ bribeBps: 10000 }, { profitHaircutBps: 1 }, { evGate: false }, { bribeAllAboveGas: true }]) {
+    await strictAssert.rejects(evaluateEv(provider, WETH, 1n, 1n, { ...competitionPolicy, ...overrides }), /gross-profit requires/);
+  }
   const tx02 = await evaluateEv(
     provider,
     USDT,

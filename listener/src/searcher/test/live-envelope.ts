@@ -69,9 +69,20 @@ await expectReject({ ...live, maxWalletEth: "0.200000000000000001" }, "no greate
 await expectReject(live, "is not BotVM owner", OTHER);
 await expectReject(live, "exceeds cap", WALLET, 200000000000000001n);
 
+const positiveGrossProfit: LiveEnvelopeInput = { ...live, profitMode: "positive-gross-profit",
+  bribeBps: 9900, profitHaircutBps: 0, sessionPath: "/bounded-test/permit.json", sessionId: "test-run" };
+await validateLiveEnvelope(positiveGrossProfit, { walletBalance: async () => 1n, botvmOwner: async () => WALLET });
+for (const patch of [{ evGate: false }, { bribeBps: 10000 }, { bribeAllAboveGas: true }, { profitHaircutBps: 1 }]) {
+  await expectReject({ ...positiveGrossProfit, ...patch }, "positive-gross-profit requires");
+}
+await expectReject({ ...positiveGrossProfit, sessionPath: undefined }, "requires a bounded-live session");
+await expectReject({ ...positiveGrossProfit, sessionId: undefined }, "requires a bounded-live session");
+await expectReject(positiveGrossProfit, "is not BotVM owner", OTHER);
+await expectReject(positiveGrossProfit, "exceeds cap", WALLET, 200000000000000001n);
+
 await validateLiveEnvelope({ ...live, dryRun: true, evGate: false }, {
   walletBalance: async () => { throw new Error("dry-run must not probe balance"); },
   botvmOwner: async () => { throw new Error("dry-run must not probe owner"); },
 });
 
-console.log("live-envelope PASS (14/14)");
+console.log("live-envelope PASS (positive-EV defaults and positive-gross-profit safety controls)");

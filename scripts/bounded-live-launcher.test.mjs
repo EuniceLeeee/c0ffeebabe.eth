@@ -92,6 +92,29 @@ test('fresh 2500 source heights begin AFTER state-ready observation', () => {
   assert.equal(window.observe(timing(2599), 6), null);
   assert.deepEqual(window.observe(timing(2600), 6), { completed: true });
 });
+test('positive-gross-profit is explicit per run, keeps 99%, and binds the permit', () => {
+  for (const parse of [parseArguments, parseClientArgs]) {
+    assert.equal(parse([]).profitMode, undefined);
+    assert.equal(parse(['--check', '--profit-mode', 'positive-gross-profit']).profitMode, 'positive-gross-profit');
+    for (const mode of ['', 'off', 'net-ev', 'gross-profit']) assert.throws(() => parse(['--profit-mode', mode]));
+    assert.throws(() => parse(['--stop', '--profit-mode', 'positive-gross-profit']));
+    assert.throws(() => parse(['--profit-mode', 'positive-ev', '--profit-mode', 'positive-gross-profit']));
+  }
+  const inherited = { ...baseConfig, SEARCHER_BLOCKSCAN_PROFIT_MODE: 'positive-gross-profit' };
+  assert.equal(makeRunConfig(inherited, profile, '/runs/test').SEARCHER_BLOCKSCAN_PROFIT_MODE, 'positive-ev');
+  const config = makeRunConfig(baseConfig, profile, '/runs/test', undefined, 'positive-gross-profit');
+  assert.equal(config.SEARCHER_BLOCKSCAN_PROFIT_MODE, 'positive-gross-profit');
+  assert.equal(config.SEARCHER_BRIBE_BPS, '9900');
+  assert.equal(config.SEARCHER_BRIBE_ALL_ABOVE_GAS, '0');
+  assert.equal(config.SEARCHER_EV_GATE, '1');
+  assert.equal(config.SEARCHER_PROFIT_HAIRCUT_BPS, '0');
+  assert.equal(config.SEARCHER_BRIBE_GAS_BASIS, 'measured-gas');
+  const window = new RunWindow({ runId: 'gross-run', profile, blocks: 500, balance: baseline, now: 100000,
+    profitMode: config.SEARCHER_BLOCKSCAN_PROFIT_MODE });
+  activate(window);
+  assert.equal(window.renew(101000, baseline).profitMode, 'positive-gross-profit');
+  assert.equal(window.stop().profitMode, 'positive-gross-profit');
+});
 
 test('requested 500-source-block run stops at its exact boundary without a restart', () => {
   const window = fresh('run-500', 500);

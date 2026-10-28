@@ -8,6 +8,7 @@ import { writeEffectiveMidProgress } from "./effective-mid-progress-file.js";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
+import { resolveProfitMode, validatePositiveGrossProfitMode, type ProfitMode } from "../shared/profit-mode.js";
 import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, StateCallAbortedError, type StateBackend, type StateCallControl } from "../shared/state/state-backend.js";
@@ -383,12 +384,14 @@ interface LiveConfig {
   /** Phantom-profit guard: reject final profit > this many bps of the flash
    *  notional. Real backruns are basis points; 100%+ means a bad overlay. */
   maxProfitBpsOfFlash: bigint;
-  /** Fraction of expected profit remaining after gas to pay as priority fee. */
+  /** Bid fraction: post-gas surplus by default, gross profit in the explicit experiment. */
   bribeBps: number;
   /** Pay all expected profit above gas as the priority-fee bribe. */
   bribeAllAboveGas: boolean;
-  /** Only submit when profitETH − gas − bribe > minNetEth (net +EV gate). */
+  /** Keep valuation/gas/source checks; positive-EV is the default profit gate. */
   evGate: boolean;
+  /** Explicit bounded block-scan competition experiment; backrun keeps net EV. */
+  blockScanProfitMode: ProfitMode;
   /** Minimum kept profit (ETH wei) after gas + bribe, for the EV gate. */
   minNetEth: bigint;
   /** Optional discount applied to simulated profit before the EV gate and
@@ -916,11 +919,12 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
 }
 
 export type BlockScanAtomicPolicy = Pick<LiveConfig,
-  "finalVerifyFloorBps" | "maxProfitBpsOfFlash" | "profitHaircutBps" | "bribeBps" | "bribeAllAboveGas" | "evGate" | "minNetEth" | "blockScanSubmit" | "inclusionWatchBlocks" | "dryRun">;
+  "finalVerifyFloorBps" | "maxProfitBpsOfFlash" | "profitHaircutBps" | "bribeBps" | "bribeAllAboveGas" | "evGate" | "minNetEth" | "blockScanSubmit" | "inclusionWatchBlocks" | "dryRun" | "blockScanProfitMode">;
 
 export function resolveBlockScanAtomicPolicy(env: NodeJS.ProcessEnv = process.env, finalVerifyMaxHops = Number(env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS)): BlockScanAtomicPolicy {
   const quoteSafetyBps = BigInt(env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
-  return {
+  const policy: BlockScanAtomicPolicy = {
+    blockScanProfitMode: resolveProfitMode(env.SEARCHER_BLOCKSCAN_PROFIT_MODE),
     dryRun: env.SEARCHER_DRY_RUN === "1",
     finalVerifyFloorBps: BigInt(
       env.SEARCHER_FINAL_VERIFY_FLOOR_BPS ??
@@ -938,6 +942,12 @@ export function resolveBlockScanAtomicPolicy(env: NodeJS.ProcessEnv = process.en
     blockScanSubmit: env.SEARCHER_BLOCKSCAN_SUBMIT === "1",
     inclusionWatchBlocks: Number(env.SEARCHER_INCLUSION_WATCH_BLOCKS ?? "3"),
   };
+  validatePositiveGrossProfitMode({ ...policy, profitMode: policy.blockScanProfitMode });
+  if (policy.blockScanProfitMode === "positive-gross-profit" &&
+      (env.SEARCHER_ENABLE_BACKRUN !== "0" || env.SEARCHER_ENABLE_MEMPOOL === "1")) {
+    throw new Error("positive-gross-profit experiment is block-scan only");
+  }
+  return policy;
 }
 
 function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
@@ -1557,6 +1567,9 @@ async function main(): Promise<void> {
     {
       dryRun: config.dryRun,
       evGate: config.evGate,
+      profitMode: config.blockScanProfitMode,
+      sessionPath: process.env.SEARCHER_LIVE_SESSION_PATH,
+      sessionId: process.env.SEARCHER_LIVE_SESSION_ID,
       bribeBps: config.bribeBps,
       bribeAllAboveGas: config.bribeAllAboveGas,
       minNetEth: config.minNetEth,
@@ -5367,6 +5380,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
     seedPools: opp.seedEdges.map((edge) => edge.target),
   });
   const eventBase = (targetBlock: number) => ({
+    profit_mode: config.blockScanProfitMode,
     opportunity_id: opportunityId,
     route_id: routeId,
     target_block: targetBlock,
@@ -5610,7 +5624,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
         resolved.profitToken,
         sim.netProfit,
         sim.gasUsed,
-        config,
+        { ...config, profitMode: config.blockScanProfitMode },
         profitTokenValuation,
         sourceBlock,
         params.historicalExecutionMode === "source-block" ? { mode: "source-block", sourceBlockHash } : undefined,
@@ -5643,9 +5657,10 @@ export async function maybeSubmitBlockScanAtomic(params: {
     recordAuditEv({
       executionStatus: "pass",
       decision: "allow",
-      reason: config.evGate ? "ev_gate_pass" : "ev_gate_disabled",
+      reason: config.evGate ? (config.blockScanProfitMode === "positive-gross-profit" ? "positive_gross_profit_gate_pass" : "ev_gate_pass") : "ev_gate_disabled",
     });
     const evEvent = {
+      profit_mode: config.blockScanProfitMode,
       expected_profit_eth: expectedProfitEth.toString(),
       gas_cost_eth: gasCostEth.toString(),
       bid_eth: bidEth.toString(),
@@ -5729,6 +5744,11 @@ export async function maybeSubmitBlockScanAtomic(params: {
     // The marker authorizes LIVE standing-position submission. Explicitly
     // non-broadcast historical diagnostics can evaluate cash EV while keeping
     // the position visible. Taxonomy mismatches still fail closed.
+    if (config.blockScanProfitMode === "positive-gross-profit" && containsStandingPosition) {
+      recordAuditEv({ executionStatus: "pass", decision: "reject", reason: "standing_position_unauthorized" });
+      drop(targetBlock, "submit_gate", "standing_position_unauthorized", "gross-profit requires an atomic route");
+      return finish("standing_position_unauthorized");
+    }
     if (!standingGuard.allowed && !(params.historicalReadOnly && params.historicalExecutionMode !== "source-block" &&
         standingGuard.reason === "standing_position_unauthorized")) {
       const error = standingGuard.reason === "edge_taxonomy_inconsistent"
@@ -5745,22 +5765,29 @@ export async function maybeSubmitBlockScanAtomic(params: {
     }
 
     if (config.evGate) {
-      if (netEvWei <= config.minNetEth) {
+      const positiveGrossProfit = config.blockScanProfitMode === "positive-gross-profit";
+      // Final simulation success and positive raw profit were checked above.
+      // This experiment changes economics only; gas, valuation, source and
+      // position checks still apply, and the signer requires a matching permit.
+      if (positiveGrossProfit ? expectedProfitEth <= 0n : netEvWei <= config.minNetEth) {
+        const reason = positiveGrossProfit ? "non_positive_gross_profit_eth" : "below_ev_gate";
         const error =
-          `EV gate: net ${netEvWei} <= ${config.minNetEth} ` +
+          (positiveGrossProfit ? `positive-gross-profit gate: profitEth ${expectedProfitEth} <= 0 ` :
+            `positive-ev gate: net ${netEvWei} <= ${config.minNetEth} `) +
           `(profitEth=${expectedProfitEth} gas=${gasCostEth} bribe=${bidEth} ` +
           `token=${resolved.profitToken.slice(0, 10)})`;
         recordAuditEv({
           executionStatus: "pass",
           decision: "reject",
-          reason: "below_ev_gate",
+          reason,
         });
-        console.log(`[searcher/blockscan] block=${sourceBlock} skip below-EV ring=${ring}: ${error}`);
-        drop(targetBlock, "submit_gate", "below_ev_gate", error, evEvent);
-        return finish("below_ev_gate");
+        console.log(`[searcher/blockscan] block=${sourceBlock} profit gate rejected mode=${config.blockScanProfitMode} ring=${ring}: ${error}`);
+        drop(targetBlock, "submit_gate", reason, error, evEvent);
+        return finish(reason);
       }
       console.log(
-        `[searcher/blockscan] block=${sourceBlock} EV ok: net=${ethers.formatEther(netEvWei)} ETH ` +
+        `[searcher/blockscan] block=${sourceBlock} ${positiveGrossProfit ? "positive-gross-profit approved (gas loss accepted)" : "EV ok"}: net=${ethers.formatEther(netEvWei)} ETH ` +
+          `profitMode=${config.blockScanProfitMode} ` +
           `profitEth=${ethers.formatEther(expectedProfitEth)} ` +
           `gas=${ethers.formatEther(gasCostEth)} bribe=${ethers.formatEther(bidEth)} ` +
           `ethUsd=${ethUsd ?? "n/a"} targetBaseFee=${maxBaseFeePerGas}`,
@@ -5823,6 +5850,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
     const results = await bundleRouter.submit({
       victimTxHash: "",
       mode: "standalone",
+      profitMode: config.blockScanProfitMode,
       backrunCalldata: sim.calldata,
       targetBlock,
       expectedProfit: sim.netProfit,

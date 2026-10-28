@@ -1,3 +1,5 @@
+import { positiveGrossProfitBid, resolveProfitMode, type ProfitMode } from "./profit-mode.js";
+
 export type BribeGasBasis = "gas-limit" | "measured-gas";
 export const BRIBE_WALLET_RESERVE = 500_000_000_000_000n;
 
@@ -15,16 +17,22 @@ export function computeSubmissionFees(input: {
   walletBalance: bigint;
   basis: BribeGasBasis;
   expectedProfitEth?: bigint;
+  profitMode?: ProfitMode;
 }) {
   const { measuredGasUsed: gas, targetBaseFee: base, bribeWei, walletBalance, expectedProfitEth } = input;
   const basis = resolveBribeGasBasis(input.basis);
+  const profitMode = resolveProfitMode(input.profitMode);
   if (gas <= 0n || gas > BigInt(Number.MAX_SAFE_INTEGER) || base <= 0n || bribeWei < 0n || walletBalance < 0n) {
     throw new Error("invalid submission fee inputs");
   }
   // In measured mode the EV-approved bid is an expected payment, NOT a hard
   // payment cap if actual gas rises. Do not replace the measured EV check with
   // a worst-gas EV claim; the latter may be negative and is recorded explicitly.
-  if (basis === "measured-gas" && (expectedProfitEth === undefined || expectedProfitEth <= base * gas + bribeWei)) {
+  if (profitMode === "positive-gross-profit") {
+    if (basis !== "measured-gas" || expectedProfitEth === undefined || expectedProfitEth <= 0n || bribeWei !== positiveGrossProfitBid(expectedProfitEth)) {
+      throw new Error("gross-profit requires measured-gas and a 99% positive simulated-profit bid");
+    }
+  } else if (basis === "measured-gas" && (expectedProfitEth === undefined || expectedProfitEth <= base * gas + bribeWei)) {
     throw new Error("measured-gas bribe requires positive EV-approved expected profit");
   }
   const gasLimit = (gas * 13n + 9n) / 10n;
@@ -37,6 +45,11 @@ export function computeSubmissionFees(input: {
   const walletBudget = basis === "measured-gas" ? (headroom / gasLimit) * gas : headroom;
   const bribeBudget = bribeWei < walletBudget ? bribeWei : walletBudget;
   const priorityFee = bribeBudget / denominator;
+  // Never silently reduce the experimental 99%-gross-profit bid because the wallet
+  // cannot afford it. Integer division is the only allowed rounding difference.
+  if (profitMode === "positive-gross-profit" && priorityFee !== bribeWei / gas) {
+    throw new Error("wallet cannot cover 99% gross-profit bid and reserve");
+  }
   const maxFeePerGas = base + priorityFee;
   const estimatedBribeWei = priorityFee * gas;
   const maxBribeWei = priorityFee * gasLimit;

@@ -1,11 +1,13 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import { resolveProfitMode, type ProfitMode } from "./profit-mode.js";
 
 const MAX_WALLET_WEI = 200_000_000_000_000_000n;
 const MAX_WALL_MS = 12 * 60 * 60 * 1_000;
 const MAX_HEARTBEAT_MS = 30_000;
 
 interface SessionPermit {
+  profitMode?: ProfitMode;
   schemaVersion: 1;
   runId: string;
   mode: "standalone";
@@ -71,6 +73,9 @@ function readPermit(path: string): SessionPermit {
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) fail("invalid-permit");
   const p = parsed as Record<string, unknown>;
+  if (p.profitMode !== undefined && p.profitMode !== "positive-ev" && p.profitMode !== "positive-gross-profit") {
+    fail("invalid-permit");
+  }
   if (p.schemaVersion !== 1 || p.mode !== "standalone" || p.chainId !== 1
     || typeof p.runId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(p.runId)
     || !address(p.wallet) || !address(p.executor)
@@ -104,6 +109,7 @@ function immutableIdentity(p: SessionPermit): string {
     p.schemaVersion, p.runId, p.mode, p.wallet.toLowerCase(), p.executor.toLowerCase(),
     p.chainId, p.firstTargetBlock, p.lastTargetBlock, p.maxBlocks,
     p.startedAtMs, p.deadlineAtMs, p.baselineBalanceWei, p.minimumBalanceWei, p.maxWalletWei,
+    resolveProfitMode(p.profitMode),
   ]);
 }
 
@@ -114,12 +120,18 @@ export function captureBoundedLiveSession(params: {
   chainId: number;
   targetBlock?: number;
   mode?: "standalone" | "victim" | "hash-only";
+  profitMode?: ProfitMode;
 }): BoundedLiveSession | null {
+  const profitMode = resolveProfitMode(params.profitMode);
   const path = process.env.SEARCHER_LIVE_SESSION_PATH;
-  if (path === undefined) return null;
+  if (path === undefined) {
+    if (profitMode === "positive-gross-profit") fail("gross-profit-requires-permit");
+    return null;
+  }
   if (!isAbsolute(path)) fail("invalid-permit-path");
   const runId = process.env.SEARCHER_LIVE_SESSION_ID;
   const initial = readPermit(path);
+  if (profitMode !== resolveProfitMode(initial.profitMode)) fail("profit-mode-mismatch");
   if (runId !== initial.runId || params.chainId !== initial.chainId
     || !address(params.wallet) || params.wallet.toLowerCase() !== initial.wallet.toLowerCase()
     || !address(params.executor) || params.executor.toLowerCase() !== initial.executor.toLowerCase()) {

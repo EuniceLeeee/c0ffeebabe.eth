@@ -132,7 +132,7 @@ export function recordRenewal(run, value) {
 }
 
 export function parseArguments(args) {
-  let mode = 'check', blocks = 2500, profile = DEFAULT_PROFILE, run, resumePrices;
+  let mode = 'check', blocks = 2500, profile = DEFAULT_PROFILE, run, resumePrices, profitMode;
   const seen = new Set();
   for (let i = 0; i < args.length; i++) {
     const key = args[i];
@@ -146,6 +146,9 @@ export function parseArguments(args) {
     } else if (key === '--resume-prices') {
       resumePrices = args[++i];
       assert(['0', '1'].includes(resumePrices), '--resume-prices must be 0 or 1');
+    } else if (key === '--profit-mode') {
+      profitMode = args[++i];
+      assert(['positive-ev', 'positive-gross-profit'].includes(profitMode), 'invalid profit mode');
     } else if (key === '--profile') profile = args[++i];
     else if (key === '--run') run = args[++i];
     else throw new Error('unknown option');
@@ -154,11 +157,13 @@ export function parseArguments(args) {
   assert(typeof profile === 'string' && isAbsolute(profile), 'absolute profile required');
   assert(mode === 'supervise' ? typeof run === 'string' && isAbsolute(run) : run === undefined, 'invalid run option');
   assert(resumePrices === undefined || ['check', 'broadcast'].includes(mode), 'resume-prices is a start/check option');
-  return { mode, blocks, profile, run, resumePrices };
+  assert(profitMode === undefined || ['check', 'broadcast'].includes(mode), 'profit-mode is a start/check option');
+  return { mode, blocks, profile, run, resumePrices, profitMode };
 }
 
-export function makeRunConfig(base, profile, run, resumePrices) {
+export function makeRunConfig(base, profile, run, resumePrices, profitMode = 'positive-ev') {
   assert(resumePrices === undefined || ['0', '1'].includes(resumePrices), 'invalid resume-prices');
+  assert(['positive-ev', 'positive-gross-profit'].includes(profitMode), 'invalid profit mode');
   // The frozen base contains only public, reviewed options; no inherited process environment.
   const result = { ...base,
     SEARCHER_DRY_RUN: '0', SEARCHER_BLOCKSCAN_SUBMIT: '1', SEARCHER_EV_GATE: '1',
@@ -168,6 +173,9 @@ export function makeRunConfig(base, profile, run, resumePrices) {
     SEARCHER_ENABLE_MEV_SHARE: '0', SEARCHER_ENABLE_HASH_ONLY: '0',
     SEARCHER_BRIBE_BPS: '9900', SEARCHER_BRIBE_ALL_ABOVE_GAS: '0',
     SEARCHER_BRIBE_GAS_BASIS: 'measured-gas',
+    // Never inherit the loss-accepting experiment from an older release.
+    SEARCHER_BLOCKSCAN_PROFIT_MODE: profitMode,
+    ...(profitMode === 'positive-gross-profit' ? { SEARCHER_PROFIT_HAIRCUT_BPS: '0' } : {}),
     SEARCHER_BLOCKSCAN_MIN_SPREAD_BPS: '10',
     SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED: '0',
     SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED: '0',
@@ -212,12 +220,13 @@ export function makeRunConfig(base, profile, run, resumePrices) {
 }
 
 export class RunWindow {
-  constructor({ runId, profile, blocks, balance, now }) {
+  constructor({ runId, profile, blocks, balance, now, profitMode = 'positive-ev' }) {
     assert(Number.isSafeInteger(blocks) && blocks >= 1 && blocks <= 2500);
+    assert(['positive-ev', 'positive-gross-profit'].includes(profitMode), 'invalid profit mode');
     assert(balance > 2n * RESERVE && balance <= MAX_WALLET, 'wallet outside bounded range');
     this.blocks = blocks; this.first = null; this.last = null;
     this.ready = false; this.mode = false; this.transitions = new Map();
-    this.permit = { schemaVersion: 1, runId, mode: 'standalone', wallet: profile.wallet,
+    this.permit = { schemaVersion: 1, runId, mode: 'standalone', profitMode, wallet: profile.wallet,
       executor: profile.executor, chainId: 1, status: 'pending',
       firstTargetBlock: 1, lastTargetBlock: blocks, maxBlocks: blocks,
       startedAtMs: now, deadlineAtMs: now + WALL_MS, validUntilMs: now + 30000,
@@ -371,9 +380,9 @@ async function start(options, profile, release) {
       assert.equal(shaFile(join(run, 'checkpoint.json')), release.readySha256);
       exclusiveJson(join(run, 'request.json'), { schemaVersion: 1, runId, profilePath: options.profile,
         profileSha256: sha(readFileSync(options.profile)), releaseSha256: profile.releaseSha256,
-        blocks: options.blocks, resumePrices: options.resumePrices ?? null,
+        blocks: options.blocks, resumePrices: options.resumePrices ?? null, profitMode: options.profitMode ?? 'positive-ev',
         credentialName: 'owner', userInitiated: true, requestedAt: new Date().toISOString() });
-      exclusiveJson(join(run, 'config.json'), makeRunConfig(release.config, profile, run, options.resumePrices));
+      exclusiveJson(join(run, 'config.json'), makeRunConfig(release.config, profile, run, options.resumePrices, options.profitMode));
       const result = spawnSync('/usr/bin/systemd-run', ['--quiet', '--collect', '--unit=' + UNIT,
         '--property=Restart=no', '--property=Type=exec', '--property=RuntimeMaxSec=43200',
         '--property=TimeoutStopSec=75', '--property=KillMode=control-group', '--property=UMask=0077',
@@ -442,7 +451,7 @@ async function supervise(options, profile, release) {
   };
   process.on('SIGTERM', onSignal); process.on('SIGINT', onSignal);
   try {
-    const config = makeRunConfig(release.config, profile, run, request.resumePrices ?? undefined);
+    const config = makeRunConfig(release.config, profile, run, request.resumePrices ?? undefined, request.profitMode ?? 'positive-ev');
     assert.deepEqual(config, json(join(run, 'config.json')));
     assert(!existsSync(config.SEARCHER_CREDIT_LIVE_MARKER_PATH));
     assert.equal(shaFile(config.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH), release.readySha256);
@@ -462,7 +471,8 @@ async function supervise(options, profile, release) {
     assert.equal(shaFile(config.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH), runReady.readySha256);
     assert(!stopping, 'stopped during preflight');
     const now = Date.now();
-    window = new RunWindow({ runId: request.runId, profile, blocks: request.blocks, balance: check.balance, now });
+    window = new RunWindow({ runId: request.runId, profile, blocks: request.blocks, balance: check.balance, now,
+      profitMode: config.SEARCHER_BLOCKSCAN_PROFIT_MODE });
     exclusiveJson(permitPath, window.permit);
     armPermitExpiry();
     markerContent = JSON.stringify({ runId: request.runId, permitPath });
@@ -594,6 +604,8 @@ export async function main(args) {
   const check = await inspector(profile);
   try { console.log(JSON.stringify({ checkOnly: true, signing: false, broadcast: false, head: check.head,
     blocks: options.blocks, walletBalanceWei: check.balance.toString(), release: profile.release,
+    profitMode: options.profitMode ?? 'positive-ev',
+    bribeBasis: options.profitMode === 'positive-gross-profit' ? 'simulated-profit-before-gas' : 'profit-after-gas',
     bribeBps: 9900, bribeGasBasis: 'measured-gas', gasLimitBufferBps: 3000,
     nodeHeapMiB: 11264, serviceMemoryMaxGiB: 13,
     readyGeneration: release.readyGeneration, readyReused: true, automaticRestart: false,

@@ -16,7 +16,7 @@ export function normalizeOwnerPrivateKey(value) {
 }
 
 export function parseClientArgs(args) {
-  let mode = 'check', blocks = 2500, resumePrices;
+  let mode = 'check', blocks = 2500, resumePrices, profitMode;
   const modes = args.filter(value => ['--check', '--broadcast', '--status', '--stop'].includes(value));
   assert(modes.length <= 1, 'choose one mode');
   if (modes.length) mode = modes[0].slice(2);
@@ -31,16 +31,20 @@ export function parseClientArgs(args) {
     } else if (key === '--resume-prices') {
       assert(['0', '1'].includes(value), '--resume-prices must be 0 or 1');
       resumePrices = value;
+    } else if (key === '--profit-mode') {
+      assert(['positive-ev', 'positive-gross-profit'].includes(value), 'invalid profit mode');
+      profitMode = value;
     } else throw new Error('unknown option');
   }
   assert(Number.isSafeInteger(blocks) && blocks >= 1 && blocks <= 2500);
   assert(resumePrices === undefined || ['check', 'broadcast'].includes(mode), 'resume-prices is a start/check option');
-  return { mode, blocks, resumePrices };
+  assert(profitMode === undefined || ['check', 'broadcast'].includes(mode), 'profit-mode is a start/check option');
+  return { mode, blocks, resumePrices, profitMode };
 }
 
 export async function main(args) {
   failureStage = 'argument validation';
-  const { mode, blocks, resumePrices } = parseClientArgs(args);
+  const { mode, blocks, resumePrices, profitMode } = parseClientArgs(args);
   failureStage = 'reading public launcher configuration';
   const folder = dirname(new URL(import.meta.url).pathname);
   const config = JSON.parse(readFileSync(join(folder, 'cloud-live-client.json'), 'utf8'));
@@ -53,8 +57,13 @@ export async function main(args) {
     assert(process.stdin.isTTY && process.stdout.isTTY, 'start requires a human terminal');
     const prompt = createInterface({ input: process.stdin, output: process.stdout });
     try {
-      const answer = await prompt.question(`This will start real, EV-gated trading for at most ${blocks} source blocks. No auto-restart. Type START ${blocks} to continue: `);
-      assert.equal(answer.trim(), `START ${blocks}`, 'start cancelled');
+      const gross = profitMode === 'positive-gross-profit';
+      const confirmation = `START ${blocks}${gross ? ' POSITIVE-GROSS-PROFIT' : ''}`;
+      const economics = gross
+        ? 'Simulation-positive trading: bid 99% of gross profit BEFORE gas; negative net EV and gas losses accepted.'
+        : 'Net-positive EV-gated trading.';
+      const answer = await prompt.question(`This will start real trading for at most ${blocks} source blocks. ${economics} No auto-restart. Type ${confirmation} to continue: `);
+      assert.equal(answer.trim(), confirmation, 'start cancelled');
     } finally { prompt.close(); }
     failureStage = 'reading local credentials';
     const secrets = parseEnv(readFileSync(config.envFile, 'utf8'));
@@ -63,7 +72,8 @@ export async function main(args) {
   }
   failureStage = 'connecting to cloud';
   const remote = ['sudo', '-n', config.node, config.launcher, '--' + mode, '--blocks', String(blocks),
-    ...(resumePrices === undefined ? [] : ['--resume-prices', resumePrices])].join(' ');
+    ...(resumePrices === undefined ? [] : ['--resume-prices', resumePrices]),
+    ...(profitMode === undefined ? [] : ['--profit-mode', profitMode])].join(' ');
   const child = spawn('gcloud', ['--configuration=' + config.configuration, 'compute', 'ssh', config.instance,
     '--project=' + config.project, '--zone=' + config.zone, '--tunnel-through-iap', '--quiet', '--command=' + remote, '--', '-T'],
     { stdio: [input === undefined ? 'ignore' : 'pipe', 'inherit', 'inherit'] });
