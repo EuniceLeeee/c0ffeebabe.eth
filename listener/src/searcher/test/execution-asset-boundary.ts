@@ -1,0 +1,181 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { ethers } from "ethers";
+import { ADDR } from "../../shared/constants/addresses.js";
+import { RuntimeAmountProgram, runtimeProgramScript } from "../../adapters/runtime-amount-program.js";
+import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
+import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary, executionNativeSides,
+  executionAssetBoundaryAdapter } from "../execution-asset-boundary.js";
+import { RUNTIME_ERC20, RUNTIME_WRAP } from "../venues/runtime-execution.js";
+import { inspectRuntime, type RuntimeCall } from "./runtime-program-testkit.js";
+
+const token = "0x1111111111111111111111111111111111111111";
+const actor = "0x2222222222222222222222222222222222222222";
+const target = "0x3333333333333333333333333333333333333333";
+const subscript = new ethers.Interface(["function execSubscript(bytes)"]);
+const rawCall = new ethers.Interface(["function exchange(uint256)"]);
+const word = (value: bigint) => ethers.toBeHex(value, 32);
+const weth = ADDR.WETH.toLowerCase();
+
+// This port covers the production quoted/runtime issuer boundary. The donor's
+// newer optional strict-program transport is not part of this implementation.
+function caseRun(nativeIn: boolean, quoted: boolean, failure?: "overspend" | "short-output" | "native-loss" | "short-unwrap", partial = false) {
+  const amount = 100n, stock = 777n;
+  const route = { tokenIn: nativeIn ? weth : token, tokenOut: nativeIn ? token : weth,
+    executionAssets: { input: nativeIn ? "native" as const : "erc20" as const,
+      output: nativeIn ? "erc20" as const : "native" as const } };
+  // A synthetic Family provides ONLY the native protocol call. No wrapper
+  // helper, native balance read, or off-chain quote is invoked by its emitter.
+  const raw = new RuntimeAmountProgram().call(target, rawCall.encodeFunctionData("exchange", [0n]), {
+    patches: [{ offset: 4, reg: 0 }], ...(nativeIn ? { valueReg: 0 } : {}),
+  });
+  const leg = { actionAdapterId: "synthetic-raw-native", program: ethers.hexlify(raw.bytes()) };
+  let program: string;
+  if (quoted) {
+    const original: any = { requirements: [], nodes: [{ adapterId: leg.actionAdapterId, target,
+      tokenIn: route.tokenIn, tokenOut: route.tokenOut, amount, params: {}, children: [] }] };
+    const fragment = applyQuotedAssetBoundary({ route, executor: actor, amountIn: amount, minimum: 200n, fragment: original });
+    assert.equal(fragment.nodes[0].adapterId, "execution-asset-boundary");
+    assert.equal(fragment.nodes[0].children[0], original.nodes[0]);
+    const script = executionAssetBoundaryAdapter.encode(fragment.nodes[0], actor, runtimeProgramScript(raw.bytes(), amount));
+    assert.equal(script[0], 0x0e); program = ethers.hexlify(script.slice(36));
+  } else program = applyRuntimeAssetBoundary({ route, executor: actor, leg }).program;
+  const balances = new Map([[route.tokenIn, stock + amount], [route.tokenOut, stock]]);
+  let native = stock, rawCalls = 0;
+  function executeScript(script: string) {
+    const bytes = ethers.getBytes(script);
+    assert.equal(bytes[0], 0x0e);
+    const supplied = BigInt(ethers.hexlify(bytes.slice(1, 33)));
+    assert.equal(Number(BigInt(ethers.hexlify(bytes.slice(33, 36)))), bytes.length - 36);
+    inspectRuntime(ethers.hexlify(bytes.slice(36)), supplied, { call, nativeBalance: () => native });
+  }
+  function call(c: RuntimeCall): string {
+    const address = c.target.toLowerCase();
+    if (address === actor) { executeScript(subscript.decodeFunctionData("execSubscript", c.data)[0]); return "0x"; }
+    if (address === target) {
+      rawCalls++;
+      const input = rawCall.decodeFunctionData("exchange", c.data)[0]; assert.equal(input, amount);
+      const paid = partial ? 40n : amount;
+      if (nativeIn) { assert.equal(c.value, amount); native -= paid; }
+      else { assert.equal(c.value, 0n); balances.set(token, balances.get(token)! - paid - (failure === "overspend" ? 1n : 0n)); }
+      const received = failure === "short-output" ? 0n : 200n;
+      if (nativeIn) balances.set(token, balances.get(token)! + received);
+      else native += received;
+      if (failure === "native-loss") native -= 1000n;
+      return "0x";
+    }
+    if (c.data.startsWith(RUNTIME_ERC20.getFunction("balanceOf")!.selector)) {
+      assert.equal(RUNTIME_ERC20.decodeFunctionData("balanceOf", c.data)[0].toLowerCase(), actor);
+      return word(balances.get(address)!);
+    }
+    assert.equal(address, weth);
+    const parsed = RUNTIME_WRAP.parseTransaction({ data: c.data }); assert(parsed);
+    if (parsed.name === "withdraw") {
+      assert.equal(parsed.args[0], amount); balances.set(weth, balances.get(weth)! - amount);
+      native += amount - (failure === "short-unwrap" ? 1n : 0n);
+    } else {
+      assert.equal(parsed.name, "deposit"); native -= c.value; balances.set(weth, balances.get(weth)! + c.value);
+    }
+    return "0x";
+  }
+  inspectRuntime(program, amount, { call, nativeBalance: () => native });
+  assert.equal(rawCalls, 1); assert.equal(native, stock);
+  assert.equal(balances.get(route.tokenIn), stock + (partial ? 60n : 0n));
+  assert.equal(balances.get(route.tokenOut), stock + 200n);
+}
+
+test("native declarations automatically bridge raw quoted/runtime operations in both directions", () => {
+  for (const nativeIn of [true, false]) for (const quoted of [true, false]) {
+    caseRun(nativeIn, quoted); caseRun(nativeIn, quoted, undefined, true);
+  }
+});
+test("central native boundary rejects inventory subsidy and independently measures output", () => {
+  for (const quoted of [true, false]) {
+    assert.throws(() => caseRun(true, quoted, "short-unwrap"), /checked uint256/);
+    assert.throws(() => caseRun(false, quoted, "overspend"), /checked uint256/);
+    for (const nativeIn of [true, false]) for (const failure of ["short-output", "native-loss"] as const)
+      assert.throws(() => caseRun(nativeIn, quoted, failure), /checked uint256/);
+  }
+});
+test("ERC20 including WETH stays unchanged; malformed native declarations fail closed", () => {
+  const leg = { actionAdapterId: "ordinary", program: "0x010001" + "00".repeat(32) };
+  const route = { tokenIn: weth, tokenOut: token };
+  assert.equal(applyRuntimeAssetBoundary({ route, executor: actor, leg }), leg);
+  assert.equal(applyRuntimeAssetBoundary({ route: { ...route, executionAssets: { input: "erc20", output: "erc20" } }, executor: actor, leg }), leg);
+  for (const executionAssets of [null, {}, { input: "native" }, { input: "native", output: "native" },
+    { input: "other", output: "erc20" }, { input: "native", output: "erc20", extra: true }])
+    assert.throws(() => executionNativeSides({ ...route, executionAssets } as any), /execution (asset|native)/);
+  assert.throws(() => executionNativeSides({ tokenIn: token, tokenOut: weth, executionAssets: { input: "native", output: "erc20" } }), /graph binding/);
+});
+
+test("quoted transfer/approval requirements stay inside the inventory boundary", () => {
+  const fragment: any = { requirements: [
+    { kind: "approve", token, spender: target, amount: ethers.MaxUint256 },
+    { kind: "transfer-to-pool", token, pool: target, amount: 100n },
+  ], nodes: [{ adapterId: "synthetic", target, tokenIn: token, tokenOut: weth, amount: 100n, params: {}, children: [] }] };
+  const result = applyQuotedAssetBoundary({ route: { tokenIn: token, tokenOut: weth,
+    executionAssets: { input: "erc20", output: "native" } }, executor: actor, amountIn: 100n, minimum: 1n, fragment });
+  assert.deepEqual(result.requirements, []);
+  assert.deepEqual(result.nodes[0].children.map(n => n.adapterId), ["erc20-approve", "erc20-transfer", "synthetic"]);
+  assert.equal(result.nodes[0].children[0].params.minimumAllowance, 100n);
+  assert.equal(result.nodes[0].children[1].amount, 100n);
+});
+
+// Independent synthetic Family: the common boundary alone enforces its input
+// tolerance. The requested input is unchanged and output is a measured 137.
+function directRounding(nativeIn: boolean, external: boolean, tolerance: bigint, amount: bigint, debit: bigint) {
+  const receiver = "0x4444444444444444444444444444444444444444", stock = 777n, received = 137n;
+  const route = { tokenIn: nativeIn ? weth : token, tokenOut: nativeIn ? token : weth,
+    executionAssets: { input: nativeIn ? "native" as const : "erc20" as const,
+      output: nativeIn ? "erc20" as const : "native" as const } };
+  const raw = new RuntimeAmountProgram().call(target, rawCall.encodeFunctionData("exchange", [0n]), {
+    patches: [{ offset: 4, reg: 0 }], ...(nativeIn ? { valueReg: 0 } : {}) });
+  const request = { kind: "direct-output" as const, recipient: external ? receiver : actor };
+  const leg = applyRuntimeAssetBoundary({ route, executor: actor, inputToleranceRawUnits: tolerance,
+    leg: { actionAdapterId: "synthetic-rounding", program: ethers.hexlify(raw.bytes()),
+      settlement: { directOutput: true }, settlementRequest: request } });
+  const balances = new Map<string, bigint>();
+  const key = (t: string, a: string) => t.toLowerCase() + a.toLowerCase();
+  const get = (t: string, a: string) => balances.get(key(t, a))!;
+  const add = (t: string, a: string, n: bigint) => balances.set(key(t, a), get(t, a) + n);
+  for (const t of [token, weth]) for (const a of [actor, receiver]) balances.set(key(t, a), a === actor ? stock : 109n);
+  add(route.tokenIn, actor, amount); let native = stock, calls = 0;
+  const call = (c: RuntimeCall): string => {
+    const address = c.target.toLowerCase();
+    if (address === actor) {
+      const script = ethers.getBytes(subscript.decodeFunctionData("execSubscript", c.data)[0]);
+      inspectRuntime(ethers.hexlify(script.slice(36)), BigInt(ethers.hexlify(script.slice(1,33))), { call, nativeBalance: () => native }); return "0x";
+    }
+    if (address === target) {
+      calls++; assert.equal(rawCall.decodeFunctionData("exchange", c.data)[0], amount);
+      if (nativeIn) { assert.equal(c.value, amount); native -= debit; add(token, request.recipient, received); }
+      else { add(token, actor, -debit); native += received; }
+      return word(999n); // A lying return amount cannot become the delivered output.
+    }
+    if (c.data.startsWith(RUNTIME_ERC20.getFunction("balanceOf")!.selector))
+      return word(get(address, RUNTIME_ERC20.decodeFunctionData("balanceOf", c.data)[0]));
+    if (c.data.startsWith(RUNTIME_ERC20.getFunction("transfer")!.selector)) {
+      const [to, value] = RUNTIME_ERC20.decodeFunctionData("transfer", c.data); assert.equal(value, received);
+      add(address, actor, -value); add(address, to, value); return word(1n);
+    }
+    assert.equal(address, weth); const wrapped = RUNTIME_WRAP.parseTransaction({ data: c.data }); assert(wrapped);
+    if (wrapped.name === "withdraw") { assert.equal(wrapped.args[0], amount); add(weth, actor, -amount); native += amount; }
+    else { assert.equal(wrapped.name, "deposit"); add(weth, actor, c.value); native -= c.value; }
+    return "0x";
+  };
+  inspectRuntime(leg.program, amount, { call, nativeBalance: () => native });
+  assert.equal(calls, 1); assert.equal(native, stock); assert.equal(get(route.tokenIn, actor), stock + amount - debit);
+  assert.equal(get(route.tokenIn, receiver), 109n);
+  assert.equal(get(route.tokenOut, actor), stock + (external ? 0n : received));
+  assert.equal(get(route.tokenOut, receiver), 109n + (external ? received : 0n));
+}
+test("common direct boundary preserves full input and measured output with explicit zero/one residue", () => {
+  for (const nativeIn of [false, true]) for (const external of [false, true]) for (const tolerance of [0n, 1n]) {
+    directRounding(nativeIn, external, tolerance, 100n, 100n);
+    if (tolerance === 1n) directRounding(nativeIn, external, tolerance, 100n, 99n);
+    else assert.throws(() => directRounding(nativeIn, external, tolerance, 100n, 99n));
+    for (const debit of [98n, 0n, 101n]) assert.throws(() => directRounding(nativeIn, external, tolerance, 100n, debit));
+    assert.throws(() => directRounding(nativeIn, external, tolerance, 1n, 0n));
+  }
+  assert.throws(() => directRounding(false, false, 2n, 100n, 100n));
+});

@@ -12,7 +12,7 @@ export const etherTokenNativeRedeemFamilyManifest = {
   familyId: ETHERTOKEN_NATIVE_FAMILY_ID,
   domain: "protocol",
   ownedActionAdapterIds: ["ethertoken-native-redeem"],
-  requiredInfraActionAdapterIds: ["weth-deposit-value"],
+  requiredInfraActionAdapterIds: [],
   allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "redeem" }],
   supportedLineages: [ETHERTOKEN_NATIVE_LINEAGE_ID],
   poolAdapterIds: ["ethertoken-native-redeem-token"],

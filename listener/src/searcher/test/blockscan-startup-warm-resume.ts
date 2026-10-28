@@ -1,5 +1,9 @@
 /** Runtime/coordinator/session/backend integration. All transport is a local HTTP fixture. */
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { BlockScanStartupCache, startupCacheNamespace } from "../blockscan-startup-cache.js";
 import { test } from "node:test";
 import { once } from "node:events";
 import { createServer, type ServerResponse } from "node:http";
@@ -225,13 +229,12 @@ async function setup(mode: Mode) {
       return session;
     } finally { activeSessionPreparations--; }
   };
-  const coordinator = new StrictCurrentRuntimeCoordinator(sessionFor, () => {},
+  const makeCoordinator = () => new StrictCurrentRuntimeCoordinator(sessionFor, () => {},
     publication => published.push(publication.snapshot), async (pricing, control, backend, reuse) => {
       assert(backend);
       const target = reuse?.quoteGraph ?? pricing;
       const source = { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation };
       let session: StrictProductionRuntimeSession | undefined;
-      let index = 0;
       return buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, control, weth: pool.token0, gasCostWei: null,
         enumerationSpreadBps: 20, concurrency: 1, previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
         prepareQuote: async requiredEdgeIds => {
@@ -242,7 +245,9 @@ async function setup(mode: Mode) {
           assert(session, "effective quote requires the current source's lazy Exact session");
           // Synthetic expensive remote step plus real Family decode/authority.
           // Deliberately omit controls here to exercise the attempt call facade.
-          await backend.call({ to: QUOTER, data: ++index === 1 ? "0xbeef01" : TAIL, from: EXECUTOR });
+          await backend.call({ to: QUOTER,
+            data: request.edge.tokenIn.toLowerCase() === pool.token0.toLowerCase() ? "0xbeef01" : TAIL,
+            from: EXECUTOR });
           const quote = await session.issueExact({ ...request, requireChainAmountQuote: false,
             executor: EXECUTOR, runtimeEvidence: [] });
           assert("amountIn" in quote);
@@ -250,6 +255,7 @@ async function setup(mode: Mode) {
           return quote;
         } });
     });
+  const coordinator = makeCoordinator();
   const realReset = coordinator.resetDynamicStateForReplay.bind(coordinator);
   coordinator.resetDynamicStateForReplay = async () => {
     assert.equal(activeActivityReads, 0, "activity must settle before a reorg reset");
@@ -369,7 +375,7 @@ async function setup(mode: Mode) {
   const loop = new BlockScanRuntimeLoop(deps);
   return { loop, coordinator, runtimeAbort, wire, requests, sessions, published, bridged, snapshots, exacts, headers, starts, drops,
     held, headerWire, headerHeld, releases, errors, backends, logs, server, deps,
-    graphInputs, activityCalls, activityReads, activityHeaderReads, activityBehavior, resets,
+    graphInputs, activityCalls, activityReads, activityHeaderReads, activityBehavior, resets, makeCoordinator,
     get maxActivePrepare() { return maxActivePrepare; },
     get forkCount() { return forkCount; }, releaseHeader: () => releaseHeader?.(),
     restore() { PinnedRethQuoteBackend.prototype.call = oldCall; console.log = oldLog; console.warn = oldWarn; } };
@@ -417,17 +423,17 @@ await fixture("normal", async f => {
     await until(() => closing, "startup physical cleanup held");
     assert.equal(f.published.length, 1);
     assert.equal(transport.transitions, 0, "publication alone must not restore startup limits");
-    assert.equal(load.limits(128, 4).concurrency, 2);
+    assert.equal(load.limits(128, 4).concurrency, 4, "one failed batch cannot lower fresh startup work");
   } finally { release(); await pass; }
   assert.equal(transport.transitions, 1);
-  assert.deepEqual(load.limits(128, 4), { version: 2, batchSize: 128, concurrency: 4 });
+  assert.deepEqual(load.limits(128, 4), { version: 0, batchSize: 128, concurrency: 4 });
   load.retry(Object.assign(new Error("steady 429"), { code: 429 }), [{}], load.limits(128, 4));
   // This preparation fixture intentionally has no downstream Exact session.
   await assert.rejects(f.loop.runHead(N + 1, observe()), /requires a strict current-source session/);
   assert.equal(f.published.at(-1)!.sourceBlock, N + 1);
   assert.equal(transport.transitions, 1, "ordinary heads must not reset shared limits");
-  assert.equal(load.limits(128, 4).batchSize, 64);
-  assert.equal(load.limits(128, 4).concurrency, 2);
+  assert.equal(load.limits(128, 4).batchSize, 128);
+  assert.equal(load.limits(128, 4).concurrency, 4);
 });
 
 for (const mode of ["ordinary-error", "publish-hash"] as const) {
@@ -488,6 +494,9 @@ await fixture("resume", async f => {
   assert.equal(f.requests[2]!.validateBeforePublish, undefined, "hot path must keep ordinary publication");
   assert.deepEqual(values(f.published[0]!), baseline!);
   assert.equal(f.published[0]!.generation, 2);
+  assert.equal(f.exacts.filter(e => e.session.source.number === N).length, 2,
+    "a completed effective direction must not be recomputed on the resumed generation");
+  assert.deepEqual([...f.published[0]!.effectiveMids!.rows.values()].map(row => row.quotedAt!.generation).sort(), [1, 2]);
   const warmWire = f.wire.filter(c => c.params[1].blockHash === hash(N));
   assert.equal(warmWire.length, 8, "three raw + two Funding + two effective reads + only the interrupted tail repeated");
   assert.equal(warmWire.filter(c => c.params[0].data === "0xbeef01").length, 1);
@@ -499,7 +508,8 @@ await fixture("resume", async f => {
   const freshQuote = f.exacts.find(e => e.session === freshExact)!.quote;
   assert.throws(() => freshExact.buildExecution({ edge: freshExact.edges[0]!, exact: oldQuote,
     minAmountOut: 1n, executor: EXECUTOR }), /same session-issued/);
-  assert.equal(freshExact.buildExecution({ edge: freshExact.edges[0]!, exact: freshQuote,
+  const freshEdge = freshExact.edges.find(edge => edge.tokenIn.toLowerCase() === pool.token1.toLowerCase())!;
+  assert.equal(freshExact.buildExecution({ edge: freshEdge, exact: freshQuote,
     minAmountOut: 1n, executor: EXECUTOR }).status, "resolved");
   assertAtomicBlockScanRuntime(f.snapshots[0]!);
   for (const request of f.requests.slice(0, 2)) {
@@ -515,6 +525,42 @@ await fixture("resume", async f => {
   await turn(); assert.equal(f.wire.length, before);
   assert(f.held[0]!.destroyed, "attempt drain left its HTTP envelope open");
 });
+
+for (const reorged of [false, true]) {
+  await fixture("range", async f => {
+    const directory = mkdtempSync(join(tmpdir(), "warm-runtime-cache-"));
+    try {
+      const cache = new BlockScanStartupCache(directory, startupCacheNamespace(["runtime-test"]));
+      Object.assign(f.deps, { startupWarmCache: cache });
+      await f.loop.runHead(N, observe());
+      assert.equal(f.published.length, 1);
+      await f.loop.shutdown();
+      for (const backend of f.backends) assert.equal(backend.stats().persistentCacheConfigured, true);
+      if (reorged) f.activityBehavior.hashes.set(N, hash(900));
+      const before = f.wire.length;
+      const successorCoordinator = f.makeCoordinator();
+      const successor = new BlockScanRuntimeLoop({ ...f.deps, runtimeAbort: new AbortController(),
+        currentRuntimeCoordinator: () => successorCoordinator });
+      try {
+        // The range fixture intentionally has no downstream solver. Snapshot
+        // publication is still real, and startup itself must never enumerate.
+        successor.schedule(N + 1);
+        await successor.waitForIdle();
+        if (reorged) {
+          assert(f.logs.some(l => l.includes('"status":"source_reorged"')));
+          assert(f.wire.slice(before).every(c => c.params[1].blockHash !== hash(N)),
+            "orphaned bytes must not enter a restored session");
+        } else {
+          assert(f.logs.some(l => l.includes('"status":"restoring"')));
+          assert.equal(f.wire.slice(before).filter(c => c.params[1].blockHash === hash(N)).length, 0,
+            "restored warm must reuse durable bytes at its canonical pin");
+          assert(f.published.some((s, index) => index > 0 && s.sourceBlock === N + 1),
+            "the original observed head must still run after restoring an older pin");
+        }
+      } finally { await successor.shutdown(); }
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  }, `durable startup ${reorged ? "rejects a reorged source" : "restores then catches up to the observed head"}`);
+}
 
 for (const mode of ["retry-hash", "retry-height", "publish-hash", "resumed-publish-hash", "canonical-timeout"] as const) {
   await fixture(mode, async f => {

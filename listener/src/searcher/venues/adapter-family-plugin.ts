@@ -662,6 +662,11 @@ export interface FamilyRouteDescriptor {
   readonly instanceKey: InstanceKey;
   readonly tokenIn: string;
   readonly tokenOut: string;
+  /** Raw settlement assets. The common execution issuer bridges native sides. */
+  readonly executionAssets?: {
+    readonly input: "erc20" | "native";
+    readonly output: "erc20" | "native";
+  };
   readonly taxonomy: AllowedTaxonomy;
   readonly bindingRef: RouteBindingRef;
   readonly runtimeRequirements: readonly RuntimeRequirement[];

@@ -3520,7 +3520,7 @@ async function testSharedWireTimeoutSplitAndReuse(): Promise<void> {
     ["0x01", "0x02", "0x03", "0x04"], ["0x01", "0x02"],
     ["0x03", "0x04"], ["0x03"], ["0x04"],
   ], "completed sub-batch must not be replayed after a later timeout");
-  assert.equal(scheduler.snapshot().reductionVersion, 2);
+  assert.equal(scheduler.snapshot().reductionVersion, 0);
   const nextSizes: number[] = [];
   const next = new JsonRpcBlockScanStateReadBackend("http://unit.test", {
     maxBatchSize: 4, maxConcurrentBatches: 4, transportScheduler: scheduler,
@@ -3531,7 +3531,7 @@ async function testSharedWireTimeoutSplitAndReuse(): Promise<void> {
     }) as typeof fetch,
   });
   assert((await next.readBatch("swap", reads, control())).every(item => item.ok));
-  assert.deepEqual(nextSizes, [1, 1, 1, 1], "new backend inherits shared limits");
+  assert.deepEqual(nextSizes, [4], "new backend must not inherit another request's retry tier");
   assert.equal(scheduler.snapshot().activeTotal, 0);
   console.log("[state-read-backend] shared wire timeout + split + completed item reuse: PASS");
 }
@@ -3630,7 +3630,7 @@ async function testSharedWireRetryControls(): Promise<void> {
     assert.equal(starts, 1, "scope termination prevents retry admission");
     assert.equal(scheduler.snapshot().activeTotal, 0);
     assert.equal(scheduler.snapshot().queuedByLane["producer-bulk"], 0);
-    assert.equal(scheduler.snapshot().reductionVersion, outcome === "abort" ? 0 : 1);
+    assert.equal(scheduler.snapshot().reductionVersion, 0);
   }
   console.log("[state-read-backend] shared retry error exclusions + floor + cancellation: PASS");
 }
@@ -3732,7 +3732,7 @@ async function testSharedGlobalCapacityIsNotLocalSlotReduction(): Promise<void> 
     assert(load);
     assert.equal(load.retry(Object.assign(new Error("fixture socket"), { code: "ETIMEDOUT" }), [{}], load.limits(4, 4)), true);
   });
-  assert.equal(scheduler.snapshot().capacity, 10);
+  assert.equal(scheduler.snapshot().capacity, 20);
   const releases: Array<() => void> = [];
   const starts = [0, 0];
   const make = (index: number, concurrency: number) => new JsonRpcBlockScanStateReadBackend("http://unit.test", {
@@ -3747,8 +3747,8 @@ async function testSharedGlobalCapacityIsNotLocalSlotReduction(): Promise<void> 
   const first = make(0, 4).readBatch("swap", [1, 2, 3, 4].map(n => read(`local-${n}`, "0x01")), control());
   await waitFor(() => starts[0] === 4);
   const second = make(1, 20).readBatch("swap", Array.from({ length: 8 }, (_, n) => read(`shared-${n}`, "0x01")), control());
-  await waitFor(() => scheduler.snapshot().activeTotal === 10);
-  assert.deepEqual(starts, [4, 6], "shared global cap applies; local slots are not an independent adaptive controller");
+  await waitFor(() => scheduler.snapshot().activeTotal === 12);
+  assert.deepEqual(starts, [4, 8], "unrelated batch backoff must not shrink the shared physical cap");
   for (const release of releases.splice(0)) release();
   await waitFor(() => starts[1] === 8);
   for (const release of releases.splice(0)) release();

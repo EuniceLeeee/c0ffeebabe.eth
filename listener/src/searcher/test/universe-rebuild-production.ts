@@ -997,6 +997,14 @@ async function main(): Promise<void> {
     familyCandidateKey: rebuildFamilyCandidateKey(candidate),
   });
   assert.equal(sealed.candidateFingerprint, candidateFingerprint(candidate));
+  assert.throws(() => probeWiring.sealDurableVerifiedMemo({
+    candidate, proofSource: SOURCE, familyCandidateKey: "wrong-key",
+    result: { accepted: { familyId }, authorityFingerprint: authorityFor(candidate) },
+  }), /candidate key mismatch/, "the sealer must bind the caller's candidate key");
+  assert.throws(() => probeWiring.sealDurableVerifiedMemo({
+    candidate, proofSource: SOURCE, familyCandidateKey: rebuildFamilyCandidateKey(candidate),
+    result: { accepted: { familyId: "protocol:wsteth" }, authorityFingerprint: authorityFor(candidate) },
+  }), /changed candidate Family\/key/, "a foreign Family result cannot be sealed under this candidate");
   const {
     candidateSnapshot: _candidateSnapshot,
     memoFingerprint: _memoFingerprint,
@@ -1131,7 +1139,7 @@ async function main(): Promise<void> {
       }),
     }),
     proofSource: SOURCE,
-    familyCandidateKey: "alias",
+    familyCandidateKey: rebuildFamilyCandidateKey({ ...candidate, pluginCandidateKey: "alias-candidate-key" }),
   });
   assert.equal(
     aliasSealed.familyInstanceKey,

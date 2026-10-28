@@ -13,7 +13,8 @@ interface CodeProvider {
 export function createSourceCodeProviders<Provider extends CodeProvider>(
   provider: Provider,
   assertOpen: () => void,
-  limits: { readonly maxEntries?: number; readonly maxBytes?: number } = {},
+  limits: { readonly maxEntries?: number; readonly maxBytes?: number;
+    readonly onReadError?: (error: unknown) => void } = {},
 ): (source: CanonicalSource) => Provider {
   const maxEntries = limits.maxEntries ?? 2048;
   const maxBytes = limits.maxBytes ?? 32 * 1024 * 1024;
@@ -86,7 +87,9 @@ export function createSourceCodeProviders<Provider extends CodeProvider>(
           entries.delete(key);
           entries.set(key, entry);
         }
-        const code = await entry.pending;
+        let code: string;
+        try { code = await entry.pending; }
+        catch (error) { limits.onReadError?.(error); throw error; }
         assertOpen();
         return code;
       },

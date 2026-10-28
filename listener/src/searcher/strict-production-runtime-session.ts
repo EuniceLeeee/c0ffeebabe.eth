@@ -200,6 +200,10 @@ export interface StrictProductionSessionCreationTiming {
   readonly pricingMs: number;
   readonly fundingMs: number;
   readonly routeProjectionMs: number;
+  /** Exact-branch attribution; these run before routeProjectionMs starts. */
+  readonly exactAuthorityReissueMs: number;
+  readonly exactRouteHandleReissueMs: number;
+  readonly exactFlattenMs: number;
   readonly totalMs: number;
   readonly heapUsedBytes: number;
 }
@@ -471,6 +475,12 @@ export class StrictProductionRuntimeRoot {
       : 0;
     let failedInstanceCount = 0;
     let pricingMs = 0;
+    // Diagnosis only. The exact branch re-issues source-bound authorities and
+    // route handles before route projection starts, so these counters exist
+    // only to attribute that gap; they never gate or reorder any work.
+    let exactAuthorityReissueMs = 0;
+    let exactRouteHandleReissueMs = 0;
+    let exactFlattenMs = 0;
 
     const prepareFunding = async () => {
       const startedAtMs = Date.now();
@@ -639,24 +649,30 @@ export class StrictProductionRuntimeRoot {
           continue;
         }
         const family = this.#catalog.forFamily(readyInstance.familyId);
+        const authorityStartedAtMs = Date.now();
         const currentAuthority = reissuePreparedInstanceAuthority({
           family,
           instance: readyInstance,
           source: input.source,
           generation: input.source.generation,
         });
+        exactAuthorityReissueMs += Math.max(0, Date.now() - authorityStartedAtMs);
+        const handlesStartedAtMs = Date.now();
         const currentInstance = reissuePreparedInstanceRouteHandles({
           family,
           instance: currentAuthority,
           source: input.source,
           generation: input.source.generation,
         });
+        exactRouteHandleReissueMs += Math.max(0, Date.now() - handlesStartedAtMs);
+        const flattenStartedAtMs = Date.now();
         routes.push(...currentInstance.routes.map((route, index) => ({
           family,
           descriptor: currentInstance.descriptor,
           route,
           handle: currentInstance.routeHandles[index]!,
         })));
+        exactFlattenMs += Math.max(0, Date.now() - flattenStartedAtMs);
       }
     }
 
@@ -741,6 +757,9 @@ export class StrictProductionRuntimeRoot {
       pricingMs,
       fundingMs: funding.fundingMs,
       routeProjectionMs,
+      exactAuthorityReissueMs,
+      exactRouteHandleReissueMs,
+      exactFlattenMs,
       totalMs: Math.max(0, Date.now() - sessionStartedAtMs),
       heapUsedBytes: process.memoryUsage().heapUsed,
     });
@@ -1703,12 +1722,15 @@ function buildStrictReadyPricingIndex(input: {
 }
 
 const immutableReadyEdgeFingerprints = new WeakMap<TokenEdge, string>();
+const immutableReadyGraphFingerprints = new WeakMap<readonly TokenEdge[], string>();
 
 /** Full ordered ready-edge contract used to reject a mixed Graph generation. */
 export function strictReadyGraphContractFingerprint(
   edges: readonly TokenEdge[],
 ): string {
-  return deterministicHash(edges.map(edge => {
+  const cachedGraph = immutableReadyGraphFingerprints.get(edges);
+  if (cachedGraph !== undefined) return cachedGraph;
+  const fingerprint = deterministicHash(edges.map(edge => {
     const cached = immutableReadyEdgeFingerprints.get(edge);
     if (cached !== undefined) return cached;
     const immutable = isDeepFrozenPlainData(edge);
@@ -1716,6 +1738,10 @@ export function strictReadyGraphContractFingerprint(
     if (immutable) immutableReadyEdgeFingerprints.set(edge, fingerprint);
     return fingerprint;
   }));
+  // Source changes reuse the same Ready topology. Only a deep immutable plain
+  // array can retain its full ordered contract; shallow freezes still rehash.
+  if (isDeepFrozenPlainData(edges)) immutableReadyGraphFingerprints.set(edges, fingerprint);
+  return fingerprint;
 }
 
 /** A shallow freeze, accessor, proxy or mutable nested binding cannot prove

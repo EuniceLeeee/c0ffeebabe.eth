@@ -1,0 +1,37 @@
+{
+  "learning_case_id": "tooling-tool-run-enobufs-20261028",
+  "status": "applied",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [],
+  "trigger": "bundle_not_included",
+  "comparable": false,
+  "primary_gap": "replay_state_unavailable",
+  "gap_detail": "The historical benchmark launcher terminated an otherwise running child when captured output crossed 64 MiB. This is an analysis-runner failure, not an economic search verdict.",
+  "evidence": {
+    "run": "parity50-r2",
+    "requested_blocks": 50,
+    "completed_blocks": 43,
+    "first_source_block": 26253875,
+    "last_completed_source_block": 26253917,
+    "wrapper_exit_code": 127,
+    "stdout_bytes": 67092845,
+    "stderr_bytes": 16673,
+    "capture_limit_bytes": 67108864,
+    "independent_review": "runner_output_fix independently reproduced spawnSync error ENOBUFS, child signal SIGTERM, status null with 65 MiB output",
+    "no_broadcast": true
+  },
+  "tooling_defect": {
+    "tool": "analysis/src/cli/tool-run.ts",
+    "issue": "Whole-output spawnSync buffering kills long-running indexed historical tools at the 64 MiB combined stdout/stderr limit and reports the error as exit 127.",
+    "evidence": "Independent real subprocess reproduction plus the measured run's 67109518 output bytes crossing its 67108864 cap; no OOM evidence.",
+    "codify_target": "Stream raw-byte hashes and bounded-memory redacted output with backpressure; preserve exit and signal status and terminate only the owned child group on cancellation; regression above 64 MiB.",
+    "codify_commit": "6d2dcbf7",
+    "status": "codified"
+  },
+  "replay_gate": {
+    "command": "cd analysis && node --import tsx --test src/test/tool-run-output.ts src/test/tool-run-security.ts",
+    "expected_transition": "An 80 MiB real child completes with its intended exit 7 and exact raw-output hashes instead of ENOBUFS/127. Cancellation leaves no analysis child."
+  },
+  "created_at": "2026-10-28T04:46:23.000Z",
+  "updated_at": "2026-10-28T04:46:23.000Z"
+}

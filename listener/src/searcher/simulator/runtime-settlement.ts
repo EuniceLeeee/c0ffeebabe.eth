@@ -31,7 +31,7 @@ export function buildRuntimeSettlementRoot(input: {
   const directDebt = legs.length === 2 && legs[0]!.settlement?.settleOutput === true &&
     last.settlement?.deferredDebtInput === true;
   for (let i = 0; i < legs.length - 1; i++) {
-    const quote = input.build(i, { kind: "quote-output" });
+    const quote = input.build(i, { kind: "quote-output", recipient: i === legs.length - 2 ? recipient : executor });
     const action = directDebt ? input.build(i, { kind: "settle-output", recipient, amountIn: amount })
       : i === legs.length - 2 ? input.build(i, { kind: "direct-output", recipient }) : legs[i]!;
     if (!quote || !action) return null;

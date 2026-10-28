@@ -6,7 +6,14 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import { RuntimeAmountProgram } from "../../adapters/runtime-amount-program.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_LOAD as load } from "../venues/production-family-composition.js";
 import { createBlockScanSimAmountSelector } from "../simulator/blockscan-sim-amount-selector.js";
-import { inspectRuntime } from "./runtime-program-testkit.js";
+import { inspectRuntime, type RuntimeCall } from "./runtime-program-testkit.js";
+import { applyRuntimeAssetBoundary, mapRuntimeAssetSettlementRequest } from "../execution-asset-boundary.js";
+import { descriptor as univ1Fixture, standardAnswer as univ1Standard } from "../venues/swaps/univ1-family/test/fixtures.js";
+import { descriptor as precisionFixture } from "../venues/swaps/precision-pool-family/test/fixtures.js";
+import { descriptor as oneswapFixture } from "../venues/swaps/oneswap-family/test/fixtures.js";
+import { descriptor as compoundFixture } from "../venues/protocols/compound-ctoken-family/test/fixtures.js";
+import { descriptor as algebraFixture } from "../venues/swaps/algebra-integral-family/test/fixtures.js";
+import { descriptor as kyberFixture } from "../venues/swaps/kyberswap-elastic-family/test/fixtures.js";
 import { PSM_INTERFACE, PSM_WAD, psmBuyQuote, psmBuyCost } from "../venues/protocols/psm-family/codec.js";
 import { MODES, EXECUTION, executionFunction, pullsInput } from "../venues/swaps/curve-plain-family/codec.js";
 import { ROUTER, PERMIT2, PERMIT2_ABI, ROUTER_ABI } from "../venues/swaps/balancer-v3-family/codec.js";
@@ -39,7 +46,13 @@ const priced = installed.filter(x => ["swap", "protocol"].includes(x.plugin.mani
 const family = (id: string): any => { const found = priced.find(x => x.familyId === id); assert(found, id); return found.plugin; };
 const raw = JSON.parse(readFileSync(new URL("./fixtures/runtime-family-descriptors.json", import.meta.url), "utf8"),
   (_key, value) => value?.$durableType === "bigint" ? BigInt(value.value) : value);
-const fixtures: any[] = raw.descriptors;
+// Old cached V1 descriptors predate the required implementation model binding.
+const fixtures: any[] = raw.descriptors.filter((d: any) => d.familyId !== "custom-swap:uniswap-v1");
+for (const d of [univ1Fixture(), univ1Fixture(univ1Standard)]) fixtures.push({ ...d,
+  pool: "0x3000000000000000000000000000000000000001", instanceKey: "0x3000000000000000000000000000000000000001",
+  token: "0x3000000000000000000000000000000000000002", factory: "0x3000000000000000000000000000000000000003",
+  issuer: d.issuer === ethers.ZeroAddress ? ethers.ZeroAddress : "0x3000000000000000000000000000000000000004" });
+fixtures.push(precisionFixture(), oneswapFixture(), compoundFixture(), algebraFixture(), kyberFixture());
 // These four missing Ready families are synthetic ABI fixtures, not minted
 // identity/admission records. Normal strict/Ready verification is NOT bypassed.
 function synthetic(id: string, fields: Record<string, unknown>, lineage = 0) {
@@ -77,6 +90,13 @@ synthetic("protocol:badger-sett-withdraw", { binding: {
 } });
 
 const dFor = (id: string) => { const d = fixtures.find(d => d.familyId === id); assert(d, id); return d; };
+// Offline ABI fixtures only: these never grant Ready admission.
+synthetic("protocol:peapods-debond", { binding: { pod: foreign.toLowerCase(), asset: ADDR.USDC.toLowerCase(),
+  staking: "0x1000000000000000000000000000000000000005", codeHash: word(1n), assetCodeHash: word(2n),
+  stakingCodeHash: word(3n), decimals: 6, feeBps: 200n } });
+synthetic("protocol:psv", { binding: { target: foreign.toLowerCase(), implementation: "0x1000000000000000000000000000000000000005",
+  proxyCodeHash: word(1n), implementationCodeHash: word(2n), gem: ADDR.USDC.toLowerCase(), stable: ADDR.DAI.toLowerCase(),
+  gemCodeHash: word(3n), stableCodeHash: word(4n), gemDecimals: 6, stableDecimals: 18 } });
 // Additional synthetic direction/variant fixtures are never written back to Ready.
 synthetic("protocol:erc4626", { asset: ADDR.USDC, verifiedDirections: { deposit: true, redeem: true } });
 const sat1Fixture = dFor("univ4-fee-hook");
@@ -139,8 +159,10 @@ test("settlement capability audit covers installed and disabled Families without
       if (capabilities.deferredInput) requests.push({ kind: "deferred-input", paymentAmount: 19n,
         paymentProgram: ethers.hexlify(new RuntimeAmountProgram().constant(1, 0n).bytes()) });
       for (const request of requests) {
-        const result = p.execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: request });
-        assert(result, entry.familyId); assert.deepEqual(result.settlementRequest, request);
+        const mapped = mapRuntimeAssetSettlementRequest({ route: r, executor, request });
+        assert(mapped);
+        const result = p.execution.buildRuntimeLeg({ ...inputFor(d, r), settlement: mapped });
+        assert(result, entry.familyId); assert.deepEqual(result.settlementRequest, mapped);
         assert.deepEqual(result.settlement, capabilities);
       }
       return { instance: d.instanceKey, direction: r.direction, capabilities, requestContracts: requests.map(r => r.kind) };
@@ -165,8 +187,10 @@ for (const d of fixtures) test(d.familyId + (d.variant ? ":" + d.variant : "") +
     assert(leg && /^0x01/.test(leg.program));
     assert(p.actionAdapters.some((a: any) => a.id === leg.actionAdapterId), "must use Family-owned action");
     assert.throws(() => p.execution.buildRuntimeLeg({ ...inputFor(d, r), route: { ...r, tokenOut: executor } }));
-    assert(p.exact.methods({ ...inputFor(d, r), amountIn: 123456789n }).length > 0,
-      "explicit-amount quote capability must not disappear");
+    const methods = p.exact.methods({ ...inputFor(d, r), amountIn: 123456789n });
+    if (d.familyId === "univ4-fee-hook" && d.hookModel !== "sat1") {
+      assert.equal(methods.length, 0, "untrusted tiered Quoter must not authorize an Exact quote");
+    } else assert(methods.length > 0, "explicit-amount quote capability must not disappear");
   }
 });
 
@@ -301,23 +325,49 @@ test("PSM both directions read the current fee in the transaction and match inte
 });
 
 test("native receipt families wrap the independently observed delta, not an expected output or old ETH", () => {
+  const subscript = new ethers.Interface(["function execSubscript(bytes)"]);
   for (const id of ["protocol:self-burn-native", "protocol:ethertoken-native-redeem", "ella-exchange", "custom-swap:uniswap-v1"]) {
     const d = dFor(id);
     for (const r of routes(d)) for (const amount of [11n, 123456789n]) {
       const outputNative = r.tokenOut.toLowerCase() === ADDR.WETH.toLowerCase();
       let native = 777n;
-      const trace = inspectRuntime(build(d, r).program, amount, { nativeBalance: () => native, call(c) {
-        if (outputNative && c.target.toLowerCase() !== ADDR.WETH.toLowerCase() && !c.static &&
-            !c.data.startsWith(erc20.getFunction("approve")!.selector)) native += 319n;
-        return "0x";
-      } });
+      const balances = new Map([[r.tokenIn.toLowerCase(), 777n + amount], [r.tokenOut.toLowerCase(), 777n]]);
+      const calls: RuntimeCall[] = [];
+      const credit = (token: string, delta: bigint) => {
+        const key = token.toLowerCase(), next = balances.get(key)! + delta;
+        assert(next >= 0n); balances.set(key, next);
+      };
+      const call = (c: RuntimeCall): string => {
+        calls.push(c);
+        if (c.static && c.data.startsWith(erc20.getFunction("balanceOf")!.selector)) return word(balances.get(c.target.toLowerCase())!);
+        if (same(c.target, executor)) {
+          const [encoded] = subscript.decodeFunctionData("execSubscript", c.data), bytes = ethers.getBytes(encoded);
+          assert.equal(bytes[0], 0x0e);
+          assert.equal(Number(BigInt(ethers.hexlify(bytes.slice(33, 36)))), bytes.length - 36);
+          inspectRuntime(ethers.hexlify(bytes.slice(36)), BigInt(ethers.hexlify(bytes.slice(1, 33))), { call, nativeBalance: () => native });
+        } else if (same(c.target, ADDR.WETH) && c.data.startsWith(erc20.getFunction("withdraw")!.selector)) {
+          const [value] = erc20.decodeFunctionData("withdraw", c.data); credit(ADDR.WETH, -value); native += value;
+        } else if (same(c.target, ADDR.WETH) && c.data === erc20.encodeFunctionData("deposit")) {
+          native -= c.value; credit(ADDR.WETH, c.value);
+        } else if (!c.static && !c.data.startsWith(erc20.getFunction("approve")!.selector)) {
+          if (outputNative) { credit(r.tokenIn, -amount); native += 319n; }
+          else { assert.equal(c.value, amount); native -= c.value; credit(r.tokenOut, 319n); }
+        }
+        assert(native >= 777n, "old native inventory must not subsidize execution");
+        return word(1n);
+      };
+      const issued = applyRuntimeAssetBoundary({ route: r, executor, leg: build(d, r) });
+      inspectRuntime(issued.program, amount, { nativeBalance: () => native, call });
+      assert.equal(native, 777n);
+      assert.equal(balances.get(r.tokenIn.toLowerCase()), 777n);
+      assert.equal(balances.get(r.tokenOut.toLowerCase()), 777n + 319n);
       if (outputNative) {
-        const wrap = trace.calls.find(c => c.data === erc20.encodeFunctionData("deposit"))!;
+        const wrap = calls.find(c => c.data === erc20.encodeFunctionData("deposit"))!;
         assert(wrap); assert.equal(wrap.value, 319n);
       } else {
-        const withdraw = trace.calls.find(c => c.data.startsWith(erc20.getFunction("withdraw")!.selector))!;
+        const withdraw = calls.find(c => same(c.target, ADDR.WETH) && c.data.startsWith(erc20.getFunction("withdraw")!.selector))!;
         assert.equal(erc20.decodeFunctionData("withdraw", withdraw.data)[0], amount);
-        assert.equal(trace.calls.find(c => same(c.target, d.pool))!.value, amount);
+        assert.equal(calls.find(c => same(c.target, d.pool))!.value, amount);
       }
     }
   }
@@ -365,17 +415,19 @@ test("Angstrom source-unlocked input retains the real source block and uint128 a
 
 test("Ekubo covers ERC20 and native both ways without changing signed input semantics", () => {
   for (const d of ekuboVariants) for (const r of routes(d)) {
-    let balance = 999n;
-    const trace = inspectRuntime(build(d, r).program, 551n, { nativeBalance: () => balance, call(c) {
-      if (same(c.target, EKUBO_ROUTER)) balance += 343n;
-      return "0x";
-    } });
+    const leg = build(d, r), trace = inspectRuntime(leg.program, 551n);
     const call = trace.calls.find(c => same(c.target, EKUBO_ROUTER))!;
     const args = ekuboRouterIface.decodeFunctionData("swap", call.data);
     assert.equal(args[1], r.isToken1); assert.equal(args[2], 551n); assert.equal(args[5], 1n); assert.equal(args[6], executor);
     assert.equal(call.value, d.poolKey.token0 === ethers.ZeroAddress && !r.isToken1 ? 551n : 0n);
-    if (d.poolKey.token0 === ethers.ZeroAddress && r.isToken1)
-      assert.equal(trace.calls.find(c => c.data === erc20.encodeFunctionData("deposit"))!.value, 343n);
+    assert.deepEqual(r.executionAssets, {
+      input: d.poolKey.token0 === ethers.ZeroAddress && !r.isToken1 ? "native" : "erc20",
+      output: d.poolKey.token0 === ethers.ZeroAddress && r.isToken1 ? "native" : "erc20",
+    });
+    assert(!trace.calls.some(c => same(c.target, ADDR.WETH)), "raw Router leg must not double-wrap");
+    const issued = applyRuntimeAssetBoundary({ route: r, executor, leg });
+    if (d.poolKey.token0 === ethers.ZeroAddress) assert.notEqual(issued.program, leg.program);
+    else assert.equal(issued, leg);
     assert.throws(() => inspectRuntime(build(d, r).program, 1n << 127n), /mismatch/);
   }
 });

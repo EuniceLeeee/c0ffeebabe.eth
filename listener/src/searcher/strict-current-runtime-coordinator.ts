@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import {
   FlashFundingSnapshot,
   type AdapterRuntimePrepareResult,
@@ -36,7 +37,8 @@ import type { RouteVenueMid } from "./venues/mid-readers.js";
 import type { StateBackend } from "../shared/state/state-backend.js";
 import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
-import { effectiveMidRowCarried, type EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
+import { effectiveMidRowCarried, exportEffectiveMidReplayState, restoreEffectiveMidReplayState,
+  type EffectiveMidReplayState, type EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
@@ -70,6 +72,30 @@ export interface StrictSessionRequest {
 export type StrictSessionProvider = (
   request: StrictSessionRequest,
 ) => Promise<StrictProductionRuntimeSession>;
+
+/**
+ * A critical-call view and the backend it was derived from are the same logical
+ * pricing backend: the view only owns a separate pending queue on the same
+ * transport, source, cancellation and retry policy. Compare through the owner
+ * chain so passing the view to funding and the owner to the pass is not a
+ * mismatch.
+ */
+function samePricingBackend(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  const root = (value: unknown): unknown => {
+    let current = value;
+    for (let depth = 0; depth < 8; depth += 1) {
+      if (current === undefined || current === null) return current;
+      const owner = (current as { quoteBackendOwner?: () => unknown }).quoteBackendOwner;
+      if (typeof owner !== "function") return current;
+      const next = owner.call(current);
+      if (next === undefined || next === current) return current;
+      current = next;
+    }
+    return current;
+  };
+  return root(left) === root(right);
+}
 
 /** Pass-owned work handle; Funding projection/authority is not caller supplied. */
 export interface StrictFundingPreparation {
@@ -121,11 +147,46 @@ export type StrictPricingPublication =
       readonly snapshot: BlockScanStateSnapshot;
     };
 
+export interface HistoricalPricingBaseline {
+  readonly version: 1;
+  readonly raw: BlockScanStateSnapshot;
+  readonly pricing: BlockScanStateSnapshot;
+  readonly lineage: EffectiveMidReplayState;
+  readonly disabledInstances: readonly string[];
+}
+
 interface StrictPricingBuildResult {
   readonly snapshot: BlockScanStateSnapshot;
   readonly publication: StrictPricingPublication;
   /** Installed only by the successful atomic publication, never by a draft. */
   readonly rawBasis?: BlockScanStateSnapshot;
+}
+
+interface EffectiveCoverageKeySet {
+  readonly keys: readonly string[];
+  readonly hash: string;
+}
+type EffectiveCoverageKeyCache = Partial<Record<
+  "expected" | "scanner" | "resolved" | "unavailable" | "unresolved" | "refreshed" | "carried",
+  EffectiveCoverageKeySet
+>>;
+
+/** Content reuse only: no source, row validity, ownership or exclusion decision
+ * is cached. All inputs here are freshly assembled primitive key arrays. */
+function effectiveCoverageKeys(cache: EffectiveCoverageKeyCache, kind: keyof EffectiveCoverageKeyCache,
+  keys: string[],
+): EffectiveCoverageKeySet {
+  const old = cache[kind];
+  if (old && keys.length === old.keys.length && keys.every((key, i) => key === old.keys[i])) return old;
+  return cache[kind] = { keys: Object.freeze(keys), hash: exactSetHash(keys) };
+}
+
+interface EffectiveInstanceIndex {
+  readonly graphFingerprint: string;
+  readonly bindings: readonly { readonly edgeId: string; readonly familyId: string | undefined }[];
+  readonly groups: ReadonlyMap<string, readonly string[]>;
+  disabledCount: number;
+  disabledEdges: ReadonlySet<string>;
 }
 
 type StrictPricingProvenance =
@@ -143,9 +204,16 @@ export class StrictCurrentRuntimeCoordinator
   implements CurrentSourceRuntimeCoordinator {
   private publishedPricing: BlockScanStateSnapshot | null = null;
   private bootstrapRawPricing: BlockScanStateSnapshot | null = null;
+  /** Unpublished samples only; never an Exact handle or admission decision. */
+  private bootstrapEffectiveDraft: {
+    readonly graphKey: string;
+    readonly snapshot: EffectiveMidSnapshot;
+  } | null = null;
   /** Policy-only exclusions for this live run. Never written into Ready or
    * cleared by a new block, touched event, raw refresh or reorg. */
   private readonly disabledEffectiveInstances = new Set<string>();
+  private effectiveInstanceIndex: EffectiveInstanceIndex | null = null;
+  private readonly effectiveCoverageKeyCache: EffectiveCoverageKeyCache = {};
   private pricingEpoch = 0;
   private fundingEpoch = 0;
   private readonly fundingPreparations = new WeakMap<StrictFundingPreparation, {
@@ -173,10 +241,77 @@ export class StrictCurrentRuntimeCoordinator
       simulationTransport?: StrictSimulationTransport,
     ) => Promise<EffectiveMidSnapshot>,
     private readonly exactQuoteCache?: AdapterFamilyExactQuoteCache,
+    /** Synchronous derived-column organization, only after publication guards. */
+    private readonly organizePricing?: (snapshot: BlockScanStateSnapshot) => BlockScanStateSnapshot,
   ) {}
 
   latestPricingSnapshot(): BlockScanStateSnapshot | null {
     return this.publishedPricing;
+  }
+
+  /** A cursor, not another exported/deep-copied table. The raw basis must stay
+   * unchanged throughout a journal; a reset cannot silently start a new one. */
+  continuationPricing() {
+    return { raw: this.bootstrapRawPricing, pricing: this.publishedPricing };
+  }
+
+  private continuationDisabled: string[] = [];
+  takeContinuationDisabled(): readonly string[] {
+    const changed = this.continuationDisabled;
+    this.continuationDisabled = [];
+    return changed;
+  }
+
+  exportHistoricalBaseline(): HistoricalPricingBaseline {
+    assert(this.bootstrapRawPricing && this.publishedPricing?.effectiveMids?.complete,
+      "complete published pricing required for historical baseline");
+    return { version: 1, raw: this.bootstrapRawPricing, pricing: this.publishedPricing,
+      lineage: exportEffectiveMidReplayState(this.publishedPricing.effectiveMids),
+      disabledInstances: [...this.disabledEffectiveInstances] };
+  }
+
+  /** Data-only restore on a new coordinator. Rebind the graph
+   * and rebuild its index through the current Ready root; persisted Funding,
+   * sessions and opaque exact request evidence are deliberately not accepted. */
+  async restoreHistoricalBaseline(baseline: HistoricalPricingBaseline, input: {
+    readonly graph: VerifiedGraphView; readonly rawGraph: VerifiedGraphView;
+    readonly weth: string; readonly control: AdapterWorkControl;
+  }): Promise<void> {
+    assert(this.publishedPricing === null && this.bootstrapRawPricing === null && baseline.version === 1,
+      "historical pricing restore requires an empty coordinator");
+    const { graph, rawGraph } = input, prior = baseline.pricing, raw = baseline.raw;
+    for (const [stored, current] of [[prior, graph], [raw, rawGraph]] as const) {
+      assert(stored.sourceBlock === current.sourceBlock && stored.sourceBlockHash === current.sourceBlockHash &&
+        stored.generation === current.generation &&
+        strictGraphPublicationFingerprint(stored.graph) === strictGraphPublicationFingerprint(current),
+      "historical baseline graph/source mismatch");
+    }
+    assert(raw.sourceBlock <= prior.sourceBlock && prior.effectiveMids?.complete, "invalid historical raw basis");
+    const session = await this.sessionFor({ purpose: "exact-execution", source: sourceFor(graph),
+      fundingAssets: [], requiredEdgeIds: new Set(), control: input.control });
+    assertSessionGraphSource(session, graph);
+    const index = session.pricingIndex();
+    const entries = (map: ReadonlyMap<string, unknown> | undefined) => [...(map ?? [])].sort(([a], [b]) => a.localeCompare(b));
+    assert.deepEqual(entries(prior.pricingStateKeyByEdgeKey), entries(index.stateKeyByEdgeKey), "baseline state keys changed");
+    assert.deepEqual(entries(prior.pricingFamilyIdByEdgeKey), entries(index.familyIdByEdgeKey), "baseline Family ownership changed");
+    assert.deepEqual([...(prior.perBlockRefreshStateKeys ?? [])].sort(), [...index.perBlockRefreshStateKeys].sort(),
+      "baseline per-block refresh policy changed");
+    const expectedRows = graph.edges.filter(edge => scannerConsumesEdge(edge) || index.stateKeyByEdgeKey.has(blockScanEdgeKey(edge)))
+      .map(blockScanEdgeKey).sort();
+    assert.deepEqual([...prior.effectiveMids.rows.keys()].sort(), expectedRows, "baseline effective table is not complete");
+    const validInstances = new Set(graph.edges.map(edge => JSON.stringify([
+      index.familyIdByEdgeKey.get(blockScanEdgeKey(edge)), edgeInstanceKey(edge),
+    ])));
+    assert(Array.isArray(baseline.disabledInstances) && baseline.disabledInstances.every(key => validInstances.has(key)),
+      "baseline run exclusions differ from Ready");
+    const restoredRaw = Object.freeze({ ...raw, graph: rawGraph });
+    const built = buildEffectivePricingSnapshot(restoredRaw, graph, index, prior.effectiveMids, null, this.effectiveCoverageKeyCache);
+    restoreEffectiveMidReplayState(prior.effectiveMids, baseline.lineage, graph.edges, input.weth);
+    this.exactQuoteCache?.resetState();
+    this.resetSessions();
+    for (const key of baseline.disabledInstances) this.disabledEffectiveInstances.add(key);
+    this.bootstrapRawPricing = restoredRaw;
+    this.publishedPricing = built.snapshot;
   }
 
   async resetDynamicStateForReplay(): Promise<void> {
@@ -184,6 +319,7 @@ export class StrictCurrentRuntimeCoordinator
     this.fundingEpoch++;
     this.publishedPricing = null;
     this.bootstrapRawPricing = null;
+    this.bootstrapEffectiveDraft = null;
     // This reset also runs on live source-anchor retirement, not just replay.
     // Run exclusions survive; only a newly started coordinator retries them.
     this.exactQuoteCache?.resetState();
@@ -280,8 +416,8 @@ export class StrictCurrentRuntimeCoordinator
       pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend,
       input.canonicalActivity, simulationTransport);
     assertWorkOpen(settleDeadlineAtMs, input.signal);
-    this.publishPricing(built, pricingEpoch);
-    return completePricingResult(built.snapshot);
+    const published = this.publishPricing(built, pricingEpoch);
+    return completePricingResult(published.snapshot);
   }
 
   async prepare(
@@ -306,7 +442,7 @@ export class StrictCurrentRuntimeCoordinator
       prefunding.input.deadlineAtMs !== input.deadlineAtMs ||
       prefunding.input.preparationSettleDeadlineAtMs !==
         input.preparationSettleDeadlineAtMs ||
-      prefunding.input.pricingCallBackend !== input.pricingCallBackend ||
+      !samePricingBackend(prefunding.input.pricingCallBackend, input.pricingCallBackend) ||
       prefunding.input.simulationTransport !== simulationTransport
     )) {
       throw new Error("strict Funding preparation differs from current pass");
@@ -393,7 +529,9 @@ export class StrictCurrentRuntimeCoordinator
     }
     const finalCanonicalCasMs = input.validateBeforePublish === undefined
       ? 0 : Math.max(0, Date.now() - canonicalStartedAtMs);
-    this.publishPricing(built, pricingEpoch);
+    const published = this.publishPricing(built, pricingEpoch);
+    const finalSnapshot = published.snapshot === pricing ? snapshot
+      : Object.freeze({ ...snapshot, pricing: published.snapshot });
     const finishedAtMs = Date.now();
     const timing: AdapterRuntimePrepareTiming = Object.freeze({
       startedAtMs,
@@ -406,8 +544,8 @@ export class StrictCurrentRuntimeCoordinator
     });
     return Object.freeze({
       status: completeness,
-      snapshot,
-      pricing: completePricingResult(pricing),
+      snapshot: finalSnapshot,
+      pricing: completePricingResult(published.snapshot),
       fundingCoverage,
       issues: Object.freeze([]),
       timing,
@@ -459,12 +597,19 @@ export class StrictCurrentRuntimeCoordinator
       // raw source and coverage; quoteGraph independently binds current Exact.
       const sizing = rawBasis ?? (await raw).built.snapshot;
       assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
+      const draft = this.bootstrapEffectiveDraft;
+      const resume = rawBasis === null && draft !== null &&
+        draft.graphKey === strictGraphPublicationFingerprint(graph) &&
+        draft.snapshot.source.number === graph.sourceBlock &&
+        draft.snapshot.source.hash.toLowerCase() === graph.sourceBlockHash.toLowerCase() &&
+        draft.snapshot.source.generation <= graph.generation ? draft.snapshot : undefined;
       return quote(sizing, control, backend, {
-        previous: rawBasis === null ? undefined : previous?.effectiveMids,
+        previous: rawBasis === null ? resume : previous?.effectiveMids,
         disabledEdgeIds: this.disabledEffectiveEdges(sizing),
         quoteGraph: rawBasis === null ? undefined : graph,
-        touchedStateKeys: rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity)
-          ? activity.touchedStateKeys : undefined,
+        touchedStateKeys: resume !== undefined ? new Set<string>()
+          : rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity)
+            ? activity.touchedStateKeys : undefined,
       }, simulationTransport);
     })();
     // A rejection cannot leave the sibling pricing work detached from the
@@ -483,17 +628,24 @@ export class StrictCurrentRuntimeCoordinator
         effectiveMids.source.generation !== source.generation) {
       throw new Error("effective pricing incomplete or mismatched source");
     }
+    if (rawBasis === null) this.bootstrapEffectiveDraft = {
+      graphKey: strictGraphPublicationFingerprint(graph), snapshot: effectiveMids,
+    };
     assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
     if (!effectiveMids.complete) throw new Error("effective pricing incomplete or mismatched source");
     return { session, built: buildEffectivePricingSnapshot(built.snapshot, graph,
-      session.pricingIndex(), effectiveMids, rawBasis === null ? null : previous) };
+      session.pricingIndex(), effectiveMids, rawBasis === null ? null : previous, this.effectiveCoverageKeyCache) };
   }
 
-  private publishPricing(built: StrictPricingBuildResult, pricingEpoch: number): void {
+  private publishPricing(built: StrictPricingBuildResult, pricingEpoch: number): StrictPricingBuildResult {
     if (pricingEpoch !== this.pricingEpoch) throw new Error("pricing publication retired during prepare");
     // Only the successful atomic publication can retire an instance. Failed,
     // incomplete, cancelled or superseded drafts must not poison the next try.
     this.recordFailedEffectiveInstances(built.snapshot);
+    const organized = this.organizePricing?.(built.snapshot) ?? built.snapshot;
+    if (organized !== built.snapshot) built = Object.freeze({ ...built, snapshot: organized,
+      publication: Object.freeze({ ...built.publication, snapshot: organized }) });
+    this.bootstrapEffectiveDraft = null;
     if (built.rawBasis !== undefined) this.bootstrapRawPricing = built.rawBasis;
     this.publishedPricing = built.snapshot;
     try {
@@ -501,40 +653,71 @@ export class StrictCurrentRuntimeCoordinator
     } catch {
       // Historical evidence is fail-open and cannot suppress pricing.
     }
+    return built;
+  }
+
+  private effectiveInstanceIndexFor(pricing: BlockScanStateSnapshot): EffectiveInstanceIndex {
+    // The graph helper caches only proven deeply immutable data. Family maps
+    // are ReadonlyMap interfaces, not immutable objects: compare their values
+    // even when the map reference is unchanged. No producer invalidation flags.
+    const graphFingerprint = strictReadyGraphContractFingerprint(pricing.graph.edges);
+    const previous = this.effectiveInstanceIndex;
+    if (previous?.graphFingerprint === graphFingerprint && previous.bindings.every(binding =>
+      binding.familyId === pricing.pricingFamilyIdByEdgeKey?.get(binding.edgeId))) return previous;
+    const bindings: EffectiveInstanceIndex["bindings"][number][] = [];
+    const groups = new Map<string, string[]>();
+    for (const edge of pricing.graph.edges) {
+      const edgeId = blockScanEdgeKey(edge);
+      const familyId = pricing.pricingFamilyIdByEdgeKey?.get(edgeId);
+      bindings.push({ edgeId, familyId });
+      if (familyId === undefined) continue;
+      const key = JSON.stringify([familyId, edgeInstanceKey(edge)]);
+      const edges = groups.get(key);
+      if (edges === undefined) groups.set(key, [edgeId]);
+      else edges.push(edgeId);
+    }
+    return this.effectiveInstanceIndex = {
+      graphFingerprint, bindings, groups, disabledCount: -1, disabledEdges: new Set(),
+    };
   }
 
   private disabledEffectiveEdges(pricing: BlockScanStateSnapshot): ReadonlySet<string> | undefined {
     if (this.disabledEffectiveInstances.size === 0) return undefined;
-    const disabled = new Set<string>();
-    for (const edge of pricing.graph.edges) {
-      const edgeId = blockScanEdgeKey(edge);
-      const familyId = pricing.pricingFamilyIdByEdgeKey?.get(edgeId);
-      if (familyId !== undefined && this.disabledEffectiveInstances.has(
-        JSON.stringify([familyId, edgeInstanceKey(edge)]),
-      )) disabled.add(edgeId);
+    const index = this.effectiveInstanceIndexFor(pricing);
+    // Run exclusions only grow, including across source retirement/reset.
+    if (index.disabledCount !== this.disabledEffectiveInstances.size) {
+      const disabled = new Set<string>();
+      for (const [key, edges] of index.groups) {
+        if (this.disabledEffectiveInstances.has(key)) for (const edgeId of edges) disabled.add(edgeId);
+      }
+      index.disabledEdges = disabled;
+      index.disabledCount = this.disabledEffectiveInstances.size;
     }
-    return disabled;
+    return index.disabledEdges;
   }
 
   private recordFailedEffectiveInstances(pricing: BlockScanStateSnapshot): void {
     const effective = pricing.effectiveMids;
     if (!effective?.complete) return;
-    const allFailed = new Map<string, boolean>();
-    for (const edge of pricing.graph.edges) {
-      const edgeId = blockScanEdgeKey(edge);
-      const familyId = pricing.pricingFamilyIdByEdgeKey?.get(edgeId);
-      if (familyId === undefined) continue;
-      const key = JSON.stringify([familyId, edgeInstanceKey(edge)]);
+    const index = this.effectiveInstanceIndexFor(pricing);
+    const perBlockRefresh = new Set(pricing.perBlockRefreshStateKeys ?? []);
+    const newlyDisabled: string[] = [];
+    for (const [key, edges] of index.groups) {
       if (this.disabledEffectiveInstances.has(key)) continue;
-      const row = effective.rows.get(edgeId);
-      // No protocol/revert-reason interpretation. Missing valuation/rows and
-      // cancelled work are not completed amount-quote failures. A successful
-      // direction keeps the instance eligible, even if its reverse failed.
-      const failed = row !== undefined && row.amountIn !== null && row.amountIn > 0n &&
-        (row.status === "quote-failed" || row.status === "unsupported" || row.status === "no-output");
-      allFailed.set(key, (allFailed.get(key) ?? true) && failed);
+      // Recheck current rows/policy, but stop at the first non-failure. There
+      // is no per-publication full-table identity/AND map to allocate or fill.
+      const allFailed = edges.every(edgeId => {
+        const row = effective.rows.get(edgeId);
+        if (row === undefined || row.amountIn === null || row.amountIn <= 0n ||
+            (row.status !== "quote-failed" && row.status !== "unsupported" && row.status !== "no-output")) return false;
+        const stateKey = pricing.pricingStateKeyByEdgeKey?.get(edgeId);
+        // Each-block pricing always gets a fresh attempt at its next source.
+        return stateKey === undefined || !perBlockRefresh.has(stateKey);
+      });
+      if (allFailed) newlyDisabled.push(key);
     }
-    for (const [key, failed] of allFailed) if (failed) this.disabledEffectiveInstances.add(key);
+    for (const key of newlyDisabled) this.disabledEffectiveInstances.add(key);
+    this.continuationDisabled.push(...newlyDisabled);
   }
 
   async prepareCurrentNExactExecutionContext(
@@ -625,15 +808,18 @@ function activityAllowsEffectiveCarry(previous: BlockScanStateSnapshot | null,
 function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
   graph: VerifiedGraphView, index: StrictReadyPricingIndex, effectiveMids: EffectiveMidSnapshot,
   previous: BlockScanStateSnapshot | null,
+  keyCache: EffectiveCoverageKeyCache,
 ): StrictPricingBuildResult {
-  const expectedEdgeKeys = [...index.expectedEdgeKeys].sort();
+  const expectedKeys = effectiveCoverageKeys(keyCache, "expected", [...index.expectedEdgeKeys].sort());
+  const expectedEdgeKeys = expectedKeys.keys;
   const expected = new Set(expectedEdgeKeys);
   const graphEdges = new Map(graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
   const scannerKeys = graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey);
   if (expected.size !== expectedEdgeKeys.length ||
-      exactSetHash(expectedEdgeKeys) !== index.expectedEdgeKeyHash ||
+      expectedKeys.hash !== index.expectedEdgeKeyHash ||
       index.readyGraphContractFingerprint !== strictReadyGraphContractFingerprint(graph.edges) ||
-      scannerKeys.length !== graph.scannerEdgeCount || exactSetHash(scannerKeys) !== graph.scannerEdgeKeyHash ||
+      scannerKeys.length !== graph.scannerEdgeCount ||
+      effectiveCoverageKeys(keyCache, "scanner", scannerKeys).hash !== graph.scannerEdgeKeyHash ||
       scannerKeys.some(key => !expected.has(key)) || [...effectiveMids.rows.keys()].some(key => !expected.has(key))) {
     throw new Error("effective pricing index differs from ready Graph");
   }
@@ -641,6 +827,15 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
   const refreshedEdgeKeys: string[] = [], carriedEdgeKeys: string[] = [];
   const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
   const pricingProvenanceByEdgeKey = new Map<string, StrictPricingProvenance>();
+  const resolvedCoverage: StateKeyCoverage = Object.freeze({ status: "resolved" });
+  const failures = new Map<string, StateKeyCoverage>();
+  const failureCoverage = (status: "rejected" | "unresolved", reason: string): StateKeyCoverage => {
+    const old = failures.get(reason);
+    if (old !== undefined) return old;
+    const coverage: StateKeyCoverage = Object.freeze({ status, reason });
+    failures.set(reason, coverage);
+    return coverage;
+  };
   const familyIds = new Set<string>(), incompleteFamilyIds = new Set<string>();
   for (const key of expectedEdgeKeys) {
     const edge = graphEdges.get(key), familyId = index.familyIdByEdgeKey.get(key);
@@ -662,32 +857,37 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
       const carried = effectiveMidRowCarried(effectiveMids, row);
       (carried ? carriedEdgeKeys : refreshedEdgeKeys).push(key);
       pricingProvenanceByEdgeKey.set(key, carried ? "carried" : "refreshed");
-      coverageByEdgeKey.set(key, Object.freeze({ status: "resolved" }));
+      coverageByEdgeKey.set(key, resolvedCoverage);
     } else if (row?.status === "no-output" || row?.status === "unsupported" || row?.status === "disabled-for-run") {
       unavailableEdgeKeys.push(key);
       pricingProvenanceByEdgeKey.set(key, "unavailable");
-      coverageByEdgeKey.set(key, Object.freeze({ status: "rejected", reason: `effective-${row.status}` }));
+      coverageByEdgeKey.set(key, failureCoverage("rejected", `effective-${row.status}`));
     } else {
       unresolvedEdgeKeys.push(key);
       incompleteFamilyIds.add(familyId);
       pricingProvenanceByEdgeKey.set(key, "unresolved");
-      coverageByEdgeKey.set(key, Object.freeze({ status: "unresolved", reason: `effective-${row?.status ?? "missing-row"}` }));
+      coverageByEdgeKey.set(key, failureCoverage("unresolved", `effective-${row?.status ?? "missing-row"}`));
     }
   }
+  const resolved = effectiveCoverageKeys(keyCache, "resolved", resolvedEdgeKeys);
+  const unavailable = effectiveCoverageKeys(keyCache, "unavailable", unavailableEdgeKeys);
+  const unresolved = effectiveCoverageKeys(keyCache, "unresolved", unresolvedEdgeKeys);
+  const refreshed = effectiveCoverageKeys(keyCache, "refreshed", refreshedEdgeKeys);
+  const carried = effectiveCoverageKeys(keyCache, "carried", carriedEdgeKeys);
   const coverage: BlockScanStateCoverage = Object.freeze({
     ...raw.coverage,
-    expectedEdgeKeys: Object.freeze(expectedEdgeKeys),
-    resolvedEdgeKeys: Object.freeze(resolvedEdgeKeys),
-    unavailableEdgeKeys: Object.freeze(unavailableEdgeKeys),
-    unresolvedEdgeKeys: Object.freeze(unresolvedEdgeKeys),
-    refreshedEdgeKeys: Object.freeze(refreshedEdgeKeys),
-    carriedEdgeKeys: Object.freeze(carriedEdgeKeys),
+    expectedEdgeKeys,
+    resolvedEdgeKeys: resolved.keys,
+    unavailableEdgeKeys: unavailable.keys,
+    unresolvedEdgeKeys: unresolved.keys,
+    refreshedEdgeKeys: refreshed.keys,
+    carriedEdgeKeys: carried.keys,
     expectedEdgeKeyHash: index.expectedEdgeKeyHash,
-    resolvedEdgeKeyHash: exactSetHash(resolvedEdgeKeys),
-    unavailableEdgeKeyHash: exactSetHash(unavailableEdgeKeys),
-    unresolvedEdgeKeyHash: exactSetHash(unresolvedEdgeKeys),
-    refreshedEdgeKeyHash: exactSetHash(refreshedEdgeKeys),
-    carriedEdgeKeyHash: exactSetHash(carriedEdgeKeys),
+    resolvedEdgeKeyHash: resolved.hash,
+    unavailableEdgeKeyHash: unavailable.hash,
+    unresolvedEdgeKeyHash: unresolved.hash,
+    refreshedEdgeKeyHash: refreshed.hash,
+    carriedEdgeKeyHash: carried.hash,
   });
   const snapshot: BlockScanStateSnapshot = Object.freeze({
     ...raw, generation: graph.generation, sourceBlock: graph.sourceBlock,

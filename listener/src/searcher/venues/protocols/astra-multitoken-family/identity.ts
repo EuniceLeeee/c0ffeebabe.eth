@@ -197,8 +197,17 @@ function activeBehaviorRequests(
         0n,
       ]),
     }),
-    // Fund the router: the observed actor must hold tokenIn to spend it.
+    // The observed actor can retain a historical allowance. Tokens such as
+    // OMG reject nonzero-to-nonzero approval; clear it before the exact grant.
+    // This is a real call in the isolated simulation, not an allowance override.
     preCalls: Object.freeze([Object.freeze({
+      caller: Object.freeze({ kind: "observed-sender" as const }),
+      to: canonicalAddress(candidate.tokenIn),
+      data: ASTRA_ERC20_INTERFACE.encodeFunctionData("approve", [
+        canonicalAddress(evidence.target),
+        0n,
+      ]),
+    }), Object.freeze({
       caller: Object.freeze({ kind: "observed-sender" as const }),
       to: canonicalAddress(candidate.tokenIn),
       data: ASTRA_ERC20_INTERFACE.encodeFunctionData("approve", [

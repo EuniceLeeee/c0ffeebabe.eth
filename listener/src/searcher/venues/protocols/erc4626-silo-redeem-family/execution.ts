@@ -1,12 +1,12 @@
 import { ethers } from "ethers";
 import { RuntimeAmountProgram } from "../../../../adapters/runtime-amount-program.js";
-import { runtimeLeg, runtimeExecutor } from "../../runtime-execution.js";
+import { runtimeLeg, runtimeExecutor, RUNTIME_ERC20 } from "../../runtime-execution.js";
 import {
   NO_EXECUTION_RUNTIME_PROJECTION,
   type ExecutionSemantics,
 } from "../../adapter-family-plugin.js";
 import { sameAddress } from "../standard-family/common.js";
-import { assertErc4626SiloInvocation } from "./shared.js";
+import { assertErc4626SiloInvocation, ERC4626_SILO_INTERFACE } from "./shared.js";
 import type {
   Erc4626SiloRedeemDescriptor,
   Erc4626SiloRedeemExactEvidence,
@@ -17,10 +17,32 @@ export const erc4626SiloRedeemExecution = {
   buildRuntimeLeg(input) {
     const { descriptor: d, route: r, executor } = input;
     assertErc4626SiloInvocation(d, r); runtimeExecutor(executor, d.vault);
+    const request = input.settlement;
+    if (request?.kind === "quote-output" || request?.kind === "deferred-input") return null;
+    if (request?.kind === "direct-output") {
+      const recipient = runtimeExecutor(request.recipient, d.vault, d.payoutToken, d.underlyingAsset);
+      runtimeExecutor(executor, d.payoutToken, d.underlyingAsset);
+      const external = !sameAddress(recipient, executor);
+      const p = new RuntimeAmountProgram().constant(15, 1n).math("sub", 14, 0, 15);
+      const balance = (token: string, account: string, reg: number) =>
+        p.call(token, RUNTIME_ERC20.encodeFunctionData("balanceOf", [account]), { static: true }).load(reg, 0);
+      balance(d.vault, executor, 1).math("sub", 14, 1, 0);
+      balance(d.payoutToken, recipient, 2);
+      p.call(d.vault, ERC4626_SILO_INTERFACE.encodeFunctionData("totalSupply"), { static: true }).load(3, 0).nativeBalance(4);
+      if (external) { balance(d.payoutToken, executor, 5); balance(d.vault, recipient, 6); }
+      p.call(d.vault, ERC4626_SILO_INTERFACE.encodeFunctionData("redeem", [r.tokenOut, 0n, recipient, executor]),
+        { patches: [{ offset: 36, reg: 0 }] }).load(7, 0).math("sub", 14, 7, 15);
+      balance(d.vault, executor, 8).math("sub", 8, 1, 8).equal(8, 0);
+      balance(d.payoutToken, recipient, 8).math("sub", 8, 8, 2).equal(8, 7);
+      p.call(d.vault, ERC4626_SILO_INTERFACE.encodeFunctionData("totalSupply"), { static: true })
+        .load(8, 0).math("sub", 8, 3, 8).equal(8, 0).nativeBalance(8).equal(8, 4);
+      if (external) { balance(d.payoutToken, executor, 8).equal(8, 5); balance(d.vault, recipient, 8).equal(8, 6); }
+      return { ...runtimeLeg(r.adapterId, p), settlement: { directOutput: true }, settlementRequest: request };
+    }
     const p = new RuntimeAmountProgram().call(d.vault,
       new ethers.Interface(["function redeem(address,uint256,address,address)"]).encodeFunctionData("redeem", [r.tokenOut, 0n, executor, executor]),
       { patches: [{ offset: 36, reg: 0 }] });
-    return runtimeLeg(r.adapterId, p);
+    return { ...runtimeLeg(r.adapterId, p), settlement: { directOutput: true } };
   },
   runtimeProjection: () => NO_EXECUTION_RUNTIME_PROJECTION,
   buildFragment(input) {

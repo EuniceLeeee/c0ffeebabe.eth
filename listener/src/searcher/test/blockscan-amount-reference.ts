@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { serialize, deserialize } from "node:v8";
 import { BlockScanAmountReference, gasReferenceInput, tokenToWethReferences } from "../blockscan-amount-reference.js";
 import { DEFAULT_EFFECTIVE_WETH_INPUT, type EffectiveMidRow } from "../blockscan-effective-mid.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
@@ -84,6 +85,24 @@ higherFee.observeHeader(header(1));
 higherFee.recordSimulation({ opportunity: opp, source: source(1), gasUsed: 100_000n, success: true });
 higherFee.observeHeader({ ...header(2), baseFeePerGas: 2_000_000_000n });
 assert.equal(higherFee.estimateGasCost(source(2)), 200_000_000_000_000n, "use the current block's fee");
+{
+  const baseline = deserialize(serialize(higherFee.exportHistoricalBaseline()));
+  for (let trial = 0; trial < 2; trial++) {
+    const restored = new BlockScanAmountReference();
+    restored.restoreHistoricalBaseline(baseline);
+    assert.equal(restored.estimateGasCost(source(2)), higherFee.estimateGasCost(source(2)));
+    restored.observeHeader(header(3));
+    assert.equal(restored.estimateGasCost(source(3)), 100_000_000_000_000n);
+    assert.throws(() => restored.restoreHistoricalBaseline(baseline), /baseline/);
+  }
+  assert.throws(() => new BlockScanAmountReference(1).restoreHistoricalBaseline(baseline), /baseline/);
+  assert.throws(() => new BlockScanAmountReference().restoreHistoricalBaseline({ ...baseline,
+    samples: [{ ...baseline.samples[0], source: { ...source(1), hash: hash(99) } }],
+  }), /gas observation/);
+  assert.throws(() => new BlockScanAmountReference().restoreHistoricalBaseline({ ...baseline,
+    samples: [{ ...baseline.samples[0], gasUsed: 0n }],
+  }), /gas observation/);
+}
 ref.recordSimulation({ opportunity: opp, source: source(1), gasUsed: 200_000n, success: true });
 assert.equal(ref.estimateGasCost(source(2)), 200_000_000_000_000n);
 ref.recordSimulation({ opportunity: other, source: source(1), gasUsed: 50_000n, success: true });

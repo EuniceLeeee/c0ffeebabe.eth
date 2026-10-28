@@ -5,9 +5,11 @@ import {
   type StateCallControl,
 } from "../shared/state/state-backend.js";
 import { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
+import type { BlockScanStartupCache } from "./blockscan-startup-cache.js";
 import { isRpcThrottleError, type LiveRpcThrottleObservation } from "./rpc-throttle-guard.js";
 import { RevmFatalError, type RevmFatalReason } from "./revm-sim-client.js";
 import { BlockActivityRangeInvalidatedError, MAX_ACTIVITY_TRANSITIONS } from "./blockscan-touched-state.js";
+import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import {
   isPassScopedExactStateBackend,
   type PassScopedExactStateBackend,
@@ -682,6 +684,14 @@ export class SourceSimulationWork {
 
 export interface BlockScanRuntimeLoopDependencies {
   readonly enabled: boolean;
+  /** Lifecycle observation after pass work drains, including gas/revert writes.
+   * Persistence uses the same hook in live and historical measurements. */
+  readonly onPassSettled?: () => void;
+  /** Cross-live data restore only. Prices catch up through this same runHead;
+   * startup execution observations are renewed once, after reaching the head. */
+  readonly liveContinuation?: {
+    revalidateStartup(pricing: BlockScanStateSnapshot, control: AdapterWorkControl): Promise<void>;
+  };
   /** Opt-in stage diagnostics, still dispatched by the ordinary head scheduler. */
   readonly diagnosticForHead?: (blockNumber: number) => NonNullable<Parameters<BlockScanRuntimeLoop["runHead"]>[2]> | undefined;
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
@@ -753,6 +763,7 @@ export interface BlockScanRuntimeLoopDependencies {
   readonly startupWarmEnabled: boolean;
   /** One-time ordinary-live budget for the first current-head runtime snapshot. */
   readonly startupWarmBudgetMs: number;
+  readonly startupWarmCache?: BlockScanStartupCache;
   /**
    * Explicit degraded availability mode. It never changes the normal
    * production scanner boundary and remains disabled for blind replay.
@@ -968,7 +979,7 @@ export class BlockScanRuntimeLoop {
     this.startupWarmPending =
       deps.startupWarmEnabled && !deps.blind.enabled;
     this.scheduler = new LatestHeadScheduler(
-      (number, observation) => this.runHead(number, observation, this.deps.diagnosticForHead?.(number)),
+      (number, observation) => this.runScheduledHead(number, observation),
       (blockNumber, error) => {
         console.log(
           `[searcher/blockscan-family] block=${blockNumber} error=` +
@@ -1006,6 +1017,79 @@ export class BlockScanRuntimeLoop {
 
   private observeTopologyHeader(blockNumber: number): Promise<BlockScanSourceHeader> {
     return this.deps.frozenTopology.observeHeader(blockNumber);
+  }
+
+  private async runScheduledHead(number: number, observation: LatestHeadObservation): Promise<void> {
+    if (this.liveContinuationPending) {
+      while (!this.deps.runtimeAbort.signal.aborted && !this.deps.isShuttingDown()) {
+        const prior = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
+        if (!prior?.effectiveMids?.complete) throw new Error("live continuation lost complete pricing");
+        const head = Math.max(number, this.latestScheduledHead ?? number);
+        if (prior.sourceBlock > head) throw new Error("live continuation source is ahead of head");
+        if (prior.sourceBlock < head) {
+          const target = Math.min(head, prior.sourceBlock + MAX_ACTIVITY_TRANSITIONS);
+          await this.runHead(target, { ...observation,
+            sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+          const next = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
+          if (!next?.effectiveMids?.complete || next.sourceBlock <= prior.sourceBlock) {
+            throw new Error("live continuation made no pricing progress; trading remains disabled");
+          }
+          console.log(`[searcher/live-continuation] ${JSON.stringify({
+            phase: "catching-up-prices", from: prior.sourceBlock, to: next.sourceBlock, head,
+            startupSimulation: false, trading: false,
+          })}`);
+          continue;
+        }
+        if (!this.liveContinuationStartupChecked) {
+          await this.deps.liveContinuation!.revalidateStartup(prior, {
+            signal: this.deps.runtimeAbort.signal,
+            deadlineAtMs: Date.now() + this.deps.startupWarmBudgetMs,
+          });
+          this.liveContinuationStartupChecked = true;
+          // Heads may have advanced during simulation. Price catch-up remains
+          // mandatory, but startup simulation is not repeated for each head.
+          continue;
+        }
+        this.liveContinuationPending = false;
+        this.liveContinuationCompletedThrough = prior.sourceBlock;
+        this.deps.rethTransportScheduler?.completeStartup?.();
+        console.log(`[searcher/live-continuation] ${JSON.stringify({
+          phase: "caught-up", sourceBlock: prior.sourceBlock, head,
+          nextHead: "full-production-pipeline",
+        })}`);
+        return;
+      }
+      return;
+    }
+    // The existing latest-head scheduler may still hold the newest head that
+    // arrived while continuation was processing its activity range.
+    if (this.liveContinuationCompletedThrough !== null && number <= this.liveContinuationCompletedThrough) return;
+    const cached = this.startupWarmPending && !this.deps.blind.enabled
+      ? this.deps.startupWarmCache?.restore(number, this.topologyKey(), MAX_ACTIVITY_TRANSITIONS)
+      : undefined;
+    if (cached) {
+      const header = await this.observeControlledHeader(cached.number,
+        Date.now() + this.deps.startupWarmBudgetMs, this.deps.runtimeAbort.signal,
+        "startup cache canonical source", number);
+      if (header.number === cached.number && header.hash.toLowerCase() === cached.hash) {
+        console.log(`[searcher/blockscan-startup-cache] ${JSON.stringify({
+          status: "restoring", sourceBlock: cached.number, sourceBlockHash: cached.hash,
+          observedHead: number, transitions: number - cached.number,
+        })}`);
+        // runHead's ordinary startup path revalidates before publication and
+        // never enumerates this old source. The next head owns range catch-up.
+        await this.runHead(cached.number, observation);
+        if (!this.startupWarmPending && !this.deps.runtimeAbort.signal.aborted &&
+            !this.deps.isShuttingDown() && cached.number < number && this.latestScheduledHead === number) {
+          await this.runHead(number, observation, this.deps.diagnosticForHead?.(number));
+        }
+        return;
+      }
+      console.log(`[searcher/blockscan-startup-cache] ${JSON.stringify({
+        status: "source_reorged", sourceBlock: cached.number, observedHead: number,
+      })}`);
+    }
+    await this.runHead(number, observation, this.deps.diagnosticForHead?.(number));
   }
 
   private observeRpcThrottle(blockNumber: number, error: unknown, controller?: AbortController): void {
@@ -1954,6 +2038,7 @@ export class BlockScanRuntimeLoop {
         }
       }
       if (retry) {
+        await backend.checkpoint();
         console.log(`[searcher/blockscan-startup-warm-resume] ${JSON.stringify({
           sourceBlock: pin.number, sourceBlockHash: pin.hash,
           generation: graph.generation, attempt, ...backend.stats(),
@@ -1965,6 +2050,34 @@ export class BlockScanRuntimeLoop {
         deadlineAtMs = Date.now() + Math.max(1, this.deps.startupWarmBudgetMs);
       }
     }
+  }
+
+  private liveContinuationPending = false;
+  private liveContinuationStartupChecked = false;
+  private liveContinuationCompletedThrough: number | null = null;
+
+  restoreLiveContinuation(): void {
+    const baseline = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
+    if (!this.deps.liveContinuation || this.deps.blind.enabled || this.deps.nMinusOneFallbackEnabled ||
+        this.activePass !== null || this.generation !== 0 || !baseline?.effectiveMids?.complete) {
+      throw new Error("live continuation requires a fresh source-N loop and complete pricing");
+    }
+    this.generation = baseline.generation;
+    this.startupWarmPending = false;
+    this.liveContinuationPending = true;
+  }
+
+  /** Resume data-only pricing in a new historical loop, never a live startup.
+   * Funding and source-bound execution authority are reacquired by runHead. */
+  restoreHistoricalBaseline(): void {
+    const baseline = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
+    if (this.deps.historicalReadOnly !== true || this.deps.blind.enabled || this.deps.nMinusOneFallbackEnabled ||
+        this.activePass !== null || this.generation !== 0 || !baseline?.effectiveMids?.complete) {
+      throw new Error("historical baseline requires a new read-only loop and complete pricing");
+    }
+    this.generation = baseline.generation;
+    this.startupWarmPending = false;
+    this.deps.rethTransportScheduler?.completeStartup?.();
   }
 
   readonly runHead = async (
@@ -2197,7 +2310,7 @@ export class BlockScanRuntimeLoop {
         ? this.deps.largeGraphPassBudgetMs
         : this.deps.passBudgetMs
     );
-    let passDeadlineAtMs = startupWarmAttempt
+    let passDeadlineAtMs = startupWarmAttempt || this.liveContinuationPending
       ? Math.max(
           hotPassDeadlineAtMs,
           passWorkerStartedAtMs + Math.max(1, this.deps.startupWarmBudgetMs),
@@ -2368,7 +2481,7 @@ export class BlockScanRuntimeLoop {
           ? "positive_quote_without_atomic_decision"
           : "no_positive_quote");
       const structuredFields = {
-        startup_warm: startupWarmAttempt,
+        startup_warm: startupWarmAttempt || this.liveContinuationPending,
         source_head_seen_at_ms: passStartedAtMs,
         scheduler_queue_ms: Math.max(
           0,
@@ -2526,6 +2639,7 @@ export class BlockScanRuntimeLoop {
     } | null = null;
     let exactTransportDrainMs = 0;
     let fundingPreparation: StrictFundingPreparation | undefined;
+    let fundingCallBackend: PinnedRethQuoteBackend | undefined;
     let fundingSettlement: Promise<void> | undefined;
     const activityStartedAtMs = Date.now();
     // Source-N must cover every transition since the last published price
@@ -2782,7 +2896,16 @@ export class BlockScanRuntimeLoop {
             // Keep cold startup unchanged. Only steady source-N pricing uses
             // wider batches, within the configured provider's 1,000-item cap.
             maxBatchSize: startupWarmAttempt ? 64 : 1000,
-            maxConcurrentBatches: 8,
+            // Bootstrap state preparation is the only phase that re-reads the
+            // whole Ready surface, so it runs at half the steady batch
+            // concurrency; the steady source-N path keeps 8.
+            maxConcurrentBatches: startupWarmAttempt ? 4 : 8,
+            ...(resumableStartupWarm && this.deps.startupWarmCache !== undefined ? {
+              persistentEthCallCachePath: this.deps.startupWarmCache.begin({
+                number: graphView.sourceBlock, hash: graphView.sourceBlockHash.toLowerCase(),
+              }, this.topologyKey()),
+              onPersistentCacheError: (error: Error) => this.deps.runtimeAbort.abort(error),
+            } : {}),
             retryRpcThrottle: true,
             transportLane: "producer-bulk",
             scopeLabel:
@@ -2803,7 +2926,11 @@ export class BlockScanRuntimeLoop {
           }),
           backend,
         };
-        if (!startupWarmAttempt) {
+        if (!startupWarmAttempt && !this.liveContinuationPending) {
+          // Funding has a separate pending queue on the existing priority lane.
+          // The parent backend owns its abort/drain; both share global permits.
+          fundingCallBackend = currentRuntimeCoordinator.startFundingPreparation === undefined
+            ? undefined : backend.criticalCalls();
           fundingStartedAtMs = currentRuntimeCoordinator.startFundingPreparation === undefined
             ? null : Date.now();
           fundingPreparation = currentRuntimeCoordinator.startFundingPreparation?.({
@@ -2813,7 +2940,7 @@ export class BlockScanRuntimeLoop {
             deadlineAtMs: runtimeDeadlineAtMs,
             preparationSettleDeadlineAtMs,
             signal: passSignal,
-            pricingCallBackend: backend,
+            pricingCallBackend: fundingCallBackend,
           });
           fundingSettlement = fundingPreparation?.settle().then(() => {
             fundingFinishedAtMs = Date.now();
@@ -2821,7 +2948,7 @@ export class BlockScanRuntimeLoop {
         }
       }
       const passTouchedPools = await awaitActivity();
-      const pricingFamilySettleDeadlineAtMs = startupWarmAttempt
+      const pricingFamilySettleDeadlineAtMs = startupWarmAttempt || this.liveContinuationPending
         ? preparationSettleDeadlineAtMs
         : Math.min(
             preparationSettleDeadlineAtMs,
@@ -2904,7 +3031,7 @@ export class BlockScanRuntimeLoop {
         recordEnumeration(coarse.opportunities, coarse.coarseEnumeration, coarse.selection.selectedCount);
       } else if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
-        if (!startupWarmAttempt) {
+        if (!startupWarmAttempt && !this.liveContinuationPending) {
           for (const worker of blockScanFinalSimulationWorkers) {
             backgroundFinalSimForks.set(worker, startBlockScanBackgroundFork({
               signal: passSignal,
@@ -2947,7 +3074,38 @@ export class BlockScanRuntimeLoop {
          */
         const sourcePricingBackend = sourcePricingCalls!.backend;
         let runtime: AdapterRuntimePrepareResult;
+        // This phase re-reads the whole Ready surface and can run for minutes
+        // under upstream throttling. Report it on its own channel so a stalled
+        // bootstrap is visible before effective quote progress exists.
+        const prepareStartedAtMs = Date.now();
+        const prepareHeartbeat = setInterval(() => {
+          try {
+            console.log(
+              `[searcher/state-prepare-progress] ${JSON.stringify({
+                sourceBlock: graphView.sourceBlock,
+                generation,
+                elapsedMs: Math.max(0, Date.now() - prepareStartedAtMs),
+                startupWarm: startupWarmAttempt,
+                ...sourcePricingBackend.stats(),
+              })}`,
+            );
+          } catch { /* diagnostics never gate the pass */ }
+        }, 5000);
+        // Never hold the process open only to report progress.
+        prepareHeartbeat.unref?.();
         try {
+          if (this.liveContinuationPending) {
+            const pricing = await currentRuntimeCoordinator.prepareCoarsePricing({
+              graph: graphView, simulationTransport, deadlineAtMs: runtimeDeadlineAtMs,
+              familySettleDeadlineAtMs: preparationSettleDeadlineAtMs,
+              signal: passSignal, touchedPools, canonicalActivity, pricingCallBackend: sourcePricingBackend,
+            });
+            finishStage("state", pricing.status === "incomplete" ? "failed" : "ran");
+            timing.stateMs = stageBoundaries.state.stage_ms;
+            outcome = "startup_warm";
+            skippedReason = "live_continuation_prices_only";
+            return; // No Funding, enumeration, Solver, final-sim, EV or submit.
+          }
           const request: PrepareStrictRuntimeInput = {
             graph: graphView,
             simulationTransport,
@@ -2986,6 +3144,7 @@ export class BlockScanRuntimeLoop {
           sourcePricingBackend.abort(error);
           throw error;
         } finally {
+          clearInterval(prepareHeartbeat);
           try {
             await sourcePricingBackend.drain();
           } finally {
@@ -3109,7 +3268,16 @@ export class BlockScanRuntimeLoop {
 
         const snapshot = runtime.snapshot;
         diagnostic?.onSnapshot(snapshot);
-        if (diagnostic?.through === "prices") return;
+        if (diagnostic?.through === "prices") {
+          // A bounded historical window reuses this same live loop. A complete
+          // first price publication must not leave every successor in bootstrap.
+          if (startupWarmAttempt) {
+            this.startupWarmPending = false;
+            outcome = "startup_warm";
+            skippedReason = `startup_warm_${runtime.status}`;
+          }
+          return;
+        }
         amountPricingSnapshot = snapshot.pricing;
         this.deps.backrunStatePublisher.publish(snapshot.pricing);
         if (this.deps.blind.enabled) auditRuntime = snapshot;
@@ -4488,6 +4656,13 @@ export class BlockScanRuntimeLoop {
                     ...sourcePricingCalls.backend.stats(),
                   })}`,
                 );
+                if (fundingCallBackend) console.log(
+                  `[searcher/blockscan-funding-call-stats-final] ${JSON.stringify({
+                    sourceBlock: sourcePricingCalls.source.number,
+                    generation: sourcePricingCalls.source.generation,
+                    ...fundingCallBackend.stats(),
+                  })}`,
+                );
               }
             } finally {
               // Existing activity I/O has no cancel API: join it even when
@@ -4544,6 +4719,7 @@ export class BlockScanRuntimeLoop {
             (outcome === "ran" || outcome === "degraded" || outcome === "startup_warm")) {
           this.deps.rpcThrottleObservation?.observeRecovery(blockNumber);
         }
+        this.deps.onPassSettled?.();
         recordPass();
       } finally {
         if (

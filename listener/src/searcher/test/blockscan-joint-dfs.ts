@@ -151,6 +151,31 @@ test("joint DFS bounds total hops, not either side to three, and counts both see
   assert.equal(check(scenario(seven, [signal("f", "buy", "sell")], { maxHops: 7 }), "seven hops included only at cap seven").length, 1);
 });
 
+test("joint DFS prunes non-closing final hops at the configured limit on either frontier", () => {
+  for (const maxHops of [2, 3, 4, 6, 7]) for (const reverse of [false, true]) {
+    const quotes = ring(Array.from({ length: maxHops }, () => [1n, 1n] as [bigint, bigint]));
+    quotes.push(reverse ? quote("dead", "dead", quotes[quotes.length - 1]!.tokenIn)
+      : quote("dead", quotes[0]!.tokenOut, "dead"));
+    const input = scenario(quotes, [signal("f", "buy", "sell")], {
+      maxHops, allowRepeatedPools: false, allowRepeatedTokens: false,
+    });
+    assert.equal(check(input, `closing at cap ${maxHops}, reverse=${reverse}`).length, 1);
+    const stats = enumerateJointDfs({ ...input, deadlineAtMs: Date.now() + 30_000, onCycle() {} });
+    assert.equal(stats.deadlineHit, false);
+    assert.equal(stats.finalHopUnclosedPruned > 0, maxHops > 2,
+      "both seeds count; only expandable states can prune a final extension");
+  }
+  for (const maxHops of [3, 4, 6, 7]) {
+    const quotes = ring(Array.from({ length: maxHops + 1 }, () => [1n, 1n] as [bigint, bigint]));
+    const input = scenario(quotes, [signal("f", "buy", "sell")], {
+      maxHops, allowRepeatedPools: false, allowRepeatedTokens: false,
+    });
+    assert.equal(check(input, `non-closing at cap ${maxHops}`).length, 0);
+    assert.equal(check({ ...input, maxHops: maxHops + 1 }, `one more hop allowed after cap ${maxHops}`).length, 1,
+      "a non-closing extension must remain eligible when another hop is available");
+  }
+});
+
 test("joint reference-value floors are inclusive and exact at zero/ten percent drawdown", () => {
   for (const bits of [300n, 1500n]) for (const drawdown of [0, 1000]) for (const delta of [-1n, 0n, 1n]) {
     const scale = 1n << bits, ratio: [bigint, bigint] = [BigInt(10_000 - drawdown) * scale + delta, 10_000n * scale];

@@ -17,6 +17,7 @@ import {
   assertAtomicBlockScanPricingView,
   assertAtomicBlockScanRuntime,
   detectProductionBlockScanOpportunities,
+  type ProductionBlockScanTiming,
 } from "../detector/blockscan-scanner-production.js";
 import {
   enumerateNMinusOneCoarseCandidates,
@@ -82,12 +83,41 @@ assert.equal(productionCompleteness, "complete");
 assert.deepEqual(productionIncompleteFamilies, []);
 assert.equal(productionSelectionMode, "production");
 assert.equal(productionForcedSelectionCount, 0);
+// Direct mids are already derived; the production wrapper also reports the
+// work that derived them. Keep all semantic output comparisons unchanged.
+assert.equal((core.enumeration as any).incremental.derivedRowsVisited, 0);
+assert.equal((productionCore.enumeration as any).incremental.derivedRowsVisited, runtimeEdges.length);
 assert.deepEqual(
   productionCore,
-  { ...core, selectionProvenance: blockScanSelectionProvenance(core, cfg.maxCandidates) },
+  { ...core, enumeration: { ...core.enumeration, incremental: {
+    ...(core.enumeration as any).incremental,
+    derivedRowsVisited: (productionCore.enumeration as any).incremental.derivedRowsVisited,
+  } }, selectionProvenance: blockScanSelectionProvenance(core, cfg.maxCandidates) },
   "strict atomic wrapper must preserve the single scanner kernel output",
 );
 console.log("[blockscan-production-boundary] published effective/current-N kernel equivalence: PASS");
+
+{
+  let measured = 0;
+  const measurements: ProductionBlockScanTiming[] = [];
+  const observed = detectProductionBlockScanOpportunities({
+    runtime, swapTouched: null, cfg,
+    onTiming: timing => {
+      measured++;
+      measurements.push(timing);
+    },
+  });
+  assert.equal(measured, 1);
+  const timing = measurements[0]!;
+  assert.equal(timing.sourceBlock, block);
+  assert(timing.pricingValidation !== null && timing.scan !== null);
+  assert(timing.totalMs >= 0 && timing.validationMs >= 0 && timing.viewMs >= 0);
+  assert.deepEqual(observed, production, "timing must preserve production selection");
+  assert.deepEqual(detectProductionBlockScanOpportunities({ runtime, swapTouched: null, cfg,
+    onTiming: () => { throw new Error("diagnostic failure"); },
+  }), production, "diagnostic failure cannot affect selection");
+}
+console.log("[blockscan-production-boundary] optional timing preserves selection: PASS");
 
 {
   const effectiveBefore = [...runtime.pricing.effectiveMids!.rows];
@@ -434,6 +464,34 @@ console.log("[blockscan-production-boundary] startup raw/current effective separ
   );
 }
 console.log("[blockscan-production-boundary] large coverage validation: PASS");
+
+{
+  const verifyEdges = (changed: typeof runtime.graph.edges) => {
+    const graph = { ...runtime.graph, edges: changed };
+    assertAtomicBlockScanPricingView(graph, { ...runtime.pricing, graph });
+  };
+  assert.doesNotThrow(() => verifyEdges([...runtime.graph.edges].reverse()), "set equality accepts reordering");
+  assert.throws(() => verifyEdges([runtime.graph.edges[0]!, runtime.graph.edges[0]!, ...runtime.graph.edges.slice(2)]),
+    /does not exactly match/, "duplicate plus missing key cannot masquerade as equal cardinality");
+  assert.throws(() => verifyEdges(runtime.graph.edges.slice(1)), /does not exactly match/);
+  const wrongHeader = { ...runtime.graph, scannerEdgeKeyHash: exactSetHash([]) };
+  assert.throws(() => assertAtomicBlockScanPricingView(wrongHeader, { ...runtime.pricing, graph: wrongHeader }),
+    /does not exactly match/, "validated coverage cannot excuse a forged scanner hash");
+  // Pricing can include a standing-position edge which the scanner must omit.
+  // Its edge identity stays the same, so coverage remains valid but scanner
+  // hashing must use the strict subset, not borrow the whole pricing hash.
+  const changedEdges = runtime.graph.edges.map((edge, i) => i === 0
+    ? { ...edge, slotKind: "protocol" as const, leavesStandingPosition: true } : edge);
+  const scannerKeys = changedEdges.slice(1).map(blockScanEdgeKey);
+  const graph = { ...runtime.graph, edges: changedEdges, scannerEdgeCount: scannerKeys.length,
+    scannerEdgeKeyHash: exactSetHash(scannerKeys) };
+  const pricing = { ...runtime.pricing, graph,
+    pricingStateKeyByEdgeKey: new Map(changedEdges.map(edge => [blockScanEdgeKey(edge), "state"])) };
+  assert.doesNotThrow(() => assertAtomicBlockScanPricingView(graph, pricing));
+  assert.throws(() => assertAtomicBlockScanPricingView({ ...graph, scannerEdgeKeyHash: pricing.coverage.expectedEdgeKeyHash }, pricing),
+    /does not exactly match/, "mixed graph retains independent scanner subset validation");
+}
+console.log("[blockscan-production-boundary] exact graph-set optimization mutation guards: PASS");
 
 {
   const invalidFunding = {

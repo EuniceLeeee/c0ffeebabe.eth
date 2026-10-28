@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { RebuildReadProvider } from "./rebuild-read-provider.js";
+import { ReadyRpcThrottle } from "./ready-rpc-throttle.js";
 import { readyActivityPayloadBytes, type ReadyActivityArchive } from "./ready-activity-archive.js";
 import { createSourceCodeProviders } from "./source-code-cache.js";
 import {
@@ -891,6 +893,7 @@ export function createProbeWiring(
     readonly familyIds?: readonly string[];
     readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
     readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
+    readonly readyThrottle?: ReadyRpcThrottle;
   },
 ): UniverseRebuildProbeWiring {
   const scopedCatalog = rebuildCatalog(input?.familyIds);
@@ -905,7 +908,10 @@ export function createProbeWiring(
     );
   }
   // Runtime capability is generic; each Family declares its own programs.
-  const revmBin = process.env.SEARCHER_REVM_SIM_BIN;
+  const revmBin = input?.readyThrottle
+    ? process.env.SEARCHER_READY_REVM_SIM_BIN ?? (process.env.SEARCHER_REVM_SIM_BIN
+      ? resolve(import.meta.dirname, "../../revm-sim/target/release/revm-sim-ready") : undefined)
+    : process.env.SEARCHER_REVM_SIM_BIN;
   const executionIdentity = input?.executionIdentity === undefined
     ? undefined : Object.freeze({ ...input.executionIdentity });
   const executor = executionIdentity?.executor ?? process.env.BOTVM_ADDRESS;
@@ -926,7 +932,7 @@ export function createProbeWiring(
   let fatal: RevmFatalError | undefined;
   let chainId: Promise<number> | undefined;
   const simulations = new Set<ReturnType<typeof createRevmStrictSourceSimulation>>();
-  const assertOpen = (): void => { if (fatal) throw fatal; };
+  const assertOpen = (): void => { if (fatal) throw fatal; input?.readyThrottle?.assertOpen(); };
   const read = async <T>(operation: () => Promise<T>): Promise<T> => {
     assertOpen();
     const result = await operation();
@@ -935,9 +941,12 @@ export function createProbeWiring(
   };
   // Ethers' short cache keys code by height, not canonical hash/generation.
   // Source-bound code reuse below owns caching instead, including reorg changes.
-  const provider = new RebuildReadProvider(read, rpcUrl, undefined, { cacheTimeout: -1 });
+  const provider = new RebuildReadProvider(read, rpcUrl, undefined, { cacheTimeout: -1, readyThrottle: input?.readyThrottle });
   const strictProviderFor = createSourceCodeProviders(
     providerAdapter(provider, assertOpen), assertOpen,
+    { onReadError(error) {
+      if (error instanceof Error && input?.readyThrottle?.isThrottle(error)) input.readyThrottle.markFailure(error);
+    } },
   );
   const onFatal = (reason: RevmFatalReason): void => {
     if (fatal) return;
@@ -965,18 +974,27 @@ export function createProbeWiring(
       const id = Number(network.chainId);
       if (!Number.isSafeInteger(id) || id <= 0) throw new Error("invalid rebuild simulation chain identity");
       return id;
-    })) : undefined;
+    }).catch(error => { chainId = undefined; throw error; })).catch(error => {
+      // The chain-id promise is shared; fence every consuming candidate.
+      if (error instanceof Error && input?.readyThrottle?.isThrottle(error)) input.readyThrottle.markFailure(error);
+      throw error;
+    }) : undefined;
     assertOpen();
     let diagnosticCandidateKey: string | undefined;
     try { diagnosticCandidateKey = rebuildFamilyCandidateKey(candidate); } catch { /* Observability only. */ }
+    const failAttempt = input?.readyThrottle?.captureFailure();
+    const readyBatch = input?.readyThrottle?.inAttempt ? input.readyThrottle.batchMaxCount : undefined;
     const simulation = networkChainId === undefined ? undefined : createRevmStrictSourceSimulation({
       identity: { source, rpcUrl, chainId: networkChainId },
       control: { signal: probeController.signal },
       // Preserve the engine's existing DEFAULT_GAS_LIMIT; make it explicit at
       // the transport boundary rather than relying on an unbound wire default.
       executionGasLimit: 0x1000000,
-      createClient: ({ onFatal }) => new RevmSimClient({ executablePath: revmBin, timeoutMs, onFatal, diagnosticCandidateKey }),
+      createClient: ({ onFatal }) => new RevmSimClient({ executablePath: revmBin, timeoutMs, onFatal, diagnosticCandidateKey,
+        ...(readyBatch === undefined ? {} : { readyRpcBatchMaxCount: readyBatch }) }),
       onFatal(reason) {
+        const ownedAttempt = failAttempt?.(reason);
+        if (ownedAttempt && input?.readyThrottle?.isTemporary(reason)) return;
         if (!fatal) logRevmFault("rebuild-candidate", reason, { candidateKey: diagnosticCandidateKey, blockNumber: source.number });
         onFatal(reason);
       },
@@ -1134,6 +1152,7 @@ export function createProbeWiring(
             candidate: canonicalCandidateSnapshot(candidate),
           }));
         } catch (error) {
+          if (input?.readyThrottle?.isThrottle(error)) throw error;
           const reason = error instanceof Error ? error.message : String(error);
           return retryable({
             candidate,
@@ -1243,8 +1262,10 @@ export function createProbeWiring(
           source: attestInput.cutoff,
           pools: Object.freeze([pool]),
           channelOrder: "reverse-binding-first",
+          onlyFamilyId: candidateFamilyId as FamilyId,
         });
       } catch (error) {
+        if (input?.readyThrottle?.isThrottle(error)) throw error;
         if (error instanceof ObservedSenderEvidenceMismatch) {
           return terminalRejected(
             "observed_sender_evidence_mismatch:" + error.message,
@@ -1304,7 +1325,13 @@ export function createProbeWiring(
           }),
         });
       }
+      if (accepted.familyId !== candidateFamilyId) {
+        throw new Error("strict attestation changed candidate Family");
+      }
       const publication = result.publications[0] ?? null;
+      if (publication !== null && publication.familyId !== candidateFamilyId) {
+        throw new Error("strict publication changed candidate Family");
+      }
       const instance = publication?.instances[0] ?? null;
       if (instance === null) {
         // Identity alone is not a verified universe instance. A missing
@@ -1336,6 +1363,17 @@ export function createProbeWiring(
     ) => {
       assertOpen();
       const candidate = sealInput.candidate as Readonly<Record<string, unknown>>;
+      const expectedFamilyId = candidateFamilyId(candidate);
+      const expectedCandidateKey = rebuildFamilyCandidateKey(candidate);
+      if (sealInput.familyCandidateKey !== expectedCandidateKey) {
+        throw new Error("memo sealer candidate key mismatch");
+      }
+      const bindMemo = (memo: DurableVerifiedMemo): DurableVerifiedMemo => {
+        if (memo.familyId !== expectedFamilyId || memo.familyCandidateKey !== expectedCandidateKey) {
+          throw new Error("memo sealer changed candidate Family/key");
+        }
+        return memo;
+      };
       const domainResult = sealInput.result as {
         readonly domain?: unknown;
         readonly familyId?: unknown;
@@ -1356,7 +1394,7 @@ export function createProbeWiring(
         const evidenceRefs = Object.freeze([
           ...(domainResult.evidenceRefs ?? []),
         ]);
-        return sealMemoFromPublication({
+        return bindMemo(sealMemoFromPublication({
           candidate,
           familyId,
           familyInstanceKey,
@@ -1386,7 +1424,7 @@ export function createProbeWiring(
             domainResult.authorityFingerprint ?? "",
           ),
           validityPolicy: "dependency-proof",
-        });
+        }));
       }
       const result = sealInput.result as {
         readonly accepted: {
@@ -1413,7 +1451,7 @@ export function createProbeWiring(
       const familyInstanceKey = digest(
         "family-instance-v1:" + familyId + "|" + instanceKey,
       );
-      return sealMemoFromPublication({
+      return bindMemo(sealMemoFromPublication({
         candidate,
         familyId,
         familyInstanceKey,
@@ -1446,7 +1484,7 @@ export function createProbeWiring(
         proofSource: sealInput.proofSource,
         candidateFingerprint: candidateFingerprint(candidate),
         authorityFingerprint: result.authorityFingerprint,
-      });
+      }));
     },
     assertCanonicalHead: async (cutoff: CanonicalSource) => {
       assertOpen();
@@ -2921,6 +2959,7 @@ function catalogActivityChunks(input: {
 }
 
 export function createRebuildWiring(input?: {
+  readonly readyThrottle?: ReadyRpcThrottle;
   readonly rpcUrl?: string;
   /** Scratch incremental rebuild only; the owner merges sealed Ready at the same cutoff. */
   readonly familyIds?: readonly string[];
@@ -2932,6 +2971,7 @@ export function createRebuildWiring(input?: {
   readonly candidateFamilyId: (candidate: unknown) => string;
   readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
 } {
+  const readyThrottle = input?.readyThrottle ?? new ReadyRpcThrottle();
   const activityArchive = input?.activityArchive?.withEntryLimit(ARCHIVE_ACTIVITY_ENTRY_BYTES);
   const archiveTransportLimits = activityArchive === undefined ? {} : {
     maxReceivedBytes: ARCHIVE_ACTIVITY_RESPONSE_BYTES,
@@ -2959,7 +2999,7 @@ export function createRebuildWiring(input?: {
   // The probe, memo reuse, and discovery transports belong to one rebuild.
   // A simulation fatal revokes all three before notifying the runtime owner.
   let fatal: RevmFatalError | undefined;
-  const assertOpen = (): void => { if (fatal) throw fatal; };
+  const assertOpen = (): void => { if (fatal) throw fatal; readyThrottle.assertOpen(); };
   const read = async <T>(operation: () => Promise<T>): Promise<T> => {
     assertOpen();
     const result = await operation();
@@ -2973,6 +3013,7 @@ export function createRebuildWiring(input?: {
   };
   const provider = new RebuildReadProvider(read, rpcUrl, undefined, {
     requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
+    readyThrottle,
     ...archiveTransportLimits,
   });
   // A trace response is already large. Ethers batches concurrent send()
@@ -2989,6 +3030,7 @@ export function createRebuildWiring(input?: {
       // The existing trace scheduler already bounds these independent requests.
       maxPhysicalRequests: Infinity,
       requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
+      readyThrottle,
       ...archiveTransportLimits,
     },
   );
@@ -3033,7 +3075,7 @@ export function createRebuildWiring(input?: {
   // and fails closed on resume. Call tracing is another physical transport
   // inside this same catalog activity plan, not a second discovery source.
   const probe = createProbeWiring({ rpcUrl, familyIds, executionIdentity: input?.executionIdentity,
-    onSimulationFatal });
+    onSimulationFatal, readyThrottle });
 
   const disabledPlugins = PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins;
   const disabledFamilyIds = new Set<string>(disabledPlugins.map(module => module.familyId));
@@ -3044,6 +3086,7 @@ export function createRebuildWiring(input?: {
     readonly candidateFamilyId: (candidate: unknown) => string;
     readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
   } = {
+    readyThrottle,
     candidateFamilyId,
     familyDiscoveryDefinitionHash,
     isFamilyEnabled: (familyId) => inScope(familyId) && !disabledFamilyIds.has(familyId),

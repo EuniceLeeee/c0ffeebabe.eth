@@ -1,5 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { BlockScanStartupCache, startupCacheNamespace } from "./blockscan-startup-cache.js";
+import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveContinuationIdentity, compatibleLiveContinuationIdentity, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
+import { createBlockScanActivityTransport } from "./blockscan-activity-transport.js";
+import { startupRevertFilterEnabled } from "./blockscan-startup-filter.js";
+import { writeEffectiveMidProgress } from "./effective-mid-progress-file.js";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
@@ -18,7 +23,7 @@ import {
 } from "../shared/executor/botvm-executor.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
 import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
-import { resolveAllowRepeatedPools, resolveAllowRepeatedTokens, resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
+import { resolveAllowRepeatedPools, resolveAllowRepeatedTokens, resolveAllowProtocolRepeats, resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
 import { resolvePairedEnumerationBackend, resolveRustEnumerationThreads, resolveRustEnumerationScratchMb } from "./detector/blockscan-paired-enumerator.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS, resolveHopTokensPerStep, resolveHopPoolsPerPair } from "./blockscan-enumeration-config.js";
 import {
@@ -41,10 +46,15 @@ import {
 import { blockScanRouteId, blockScanRouteLocator } from "./blockscan-route-identity.js";
 import { createSolverExecutionInputRecorder } from "./solver-execution-input-recorder.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
+import { createBlockScanStartupExecutionPreflight, type StartupExecutionPreflight } from "./blockscan-startup-execution-preflight.js";
+import { createStartupNodeSimulation } from "./blockscan-startup-node-simulation.js";
 import { BlockScanPoolRevertAttributor, poolRevertFilterEnabled } from "./blockscan-pool-revert.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
-import { buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried, resolveEffectiveAmountCascade } from "./blockscan-effective-mid.js";
-import { effectiveEthPricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
+import {
+  buildEffectiveMids, createEffectiveQuoteSessions, effectiveMidPairStatistics, effectiveMidRowCarried,
+  MAX_EFFECTIVE_INPUT_PATH_HOPS, resolveEffectiveAmountCascade, type EffectiveMidSnapshot,
+} from "./blockscan-effective-mid.js";
+import { effectiveEthPricing, organizeEffectivePricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
 import { initEvents, emitEvent, emitSubmissionEvidence, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
@@ -699,6 +709,7 @@ export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env,
         deduplicateRotations: deduplicateRotations === "1",
         allowRepeatedPools: resolveAllowRepeatedPools(env.SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED),
         allowRepeatedTokens: resolveAllowRepeatedTokens(env.SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED),
+        allowProtocolRepeats: resolveAllowProtocolRepeats(env.SEARCHER_BLOCKSCAN_ALLOW_PROTOCOL_REPEATS_ENABLED),
         prefixPruningEnabled: prefixPruning === "1",
         maxPrefixDrawdownBps,
         enumerationMethod,
@@ -801,6 +812,15 @@ export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = proce
   // Deliberately no rounding/fallback: the live transport constructor owns
   // validation of non-integer/non-finite state concurrency, as before.
   const stateRpcBatchConcurrency = Math.max(1, Number(env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4"));
+  // A throttled batch degrades to concurrency 1 and keeps retrying there; only
+  // that batch pays the patience, never the whole live scope. The backoff is
+  // capped so a long refusal cannot turn into an unbounded stall.
+  const throttleRetriesAtOneRaw = Number(env.SEARCHER_RPC_THROTTLE_RETRIES_AT_ONE ?? "3");
+  const throttleRetriesAtOne = Number.isSafeInteger(throttleRetriesAtOneRaw) && throttleRetriesAtOneRaw >= 1
+    ? throttleRetriesAtOneRaw : 3;
+  const throttleMaxDelayRaw = Number(env.SEARCHER_RPC_THROTTLE_MAX_DELAY_MS ?? "30000");
+  const throttleMaxDelayMs = Number.isSafeInteger(throttleMaxDelayRaw) && throttleMaxDelayRaw > 0
+    ? throttleMaxDelayRaw : 30_000;
   return Object.freeze({ singleFunding: singleFundingRaw === "1", fixedEffectiveWethInput,
     passBudgetMs, largeGraphPassBudgetMs, largeGraphEdgeThreshold,
     startupWarmBudgetMs, hotPricingFamilyBudgetMs, runtimePublicationReserveMs, solveReserveMs,
@@ -809,11 +829,24 @@ export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = proce
     exactRefineHardBudgetMs, exactConcurrency, exactProbeTimeoutMs, exactRpcBatchSize, exactRpcBatchConcurrency,
     stateRpcBatchConcurrency, transport: Object.freeze({
       capacity: stateRpcBatchConcurrency + exactRpcBatchConcurrency, producerReserved: stateRpcBatchConcurrency,
+      maxRetriesAtOne: throttleRetriesAtOne, maxRetryDelayMs: throttleMaxDelayMs,
     }) });
 }
 
 export type BlockScanLiveStageSettings = ReturnType<typeof resolveBlockScanLiveStageSettings>;
 type BlockScanAmountSelectorFactory = NonNullable<BlockScanRuntimeLoopDependencies["amountSelectorFactory"]>;
+
+export function logBlockScanAmountEvent({ source, workerIndex, event }: {
+  source: Parameters<BlockScanAmountSelectorFactory>[0]["source"];
+  workerIndex: number;
+  event: Record<string, unknown>;
+}): void {
+  try {
+    console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,
+      sourceBlock: source.number, generation: source.generation, workerIndex },
+      (_key, value) => typeof value === "bigint" ? value.toString() : value)}`);
+  } catch { /* Telemetry cannot alter amount selection. */ }
+}
 
 /** One live-runtime trial limit shared across every source/worker selector. */
 export function createBlockScanLiveAmountSelectorFactory(input: {
@@ -1125,6 +1158,9 @@ export function createBlockScanPriceRuntime(input: {
   blockScanRuntimeAbort: AbortController;
   blockScanRethTransportScheduler?: RethTransportScheduler;
   blockScanCfg: BlockScanCoreConfig | undefined;
+  /** The same run-local, attributed-pool predicate used by enumeration. */
+  isPoolSimRejected: (edge: TokenEdge) => boolean;
+  startupExecutionPreflight?: Pick<StartupExecutionPreflight, "run" | "reset">;
   recordPricing: (publication: import("./strict-current-runtime-coordinator.js").StrictPricingPublication) => void;
 }) {
   const { provider, strictRuntimeRoot, blockScanRuntimeAbort,
@@ -1312,25 +1348,26 @@ export function createBlockScanPriceRuntime(input: {
     (publication) => {
       // Effective sampling amounts come only from successful forward quotes.
       blockScanRouteTelemetry.recordPricing(publication);
-      if (blockScanCfg !== undefined && publication.snapshot.effectiveMids?.complete) {
-        const start = Date.now();
-        const { view } = effectiveEthPricing(publication.snapshot, blockScanCfg.ethSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
-        console.log(`[searcher/effective-eth-view] ${JSON.stringify({
-          sourceBlock: publication.snapshot.sourceBlock,
-          sourceBlockHash: publication.snapshot.sourceBlockHash,
-          generation: publication.snapshot.generation,
-          algorithm: blockScanCfg.enumerationMethod === "joint-dfs" ? "joint-dfs"
-            : blockScanCfg.enumerationMethod === "layered" ? "paired-layered" : "paired-dfs",
-          reference: "WETH wei per token raw unit; effective-only <=3-hop valuation",
-          ...ethViewStatistics(view, blockScanCfg.minSpreadBps), wallMs: Date.now() - start,
-        })}`);
-      }
     },
     blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend, reuse, simulationTransport) => {
       const controller = new AbortController();
       const effectiveControl = { ...control, signal: control.signal === undefined
         ? controller.signal : AbortSignal.any([control.signal, controller.signal]) };
       const quoteTarget = reuse?.quoteGraph ?? pricing;
+      // Reuse the effective builder's exclusion path: no carry, amount
+      // references, bindings or quotes for an already attributed failed pool.
+      // Do not mutate the coordinator's cached automatic-exclusion set.
+      const quoteEdges = reuse?.quoteGraph?.edges ?? pricing.graph.edges;
+      const disabledEdgeIds = () => {
+        let poolDisabledEdgeIds: Set<string> | undefined;
+        for (const edge of quoteEdges) {
+          if (input.isPoolSimRejected(edge)) {
+            poolDisabledEdgeIds ??= new Set(reuse?.disabledEdgeIds);
+            poolDisabledEdgeIds.add(blockScanEdgeKey(edge));
+          }
+        }
+        return poolDisabledEdgeIds ?? reuse?.disabledEdgeIds;
+      };
       const source = Object.freeze({ number: quoteTarget.sourceBlock,
         hash: quoteTarget.sourceBlockHash, generation: quoteTarget.generation });
       // Use the existing source-pinned producer transport. The fallback is
@@ -1345,23 +1382,26 @@ export function createBlockScanPriceRuntime(input: {
           transportScheduler: blockScanRethTransportScheduler },
       ) : undefined;
       try {
-        let session: StrictProductionRuntimeSession | undefined;
-        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=3 cascadeAmountChanges=${cascadeAmountChanges}`);
-        const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
+        const sessions = createEffectiveQuoteSessions(requiredEdgeIds =>
+          strictSessionFor({ purpose: "exact-execution", source, simulationTransport,
+            control: effectiveControl, fundingAssets: [], requiredEdgeIds,
+            exactCallBackend: pricingBackend ?? ownedBackend! }));
+        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=${MAX_EFFECTIVE_INPUT_PATH_HOPS} cascadeAmountChanges=${cascadeAmountChanges}`);
+        const build = (previous: EffectiveMidSnapshot | undefined, touchedStateKeys: ReadonlySet<string> | undefined) =>
+          buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
           fixedWethInput: input.fixedEffectiveWethInput,
           cascadeAmountChanges,
-          previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
-          disabledEdgeIds: reuse?.disabledEdgeIds,
+          previous, touchedStateKeys, disabledEdgeIds: disabledEdgeIds(),
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
           enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 1024,
-          prepareQuote: async (requiredEdgeIds) => {
-            session = await strictSessionFor({ purpose: "exact-execution", source,
-              simulationTransport,
-              control: effectiveControl, fundingAssets: [], requiredEdgeIds,
-              exactCallBackend: pricingBackend ?? ownedBackend! });
+          onProgress: progress => {
+            try { writeEffectiveMidProgress(process.env.SEARCHER_EVENTS_PATH ?? "", progress); }
+            catch { console.error("[searcher/effective-mid-progress] snapshot_write_failed"); }
+            console.log(`[searcher/effective-mid-progress] ${JSON.stringify(progress)}`);
           },
+          prepareQuote: sessions.prepareQuote,
           quote: async (request) => {
-            if (!session) throw new Error("effective quote session was not prepared");
+            const session = sessions.sessionFor(request.edge);
             const startedAtMs = Date.now();
             let status = "failed";
             try {
@@ -1384,11 +1424,24 @@ export function createBlockScanPriceRuntime(input: {
             }
           },
         });
+        let effective = await build(reuse?.previous, reuse?.touchedStateKeys);
+        let effectiveBuildWallMs = effective.wallMs;
+        const preflightStarted = Date.now();
+        if (input.startupExecutionPreflight && await input.startupExecutionPreflight.run({
+          effective, edges: quoteEdges, control: effectiveControl,
+          prepareQuote: sessions.prepareQuote, sessionFor: sessions.sessionFor,
+        })) {
+          // Same source and successful amount tuples: reuse the existing
+          // exclusion path to invalidate prices before any publication.
+          effective = await build(effective, new Set());
+          effectiveBuildWallMs += effective.wallMs;
+        }
         console.log(`[searcher/effective-mid] ${JSON.stringify({
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
-          samplingSource: "effective-forward", maxInputPathHops: 3, reference: effective.reference,
+          samplingSource: "effective-forward", maxInputPathHops: MAX_EFFECTIVE_INPUT_PATH_HOPS, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
-          complete: effective.complete, wallMs: effective.wallMs,
+          complete: effective.complete, wallMs: effectiveBuildWallMs,
+          startupExecutionAndInvalidationMs: Date.now() - preflightStarted,
           cascadeAmountChanges,
           localQuoteCache: strictExactQuoteCache.snapshot(),
           carried: [...effective.rows.values()].filter(row => effectiveMidRowCarried(effective, row)).length,
@@ -1400,6 +1453,20 @@ export function createBlockScanPriceRuntime(input: {
       }
     },
     strictExactQuoteCache,
+    blockScanCfg === undefined ? undefined : (pricing) => {
+      const start = Date.now();
+      const organized = organizeEffectivePricing(pricing, blockScanCfg.ethSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
+      const { view } = effectiveEthPricing(organized, blockScanCfg.ethSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
+      try { console.log(`[searcher/effective-eth-view] ${JSON.stringify({
+        sourceBlock: organized.sourceBlock, sourceBlockHash: organized.sourceBlockHash,
+        generation: organized.generation,
+        algorithm: blockScanCfg.enumerationMethod === "joint-dfs" ? "joint-dfs"
+          : blockScanCfg.enumerationMethod === "layered" ? "paired-layered" : "paired-dfs",
+        reference: "WETH wei per token raw unit; effective-only <=3-hop valuation",
+        ...ethViewStatistics(view, blockScanCfg.minSpreadBps), wallMs: Date.now() - start,
+      })}`); } catch { /* Diagnostics cannot invalidate an organized publication. */ }
+      return organized;
+    },
   );
   return { strictSessionFor, currentRuntimeCoordinator, blockScanAmountReference };
 }
@@ -1638,12 +1705,19 @@ async function main(): Promise<void> {
   const finalSimulationExecutorRuntimeCode = dryRunBotVmCodeOverride
     ? loadBotVmRuntimeCode(executionIdentity.transactionOrigin) : undefined;
   const rawExecutionEntry = rawExecutionEntryEnabled(process.env.SEARCHER_BOTVM_RAW_ENTRY);
+  const blockScanPoolRevertFilter = poolRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_POOL_REVERT_FILTER);
+  const chainDiagnosticCode = !finalSimulationExecutorRuntimeCode && enableBlockScan &&
+    blockScanFinalSimulationMethod === "eth_simulateV1" && blockScanPoolRevertFilter
+    ? loadBotVmRuntimeCode(executionIdentity.transactionOrigin) : undefined;
+  if (chainDiagnosticCode && ethers.keccak256(await provider.getCode(executionIdentity.executor)) !== chainDiagnosticCode.keccak256) {
+    throw new Error("direct hop diagnosis requires the exact tested deployed runtime");
+  }
   if (rawExecutionEntry) {
     if (!enableBlockScan || blockScanFinalSimulationMethod !== "eth_simulateV1") {
       throw new Error("raw executor entry requires block-scan eth_simulateV1 final simulation");
     }
     const expected = loadBotVmRuntimeCode(executionIdentity.transactionOrigin);
-    if (!dryRunBotVmCodeOverride && ethers.keccak256(await provider.getCode(executionIdentity.executor)) !== expected.keccak256) {
+    if (!dryRunBotVmCodeOverride && !chainDiagnosticCode && ethers.keccak256(await provider.getCode(executionIdentity.executor)) !== expected.keccak256) {
       throw new Error("raw executor entry requires the exact tested deployed runtime");
     }
     console.log(`[searcher/live] executor=solidity-yul raw-entry=if-compatible codehash=${expected.keccak256}`);
@@ -1840,17 +1914,6 @@ async function main(): Promise<void> {
   const blockScanRouteEventsPath = enableBlockScan && !blindProductionAudit
     ? process.env.SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH ?? ""
     : "";
-  const configuredMidHistoryPath =
-    process.env.SEARCHER_BLOCKSCAN_MID_HISTORY_PATH;
-  const blockScanMidHistoryPath = enableBlockScan && !blindProductionAudit
-    ? configuredMidHistoryPath === undefined
-      ? blockScanRouteEventsPath.endsWith(".jsonl")
-        ? `${blockScanRouteEventsPath.slice(0, -6)}.mids.jsonl`
-        : blockScanRouteEventsPath
-          ? `${blockScanRouteEventsPath}.mids.jsonl`
-          : ""
-      : configuredMidHistoryPath
-    : "";
   const solverInputPath = (process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_PATH ?? "").trim();
   if (solverInputPath && (!enableBlockScan || blindProductionAudit || !eventContext.enabled ||
       blockScanFinalSimulationMethod !== "eth_simulateV1")) {
@@ -1862,14 +1925,13 @@ async function main(): Promise<void> {
     maxFileBytes: process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_MAX_BYTES === undefined
       ? undefined
       : Number(process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_MAX_BYTES),
-    protectedPaths: [eventContext.path, blockScanRouteEventsPath, blockScanMidHistoryPath,
+    protectedPaths: [eventContext.path, blockScanRouteEventsPath,
       process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH ?? ""],
   }) : undefined;
   if (solverInputRecorder) console.log("[searcher/solver-inputs] enabled private complete execution input recording");
   const blockScanRouteTelemetry =
     await initBlockScanEnumerationSolverTelemetry({
       path: blockScanRouteEventsPath,
-      midHistoryPath: blockScanMidHistoryPath,
       eventsPath: eventContext.path,
       runId: eventContext.runId,
     });
@@ -1877,12 +1939,6 @@ async function main(): Promise<void> {
     console.log(
       `[searcher/live] block-scan route events emit → ` +
         blockScanRouteEventsPath,
-    );
-  }
-  if (blockScanRouteTelemetry.enabled && blockScanMidHistoryPath) {
-    console.log(
-      `[searcher/live] block-scan mid history emit → ` +
-        blockScanMidHistoryPath,
     );
   }
   console.log(`[searcher/live] runtime_commit=${process.env.SEARCHER_RUNTIME_COMMIT ?? "unavailable"}`);
@@ -2398,11 +2454,25 @@ async function main(): Promise<void> {
     runtimeAbort: blockScanRuntimeAbort,
     onFatal: onSimulationFatal,
   });
+  const blockScanSimRejects = new BlockScanSimRejectCache();
+  let continuationWriter: LivePricingContinuationWriter | undefined;
+  const startupExecutionPreflight = blockScanRethTransportScheduler ? createBlockScanStartupExecutionPreflight({ ...executionIdentity,
+    simRejects: blockScanSimRejects, concurrency: 32,
+    filterTargetReverts: startupRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_STARTUP_REVERT_FILTER),
+    simulateStandalone: createStartupNodeSimulation({ rpcUrl: config.rpcUrl, chainId: blockScanChainId,
+      ...executionIdentity, executorRuntimeCode: finalSimulationExecutorRuntimeCode,
+      rawExecutionEntry, scheduler: blockScanRethTransportScheduler, requestsPerSecond: 200 }) }) : undefined;
   const priceRuntime = createBlockScanPriceRuntime({
     provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
     fixedEffectiveWethInput: blockScanStageSettings.fixedEffectiveWethInput,
     blockScanRuntimeAbort, blockScanRethTransportScheduler, blockScanCfg,
-    recordPricing: publication => blockScanRouteTelemetry.recordPricing(publication),
+    recordPricing: publication => {
+      // Price history belongs to the baseline + native-delta journal, not a
+      // second worker which clones and diffs the complete effective table.
+      if (publication.snapshot.effectiveMids?.complete) continuationWriter?.capture();
+    },
+    isPoolSimRejected: edge => blockScanSimRejects.hasPool(edge),
+    startupExecutionPreflight,
   });
   const { strictSessionFor, blockScanAmountReference } = priceRuntime;
   currentRuntimeCoordinator = priceRuntime.currentRuntimeCoordinator;
@@ -2558,8 +2628,6 @@ async function main(): Promise<void> {
     });
   }
 
-  const blockScanSimRejects = new BlockScanSimRejectCache();
-  const blockScanPoolRevertFilter = poolRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_POOL_REVERT_FILTER);
   const blockScanPoolRevertAttributor = blockScanPoolRevertFilter
     ? new BlockScanPoolRevertAttributor(blockScanSimRejects) : undefined;
   console.log(`[searcher/blockscan-pool-revert-filter] ${JSON.stringify({ enabled: blockScanPoolRevertFilter })}`);
@@ -2641,22 +2709,111 @@ async function main(): Promise<void> {
       } catch { /* Diagnostics never change activity completeness or failure. */ }
     }
   };
+  const activityTransport = createBlockScanActivityTransport(config.rpcUrl);
   const blockScanRawActivityProvider: BlockTouchedProvider = {
     getLogs(filter) {
       blockScanRuntimeAbort.signal.throwIfAborted();
       return timedActivityRead("eth_getLogs", "blockHash" in filter ? filter.blockHash : filter.fromBlock,
-        () => provider.getLogs(filter)).catch(activityReadFailed);
+        () => activityTransport.getLogs(filter)).catch(activityReadFailed);
     },
     send(method, params) {
       blockScanRuntimeAbort.signal.throwIfAborted();
-      return timedActivityRead(method, params[0], () => provider.send(method, params)).catch(activityReadFailed);
+      return timedActivityRead(method, params[0], () => activityTransport.send(method, params)).catch(activityReadFailed);
     },
   };
   const blockScanActivityProvider = new BlockScanActivityPrefetch(
     blockScanRawActivityProvider, blockScanRuntimeAbort.signal,
   );
+  const continuePrices = liveContinuationEnabled(process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED);
+  const continuationDirectory = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR;
+  if (continuePrices && !continuationDirectory) throw new Error("live continuation directory is required");
+  let restoredContinuation = false;
+  if (continuationDirectory) {
+    if (!enableBlockScan || blindProductionAudit || blockScanNMinusOneFallback || !blockScanCfg || !startupExecutionPreflight) {
+      throw new Error("live continuation supports ordinary source-N blockscan only");
+    }
+    const continuationContext = {
+      chainId: String(blockScanChainId), topology: frozenProducerTopology.topologyKey,
+      ...executionIdentity, executorCode: ethers.keccak256(finalSimulationExecutorRuntimeCode?.code ??
+        await provider.getCode(executionIdentity.executor)), rawExecutionEntry,
+      fixedWethInput: blockScanStageSettings.fixedEffectiveWethInput?.toString() ?? null,
+      spreadBps: blockScanCfg.minSpreadBps,
+      cascade: resolveEffectiveAmountCascade(process.env.SEARCHER_BLOCKSCAN_EFFECTIVE_AMOUNT_CASCADE_ENABLED),
+    };
+    const identity = liveContinuationIdentity(continuationContext);
+    const compatibilityPath = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY;
+    const previousIdentity = continuePrices && compatibilityPath
+      ? compatibleLiveContinuationIdentity(continuationContext, compatibilityPath) : undefined;
+    const store = new LivePricingContinuationStore(continuationDirectory, identity, previousIdentity);
+    if (!continuePrices) {
+      const archived = await store.beginFreshRound();
+      console.log(`[searcher/live-continuation] ${JSON.stringify({
+        phase: "new-logical-round", previousCheckpointArchived: archived,
+      })}`);
+    }
+    const restored = continuePrices ? await store.read() : null;
+    if (restored) {
+      // Canonical anchors and current Ready/index are checked before installing
+      // data. No stored Funding, Exact handles, permit or final sim is restored.
+      await validateLiveContinuationAnchors(restored, blockScanAmountReference,
+        number => frozenProducerTopology.observeHeader(number));
+      const view = (at: typeof restored.pricing.pricing) => strictReadyGraphViews.build({
+        id: "live-continuation", edges: graph, topologyKey: frozenProducerTopology.topologyKey,
+        generation: at.generation, sourceBlock: at.sourceBlock, sourceBlockHash: at.sourceBlockHash,
+      });
+      await priceRuntime.currentRuntimeCoordinator.restoreHistoricalBaseline(restored.pricing, {
+        graph: view(restored.pricing.pricing), rawGraph: view(restored.pricing.raw), weth: ADDR.WETH,
+        control: { signal: blockScanRuntimeAbort.signal, deadlineAtMs: Date.now() + blockScanStartupWarmBudgetMs },
+      });
+      startupExecutionPreflight.restoreContinuation(restored.startup);
+      blockScanSimRejects.restoreContinuation(restored.simRejects, graph);
+      startupExecutionPreflight.defer(true);
+      restoredContinuation = true;
+      console.log(`[searcher/live-continuation] ${JSON.stringify({
+        phase: "restored", sourceBlock: restored.pricing.pricing.sourceBlock,
+        sourceBlockHash: restored.pricing.pricing.sourceBlockHash, observations: restored.startup.rows.length,
+        trading: false, identity,
+      })}`);
+    } else {
+      console.log(`[searcher/live-continuation] ${JSON.stringify({
+        phase: continuePrices ? "no-checkpoint-cold-start" : "disabled-cold-start", identity,
+      })}`);
+    }
+    continuationWriter = new LivePricingContinuationWriter({ store,
+      coordinator: priceRuntime.currentRuntimeCoordinator, amounts: blockScanAmountReference,
+      startup: startupExecutionPreflight, simRejects: blockScanSimRejects, restored: restoredContinuation,
+      onEvent: event => console.log(`[searcher/live-continuation] ${JSON.stringify(event)}`) });
+  }
   const blockScanRuntimeLoop = new BlockScanRuntimeLoop({
     enabled: enableBlockScan,
+    onPassSettled: () => continuationWriter?.capture(),
+    ...(restoredContinuation ? { liveContinuation: {
+      async revalidateStartup(pricing: import("./blockscan-state-coordinator.js").BlockScanStateSnapshot,
+        control: import("./adapter-work-intent.js").AdapterWorkControl) {
+        const effective = pricing.effectiveMids!;
+        const backend = new PinnedRethQuoteBackend(config.rpcUrl, effective.source.hash, {
+          ...control, maxBatchSize: 64, maxConcurrentBatches: 8, transportLane: "producer-bulk",
+          retryRpcThrottle: true, allowSingleCallFallback: false, transportScheduler: blockScanRethTransportScheduler,
+        });
+        const sessions = createEffectiveQuoteSessions(requiredEdgeIds => strictSessionFor({
+          purpose: "exact-execution", source: effective.source, control,
+          fundingAssets: [], requiredEdgeIds, exactCallBackend: backend,
+        }));
+        console.log(`[searcher/live-continuation] ${JSON.stringify({
+          phase: "revalidating-startup", sourceBlock: pricing.sourceBlock, trading: false,
+        })}`);
+        startupExecutionPreflight!.defer(false);
+        try {
+          await startupExecutionPreflight!.run({ effective, edges: pricing.graph.edges, control,
+            prepareQuote: sessions.prepareQuote, sessionFor: sessions.sessionFor });
+        } finally {
+          // Ordinary per-head pricing must not start another preflight while
+          // a failed/interrupted resume is still catching up.
+          startupExecutionPreflight!.defer(true);
+          await backend.closeAndDrain();
+        }
+      },
+    } } : {}),
     blockScanConfig: blockScanCfg,
     executionWorkers: blockScanExecutionWorkers,
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
@@ -2665,17 +2822,11 @@ async function main(): Promise<void> {
       singleFunding: blockScanStageSettings.singleFunding,
       simRejects: blockScanSimRejects,
       poolRevertAttributor: blockScanPoolRevertAttributor,
-      record({ source, workerIndex, event }) {
-        try {
-          console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,
-            sourceBlock: source.number, generation: source.generation, workerIndex },
-            (_key, value) => typeof value === "bigint" ? value.toString() : value)}`);
-        } catch { /* Telemetry cannot alter amount selection. */ }
-      },
+      record: logBlockScanAmountEvent,
     }),
     directFinalSimulation: enableBlockScan && blockScanFinalSimulationMethod === "eth_simulateV1"
       ? Object.assign(new EthSimulateV1Simulator(config.rpcUrl, executionIdentity.executor, executionIdentity.transactionOrigin,
-          finalSimulationExecutorRuntimeCode, rawExecutionEntry),
+          finalSimulationExecutorRuntimeCode, rawExecutionEntry, chainDiagnosticCode),
           { concurrency: blockScanFinalSimulationConcurrency })
       : undefined,
     rpcUrl: config.rpcUrl,
@@ -2737,6 +2888,13 @@ async function main(): Promise<void> {
     passBudgetMs: blockScanPassBudgetMs,
     startupWarmEnabled: enableBlockScan && !blindProductionAudit,
     startupWarmBudgetMs: blockScanStartupWarmBudgetMs,
+    startupWarmCache: !blindProductionAudit && enableBlockScan && process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_DIR
+      ? new BlockScanStartupCache(process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_DIR,
+        startupCacheNamespace([1, Number(blockScanChainId), frozenProducerTopology.topologyKey,
+          executionIdentity.executor, executionIdentity.transactionOrigin,
+          blockScanStageSettings.fixedEffectiveWethInput?.toString() ?? null,
+          process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_NAMESPACE ?? null]))
+      : undefined,
     nMinusOneFallbackEnabled: blockScanNMinusOneFallback,
     nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
     nMinusOneFamilySettleBudgetMs: blockScanNMinusOneFamilySettleMs,
@@ -2821,10 +2979,9 @@ async function main(): Promise<void> {
     readBlockHash,
     formatRouteKey: formatBlockScanRouteKey,
     formatRing: formatBlockScanRing,
-    isRouteSimRejected: (opp) => blockScanSimRejects.has(blockScanRouteId(opp.seedEdges)),
-    ...(blockScanPoolRevertFilter ? {
-      isPoolSimRejected: (edge: TokenEdge) => blockScanSimRejects.hasPool(edge),
-    } : {}),
+    isRouteSimRejected: (opp) => blockScanSimRejects.has(blockScanRouteId(opp.seedEdges)) ||
+      opp.seedEdges.some(edge => blockScanSimRejects.hasPool(edge)),
+    isPoolSimRejected: (edge: TokenEdge) => blockScanSimRejects.hasPool(edge),
     submitAtomic(input) {
       return maybeSubmitBlockScanAtomic({
         ...input,
@@ -2990,6 +3147,7 @@ async function main(): Promise<void> {
         );
       }
       blockScanSimRejects.clear();
+      startupExecutionPreflight?.reset();
     }
     // A blind attempt may target the same source N/hash as the previous
     // attempt. Clear both dynamic publishers before rebuilding N-1: the
@@ -3176,6 +3334,7 @@ async function main(): Promise<void> {
     provider.on("block", (blockNumber: number) => runStateUpdate(blockNumber, "block"));
   }
   submissionFollowup?.start();
+  if (restoredContinuation) blockScanRuntimeLoop.restoreLiveContinuation();
   const blockScanHeadFeed = enableBlockScan && !blindProductionAudit
     ? startBlockScanHeadFeed({
       url: config.wsUrl,
@@ -3232,6 +3391,7 @@ async function main(): Promise<void> {
       try {
         const settled = await Promise.allSettled([blockScanRuntimeLoop.shutdown(), blockScanActivityProvider.closeAndDrain(),
           activeHintSimulationWork?.closeAndDrain(), activeBlindSimulationWork?.closeAndDrain()]);
+        activityTransport.destroy();
         const failure = settled.find(result => result.status === "rejected");
         if (failure?.status === "rejected") throw failure.reason;
       } catch (error) {
@@ -3239,6 +3399,12 @@ async function main(): Promise<void> {
           `[searcher/live] block-scan shutdown failed: ` +
             `${error instanceof Error ? error.message : String(error)}`,
         );
+      }
+      try {
+        continuationWriter?.capture();
+        await continuationWriter?.flush();
+      } catch {
+        console.error("[searcher/live-continuation] final_checkpoint_failed; latest prior checkpoint remains available");
       }
       // Keep recording receipts while existing runtime workers drain; never start new trading work.
       try { await submissionFollowup?.close(); }
@@ -5280,7 +5446,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
       drop(targetBlock, "final_verify", "blockscan_stale_state", error);
       return finish("blockscan_stale_state");
     }
-    if (simRejects.has(routeId)) {
+    if (simRejects.has(routeId) || opp.seedEdges.some(edge => simRejects.hasPool(edge))) {
       drop(targetBlock, "final_verify", "sim_revert_seen_this_live");
       return finish("sim_revert_seen_this_live");
     }

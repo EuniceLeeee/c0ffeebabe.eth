@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { historicalCandidateSelection } from "../blockscan-at-block-cli.js";
+import { historicalCandidateSelection, cleanupHistoricalResources, historicalContinuationIdentity } from "../blockscan-at-block-cli.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
 import { test } from "node:test";
 import { ethers } from "ethers";
@@ -13,12 +13,120 @@ import { historicalLiveConfig, historicalRejectedRoutes, historicalRankedRouteEl
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { scanBlockStateFromResolvedMids as scan, type ResolvedBlockScanQuote } from "../detector/blockscan-scanner-core.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { TokenEdge } from "../planner/token-graph.js";
+import { historicalBaselineData, writeHistoricalBenchmarkBaseline, readHistoricalBenchmarkBaseline,
+  historicalBenchmarkSummary, assertHistoricalSamplingPolicy } from "../blockscan-historical-benchmark.js";
 
 const base = ["--ready", "ready.json", "--block", "123", "--out", "logs/new-run"];
+test("historical continuation binds a bigint sampling policy without serializing raw bigint", () => {
+  const policy = { spreadBps: 0, fixedWethInput: 20_000_000_000_000_000n, cascade: false };
+  const first = historicalContinuationIdentity("baseline", policy);
+  assert.match(first, /^[0-9a-f]{64}$/);
+  assert.equal(first, historicalContinuationIdentity("baseline", policy));
+  assert.notEqual(first, historicalContinuationIdentity("baseline", { ...policy, fixedWethInput: null }));
+  assert.notEqual(first, historicalContinuationIdentity("baseline", { ...policy, fixedWethInput: 1n }));
+});
+test("historical cleanup drains every resource even when evidence writes fail", async () => {
+  const calls: number[] = [], diskError = new Error("ENOSPC");
+  const actions = [() => { calls.push(1); throw diskError; }, async () => { calls.push(2); throw new Error("close"); },
+    () => { calls.push(3); }];
+  await assert.rejects(cleanupHistoricalResources(actions, false), error => error === diskError);
+  assert.deepEqual(calls, [1, 2, 3]);
+  calls.length = 0;
+  await cleanupHistoricalResources(actions, true);
+  assert.deepEqual(calls, [1, 2, 3], "original run failure is preserved without skipping final cleanup");
+});
+test("expired run deadline cannot let unref-only cleanup silently exit zero", () => {
+  const url = new URL("../blockscan-at-block-cli.ts", import.meta.url).href;
+  const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+    import { cleanupHistoricalResources } from ${JSON.stringify(url)};
+    await new Promise(resolve => setTimeout(resolve, 1)); // run deadline already fired
+    void (async () => {
+      try { throw new Error("original run failure"); }
+      finally { await cleanupHistoricalResources([() => new Promise(resolve => {
+        setTimeout(() => { console.log("drained"); resolve(); }, 20).unref();
+      })], true); }
+    })().catch(error => { console.error(error.message); process.exitCode = 1; });
+  `], { encoding: "utf8", timeout: 10_000 });
+  assert.equal(child.status, 1, child.stderr);
+  assert.match(child.stdout, /drained/);
+  assert.match(child.stderr, /original run failure/);
+});
+test("fixed-input baseline permits enumeration-only threshold changes but not sampling changes", () => {
+  const fixed = { spreadBps: 0, fixedWethInput: 20_000_000_000_000_000n, cascade: false };
+  assert.doesNotThrow(() => assertHistoricalSamplingPolicy(fixed, { ...fixed, spreadBps: 100 }));
+  assert.equal(fixed.spreadBps, 0, "the stored baseline policy is not relabelled");
+  for (const changed of [{ ...fixed, fixedWethInput: 1n }, { ...fixed, fixedWethInput: null },
+    { ...fixed, cascade: true }]) assert.throws(() => assertHistoricalSamplingPolicy(fixed, changed));
+  const dynamic = { ...fixed, fixedWethInput: null };
+  assert.throws(() => assertHistoricalSamplingPolicy(dynamic, { ...dynamic, spreadBps: 100 }));
+  assert.doesNotThrow(() => assertHistoricalSamplingPolicy(dynamic, dynamic));
+  assert.throws(() => assertHistoricalSamplingPolicy({ ...fixed, fixedWethInput: 0n },
+    { ...fixed, fixedWethInput: 0n, spreadBps: 100 }));
+});
+test("benchmark supports one or several full production blocks from a fixed baseline without injection", () => {
+  const args = [...base, "--benchmark-baseline", "baseline.json"];
+  assert.equal(parseAtBlockArgs(args)?.amountSelector, "sim");
+  assert.equal(parseAtBlockArgs(args)?.through, "ev");
+  assert.equal(parseAtBlockArgs([...args, "--through-block", "125"])?.throughBlock, 125);
+  assert.throws(() => parseAtBlockArgs([...base, "--save-baseline", "--through", "prices"]));
+  for (const extra of [["--offline"], ["--live-mids", "mids.json"], ["--amount-selector", "solver"],
+    ["--only-enumerated-rank", "1"], ["--max-candidates", "2"], ["--execution-mode", "source-block"]])
+    assert.throws(() => parseAtBlockArgs([...args, ...extra]));
+});
+
+test("extended execution-screen budget is bounded and only available for existing-baseline benchmarks", () => {
+  const benchmark = [...base, "--benchmark-baseline", "baseline.json", "--through-block", "222"];
+  assert.equal(parseAtBlockArgs(base)?.budgetMs, 120_000);
+  assert.equal(parseAtBlockArgs(benchmark)?.budgetMs, 120_000);
+  assert.equal(parseAtBlockArgs([...base, "--budget-ms", "3600000"])?.budgetMs, 3_600_000);
+  assert.throws(() => parseAtBlockArgs([...base, "--budget-ms", "3600001"]), /invalid --budget-ms/);
+  assert.throws(() => parseAtBlockArgs([...base, "--budget-ms", "43200000"]), /invalid --budget-ms/);
+  assert.equal(parseAtBlockArgs([...benchmark, "--budget-ms", "43200000"])?.budgetMs, 43_200_000);
+  for (const value of ["0", "-1", "1.5", "NaN", "Infinity", "43200001", "9007199254740992"])
+    assert.throws(() => parseAtBlockArgs([...benchmark, `--budget-ms=${value}`]), /invalid --budget-ms/);
+});
+
+test("baseline serialization preserves shared integer data, rejects authority and checks bytes", () => {
+  const shared = { amount: 17n }, source = { a: new Map([["one", shared]]), b: shared, nonfinite: Infinity };
+  const copy = historicalBaselineData(source);
+  assert.equal(copy.a.get("one"), copy.b); assert.equal(copy.b.amount, 17n); assert.equal(copy.nonfinite, Infinity);
+  assert.throws(() => historicalBaselineData({ issueExact() {} }));
+  const dir = mkdtempSync(join(tmpdir(), "production-baseline-")), path = join(dir, "baseline.json");
+  try {
+    const baseline: any = { version: 1, readySha256: "hash", pricing: { pricing: { sourceBlock: 123, sourceBlockHash: "source" } }, data: source };
+    writeHistoricalBenchmarkBaseline(path, baseline);
+    assert.deepEqual(readHistoricalBenchmarkBaseline(path).baseline, baseline);
+    assert.throws(() => writeHistoricalBenchmarkBaseline(path, baseline));
+    writeFileSync(path + ".bin", "changed"); assert.throws(() => readHistoricalBenchmarkBaseline(path), /bytes changed/);
+  } finally { rmSync(dir, { recursive: true }); }
+});
+
+test("benchmark statistics exclude censored and not-run stages but retain their counts", () => {
+  const stage = (ms: number, status = "ran") => ({ status, stage_ms: ms, started_at_ms: 1, finished_at_ms: 2, cumulative_ms: ms });
+  const sample = (block: number, time: number): any => ({ block, outcome: "ran", totalMs: time, callWallMs: time + 1,
+    completePrices: true, timing: {}, stages: { state: stage(time / 2), ev: stage(0, "not-run") } });
+  const result = historicalBenchmarkSummary([sample(2, 10), sample(3, 30), { ...sample(4, 100), outcome: "budget_exceeded" }], 4);
+  assert.equal(result.totalMs.mean, 20); assert.equal(result.totalMs.p50, 10); assert.equal(result.totalMs.p90, 30);
+  assert.equal(result.afterFirstTransitionTotalMs.mean, 30); assert.equal(result.stages.ev.count, 0);
+  assert.equal(result.censoredBlocks.length, 1); assert.equal(result.missingBlocks, 1); assert.equal(result.reachedEvBlocks, 0);
+});
+test("historical benchmark windows require an existing baseline and never start full-table warmup", () => {
+  const valid = [...base, "--benchmark-baseline", "baseline.json", "--through", "prices", "--through-block", "125"];
+  assert.equal(parseAtBlockArgs(valid)?.throughBlock, 125);
+  for (const end of ["122", "123", "373", "NaN", "124.5"])
+    assert.throws(() => parseAtBlockArgs([...base, "--through", "prices", "--through-block", end]));
+  for (const extra of [["--offline"], ["--live-mids", "manifest.json"]])
+    assert.throws(() => parseAtBlockArgs([...valid, ...extra]));
+  for (const stage of ["enumerate", "solver", "ev"])
+    assert.throws(() => parseAtBlockArgs([...base, "--through", stage, "--through-block", "125"]));
+  assert.throws(() => parseAtBlockArgs([...base, "--through", "prices", "--through-block", "125"]), /cold-start windows/);
+  assert.equal(parseAtBlockArgs(base)?.throughBlock, undefined);
+});
 test("experiment P reverts are hash-bound, single-source and distinct from historical cache knowledge", () => {
   const dir = mkdtempSync(join(tmpdir(), "p-revert-proof-"));
   try {

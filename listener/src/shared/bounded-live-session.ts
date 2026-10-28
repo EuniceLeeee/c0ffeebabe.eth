@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 
 const MAX_WALLET_WEI = 200_000_000_000_000_000n;
 const MAX_WALL_MS = 12 * 60 * 60 * 1_000;
-const MAX_HEARTBEAT_MS = 15_000;
+const MAX_HEARTBEAT_MS = 30_000;
 
 interface SessionPermit {
   schemaVersion: 1;

@@ -1,5 +1,6 @@
 import { ethers } from "ethers";
-import type { IdentitySemantics } from "../../adapter-family-plugin.js";
+import type { IdentitySemantics, IdentityVariant } from "../../adapter-family-plugin.js";
+import type { FamilyId, LineageId } from "../../adapter-family-identifiers.js";
 import type {
   AdapterRequest,
   AdapterRequestResult,
@@ -9,6 +10,7 @@ import { RequiredAdapterRequestError } from
 import { hashCanonical } from "../../canonical-value.js";
 import {
   assertSameSource,
+  assertSource,
   callRequest,
   canonicalAddress,
   codeRequest,
@@ -16,6 +18,7 @@ import {
   decodeUint,
   effectsProjection,
   requireRuntimeCode,
+  returnedResult,
   sameAddress,
   tokenDeltaAtLeast,
   totalSupplyDeltaAtLeast,
@@ -39,25 +42,40 @@ import type {
   Erc4626Identity,
   Erc4626IdentityEvidence,
 } from "./types.js";
+import { infinifiIdentity } from "./infinifi-identity.js";
+import { custodianIdentity } from "./custodian-identity.js";
+import { CUSTODIAN_IMPLEMENTATION_HASH, proveCustodianProxy, custodianImplementationWord, custodianSlot } from "./custodian.js";
+import { decodeStakedUsdatBinding, isStakedUsdatProxy, stakedUsdatAddressWord,
+  stakedUsdatBindingRequests, stakedUsdatSlot, STAKED_USDAT_IMPLEMENTATION_HASH } from "../staked-usdat-family/identity-proof.js";
 
 export const ERC4626_PROBE_ACTOR_EVIDENCE_ID = "erc4626-probe-actor";
 
-export const erc4626Identity: IdentitySemantics<
-  Erc4626Candidate,
-  Erc4626Identity
-> = {
-  variants: [{
-    id: "standalone-standard-behavior",
+export function createErc4626StandardIdentityVariant(profile: {
+  readonly familyId: FamilyId;
+  readonly lineageId: LineageId;
+  readonly id: string;
+  readonly excludeSpecialized?: boolean;
+  /** Event assets may differ from gross payer input for a proven implementation. */
+  readonly depositEventAssets?: (grossAssets: bigint) => bigint;
+}): IdentityVariant<Erc4626Candidate, Erc4626Identity, unknown> {
+  return {
+    id: profile.id,
     kind: "standalone-contract" as const,
-    lineageId: ERC4626_LINEAGE_ID,
+    lineageId: profile.lineageId,
     applies: () => true,
     requirements({ evidence }) {
+      const staked = (evidence as Erc4626BaseEvidence | undefined)?.stakedUsdatCheck;
+      if (staked) return { transports: staked.implementation === undefined
+        ? ["get-storage" as const] : staked.implementationMatched
+          ? ["get-code" as const, "eth-call" as const] : ["get-code" as const] };
+      const check = (evidence as Erc4626BaseEvidence | undefined)?.custodianCheck;
+      if (check) return { transports: check === "slot" ? ["get-storage" as const] : ["get-code" as const] };
       if (evidence === undefined) {
         return { transports: ["get-code" as const, "eth-call" as const] };
       }
       return {
         transports: [
-          "get-code" as const,
+          ...((evidence as Erc4626ActiveEvidence).depositRetry ? [] : ["get-code" as const]),
           "eth-call" as const,
           "effect-delta-simulation" as const,
         ],
@@ -73,6 +91,25 @@ export const erc4626Identity: IdentitySemantics<
     },
     buildRequests({ candidate, evidence }) {
       if (evidence === undefined) return baseRequests(candidate.vault);
+      const active = evidence as Erc4626ActiveEvidence;
+      if (active.phase === "active" && active.depositRetry) {
+        const retryBase = { ...active, phase: "base" as const,
+          sampleAssets: active.depositRetry.amount, previewDeposit: active.depositRetry.preview };
+        return activeRequests(retryBase).filter(request =>
+          request.id === "active-deposit" || request.id === "active-roundtrip"
+        ).map(request => Object.freeze({ ...request,
+          id: request.id.replace("active-", "fallback-"), required: false,
+          ...(request.kind === "eth-call" ? { completion: "return-or-revert-data" as const } : {}),
+        }));
+      }
+      const base = evidence as Erc4626BaseEvidence;
+      if (base.stakedUsdatCheck) return base.stakedUsdatCheck.implementation === undefined
+        ? [stakedUsdatSlot("standard-staked-implementation", candidate.vault)]
+        : base.stakedUsdatCheck.implementationMatched
+          ? stakedUsdatBindingRequests("standard-staked", candidate.vault, base.stakedUsdatCheck.implementation)
+          : [codeRequest("standard-staked-code", base.stakedUsdatCheck.implementation)];
+      if (base.custodianCheck === "slot") return [custodianSlot("standard-implementation", candidate.vault)];
+      if (base.custodianCheck === "code") return [codeRequest("standard-implementation-code", base.custodianImplementation!)];
       return activeRequests(evidence as Erc4626BaseEvidence);
     },
     decode({ step, results }) {
@@ -83,6 +120,8 @@ export const erc4626Identity: IdentitySemantics<
             "active-share-balance",
             "active-deposit",
             "active-redeem",
+            "fallback-deposit",
+            "fallback-roundtrip",
           ]);
       const successful = results.filter((result) => result.ok);
       for (const result of results) {
@@ -90,13 +129,47 @@ export const erc4626Identity: IdentitySemantics<
           throw new RequiredAdapterRequestError(result);
         }
       }
-      assertSameSource(successful);
-      return step.evidence === undefined
-        ? decodeBaseEvidence(step.candidate.vault, results)
-        : decodeActiveEvidence(
-            step.evidence as Erc4626BaseEvidence,
-            results,
-          );
+      const active = step.evidence as Erc4626ActiveEvidence | undefined;
+      if (active?.phase === "active" && active.depositRetry) {
+        return decodeDepositRetry(active, results, profile.depositEventAssets);
+      }
+      const source = assertSameSource(successful);
+      if (step.evidence === undefined) {
+        const base = decodeBaseEvidence(step.candidate.vault, results);
+        if (base.baseValid && profile.excludeSpecialized !== false) {
+          if (isStakedUsdatProxy(requireRuntimeCode(results, "base-vault-code")))
+            return { ...base, stakedUsdatCheck: { source, proxyCodeHash: base.vaultCodeHash } };
+          try {
+            proveCustodianProxy(requireRuntimeCode(results, "base-vault-code"));
+            return { ...base, custodianCheck: "slot", custodianCheckSource: source };
+          } catch { /* Another proxy/standard vault keeps its original path. */ }
+        }
+        return base;
+      }
+      const base = step.evidence as Erc4626BaseEvidence;
+      if (base.stakedUsdatCheck) {
+        const check = base.stakedUsdatCheck;
+        assertSource(source, check.source);
+        if (check.implementation === undefined) return { ...base, stakedUsdatCheck: { ...check,
+          implementation: stakedUsdatAddressWord(returnedResult(results, "standard-staked-implementation").data) } };
+        const { stakedUsdatCheck, ...standard } = base;
+        if (ethers.keccak256(requireRuntimeCode(results, "standard-staked-code")) !== STAKED_USDAT_IMPLEMENTATION_HASH) return standard;
+        if (!check.implementationMatched) return { ...base, stakedUsdatCheck: { ...check, implementationMatched: true } };
+        decodeStakedUsdatBinding(results, "standard-staked", step.candidate.vault, check);
+        return { ...standard, baseValid: false, evidenceRequestIds: ["standard-staked-code", "standard-staked-asset",
+          "standard-staked-getStrcOracle", "standard-staked-getWithdrawalQueue"] };
+      }
+      if (base.custodianCheck !== undefined) {
+        assertSource(source, base.custodianCheckSource!);
+        if (base.custodianCheck === "slot") return { ...base, custodianCheck: "code",
+          custodianImplementation: custodianImplementationWord(returnedResult(results, "standard-implementation").data) };
+        const { custodianCheck, custodianCheckSource, custodianImplementation, ...standard } = base;
+        // Only the reverse-proven implementation is excluded from standard
+        // vault==share semantics. Other vaults sharing proxy code are untouched.
+        return ethers.keccak256(requireRuntimeCode(results, "standard-implementation-code")) === CUSTODIAN_IMPLEMENTATION_HASH
+          ? { ...standard, baseValid: false, evidenceRequestIds: ["standard-implementation-code"] } : standard;
+      }
+      return decodeActiveEvidence(base, results, profile.depositEventAssets);
     },
     decide: ({ candidate, evidence }) => {
       if (evidence === undefined) return { status: "continue" as const };
@@ -120,19 +193,21 @@ export const erc4626Identity: IdentitySemantics<
           evidenceRequestIds: ["base-asset"],
         };
       }
+      if (proof.depositRetry) return { status: "continue" as const };
       if (!proof.depositVerified && !proof.redeemVerified) {
-        // Both declared execution surfaces reverted at the fixed cutoff.
+        // Neither direction proved the required return, effects and event at the cutoff.
         return {
           status: "chain-proven-rejected" as const,
           reasonCode: "erc4626_execution_surfaces_failed",
-          evidenceRequestIds: ["active-deposit", "active-redeem"],
+          evidenceRequestIds: ["active-deposit", "active-redeem",
+            ...(proof.depositRetryCompleted ? ["fallback-deposit", "fallback-roundtrip"] : [])],
         };
       }
       return {
         status: "verified" as const,
         identity: Object.freeze({
-          familyId: ERC4626_FAMILY_ID,
-          lineageId: ERC4626_LINEAGE_ID,
+          familyId: profile.familyId,
+          lineageId: profile.lineageId,
           subject: canonicalAddress(candidate.vault),
           provenance: Object.freeze([Object.freeze({
             kind: "erc4626-standard-active-proof",
@@ -147,7 +222,13 @@ export const erc4626Identity: IdentitySemantics<
         }),
       };
     },
-  }],
+  };
+}
+
+export const erc4626Identity: IdentitySemantics<Erc4626Candidate, Erc4626Identity> = {
+  memoReuse: "recheck-identity",
+  variants: [createErc4626StandardIdentityVariant({ familyId: ERC4626_FAMILY_ID,
+    lineageId: ERC4626_LINEAGE_ID, id: "standalone-standard-behavior" }), custodianIdentity, infinifiIdentity],
   identityKey: (identity) => identity.subject.toLowerCase(),
 };
 
@@ -291,6 +372,7 @@ function decodeBaseEvidence(
     assets: bigint;
     preview: bigint;
   } | null = null;
+  let alternateDepositSample: Erc4626BaseEvidence["alternateDepositSample"];
   for (let index = 0; index < ERC4626_SAMPLE_AMOUNTS.length; index++) {
     const amount = ERC4626_SAMPLE_AMOUNTS[index];
     // A reverted/empty sample view is Family-declared negative evidence
@@ -329,10 +411,13 @@ function decodeBaseEvidence(
       `base-preview-redeem:${index}`,
     );
     if (
-      depositSample === null && shares > 0n && previewDeposit > 0n &&
+      shares > 0n && previewDeposit > 0n &&
       previewDeposit <= shares + tolerance(shares)
     ) {
-      depositSample = { amount, shares, preview: previewDeposit };
+      if (depositSample === null) depositSample = { amount, shares, preview: previewDeposit };
+      else if (alternateDepositSample === undefined) {
+        alternateDepositSample = Object.freeze({ amount, preview: previewDeposit });
+      }
     }
     if (
       redeemSample === null && assets > 0n && previewRedeem > 0n &&
@@ -361,6 +446,7 @@ function decodeBaseEvidence(
     sampleShares,
     previewDeposit: depositSample?.preview ?? 0n,
     previewRedeem: redeemSample?.preview ?? 0n,
+    ...(alternateDepositSample === undefined ? {} : { alternateDepositSample }),
     baseValid: depositSample !== null && redeemSample !== null,
   });
 }
@@ -369,6 +455,14 @@ function activeRequests(
   evidence: Erc4626BaseEvidence,
 ): readonly AdapterRequest[] {
   if (!evidence.baseValid) return [];
+  const observeTokenBalances = Object.freeze([evidence.asset, evidence.vault].map(token =>
+    Object.freeze({
+      token,
+      account: Object.freeze({
+        kind: "verified-actor" as const,
+        evidenceId: ERC4626_PROBE_ACTOR_EVIDENCE_ID,
+      }),
+    })));
   const requests: AdapterRequest[] = [
     codeRequest("active-asset-code", evidence.asset),
     declaredCallRequest(
@@ -428,6 +522,7 @@ function activeRequests(
           amount: evidence.sampleAssets,
         })]),
       }),
+      observeTokenBalances,
       observe: Object.freeze([
         "return-data" as const,
         "revert-data" as const,
@@ -471,6 +566,7 @@ function activeRequests(
           amount: evidence.sampleShares,
         })]),
       }),
+      observeTokenBalances,
       observe: Object.freeze([
         "return-data" as const,
         "revert-data" as const,
@@ -486,6 +582,7 @@ function activeRequests(
 function decodeActiveEvidence(
   base: Erc4626BaseEvidence,
   results: readonly AdapterRequestResult[],
+  depositEventAssets?: (grossAssets: bigint) => bigint,
 ): Erc4626ActiveEvidence {
   const assetCode = requireRuntimeCode(results, "active-asset-code");
   const assetBalanceSurface = balanceSurfaceOutcome(
@@ -514,46 +611,12 @@ function decodeActiveEvidence(
     results,
     "active-roundtrip",
   );
-  const roundTripSafe =
-    roundTrip <= base.sampleAssets + tolerance(base.sampleAssets);
   const depositResult = results.find((result) => result.id === "active-deposit");
   if (depositResult === undefined) {
     throw new Error("ERC4626 active-deposit result is missing");
   }
-  const deposit = depositResult.ok ? depositResult : null;
-  const depositReturned = deposit?.completion === "returned";
-  const depositAmountOut = depositReturned
-    ? decodeSimulationUint("deposit", deposit!.data)
-    : 0n;
-  const depositVerified = roundTripSafe && depositReturned &&
-    depositAmountOut === base.previewDeposit &&
-    tokenDeltaAtLeast({
-      result: deposit!,
-      token: base.asset,
-      account: ERC4626_PROBE_ACTOR,
-      direction: "decrease",
-      amount: base.sampleAssets,
-    }) &&
-    tokenDeltaAtLeast({
-      result: deposit!,
-      token: base.vault,
-      account: ERC4626_PROBE_ACTOR,
-      direction: "increase",
-      amount: base.previewDeposit,
-    }) &&
-    totalSupplyDeltaAtLeast({
-      result: deposit!,
-      token: base.vault,
-      direction: "increase",
-      amount: base.previewDeposit,
-    }) &&
-    lifecycleEventMatches(
-      deposit!,
-      "Deposit",
-      base,
-      base.sampleAssets,
-      base.previewDeposit,
-    );
+  const eventAssets = depositEventAssets?.(base.sampleAssets) ?? base.sampleAssets;
+  const depositVerified = verifiedDeposit(base, depositResult, roundTrip, undefined, eventAssets);
 
   const redeemResult = results.find((result) => result.id === "active-redeem");
   let redeemVerified = false;
@@ -603,6 +666,13 @@ function decodeActiveEvidence(
       { readonly ok: false }
     > => result !== undefined && !result.ok)
     .sort((left, right) => left.id.localeCompare(right.id));
+  // A successful preview does not imply the same tiny amount is executable.
+  // Retry only a deterministic revert, once, using a sample already validated
+  // in the base round. Never hide transport failures or malformed effects.
+  const depositRetry = erc20SurfacesValid && depositResult.ok &&
+    depositResult.completion === "reverted-as-declared" && base.alternateDepositSample
+      ? Object.freeze({ ...base.alternateDepositSample,
+          source: assertSameSource(results.filter(result => result.ok)) }) : undefined;
   if (
     erc20SurfacesValid && !depositVerified && !redeemVerified &&
     unresolvedDirections.length > 0
@@ -616,10 +686,12 @@ function decodeActiveEvidence(
     erc20SurfacesValid,
     depositVerified,
     redeemVerified,
+    ...(depositRetry === undefined ? {} : { depositRetry }),
     behaviorProofHash: hashCanonical({
       vault: base.vault,
       asset: base.asset,
       roundTrip,
+      ...(depositEventAssets === undefined ? {} : { depositEventAssets: eventAssets }),
       erc20SurfacesValid,
       depositVerified,
       redeemVerified,
@@ -638,6 +710,69 @@ function decodeActiveEvidence(
         effects: effectsProjection(result.effects),
       })),
     }),
+  });
+}
+
+function verifiedDeposit(
+  base: Pick<Erc4626BaseEvidence, "asset" | "vault" | "sampleAssets" | "previewDeposit">,
+  result: AdapterRequestResult,
+  roundTrip: bigint,
+  decodedAmountOut?: bigint,
+  eventAssets = base.sampleAssets,
+): boolean {
+  return result.ok && result.completion === "returned" &&
+    eventAssets >= 0n && eventAssets <= base.sampleAssets &&
+    roundTrip <= base.sampleAssets + tolerance(base.sampleAssets) &&
+    (decodedAmountOut ?? decodeSimulationUint("deposit", result.data)) === base.previewDeposit &&
+    tokenDeltaAtLeast({ result, token: base.asset, account: ERC4626_PROBE_ACTOR,
+      direction: "decrease", amount: base.sampleAssets }) &&
+    tokenDeltaAtLeast({ result, token: base.vault, account: ERC4626_PROBE_ACTOR,
+      direction: "increase", amount: base.previewDeposit }) &&
+    totalSupplyDeltaAtLeast({ result, token: base.vault,
+      direction: "increase", amount: base.previewDeposit }) &&
+    lifecycleEventMatches(result, "Deposit", base, eventAssets, base.previewDeposit);
+}
+
+function decodeDepositRetry(
+  previous: Erc4626ActiveEvidence,
+  results: readonly AdapterRequestResult[],
+  depositEventAssets?: (grossAssets: bigint) => bigint,
+): Erc4626ActiveEvidence {
+  const { depositRetry: retry, alternateDepositSample: _alternate, ...retained } = previous;
+  if (!retry) throw new Error("ERC4626 deposit retry evidence missing");
+  for (const result of results) assertSource(result.source, retry.source);
+  const deposit = results.find(result => result.id === "fallback-deposit");
+  const roundTrip = results.find(result => result.id === "fallback-roundtrip");
+  if (!deposit || !roundTrip) throw new Error("ERC4626 deposit retry result missing");
+  const base = { ...retained, sampleAssets: retry.amount, previewDeposit: retry.preview };
+  const eventAssets = depositEventAssets?.(base.sampleAssets) ?? base.sampleAssets;
+  let roundTripValue: bigint | undefined;
+  let depositValue: bigint | undefined;
+  // An optional sibling's malformed ABI must not revoke the proven redeem.
+  // Source and result completeness checks stay outside this isolation boundary.
+  try {
+    if (roundTrip.ok && roundTrip.completion === "returned") {
+      roundTripValue = decodeUint(ERC4626_INTERFACE, "previewRedeem", results, "fallback-roundtrip");
+    }
+    if (deposit.ok && deposit.completion === "returned") depositValue = decodeSimulationUint("deposit", deposit.data);
+  } catch (error) {
+    if (!previous.redeemVerified) throw error;
+  }
+  const depositVerified = roundTripValue !== undefined && depositValue !== undefined &&
+    verifiedDeposit(base, deposit, roundTripValue, depositValue, eventAssets);
+  if (!depositVerified && !previous.redeemVerified) {
+    const unresolved = results.find(result => !result.ok);
+    if (unresolved && !unresolved.ok) throw new RequiredAdapterRequestError(unresolved);
+  }
+  return Object.freeze({ ...base, depositVerified, depositRetryCompleted: true,
+    behaviorProofHash: hashCanonical({ previous: previous.behaviorProofHash,
+      sample: { amount: retry.amount, preview: retry.preview, source: { ...retry.source } },
+      ...(depositEventAssets === undefined ? {} : { depositEventAssets: eventAssets }),
+      results: results.map(result => ({ id: result.id,
+        completion: result.ok ? result.completion : null,
+        data: result.ok ? result.data : null,
+        effects: result.ok ? effectsProjection(result.effects) : null,
+        failure: result.ok ? null : result.failure })) }),
   });
 }
 
@@ -698,7 +833,7 @@ function decodeSimulationUint(
 function lifecycleEventMatches(
   result: Extract<AdapterRequestResult, { readonly ok: true }>,
   eventName: "Deposit" | "Withdraw",
-  base: Erc4626BaseEvidence,
+  base: Pick<Erc4626BaseEvidence, "vault">,
   assets: bigint,
   shares: bigint,
 ): boolean {

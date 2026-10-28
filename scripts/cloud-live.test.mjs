@@ -66,6 +66,12 @@ test('wrong confirmation cannot read credentials or connect', async () => {
   const result = await runMock({ args: ['--broadcast'], answer: '2500', envReadable: false });
   assert(result.error); assert.equal(result.commands.length, 0); assert.equal(result.reads.length, 1);
 });
+test('resume switch is forwarded with the exact human-confirmed 1250 block limit', async () => {
+  const result = await runMock({ args: ['--broadcast', '--blocks', '1250', '--resume-prices', '1'], answer: 'START 1250' });
+  assert.equal(result.error, undefined);
+  assert(result.commands[0].argv.join(' ').includes('--broadcast --blocks 1250 --resume-prices 1'));
+  assert(!result.commands[0].argv.join(' ').includes(dummyKey));
+});
 test('noninteractive start cannot read credentials or connect', async () => {
   const result = await runMock({ args: ['--broadcast'], tty: false, envReadable: false });
   assert(result.error); assert.equal(result.commands.length, 0); assert.equal(result.reads.length, 1);

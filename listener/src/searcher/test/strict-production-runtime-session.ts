@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
+import { serialize, deserialize } from "node:v8";
+import { historicalBaselineData } from "../blockscan-historical-benchmark.js";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import {
@@ -2106,6 +2108,90 @@ const currentGraph = createVerifiedGraphView({
     },
   });
   try {
+    // Exercise the actual split used by the live loop, not two references to
+    // the fixture backend. HTTP replies are deterministic; ownership, batching,
+    // session construction and the Funding publication join are production code.
+    {
+      const tested = fixture();
+      const calls: { hash: string; selector: string }[] = [];
+      const server = createServer((req, res) => {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+        req.on("end", () => { void (async () => {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          const items = Array.isArray(body) ? body : [body];
+          const replies = await Promise.all(items.map(async (item: {
+            id: number; method: string; params: [{ to: string; data: string; from?: string }, { blockHash: string }];
+          }) => {
+            assert.equal(item.method, "eth_call");
+            assert.equal(item.params[1].blockHash, CURRENT.hash);
+            calls.push({ hash: item.params[1].blockHash, selector: item.params[0].data.slice(0, 10) });
+            return { jsonrpc: "2.0", id: item.id, result: await tested.backend.call(item.params[0]) };
+          }));
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify(Array.isArray(body) ? replies : replies[0]));
+        })().catch((error) => { res.statusCode = 500; res.end(String(error)); }); });
+      });
+      server.listen(0, "127.0.0.1");
+      await once(server, "listening");
+      const address = server.address();
+      assert.ok(address && typeof address !== "string");
+      const controller = new AbortController();
+      const scope = scopeFor(tested, controller.signal);
+      const makeBackend = (hash = CURRENT.hash) => new PinnedRethQuoteBackend(
+        `http://127.0.0.1:${address.port}`, hash,
+        { transportLane: "producer-bulk", signal: scope.signal, deadlineAtMs: scope.deadlineAtMs },
+      );
+      const parent = makeBackend();
+      const foreign = makeBackend();
+      const foreignBlock = makeBackend(WRONG_HASH.hash);
+      try {
+        const critical = parent.criticalCalls();
+        assert.notEqual(critical, parent);
+        assert.equal(parent.criticalCalls(), critical);
+        assert.equal(critical.stats().lane, "producer-critical");
+        assert.equal(parent.stats().lane, "producer-bulk");
+        const handle = tested.coordinator.startFundingPreparation({ ...scope, pricingCallBackend: critical });
+        await handle.settle();
+        const requestCount = tested.requests.length;
+        for (const backend of [foreign, foreign.criticalCalls(), foreignBlock]) {
+          await assert.rejects(tested.coordinator.prepare({
+            ...scope, pricingCallBackend: backend, fundingPreparation: handle,
+          }), /Funding preparation differs/);
+          assert.equal(tested.requests.length, requestCount, "foreign owner must not start pricing");
+        }
+        for (const change of [
+          { graph: Object.freeze({ ...currentGraph, sourceBlockHash: WRONG_HASH.hash }) },
+          { graph: Object.freeze({ ...currentGraph, generation: CURRENT.generation + 1 }) },
+          { signal: new AbortController().signal },
+          { deadlineAtMs: scope.deadlineAtMs + 1 },
+        ]) {
+          await assert.rejects(tested.coordinator.prepare({
+            ...scope, ...change, pricingCallBackend: parent, fundingPreparation: handle,
+          }), /Funding preparation differs/);
+        }
+        const joined = await tested.coordinator.prepare({
+          ...scope, pricingCallBackend: parent, fundingPreparation: handle,
+        });
+        assert.ok(joined.status !== "incomplete");
+        assert.ok(joined.snapshot.funding.sources.size > 0);
+        assert.equal(joined.snapshot.funding.coverage.unresolvedKeys.length, 0);
+        assert.equal(tested.requests[0]!.pricingCallBackend, critical);
+        assert.equal(tested.requests[1]!.pricingCallBackend, parent);
+        assert.ok(critical.stats().batchesSent > 0);
+        assert.ok(parent.stats().batchesSent > 0);
+        assert.ok(calls.length > readyFundingAssets.length);
+        assert.doesNotThrow(() => assertAtomicBlockScanRuntime(joined.snapshot));
+        controller.abort(new Error("test parent scope closed"));
+        await assert.rejects(critical.call({ to: UNIV2_FIXTURE_TOKEN0, data: "0x12345678" }), /closed|abort/i);
+        console.log("strict early Funding coordinator: PASS real critical view joins owner; foreign source/control rejected");
+      } finally {
+        await Promise.all([parent, foreign, foreignBlock].map(backend => backend.closeAndDrain()));
+        server.closeAllConnections();
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    }
+    if (process.argv.includes("--funding-view-only")) process.exit(0);
     for (const mode of ["funding-first", "pricing-first", "failed-funding"] as const) {
       const activity = preparationGate();
       const releaseFunding = preparationGate();
@@ -2858,6 +2944,79 @@ for (const path of ["coarse", "runtime"] as const) {
     console.log(`strict effective range carry: PASS ${path}/${mode}`);
   }
 }
+
+// Binary restore must preserve production carry, not just reconstruct visible
+// prices. All chain responses here are fixtures, not live latency evidence.
+{
+  let quotes = 0, rawReads = 0, rejectFirstInstance = false;
+  const make = () => new StrictCurrentRuntimeCoordinator(request => parallelRoot.createSession({
+    source: request.source, runtime: runtime(request.source, { onCurrentPricingReadStart: () => { rawReads++; } }),
+    fundingAssets: request.fundingAssets, control: request.control,
+    kind: request.purpose === "exact-execution" ? "exact" : "pricing", requiredEdgeIds: request.requiredEdgeIds,
+  }), () => {}, undefined, (pricing, control, _backend, reuse) => {
+    const target = reuse?.quoteGraph ?? pricing;
+    return buildEffectiveMids({ pricing, control, quoteGraph: reuse?.quoteGraph,
+      previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys, disabledEdgeIds: reuse?.disabledEdgeIds,
+      weth: UNIV2_FIXTURE_TOKEN0, gasCostWei: null, enumerationSpreadBps: 0, concurrency: 2,
+      quote: async ({ edge, amountIn }) => {
+        quotes++;
+        if (rejectFirstInstance && edge.target.toLowerCase() === firstParallelTarget) throw new Error("fixture rejected quote");
+        return { source: { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation },
+          amountIn, amountOut: amountIn * 2n + BigInt(target.sourceBlock - CURRENT.number) };
+      } });
+  });
+  const prepare = (coordinator: StrictCurrentRuntimeCoordinator, graph: typeof carryBaseGraph, touched = true) => coordinator.prepare({
+    graph, fundingTokens: [], deadlineAtMs: Date.now() + 10_000,
+    canonicalActivity: { source: { number: graph.sourceBlock, hash: graph.sourceBlockHash, generation: graph.generation },
+      parentHash: CURRENT.hash, touchedStateKeys: new Set(touched ? [firstParallelTarget] : []), complete: true },
+  });
+  const uninterrupted = make();
+  await prepare(uninterrupted, carryBaseGraph);
+  const bytes = serialize(historicalBaselineData(uninterrupted.exportHistoricalBaseline()));
+  quotes = 0; rawReads = 0;
+  const expected = await prepare(uninterrupted, carryNextGraph);
+  const expectedQuotes = quotes;
+  assert(expectedQuotes > 0 && expectedQuotes < carryNextGraph.edges.length);
+  for (let trial = 0; trial < 2; trial++) {
+    const restored = make(); quotes = 0; rawReads = 0;
+    const baseline = deserialize(bytes);
+    await restored.restoreHistoricalBaseline(baseline, { graph: carryBaseGraph, rawGraph: carryBaseGraph,
+      weth: UNIV2_FIXTURE_TOKEN0, control: {} });
+    assert.equal(rawReads, 0, "restoration rebuilds bindings, not prices");
+    assert.equal(quotes, 0, "restoration never re-quotes the full table");
+    await assert.rejects(restored.restoreHistoricalBaseline(baseline, { graph: carryBaseGraph, rawGraph: carryBaseGraph,
+      weth: UNIV2_FIXTURE_TOKEN0, control: {} }), /empty coordinator/);
+    const actual = await prepare(restored, carryNextGraph);
+    assert.equal(quotes, expectedQuotes, "each trial must re-evaluate the same dirty set");
+    assert.equal(rawReads, 0, "incremental pass keeps the frozen raw basis");
+    assert.deepEqual([...actual.snapshot.pricing.effectiveMids!.rows], [...expected.snapshot.pricing.effectiveMids!.rows]);
+    assert.deepEqual(actual.snapshot.pricing.coverage, expected.snapshot.pricing.coverage);
+    assertAtomicBlockScanRuntime(actual.snapshot);
+  }
+  const incompatible = deserialize(bytes);
+  incompatible.pricing.pricingStateKeyByEdgeKey = new Map();
+  await assert.rejects(make().restoreHistoricalBaseline(incompatible, { graph: carryBaseGraph, rawGraph: carryBaseGraph,
+    weth: UNIV2_FIXTURE_TOKEN0, control: {} }), /state keys changed/);
+  console.log("strict historical baseline: PASS binary restore, independent hot trials and fresh atomic authority");
+  rejectFirstInstance = true;
+  const failed = make(); await prepare(failed, carryBaseGraph);
+  const failedBaseline = deserialize(serialize(historicalBaselineData(failed.exportHistoricalBaseline())));
+  assert(failedBaseline.disabledInstances.length > 0, "checkpoint after first failing publication");
+  rejectFirstInstance = false; quotes = 0;
+  const newRun = make();
+  await newRun.restoreHistoricalBaseline(failedBaseline, { graph: carryBaseGraph, rawGraph: carryBaseGraph,
+    weth: UNIV2_FIXTURE_TOKEN0, control: {} });
+  assert.deepEqual(newRun.exportHistoricalBaseline().disabledInstances, failedBaseline.disabledInstances,
+    "explicit continuation preserves the logical round's exclusions");
+  await prepare(newRun, carryNextGraph, false);
+  assert.equal(quotes, 0, "continued logical round does not retry its excluded pools");
+  assert.deepEqual(newRun.exportHistoricalBaseline().disabledInstances, failedBaseline.disabledInstances);
+  const freshRound = make(); await prepare(freshRound, carryNextGraph, false);
+  assert(quotes > 0, "explicit fresh round does re-quote");
+  assert.equal(freshRound.exportHistoricalBaseline().disabledInstances.length, 0);
+  console.log("strict live continuation: PASS exclusions continue; explicit fresh round resets");
+}
+if (process.argv.includes("--historical-baseline-only")) process.exit(0);
 
 // Current effective status owns coverage even when every raw entry is healthy.
 {

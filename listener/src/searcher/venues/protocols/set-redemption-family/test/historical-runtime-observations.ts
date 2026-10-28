@@ -33,8 +33,9 @@ export function observeBalance(diff: any, token: string, slot: string, initial: 
   return { before, after, delta: after - before };
 }
 export function assertBasket(input: ReturnType<typeof observeBalance>, outputs: ReturnType<typeof observeBalance>[],
-  amountIn: bigint, expected: readonly bigint[], inventory: readonly bigint[]) {
-  assert.equal(outputs.length, 4, "whole four-component sample required");
+  amountIn: bigint, expected: readonly bigint[], inventory: readonly bigint[], componentCount = 4) {
+  assert(Number.isSafeInteger(componentCount) && componentCount > 0);
+  assert.equal(outputs.length, componentCount, componentCount === 4 ? "whole four-component sample required" : "whole sample basket required");
   assert.equal(expected.length, outputs.length); assert.equal(inventory.length, outputs.length);
   assert.equal(input.delta, -amountIn, "Set debit differs from requested input");
   assert.equal(input.after, input.before - amountIn, "old Set inventory consumed");

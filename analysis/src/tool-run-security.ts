@@ -69,14 +69,23 @@ export function redactToolOutput(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
   let output = redactRemoteUrls(input);
-  for (const [name, value] of Object.entries(env)) {
-    if (!value || value.length < 8 || !SECRET_ENV_NAME.test(name)) continue;
-    output = output.split(value).join("<redacted-env>");
-    for (const credential of secretFragments(value)) {
-      output = output.split(credential).join("<redacted-env-fragment>");
-    }
+  for (const { value, replacement } of toolOutputSecretReplacements(env)) {
+    output = output.split(value).join(replacement);
   }
   return output;
+}
+
+/** Shared ordered literals for whole-output and streaming redaction. */
+export function toolOutputSecretReplacements(env: NodeJS.ProcessEnv): { value: string; replacement: string }[] {
+  const replacements: { value: string; replacement: string }[] = [];
+  for (const [name, value] of Object.entries(env)) {
+    if (!value || value.length < 8 || !SECRET_ENV_NAME.test(name)) continue;
+    replacements.push({ value, replacement: "<redacted-env>" });
+    for (const credential of secretFragments(value)) {
+      replacements.push({ value: credential, replacement: "<redacted-env-fragment>" });
+    }
+  }
+  return replacements;
 }
 
 function redactRemoteUrls(input: string): string {

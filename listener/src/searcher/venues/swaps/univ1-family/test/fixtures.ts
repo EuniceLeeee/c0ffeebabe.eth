@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { plugin } from "../../../production-families/uniswap-v1.production.js";
-import type { AdapterRequest, AdapterRequestResult } from "../../../adapter-request-program.js";
+import { declareRequestProgram, type AdapterRequest, type AdapterRequestResult } from "../../../adapter-request-program.js";
 import { IMPLEMENTATION } from "../codec.js";
 import type { Candidate, Identity } from "../types.js";
 export const SOURCE = { number: 26029476, hash: "0x74997e992f9feddb1b373da2eb41e7cd3abe189c537b4fc79e7d15896c092c35", generation: 1 };
@@ -12,6 +13,12 @@ export const ISSUER = "0x1000000000000000000000000000000000000004";
 export const EXECUTOR = "0x1000000000000000000000000000000000000005";
 // Shape observed via eth_getCode at N=26029476, not a handwritten proxy model.
 export const CLONE = `0x366000600037611000600036600073${IMPLEMENTATION.slice(2)}5af41558576110006000f3`;
+const captured = JSON.parse(readFileSync(new URL("./implementation-bytecode.json", import.meta.url), "utf8"));
+const implementationCode = (address: string): string => {
+  const row = captured.implementations.find((r: { address: string }) => r.address === address);
+  assert(row); assert.equal(ethers.keccak256(row.code), row.codeHash); return row.code;
+};
+export const STANDARD_IMPLEMENTATION = "0x2157a7894439191e520825fe9399ab8655e0f708";
 export const word = (n: bigint | string) => ethers.toBeHex(n, 32);
 export const CANDIDATE: Candidate = { candidateKind: "univ1-exchange", pool: POOL_ADDRESS };
 export function result(id: string, data: string, source = SOURCE): AdapterRequestResult {
@@ -19,29 +26,37 @@ export function result(id: string, data: string, source = SOURCE): AdapterReques
 }
 export function answer(r: AdapterRequest): AdapterRequestResult {
   const values: Record<string, string> = { code: CLONE, token: word(TOKEN_ADDRESS), factory: word(FACTORY_ADDRESS), issuer: word(ISSUER),
-    "implementation-code": "0x60006000f3", "factory-code": "0x60016000f3", "token-code": "0x60026000f3",
+    "implementation-code": implementationCode(IMPLEMENTATION), "factory-code": "0x60016000f3", "token-code": "0x60026000f3",
     exchange: word(POOL_ADDRESS), "reverse-token": word(TOKEN_ADDRESS), decimals: word(18n),
     "native-reserve": word(100n * 10n ** 18n), "token-reserve": word(50_000n * 10n ** 18n) };
   assert(r.id in values, r.id);
   const data = ["token", "factory", "issuer"].includes(r.id) ? values[r.id] + "ff".repeat(4096 - 32) : values[r.id];
   return result(r.id, data);
 }
+export function standardAnswer(r: AdapterRequest): AdapterRequestResult {
+  assert.notEqual(r.id, "issuer", "canonical V1 must never be asked for issuer()");
+  return r.id === "code" ? result(r.id, CLONE.replace(IMPLEMENTATION.slice(2), STANDARD_IMPLEMENTATION.slice(2)))
+    : r.id === "implementation-code" ? result(r.id, implementationCode(STANDARD_IMPLEMENTATION)) : answer(r);
+}
 export function descriptor(reply = answer, candidate = CANDIDATE) {
   const variant = plugin.identity.variants[0];
   let evidence: unknown;
   let verified: Identity | undefined;
-  for (let step = 0; step < 3; step++) {
+  for (let step = 0; step < 5; step++) {
     const input = { candidate, evidence, step };
     const decision = variant.decide(input);
     if (decision.status === "verified") { verified = decision.identity as Identity; break; }
     assert.equal(decision.status, "continue", JSON.stringify(decision));
-    evidence = variant.decode({ step: input, results: variant.buildRequests(input).map(reply) });
+    // Use the same declaration validator as strict; unused transports are invalid.
+    const declared = declareRequestProgram({ requirements: variant.requirements,
+      buildRequests: variant.buildRequests, decode: () => undefined }, input);
+    evidence = variant.decode({ step: input, results: declared.requests.map(reply) });
   }
   assert(verified);
   return plugin.instance.finalizeDescriptor({ identity: verified, draft: plugin.instance.compileDraft(verified), sharedBindings: [] });
 }
-export function quote(amountIn: bigint, buy = true) {
-  const d = descriptor(), route = plugin.routes.project({ descriptor: d }).find(r => r.buy === buy)!;
+export function quote(amountIn: bigint, buy = true, reply = answer) {
+  const d = descriptor(reply), route = plugin.routes.project({ descriptor: d }).find(r => r.buy === buy)!;
   const input = { descriptor: d, route, amountIn, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] };
   const method = plugin.exact.methods(input)[1];
   assert.equal(method.kind, "request-program");

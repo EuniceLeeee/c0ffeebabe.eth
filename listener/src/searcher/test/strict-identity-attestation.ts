@@ -473,6 +473,52 @@ async function main(): Promise<void> {
     "explicitly-unsupported retain channel must reach the family lifecycle",
   );
 
+  // A known adapter is a Family binding, not permission to substitute the
+  // first unrelated observation when that Family cannot nominate this row.
+  let unrelatedReverseCalls = 0;
+  const selectedFamilies: string[] = [];
+  const unrelatedFamily = Object.freeze({
+    ...reverseBindingFamily,
+    plugin: Object.freeze({
+      ...reverseBindingFamily.plugin,
+      discovery: Object.freeze({
+        ...reverseBindingFamily.plugin.discovery,
+        reverseBinding: Object.freeze({
+          kind: "implementation" as const,
+          reverseBinding: async (input: { readonly provider: CaptureNominationProvider }) => {
+            unrelatedReverseCalls++;
+            return reverseBindingFamily.plugin.discovery.reverseBinding.reverseBinding(input);
+          },
+        }),
+      }),
+    }),
+  });
+  const boundCatalog = Object.freeze({
+    ...rbCatalog,
+    listAll: () => Object.freeze([unrelatedFamily, unsupportedFamily]),
+    ownerOfPoolAdapter: (adapter: string) => adapter === "synthetic-un-pool"
+      ? "synthetic:unsupported" : rbCatalog.ownerOfPoolAdapter(adapter),
+    forFamily: (id: string) => id === "synthetic:unsupported" ? unsupportedFamily : unrelatedFamily,
+    forStrictFamily: (id: string) => {
+      selectedFamilies.push(id);
+      return id === "synthetic:unsupported" ? unsupportedFamily : unrelatedFamily;
+    },
+  }) as unknown as FamilyCapabilityCatalog;
+  const boundResult = await attestPoolIdentitiesStrict({
+    catalog: boundCatalog, provider: rbProvider, runtime: runtime(false), source: SOURCE,
+    pools: [{ address: POOL, adapter: "synthetic-un-pool" }], channelOrder: "reverse-binding-first",
+  });
+  assert.equal(unrelatedReverseCalls, 0, "known-Family candidates must not run unrelated reverse binding");
+  assert(!selectedFamilies.includes("synthetic:reverse-binding"), "known-Family candidates must not execute another Family lifecycle");
+  assert.equal(boundResult.accepted.length, 0);
+  assert.equal(boundResult.rejected.length, 1);
+  const conflict = await attestPoolIdentitiesStrict({
+    catalog: boundCatalog, provider: rbProvider, runtime: runtime(false), source: SOURCE,
+    pools: [{ address: POOL, adapter: "synthetic-un-pool" }], onlyFamilyId: "synthetic:reverse-binding" as never,
+  });
+  assert.equal(conflict.rejected[0]?.reason, "candidate_family_adapter_mismatch");
+  assert.equal(unrelatedReverseCalls, 0, "contradictory Family and adapter cannot start nomination");
+
   // P0.1: family-aware candidate key. A shared physical address serving
   // two families (distinct adapter labels) keeps two keys; the same
   // family + pool collapses to one.

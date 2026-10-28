@@ -40,3 +40,23 @@ export function runtimeWrapReceipt(p: RuntimeAmountProgram, wrapped: string, bef
   p.nativeBalance(after).math("sub", after, after, before)
     .call(wrapped, RUNTIME_WRAP.encodeFunctionData("deposit"), { valueReg: after });
 }
+
+/** Protect pre-existing native inventory and wrap only this operation's receipt. */
+export function runtimeNativeBoundary(p: RuntimeAmountProgram, wrapped: string, before = 13, scratch = 14) {
+  if (![before, scratch].every(r => Number.isInteger(r) && r > 0 && r < 16) || before === scratch) {
+    throw new Error("runtime native boundary registers");
+  }
+  const token = ethers.getAddress(wrapped);
+  if (token === ethers.ZeroAddress) throw new Error("runtime native wrapper address");
+  p.nativeBalance(before);
+  return {
+    unwrapInput(amountReg = 0): void {
+      if (!Number.isInteger(amountReg) || amountReg < 0 || amountReg >= 16 || amountReg === before || amountReg === scratch) {
+        throw new Error("runtime native amount register");
+      }
+      p.call(token, RUNTIME_WRAP.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: amountReg }] });
+    },
+    wrapOutput(): void { runtimeWrapReceipt(p, token, before, scratch); },
+    assertRestored(): void { p.nativeBalance(scratch).equal(scratch, before); },
+  };
+}

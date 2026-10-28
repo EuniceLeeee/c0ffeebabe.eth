@@ -6,6 +6,7 @@ import {
   activeReadyMemos,
   buildReadyCatalogSnapshot,
   canonicalJson,
+  canonicalJsonFingerprint,
   hasDurableCandidateSnapshot,
   prepareReadyFamilyUpdate,
   immutableReadyValue,
@@ -26,6 +27,7 @@ import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import { strictEdgeCollectionFromBlock } from
   "./strict-edge-collection-policy.js";
+import type { ReadyRpcThrottle } from "./ready-rpc-throttle.js";
 
 /**
  * Durable universe rebuild runner (adversarial audit §5-§6). Every rebuild
@@ -58,6 +60,7 @@ export class UniverseRunIncomplete extends Error {
 }
 
 export interface UniverseRebuildDependencies {
+  readonly readyThrottle?: ReadyRpcThrottle;
   /** Freeze the canonical head, or one explicitly requested historical cutoff. */
   readonly freezeCanonicalHead: (
     requestedBlock?: number,
@@ -729,7 +732,9 @@ export async function rebuildUniverse(
           checkpoint: attestationCheckpoint,
           cutoff,
         });
+        input.readyThrottle?.assertOpen();
       } catch (error) {
+        if (input.readyThrottle?.isThrottle(error)) throw error;
         log(
           "universe rebuild memo revalidation failed for " + candidateKey +
             ": " + (error instanceof Error ? error.message : String(error)),
@@ -786,6 +791,7 @@ export async function rebuildUniverse(
       cutoff,
       ...(evidenceRef === undefined ? {} : { evidenceRef }),
     });
+    input.readyThrottle?.assertOpen();
     if (result.status === "verified") {
       const memo = input.sealDurableVerifiedMemo({
         candidate,
@@ -849,8 +855,18 @@ export async function rebuildUniverse(
   if (!Number.isSafeInteger(requestedConcurrency) || requestedConcurrency < 1) {
     throw new Error("universe rebuild attestation concurrency is invalid");
   }
+  input.readyThrottle?.limitConcurrency(requestedConcurrency);
   try {
-    await Promise.all(Array.from({
+    if (input.readyThrottle) {
+      try {
+        await input.readyThrottle.runCandidates(candidates, processCandidate, recordAttestationProgress);
+      } catch (error) {
+        log("universe rebuild attestation stopped: processed=" + completedPending +
+          "/" + candidates.length + " pending=" + (candidates.length - completedPending) +
+          " error=" + (error instanceof Error ? error.message : String(error)));
+        throw error;
+      }
+    } else await Promise.all(Array.from({
       length: Math.min(requestedConcurrency, Math.max(1, candidates.length)),
     }, async () => {
       while (true) {
@@ -1033,14 +1049,8 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
   let completed = 0;
   let refreshed = 0;
   let stop = false;
-  const workers = await Promise.allSettled(Array.from({
-    length: Math.min(concurrency, oldMemos.length),
-  }, async () => {
-    try {
-      for (;;) {
-      if (stop) return;
-      const index = next++;
-      if (index >= oldMemos.length) return;
+  const refreshOne = async (index: number): Promise<void> => {
+      input.readyThrottle?.assertOpen();
       const old = oldMemos[index]!;
       const candidate = decodeCandidate(old.candidateSnapshot);
       if (input.familyCandidateKey(candidate) !== old.familyCandidateKey) {
@@ -1052,12 +1062,14 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
       const reusable = input.isReadyMemoDefinitionCurrent === undefined
         ? await input.findReusableMemo({ candidate, checkpoint, cutoff })
         : input.isReadyMemoDefinitionCurrent(old) ? old : null;
+      input.readyThrottle?.assertOpen();
       if (reusable !== null) {
         memos[index] = reusable;
       } else {
         if (stop) return;
         let attempt = 1;
         let result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
+        input.readyThrottle?.assertOpen();
         while (result.status !== "verified") {
           const failure = `ready refresh ${old.familyCandidateKey}: attempt=${attempt}/${READY_REFRESH_MAX_ATTEMPTS} ${result.status} ${result.reasonCode}`;
           input.log?.(failure);
@@ -1068,6 +1080,7 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
           if (stop) return;
           attempt++;
           result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
+          input.readyThrottle?.assertOpen();
         }
         memos[index] = input.sealDurableVerifiedMemo({
           candidate, result: result.result, proofSource: cutoff,
@@ -1079,14 +1092,24 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
       if (completed === 1 || completed % 100 === 0 || completed === oldMemos.length) {
         input.log?.(`ready instance refresh ${completed}/${oldMemos.length} reattested=${refreshed}`);
       }
-      }
-    } catch (error) {
-      stop = true;
-      throw error;
-    }
-  }));
-  const failed = workers.find((worker) => worker.status === "rejected");
-  if (failed?.status === "rejected") throw failed.reason;
+  };
+  if (input.readyThrottle) {
+    input.readyThrottle.limitConcurrency(concurrency);
+    await input.readyThrottle.runCandidates(oldMemos.map((_, index) => index), refreshOne, () => {});
+  } else {
+    const workers = await Promise.allSettled(Array.from({ length: Math.min(concurrency, oldMemos.length) }, async () => {
+      try {
+        for (;;) {
+          if (stop) return;
+          const index = next++;
+          if (index >= oldMemos.length) return;
+          await refreshOne(index);
+        }
+      } catch (error) { stop = true; throw error; }
+    }));
+    const failed = workers.find(worker => worker.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
+  }
   if (memos.every((memo, index) => memo.memoFingerprint === oldMemos[index]!.memoFingerprint)) {
     await input.assertCanonicalHead(cutoff);
     if ((await input.store.load())?.revision !== checkpoint.revision) {
@@ -1610,23 +1633,19 @@ function hashCandidateSet(
 function hashUniverseCandidatePartition(
   candidatesByKey: Readonly<Record<string, unknown>>,
 ): string {
-  return createDigest(
-    "universe-candidate-partition-v1:" + canonicalJson(candidatesByKey),
-  );
+  return canonicalJsonFingerprint(candidatesByKey, "universe-candidate-partition-v1:");
 }
 
 export function hashReadyPublicationSet(catalogSnapshot: unknown): string {
-  return createDigest(
-    "publications-v2:" + canonicalJson(catalogSnapshot),
-  );
+  return canonicalJsonFingerprint(catalogSnapshot, "publications-v2:");
 }
 
 export function hashReadyGraphSnapshot(graph: unknown): string {
-  return createDigest("graph-v2:" + canonicalJson(graph));
+  return canonicalJsonFingerprint(graph, "graph-v2:");
 }
 
 export function hashReadyCatalogSnapshot(catalog: unknown): string {
-  return createDigest("catalog-v1:" + canonicalJson(catalog));
+  return canonicalJsonFingerprint(catalog, "catalog-v1:");
 }
 
 function createDigest(seed: string): string {

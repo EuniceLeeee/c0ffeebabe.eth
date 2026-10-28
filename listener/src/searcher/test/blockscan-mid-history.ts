@@ -12,6 +12,55 @@ import type { RouteVenueMid } from "../venues/mid-readers.js";
 import type { EffectiveMidRow, EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
 import { EffectiveMidHistoryReplay } from "../blockscan-effective-mid-history.js";
 
+test("large production-sized raw and effective baselines restore every direction across a delta", async () => {
+  await withTempDir(async directory => {
+    const eventsPath = join(directory, "events.jsonl"), historyPath = join(directory, "mids.jsonl");
+    await writeFile(eventsPath, "");
+    const sink = await initBlockScanEnumerationSolverTelemetry({ path: join(directory, "routes.jsonl"),
+      midHistoryPath: historyPath, eventsPath, runId: "large-price-history", minFreeBytes: 1 });
+    const rows = new Map<string, EffectiveMidRow>(), raw = new Map<string, RouteVenueMid>();
+    const address = (n: number) => `0x${n.toString(16).padStart(40, "0")}`;
+    const source = { number: 300, hash: blockHash(300), generation: 300 };
+    for (let i = 0; i < 150_001; i++) {
+      const tokenIn = address(1), tokenOut = address(i + 2), instanceKey = `fixture:${address(i + 3)}`;
+      const edgeId = ["fixture-production-direction", address(i + 3), tokenIn, tokenOut, "0x" + "a".repeat(64)].join("\u001f");
+      const amountIn = EFFECTIVE_UNIT + BigInt(i), amountOut = amountIn * 2n;
+      raw.set(edgeId, mid("v2", 2, 30, amountIn, amountOut));
+      rows.set(edgeId, { edgeId, instanceKey, tokenIn, tokenOut, amountIn, amountOut,
+        effectiveMid: 2, status: "quoted", quotedAt: source });
+    }
+    const first: EffectiveMidSnapshot = { ...effectiveSnapshot(300), source, rows };
+    const keepAlive = setInterval(() => {}, 1000);
+    try {
+      sink.recordPricing(baseline(300, raw, first));
+      const until = Date.now() + 60_000;
+      while (sink.telemetry().acknowledged < 1 && !sink.telemetry().failed && Date.now() < until)
+        await new Promise(resolve => setTimeout(resolve, 20));
+      assert.equal(sink.telemetry().failed, false);
+      assert.equal(sink.telemetry().acknowledged, 1);
+      const key = rows.keys().next().value!, next = new Map(rows), previous = rows.get(key)!;
+      next.set(key, { ...previous, amountOut: previous.amountOut! + 1n,
+        quotedAt: { number: 301, hash: blockHash(301), generation: 301 } });
+      sink.recordPricing(delta({ previousBlock: 300, block: 301, updates: [], removals: [], mids: raw,
+        effectiveMids: { ...first, source: { number: 301, hash: blockHash(301), generation: 301 }, rows: next } }));
+      await sink.shutdown(30_000);
+      const records = await readJsonl(historyPath), replay = new EffectiveMidHistoryReplay();
+      assert.equal(records.length, 2); assert.equal(sink.telemetry().droppedMidPublications, 0);
+      replay.apply(records[0]!.effective_mids);
+      const restored = replay.apply(records[1]!.effective_mids)!;
+      const restoredRows = new Map(restored.rows as Array<[string, JsonRecord]>);
+      assert.equal(restoredRows.size, rows.size);
+      for (const [id, expected] of next) {
+        const actual = restoredRows.get(id)!;
+        assert.equal(actual.edge_id, expected.edgeId); assert.equal(actual.instance_key, expected.instanceKey);
+        assert.equal(actual.token_in, expected.tokenIn); assert.equal(actual.token_out, expected.tokenOut);
+        assert.equal(actual.amount_in, expected.amountIn!.toString()); assert.equal(actual.amount_out, expected.amountOut!.toString());
+        assert.equal(actual.status, expected.status); assert.deepEqual(actual.quoted_at, expected.quotedAt);
+      }
+    } finally { await sink.shutdown(1000); clearInterval(keepAlive); }
+  });
+});
+
 test("writes one baseline followed by compact ordered deltas", async () => {
   await withTempDir(async (directory) => {
     const historyPath = join(directory, "mids.jsonl");

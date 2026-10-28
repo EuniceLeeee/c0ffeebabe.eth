@@ -213,6 +213,43 @@ test("current pricing is fresh, fee-inclusive, source-fenced and quotes its sizi
     assert.deepEqual(plugin.pricing.mutation!.affectedStateKeys({ descriptor: pricing, routes: [route], observation: initialized() }), [route.routeKey]);
   }
 });
+test("asymmetric depth retries fresh forward fills once without changing ordinary probes", () => {
+  // Synthetic regression shaped like N26088150 ETH/USDT; not an EVM receipt.
+  const d = descriptor(), route = plugin.routes.project({ descriptor: d })[1];
+  const draft = plugin.pricing.compileDraft({ descriptor: d, routes: [route], stateKey: route.routeKey });
+  const pricing = plugin.pricing.finalizePricingDescriptor({ draft, sharedBindings: [] });
+  const current = { descriptor: pricing, routes: [route], source: SOURCE };
+  const initialResults = [result("current-unit-in", quoteData(true, 1_000_000n, 373n)),
+    result("current-unit-out", quoteData(false, 100_000_000n, 847_946_792n))];
+  const first = plugin.pricing.current.buildDependentProgram!({ current, completedRound: 0, initialResults, priorEvidence: [] });
+  assert(first);
+  const requests = (program: typeof first) => program!.requests.map(r => {
+    assert(r.kind === "eth-call"); return BigInt(ekuboRouterIface.decodeFunctionData("quote", r.data)[2]);
+  });
+  assert.deepEqual(requests(first), [21_198n, 211_986_698n]);
+  const partial = first.decode([result("current-small", quoteData(true, 21_198n, 42_396n)),
+    result("current-depth", quoteData(true, 29_115_356n, 58_230_712n))]);
+  assert.throws(() => plugin.pricing.current.decodeSnapshot({ descriptor: pricing, initialResults, dependentEvidence: [partial] }), /partial/);
+  const next = plugin.pricing.current.buildDependentProgram!({ current, completedRound: 1, initialResults, priorEvidence: [partial] });
+  assert(next); assert.deepEqual(requests(next), [21_198n, 7_278_839n]);
+  const answers = next.requests.map((r, i) => result(r.id, quoteData(true, requests(next)[i], requests(next)[i] * 2n)));
+  const final = next.decode(answers);
+  const snapshot = plugin.pricing.current.decodeSnapshot({ descriptor: pricing, initialResults, dependentEvidence: [partial, final] });
+  assert.equal(snapshot.depthIn, 7_278_839n); assert.equal(snapshot.amountIn, 21_198n);
+  assert.equal(plugin.pricing.current.buildDependentProgram!({ current, completedRound: 2, initialResults, priorEvidence: [partial, final] }), null);
+  assert.throws(() => plugin.pricing.current.decodeSnapshot({ descriptor: pricing, initialResults,
+    dependentEvidence: [partial, next.decode(answers.map(r => r.id === "current-depth-retry"
+      ? result(r.id, quoteData(true, 7_278_838n, 14_557_676n)) : r))] }), /partial/);
+  const zero = first.decode([result("current-small", quoteData(true, 21_198n, 42_396n)), result("current-depth", quoteData(true, 0n, 0n))]);
+  assert.throws(() => plugin.pricing.current.buildDependentProgram!({ current, completedRound: 1, initialResults, priorEvidence: [zero] }));
+  const full = first.decode([result("current-small", quoteData(true, 21_198n, 42_396n)),
+    result("current-depth", quoteData(true, 211_986_698n, 423_973_396n))]);
+  assert.equal(plugin.pricing.current.buildDependentProgram!({ current, completedRound: 1, initialResults, priorEvidence: [full] }), null);
+  assert.throws(() => plugin.pricing.current.decodeSnapshot({ descriptor: pricing, initialResults, dependentEvidence: [full, final] }), /unexpected/);
+  assert.throws(() => plugin.pricing.current.buildDependentProgram!({ current: { ...current, source: { ...SOURCE, hash: word(9n) } },
+    completedRound: 1, initialResults, priorEvidence: [partial] }), /source/);
+});
+
 test("partial unit sizing hints never escape as current mids or capacity", () => {
   const route = routes[0];
   const draft = plugin.pricing.compileDraft({ descriptor: d, routes: [route], stateKey: route.routeKey });

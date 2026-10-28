@@ -1,7 +1,7 @@
 import { localZeroExactMethod, type ExactQuoteInput, type ExactQuoteSemantics, type ExactRequestProgram, type ExactTrialStateRef } from "../../adapter-family-plugin.js";
 import { hashCanonical } from "../../canonical-value.js";
 import { nativeBalanceState, storageState, tokenBalanceState, tokenSupplyState } from "../../local-state-models/resources.js";
-import { checked, lower, sourceEqual, WETH } from "./codec.js";
+import { checked, lower, MODEL, sourceEqual, WETH } from "./codec.js";
 import { staticBinding } from "./instance.js";
 import { assertRoute } from "./routes.js";
 import { decodeState, quoteAmount, quoteTransition, stateRequests } from "./state.js";
@@ -18,7 +18,7 @@ function quoted(i: Input, amountOut: bigint) {
     binding: i.route.bindingRef.fingerprint, routeKey: i.route.routeKey, amountIn: i.amountIn, amountOut } };
 }
 function trialRef(d: Descriptor): ExactTrialStateRef {
-  return { key: `pool:${lower(d.pool)}`, schema: "anyswap-v1-reserves:v1", binding: hashCanonical(staticBinding(d)),
+  return { key: `pool:${lower(d.pool)}`, schema: "univ1-reserves:v2", binding: hashCanonical(staticBinding(d)),
     dependencies: [storageState(d.pool), nativeBalanceState(d.pool), tokenBalanceState(d.token, d.pool)] };
 }
 function trialState(i: Input): State | undefined {
@@ -32,15 +32,15 @@ function trialState(i: Input): State | undefined {
   return state;
 }
 function quoteState(i: Input, state: State) {
-  if (!i.trialState || i.amountIn === 0n) return quoted(i, quoteAmount(state, i.route.buy, i.amountIn));
-  const { amountOut, state: next } = quoteTransition(state, i.route.buy, i.amountIn);
+  if (!i.trialState || i.amountIn === 0n) return quoted(i, quoteAmount(state, i.route.buy, i.amountIn, i.descriptor.model));
+  const { amountOut, state: next } = quoteTransition(state, i.route.buy, i.amountIn, i.descriptor.model);
   const d = i.descriptor;
   return { ...quoted(i, amountOut), stateChanges: [{ ref: trialRef(d), value: next }],
     // A fee payment can touch another model's inventory. Publishing only this
     // exchange's reserves would incorrectly make that other model independent.
     // Wrapping/unwrapping also changes WETH backing and executor balances.
     stateEffects: [storageState(d.pool), nativeBalanceState(d.pool), tokenBalanceState(d.token, d.pool),
-      i.route.buy ? nativeBalanceState(d.issuer) : tokenBalanceState(d.token, d.issuer),
+      ...(d.model === MODEL ? [i.route.buy ? nativeBalanceState(d.issuer) : tokenBalanceState(d.token, d.issuer)] : []),
       nativeBalanceState(i.executor), tokenBalanceState(d.token, i.executor), tokenBalanceState(WETH, i.executor),
       nativeBalanceState(WETH), tokenSupplyState(WETH)] };
 }

@@ -10,6 +10,7 @@ import { extensionRegistrationSlot, validateExtensionProof, EKUBO_SUPPORTED_CORE
 import { ekuboNomination } from "../nomination.js";
 import { INIT_ID, MULTIHOP_ID } from "../discovery.js";
 import { EKUBO_ACTION_ID } from "../manifest.js";
+import { applyQuotedAssetBoundary, applyRuntimeAssetBoundary } from "../../../../execution-asset-boundary.js";
 import { descriptor, EXECUTOR, fixture, identity, initialized, KEY, result, SOURCE, word } from "./fixtures.js";
 
 // Calldata semantics independently extracted from TX 03d6a2ef…73c72 at N26029876.
@@ -100,7 +101,7 @@ test("TWAMM descriptors bind supported behavior; no unknown extension can projec
   assert.notEqual(d.poolId, another.poolId);
   assert.equal(plugin.routes.project({ descriptor: another }).length, 2);
 });
-test("native input emits exact WETH withdrawal + equal CALL_VALUE, ERC20 output remains dynamic", () => {
+test("native input emits only equal CALL_VALUE; common issuer supplies WETH conversion", () => {
   const d = syntheticDescriptor(NATIVE_KEY), routes = plugin.routes.project({ descriptor: d });
   assert.equal(routes.length, 2);
   const route = routes[0], amountIn = 123456789n;
@@ -111,14 +112,17 @@ test("native input emits exact WETH withdrawal + equal CALL_VALUE, ERC20 output 
   const fragment = plugin.execution.buildFragment(input);
   assert.deepEqual(fragment.requirements, []);
   const encoded = plugin.actionAdapters[0].encode(fragment.nodes[0], EXECUTOR, new Uint8Array());
-  assert.equal(encoded[0], 0);
-  assert.equal(ethers.hexlify(encoded.slice(1, 21)), route.tokenIn.toLowerCase());
-  const weth = new ethers.Interface(["function withdraw(uint256)"]);
-  assert.equal(weth.decodeFunctionData("withdraw", encoded.slice(24, 60))[0], amountIn);
-  assert.equal(encoded[60], 1);
-  assert.equal(BigInt(ethers.hexlify(encoded.slice(81, 93))), amountIn);
-  const swap = ekuboRouterIface.decodeFunctionData("swap", encoded.slice(96));
+  assert.deepEqual(route.executionAssets, { input: "native", output: "erc20" });
+  assert.equal(encoded[0], 1);
+  assert.equal(ethers.hexlify(encoded.slice(1, 21)), EKUBO_ROUTER);
+  assert.equal(BigInt(ethers.hexlify(encoded.slice(21, 33))), amountIn);
+  const swap = ekuboRouterIface.decodeFunctionData("swap", encoded.slice(36));
   assert.equal(swap[2], amountIn); assert.equal(swap[5], 456n); assert.equal(String(swap[6]).toLowerCase(), EXECUTOR);
+  const boundary = applyQuotedAssetBoundary({ route, executor: EXECUTOR, amountIn, minimum: 456n, fragment });
+  assert.equal(boundary.nodes[0].adapterId, "execution-asset-boundary");
+  assert.deepEqual(boundary.nodes[0].children, fragment.nodes);
+  const leg = plugin.execution.buildRuntimeLeg!(input); assert(leg);
+  assert.notEqual(applyRuntimeAssetBoundary({ route, executor: EXECUTOR, leg }).program, leg.program);
   assert.throws(() => plugin.execution.buildFragment({ ...input, amountIn: 1n << 96n }), /uint96/);
 });
 function nativeOutputInput(quotedAmountOut = 19920056031913n, minAmountOut = quotedAmountOut, amountIn = 123456789n) {
@@ -135,18 +139,22 @@ function assertNativeOutputEncoding(input: ReturnType<typeof nativeOutputInput>)
   assert.equal(plugin.routes.projectGraph({ descriptor: input.descriptor, route: input.route }).executionTarget, EKUBO_ROUTER);
   assert.deepEqual(fragment.requirements, [{ kind: "approve", token: input.route.tokenIn, spender: EKUBO_ROUTER, amount: MAX_UINT }]);
   const encoded = plugin.actionAdapters[0].encode(fragment.nodes[0], EXECUTOR, new Uint8Array());
-  assert.equal(encoded[0], 0x0b);
-  assert.equal(Number(BigInt(ethers.hexlify(encoded.slice(1, 4)))), encoded.length - 4);
-  const body = encoded.slice(4);
+  assert.deepEqual(input.route.executionAssets, { input: "erc20", output: "native" });
+  const body = encoded;
   // Exactly one no-value Router CALL: no fixed deposit/withdraw or CALL_VALUE.
   assert.equal(body[0], 0x00);
   assert.equal(ethers.hexlify(body.slice(1, 21)), EKUBO_ROUTER);
   assert.equal(Number(BigInt(ethers.hexlify(body.slice(21, 24)))), body.length - 24);
   const expectedData = ekuboRouterIface.encodeFunctionData("swap", [NATIVE_KEY, true, input.amountIn, 0n, 0n, input.minAmountOut, EXECUTOR]);
   assert.equal(ethers.hexlify(body.slice(24)), expectedData);
+  const boundary = applyQuotedAssetBoundary({ route: input.route, executor: EXECUTOR, amountIn: input.amountIn,
+    minimum: input.minAmountOut, fragment });
+  assert.equal(boundary.nodes[0].adapterId, "execution-asset-boundary");
+  assert.equal(boundary.nodes[0].params.nativeOutput, true);
+  assert.equal(boundary.nodes[0].params.minAmountOut, input.minAmountOut);
   return encoded;
 }
-test("native output encodes only an actual-delta wrapper around the explicit-receiver Router call", () => {
+test("native output emits the raw explicit-receiver Router call inside the common boundary", () => {
   assertNativeOutputEncoding(nativeOutputInput());
 });
 test("native output encoding does not fix wrap quantity to a quote one wei below or above receipt", () => {
@@ -186,6 +194,11 @@ test("native-output wrapper preserves binding, direction and receiver rejection"
   }
   assert.throws(() => plugin.routes.projectGraph({ descriptor: input.descriptor,
     route: { ...input.route, isToken1: false } }), /direction|descriptor/);
+  for (const executionAssets of [undefined, { input: "native" as const, output: "erc20" as const }]) {
+    const route = { ...input.route, executionAssets };
+    assert.throws(() => plugin.execution.buildFragment({ ...input, route }), /descriptor/);
+    assert.throws(() => plugin.execution.buildRuntimeLeg!({ ...input, route }), /descriptor/);
+  }
 });
 test("existing Family-level cadence covers vanilla AND TWAMM; extension dependency is declared", () => {
   assert.equal(plugin.pricing.refreshPolicy, "each-block");

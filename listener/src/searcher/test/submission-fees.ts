@@ -60,7 +60,7 @@ try {
     signMessage: async () => "mock-auth",
   } as unknown as ethers.Wallet;
   const provider = { getBalance: async () => { reads++; return input.walletBalance; } } as unknown as ethers.JsonRpcProvider;
-  globalThis.fetch = async () => { sends++; return new Response('{"result":{"bundleHash":"fixture"}}'); };
+  globalThis.fetch = async () => { sends++; return new Response(JSON.stringify({ id: 1, result: { bundleHash: "0x" + "cd".repeat(32) } })); };
   const router = createBundleRouter({ dryRun: false, wallet, provider, botvmAddress: "0x" + "22".repeat(20),
     defaultGasUsed: 100_000, evidence: row => rows.push(row), bribeGasBasis: "measured-gas" });
   for (const mode of ["standalone", "victim-bundle", "hash-only"] as const) {

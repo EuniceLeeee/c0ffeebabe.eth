@@ -23,7 +23,8 @@ const DEFAULT_MAX_ROUTES = 2_048;
 const DEFAULT_MAX_LEGS = 8;
 const DEFAULT_MAX_ROUTE_FILE_BYTES = 10 * 1024 * 1024 * 1024;
 const DEFAULT_MAX_MID_FILE_BYTES = 16 * 1024 * 1024 * 1024;
-const DEFAULT_MAX_MID_RECORD_BYTES = 128 * 1024 * 1024;
+// One full raw+effective baseline for large Ready graphs, then compact deltas.
+const DEFAULT_MAX_MID_RECORD_BYTES = 256 * 1024 * 1024;
 const DEFAULT_SHUTDOWN_TIMEOUT_MS = 2_000;
 const ROUTE_LOCATOR_CACHE_ENTRIES = 2_048;
 

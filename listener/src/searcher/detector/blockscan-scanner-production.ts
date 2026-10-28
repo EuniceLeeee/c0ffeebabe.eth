@@ -14,6 +14,7 @@ import {
   scanBlockStateFromResolvedMids,
   type BlockScanCoreConfig,
   type BlockScanOutcome,
+  type BlockScanScanTiming,
   type NaturalBlockScanSelectionProvenance,
 } from "./blockscan-scanner-core.js";
 
@@ -30,6 +31,18 @@ export interface ProductionBlockScanInput {
   readonly edgeEligible?: (edge: TokenEdge) => boolean;
   readonly poolRevertExcludedEdge?: (edge: TokenEdge) => boolean;
   readonly captureCoarseEnumeration?: boolean;
+  readonly onTiming?: (timing: ProductionBlockScanTiming) => void;
+}
+
+export interface ProductionBlockScanTiming {
+  readonly sourceBlock: number;
+  readonly validationMs: number;
+  readonly pricingValidation: AtomicBlockScanPricingValidationTiming | null;
+  readonly viewMs: number;
+  readonly edgeSelectionMs: number;
+  readonly scan: BlockScanScanTiming | null;
+  readonly resultMs: number;
+  readonly totalMs: number;
 }
 
 export interface ProductionBlockScanOutcome extends BlockScanOutcome {
@@ -56,16 +69,22 @@ export interface AtomicBlockScanPricingValidationTiming {
 export function detectProductionBlockScanOpportunities(
   input: ProductionBlockScanInput,
 ): ProductionBlockScanOutcome {
-  assertAtomicRuntime(input.runtime);
+  const started = performance.now();
+  let pricingValidation: AtomicBlockScanPricingValidationTiming | null = null;
+  let scanTiming: BlockScanScanTiming | null = null;
+  assertAtomicRuntime(input.runtime, timing => { pricingValidation = timing; });
+  const validated = performance.now();
   const eth = effectiveEthPricing(input.runtime.pricing, input.cfg.ethSignalPairsPerToken, input.cfg.allowRepeatedPools);
+  const viewed = performance.now();
   const resolvedEdgeKeys = new Set(
     input.runtime.pricing.coverage.resolvedEdgeKeys,
   );
+  const edges = input.runtime.graph.edges.filter(
+    (edge) => !scannerConsumesEdge(edge) || resolvedEdgeKeys.has(blockScanEdgeKey(edge)),
+  );
+  const selected = performance.now();
   const outcome = scanBlockStateFromResolvedMids({
-    edges: input.runtime.graph.edges.filter(
-      (edge) => !scannerConsumesEdge(edge) ||
-        resolvedEdgeKeys.has(blockScanEdgeKey(edge)),
-    ),
+    edges,
     sourceBlock: input.runtime.sourceBlock,
     swapTouched: input.swapTouched,
     cfg: input.cfg,
@@ -76,8 +95,10 @@ export function detectProductionBlockScanOpportunities(
     edgeEligible: input.edgeEligible,
     poolRevertExcludedEdge: input.poolRevertExcludedEdge,
     captureCoarseEnumeration: input.captureCoarseEnumeration,
+    onTiming: timing => { scanTiming = timing; },
   });
-  return Object.freeze({
+  const scanned = performance.now();
+  const result = Object.freeze({
     ...outcome,
     completeness: input.runtime.completeness,
     incompleteFamilyIds: input.runtime.pricing.incompleteFamilyIds,
@@ -88,6 +109,20 @@ export function detectProductionBlockScanOpportunities(
       input.cfg.maxCandidates,
     ),
   });
+  const finished = performance.now();
+  const timing: ProductionBlockScanTiming = {
+    sourceBlock: input.runtime.sourceBlock,
+    validationMs: validated - started, pricingValidation,
+    viewMs: viewed - validated, edgeSelectionMs: selected - viewed,
+    scan: scanTiming, resultMs: finished - scanned, totalMs: finished - started,
+  };
+  try {
+    input.onTiming?.(timing);
+    if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1") {
+      console.log(`[searcher/blockscan-enumeration-timing] ${JSON.stringify(timing)}`);
+    }
+  } catch { /* Observability must not affect candidate selection. */ }
+  return result;
 }
 
 export function assertAtomicBlockScanRuntime(
@@ -96,9 +131,10 @@ export function assertAtomicBlockScanRuntime(
   assertAtomicRuntime(runtime);
 }
 
-function assertAtomicRuntime(runtime: AdapterRuntimeSnapshot): void {
+function assertAtomicRuntime(runtime: AdapterRuntimeSnapshot,
+  onPricingTiming?: (timing: AtomicBlockScanPricingValidationTiming) => void): void {
   const { graph, pricing, funding } = runtime;
-  assertAtomicBlockScanPricingView(graph, pricing);
+  assertAtomicBlockScanPricingView(graph, pricing, onPricingTiming);
   assertEqualNumber("generation", [
     runtime.generation,
     graph.generation,
@@ -217,7 +253,7 @@ export function assertAtomicBlockScanPricingView(
     coverage.resolvedStateKeyHash,
     coverage.unresolvedStateKeyHash,
   );
-  assertCoverageIntegrity(
+  const readSets = assertCoverageIntegrity(
     "read keys",
     coverage.expectedReadKeys,
     coverage.resolvedReadKeys,
@@ -226,7 +262,7 @@ export function assertAtomicBlockScanPricingView(
     coverage.resolvedReadKeyHash,
     coverage.unresolvedReadKeyHash,
   );
-  assertCoverageIntegrity(
+  const edgeSets = assertCoverageIntegrity(
     "edge keys",
     coverage.expectedEdgeKeys,
     coverage.resolvedEdgeKeys,
@@ -239,10 +275,10 @@ export function assertAtomicBlockScanPricingView(
   );
   const coverageFinishedAtMs = Date.now();
 
-  const expectedEdgeSet = new Set(coverage.expectedEdgeKeys);
-  const resolvedReadSet = new Set(coverage.resolvedReadKeys);
-  const resolvedEdgeSet = new Set(coverage.resolvedEdgeKeys);
-  const unavailableEdgeSet = new Set(coverage.unavailableEdgeKeys);
+  const expectedEdgeSet = edgeSets.expected;
+  const resolvedReadSet = readSets.resolved;
+  const resolvedEdgeSet = edgeSets.resolved;
+  const unavailableEdgeSet = edgeSets.unavailable;
   if (
     pricing.coverageByReadKey.size !== coverage.expectedReadKeys.length ||
     pricing.freshnessByReadKey.size !== coverage.resolvedReadKeys.length ||
@@ -300,14 +336,31 @@ export function assertAtomicBlockScanPricingView(
     );
   }
   const midsFinishedAtMs = Date.now();
-  const pricingEdges = graph.edges.filter(edge => scannerConsumesEdge(edge) ||
-    pricing.pricingStateKeyByEdgeKey?.has(blockScanEdgeKey(edge)));
-  const pricingEdgeKeys = pricingEdges.map(blockScanEdgeKey);
+  // Coverage's expected hash has already been verified above. Prove exact set
+  // equality against the actual graph, including duplicate rejection, instead
+  // of sorting/hashing that same set again. Never trust the graph header alone.
+  let pricingEdgeCount = 0;
+  const scannerEdgeKeys: string[] = [];
+  let invalidPricingEdge = false;
+  for (const edge of graph.edges) {
+    const scanner = scannerConsumesEdge(edge);
+    const key = blockScanEdgeKey(edge);
+    if (scanner) scannerEdgeKeys.push(key);
+    if (!scanner && !pricing.pricingStateKeyByEdgeKey?.has(key)) continue;
+    // Consume only this invocation's validation set, never snapshot data.
+    // Missing membership also detects a duplicate after its first occurrence.
+    if (!expectedEdgeSet.delete(key)) invalidPricingEdge = true;
+    pricingEdgeCount++;
+  }
+  const exactPricingGraph = !invalidPricingEdge && expectedEdgeSet.size === 0;
+  // Scanner keys are a subset of pricing keys. Equal cardinality after exact
+  // set validation proves equality; mixed graphs retain their own scanner hash.
+  const scannerHash = exactPricingGraph && scannerEdgeKeys.length === pricingEdgeCount
+    ? coverage.expectedEdgeKeyHash : exactSetHash(scannerEdgeKeys);
   if (
-    pricingEdgeKeys.length !== expectedEdgeSet.size ||
-    exactSetHash(pricingEdgeKeys) !== coverage.expectedEdgeKeyHash ||
-    graph.edges.filter(scannerConsumesEdge).length !== graph.scannerEdgeCount ||
-    exactSetHash(graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey)) !== graph.scannerEdgeKeyHash
+    !exactPricingGraph ||
+    scannerEdgeKeys.length !== graph.scannerEdgeCount ||
+    scannerHash !== graph.scannerEdgeKeyHash
   ) {
     throw new Error(
       "production scanner missing current-N mid or pricing coverage does not exactly match its graph",
@@ -342,7 +395,7 @@ function assertCoverageIntegrity(
   unresolvedHash: string,
   unavailable: readonly string[] = [],
   unavailableHash: string = exactSetHash([]),
-): void {
+): { expected: Set<string>; resolved: Set<string>; unavailable: Set<string> } {
   if (
     canonicalSetHash(label, expected) !== expectedHash ||
     canonicalSetHash(label, resolved) !== resolvedHash ||
@@ -372,6 +425,7 @@ function assertCoverageIntegrity(
   ) {
     throw new Error(`production scanner rejected non-partitioned ${label} coverage`);
   }
+  return { expected: expectedSet, resolved: resolvedSet, unavailable: unavailableSet };
 }
 
 /**

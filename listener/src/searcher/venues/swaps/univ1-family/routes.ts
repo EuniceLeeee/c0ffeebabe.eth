@@ -1,13 +1,15 @@
 import type { RouteProjectionSemantics } from "../../adapter-family-plugin.js";
 import { routeKey } from "../../adapter-family-identifiers.js";
 import { hashCanonical } from "../../canonical-value.js";
-import { IMPLEMENTATION, MODEL, WETH, same } from "./codec.js";
+import { ethers } from "ethers";
+import { implementationModel, MODEL, WETH, same } from "./codec.js";
 import { staticBinding } from "./instance.js";
 import { ACTION, ID, LINEAGE } from "./manifest.js";
 import type { Descriptor, Route } from "./types.js";
 const key = (pool: string, buy: boolean) => `${ID}:${pool}:${buy ? "eth-token" : "token-eth"}`;
 export function assertRoute(d: Descriptor, r: Route): void {
-  if (d.familyId !== ID || d.lineageId !== LINEAGE || d.model !== MODEL || d.implementation !== IMPLEMENTATION ||
+  if (d.familyId !== ID || d.lineageId !== LINEAGE || implementationModel(d.implementationCodeHash) !== d.model ||
+      (d.model === MODEL ? d.issuer === ethers.ZeroAddress : d.issuer !== ethers.ZeroAddress) ||
       d.instanceKey !== d.pool || r.familyId !== ID || r.lineageId !== LINEAGE || r.instanceKey !== d.instanceKey ||
       r.pool !== d.pool || typeof r.buy !== "boolean" || r.routeKey !== key(d.pool, r.buy) ||
       !same(r.tokenIn, r.buy ? WETH : d.token) || !same(r.tokenOut, r.buy ? d.token : WETH) ||

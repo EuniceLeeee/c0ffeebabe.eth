@@ -31,6 +31,13 @@ export function resolveAllowRepeatedTokens(raw?: string): boolean {
   if (raw === "0" || raw === "1") return raw === "1";
   throw new Error("SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED must be 0 or 1");
 }
+/** Independent admission policy: enumerate repeated tokens, then keep only the
+ * cycles whose repeats are re-introduced by a protocol edge. */
+export function resolveAllowProtocolRepeats(raw?: string): boolean {
+  if (raw === undefined) return BLOCKSCAN_ENUMERATION_DEFAULTS.allowProtocolRepeats;
+  if (raw === "0" || raw === "1") return raw === "1";
+  throw new Error("SEARCHER_BLOCKSCAN_ALLOW_PROTOCOL_REPEATS_ENABLED must be 0 or 1");
+}
 export function resolvePairedEnumerationMethod(value?: string): PairedEnumerationMethod {
   if (value === undefined) return BLOCKSCAN_ENUMERATION_DEFAULTS.method;
   if (value === "joint-dfs") return value;

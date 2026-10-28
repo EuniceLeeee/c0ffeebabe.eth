@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ethers } from "ethers";
-import { RuntimeAmountProgram, runtimeAmountFlowAdapter } from "../../adapters/runtime-amount-program.js";
+import { RuntimeAmountProgram, runtimeAmountFlowAdapter, runtimeSettlementFlowHash } from "../../adapters/runtime-amount-program.js";
 import { register } from "../../adapters/registry.js";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { loadBotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
@@ -65,12 +65,14 @@ assert.equal(revertedRuntimeHop(plan, [edge(addr(13)), edges[1]!], trace, execut
 
 const source = { number: 100, hash: "0x" + "aa".repeat(32), generation: 1 };
 register(runtimeAmountFlowAdapter);
-const executionInput = buildEthSimulateV1ExecutionInput({ source, owner, executor,
+const inputContext = { source, owner, executor,
   header: { number: 100, hash: source.hash, parentHash: ethers.ZeroHash,
     timestamp: 1800000000, baseFeePerGas: 1n, gasUsed: 30000000n, gasLimit: 60000000n, transactionHashes: [] },
-  profitToken: a, scriptHex: ethers.hexlify(compilePlan(plan.root, executor)),
+  profitToken: a,
   executorRuntimeCode: loadBotVmRuntimeCode(owner), diagnosticKey: "0x" + "34".repeat(32),
-});
+};
+const executionInput = buildEthSimulateV1ExecutionInput({ ...inputContext,
+  scriptHex: ethers.hexlify(compilePlan(plan.root, executor)) });
 assert.equal(executionInput.schemaVersion, 4);
 assert.deepEqual(validateEthSimulateV1ExecutionInput(JSON.parse(JSON.stringify(executionInput))), executionInput);
 const withWrongStorage = JSON.parse(JSON.stringify(executionInput));
@@ -90,6 +92,28 @@ const directEvidence = (hop: number, reason = "0x", target = edges[hop]!.target)
 };
 const evidence = directEvidence(0);
 assert.equal(directRevertedRuntimeHop(plan, edges, evidence)?.hopIndex, 0);
+// Chain diagnosis retains the production bytecode and the same authenticated
+// hop proof. Replaying a naked RuntimeHopFailed without the key stays rejected.
+const chainInput = buildEthSimulateV1ExecutionInput({ ...inputContext,
+  executorRuntimeCode: undefined, chainExecutorRuntimeCode: inputContext.executorRuntimeCode,
+  scriptHex: executionInput.scriptHex });
+assert.equal(chainInput.schemaVersion, 7);
+assert.deepEqual(chainInput.simulateParams[0].blockStateCalls[0].stateOverrides[executor],
+  { stateDiff: { [HOP_DIAGNOSTIC_SLOT]: inputContext.diagnosticKey } });
+assert.equal(directRevertedRuntimeHop(plan, edges, { ...evidence, executionInput: chainInput })?.hopIndex, 0);
+const noDiagnosis = buildEthSimulateV1ExecutionInput({ ...inputContext,
+  executorRuntimeCode: undefined, diagnosticKey: undefined, scriptHex: executionInput.scriptHex });
+assert.equal(directRevertedRuntimeHop(plan, edges, { ...evidence, executionInput: noDiagnosis }), null);
+for (const mutate of [
+  (x: any) => { x.simulateParams[0].blockStateCalls[0].stateOverrides[executor].code = inputContext.executorRuntimeCode.code; },
+  (x: any) => { delete x.chainExecutorRuntimeCode; },
+  (x: any) => { x.chainExecutorRuntimeCode.keccak256 = ethers.ZeroHash; },
+  (x: any) => { x.schemaVersion = 4; },
+]) {
+  const changed = JSON.parse(JSON.stringify(chainInput)); mutate(changed);
+  assert.throws(() => validateEthSimulateV1ExecutionInput(changed));
+  assert.equal(directRevertedRuntimeHop(plan, edges, { ...evidence, executionInput: changed }), null);
+}
 assert.equal(directRevertedRuntimeHop({ ...plan, flashAmount: 99n }, edges, evidence), null);
 assert.equal(directRevertedRuntimeHop(plan, edges, { ...evidence,
   returnData: evidence.returnData.slice(0, -2) + "aa" }), null, "foreign errors cannot forge the envelope");
@@ -97,6 +121,44 @@ assert.equal(directRevertedRuntimeHop(plan, edges, { ...evidence,
   errorData: "0xdeadbeef" }), null, "conflicting original response bytes are unresolved");
 assert.equal(directRevertedRuntimeHop(plan, edges, { ...evidence,
   executionInput: { ...executionInput, diagnosticKey: "0x" + "56".repeat(32) } }), null, "another trial cannot replay the proof");
+// Compact callback execution is authenticated against both the original route
+// witness and the exact final calldata. No trace or balance query is needed.
+const compactPlan: ResolvedPlan = { ...plan, root: { ...plan.root, params: { ...plan.root.params,
+  settlementProgram: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()) } } };
+const compactInput = buildEthSimulateV1ExecutionInput({ ...inputContext,
+  scriptHex: ethers.hexlify(compilePlan(compactPlan.root, executor)) });
+const compactHash = runtimeSettlementFlowHash(100n, 101n, legs);
+const envelope = (hop: number, reason: string, key = executionInput.diagnosticKey!, hash = compactHash) =>
+  diagnosticAbi.encodeErrorResult("RuntimeHopFailed", [hop, edges[hop]!.target, hash, reason,
+    ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+      ["bytes32", "uint256", "address", "bytes32", "bytes32"], [key, hop, edges[hop]!.target, hash, ethers.keccak256(reason)]))]);
+const compactEvidence = { ...evidence, executionInput: compactInput, returnData: envelope(1, envelope(0, "0xabcd")) };
+const rawChainInput = buildEthSimulateV1ExecutionInput({ ...inputContext,
+  scriptHex: compactInput.scriptHex, executorRuntimeCode: undefined,
+  chainExecutorRuntimeCode: inputContext.executorRuntimeCode, executionEntry: "raw" });
+assert.equal(rawChainInput.schemaVersion, 8);
+assert.deepEqual(rawChainInput.simulateParams[0].blockStateCalls[0].stateOverrides[executor],
+  { stateDiff: { [HOP_DIAGNOSTIC_SLOT]: inputContext.diagnosticKey } });
+assert.equal(directRevertedRuntimeHop(compactPlan, edges, { ...compactEvidence, executionInput: rawChainInput })?.hopIndex, 0);
+assert.deepEqual(directRevertedRuntimeHop(compactPlan, edges, compactEvidence),
+  { hopIndex: 0, callTarget: edges[0]!.target.toLowerCase(), rawReason: "0xabcd" });
+for (const returnData of [envelope(1, "0xabcd"), envelope(1, envelope(0, "0xabcd", ethers.ZeroHash)),
+  envelope(0, "0xabcd", executionInput.diagnosticKey!, ethers.ZeroHash)]) {
+  assert.equal(directRevertedRuntimeHop(compactPlan, edges, { ...compactEvidence, returnData }), null,
+    "masked or forged callback failures cannot blacklist the opening venue");
+}
+assert.equal(directRevertedRuntimeHop(compactPlan, edges, { ...compactEvidence, executionInput }), null,
+  "diagnostic and submitted script must not diverge");
+for (const field of ["calldata", "wire", "diagnostic-storage"]) {
+  const drifted = JSON.parse(JSON.stringify(compactInput));
+  if (field === "calldata") drifted.calldata = executionInput.calldata;
+  if (field === "wire") drifted.simulateParams[0].blockStateCalls[0].calls[1].data = executionInput.calldata;
+  if (field === "diagnostic-storage") {
+    drifted.simulateParams[0].blockStateCalls[0].stateOverrides[executor].stateDiff[HOP_DIAGNOSTIC_SLOT] = ethers.ZeroHash;
+  }
+  assert.equal(directRevertedRuntimeHop(compactPlan, edges, { ...compactEvidence, executionInput: drifted }), null,
+    `${field} drift cannot supply pool attribution`);
+}
 let traceCalls = 0;
 const sim: SimulationResult = { success: false, netProfit: 0n, grossProfit: 0n, gasUsed: 0n,
   profitToken: a, calldata: executionInput.calldata,
@@ -113,6 +175,13 @@ try {
   const path = await writer.record(request());
   assert(path);
   const saved = JSON.parse(readFileSync(path, "utf8"));
+  const chainCache = new BlockScanSimRejectCache();
+  const chainWriter = new BlockScanPoolRevertAttributor(chainCache, root);
+  assert(await chainWriter.record({ ...request(), trials: [{ plan,
+    sim: { ...sim, revertEvidence: { ...evidence, executionInput: chainInput } } }] }));
+  assert(chainCache.hasPool(edges[0]!));
+  assert(!chainCache.hasPool(edges[1]!));
+  assert.equal(traceCalls, 0, "chain mode must not request a trace");
   assert.equal(saved.trials[0].attribution.callTarget, edges[0]!.target.toLowerCase());
   assert.equal(saved.trials[0].returnData, evidence.returnData);
   assert.equal(saved.policy, "p-revert-failed-hop-any-cause");

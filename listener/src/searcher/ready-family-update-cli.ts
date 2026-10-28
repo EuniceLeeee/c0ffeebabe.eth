@@ -83,7 +83,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     log("verifying complete compressed inputs before resuming admission");
     return archive.assertComplete({ method });
   };
-  const wiring = createRebuildWiring({ ...common, activityArchive: archive });
+  const wiring = createRebuildWiring({ ...common, activityArchive: archive, readyThrottle: discovery.readyThrottle });
   if (mode === "build") {
     // In-progress admission means the source scan is already sealed. Recheck
     // durable inputs before reusing it; fresh scans verify before sealing.
@@ -117,7 +117,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     try { await copyFile(checkpointPath, stagePath, constants.COPYFILE_EXCL); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
     if ((await store.load())?.checkpointFingerprint !== base.checkpointFingerprint) throw new Error("Ready changed while preparing scoped update");
-    const scoped = createRebuildWiring({ ...common, familyIds: needed, activityArchive: archive });
+    const scoped = createRebuildWiring({ ...common, familyIds: needed, activityArchive: archive, readyThrottle: wiring.readyThrottle });
     const stageStore = new UniverseRebuildCheckpointStore({ path: stagePath });
     const stage = await stageStore.load();
     if (!stage) throw new Error("scoped checkpoint absent");

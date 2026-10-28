@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { RunWindow, makeRunConfig, sha } from './bounded-live-launcher.mjs';
+import { RunWindow, makeRunConfig, sha, shaFile, classifyStopReason, failureEvidence,
+  retryableBalanceFailure, RENEW_RPC_DEADLINE_MS, RENEW_RETRY_MS, RENEW_INTERVAL_MS } from './bounded-live-launcher.mjs';
 
 const source = readFileSync(new URL('./bounded-live-launcher.mjs', import.meta.url), 'utf8');
 function between(start, end) {
@@ -36,7 +37,14 @@ async function lifecycle(scenario) {
   const files = new Map([[options.profile, 'profile'], [join(run, 'request.json'), request],
     [join(run, 'config.json'), config], [credential, { OWNER_PRIVATE_KEY: 'mock-not-a-key' }],
     [config.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH, 'ready']]);
-  const events = [], timers = new Map(); let timerId = 0, spawnCount = 0, closeScheduled = false;
+  const events = [], timers = new Map(); let timerId = 0, spawnCount = 0, closeScheduled = false, oom = false;
+  let now = 100000, resolveRpc, rejectRpc, rpcCalls = 0;
+  const deadlines = [], renewals = [];
+  const deferred = ['slow-renewal', 'renewal-timeout', 'expired-renewal', 'expired-rejection', 'delayed-expiry-callback'].includes(scenario);
+  class Clock extends Date {
+    constructor(...args) { super(...(args.length ? args : [now])); }
+    static now() { return now; }
+  }
   const proc = new EventEmitter(); proc.exitCode = 0;
   proc.env = { CREDENTIALS_DIRECTORY: '/run/credentials/' + unit };
   const child = new EventEmitter();
@@ -52,11 +60,35 @@ async function lifecycle(scenario) {
   };
   const check = { balance: 2_000_000_000_000_000n, endpoint: 'mock-no-network',
     ethers: { Wallet: class { constructor() { this.address = profile.wallet; } } },
-    provider: { destroy() { events.push('provider-destroy'); }, async send() {
-      if (scenario === 'renewal-failure') throw new Error('mock RPC failure');
-      return '2000000000000000';
-    } } };
-  const deps = { dirname, join, assert, sha, RunWindow, makeRunConfig,
+    provider: { destroy() { events.push('provider-destroy'); } } };
+  // Only the balance reader is mocked: everything that decides retry vs stop
+  // (retryableBalanceFailure, failureEvidence, the deadlines) is the real code.
+  const readWalletBalance = async (endpoint, wallet, timeoutMs) => {
+    rpcCalls++; deadlines.push(timeoutMs);
+    if (deferred) return await new Promise((resolve, reject) => {
+      resolveRpc = value => resolve(BigInt(value));
+      rejectRpc = reject;
+    });
+    if (scenario === 'renewal-failure') {
+      throw Object.assign(new Error('mock RPC failure'), { code: 'TIMEOUT' });
+    }
+    if (scenario === 'renewal-permanent') {
+      throw Object.assign(new Error('mock unauthorized'), { code: 'HTTP_401', httpStatus: 401 });
+    }
+    return 2_000_000_000_000_000n;
+  };
+  const deps = { dirname, join, assert, sha, shaFile: file => sha(files.get(file)), RunWindow, makeRunConfig,
+    prepareRunReady: async () => {
+      events.push('ready-activation');
+      assert(!files.has(marker)&&!files.has(join(run,'permit.json')));
+      if(scenario==='activation-failure')throw new Error('mock activation failure');
+      return {readySha256:release.readySha256,generation:release.readyGeneration+1,cacheHit:false};
+    },
+    Date: Clock,
+    classifyStopReason, failureEvidence, readMemoryState: () => ({ events: { oom_kill: oom ? 1 : 0 } }),
+    readWalletBalance, retryableBalanceFailure,
+    RENEW_RPC_DEADLINE_MS, RENEW_RETRY_MS, RENEW_INTERVAL_MS,
+    recordRenewal: (target, value) => renewals.push(value),
     UNIT: unit, MARKER: marker, WALL_MS: 43_200_000, process: proc,
     json: file => { assert(files.has(file)); return structuredClone(files.get(file)); },
     realpathSync: file => file, readFileSync: file => { assert(files.has(file)); return files.get(file); },
@@ -79,21 +111,79 @@ async function lifecycle(scenario) {
       if (scenario === 'revoke-and-unlink-failure' && file === join(run, 'permit.json')) throw new Error('mock unlink failure');
       events.push('unlink:' + file + ':closed=' + child.closed); files.delete(file);
     },
-    spawn() { spawnCount++; return child; }, createInterface() { return new EventEmitter(); },
+    spawn(command, args) { spawnCount++; assert.equal(command, profile.node); assert(args.includes('--max-old-space-size=11264')); return child; }, createInterface() { return new EventEmitter(); },
     statfsSync() { return { bavail: 10, bsize: 1024 ** 3 }; },
-    setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn, ms }); return id; },
+    setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn: () => { timers.delete(id); return fn(); }, ms }); return id; },
     clearTimeout(id) { timers.delete(id); },
   };
   const pending = bind(superviseSource, deps)(options, profile, release);
   await flush();
+  if(scenario==='activation-failure'){
+    await pending;assert.equal(spawnCount,0);assert(!files.has(marker));assert(!files.has(join(run,'permit.json')));
+    assert.equal(files.get(join(run,'ended.json')).reason,'supervisor_failed');return;
+  }
   let expectedReason = 'supervisor_failed';
-  if (scenario === 'renewal-failure' || scenario.startsWith('revoke-')) {
+  if (deferred) {
+    const expiry = [...timers.values()].find(t => t.ms === 30000); assert(expiry);
+    const renew = [...timers.values()].find(t => t.ms === 3000); assert(renew);
+    now += 3000;
+    const renewing = renew.fn(); await flush(); assert.equal(rpcCalls, 1);
+    if (scenario === 'slow-renewal') {
+      now += 15000; resolveRpc('2000000000000000'); await renewing;
+      assert.equal(events.filter(e => e.startsWith('signal:')).length, 0);
+      assert.equal(files.get(join(run, 'permit.json')).validUntilMs, now + 30000);
+      assert(![...timers.values()].includes(expiry), 'old expiry timer must be cancelled');
+      expectedReason = 'supervisor_signal'; proc.emit('SIGTERM', 'SIGTERM');
+    } else if (scenario === 'renewal-timeout') {
+      // A rejected balance read is a throughput signal, not a safety failure:
+      // the supervisor records it and retries inside the permit. The permit
+      // expiry timer remains the only fail-closed stop for a starved renewal.
+      now += 20000; rejectRpc(Object.assign(new Error('mock timeout'), { code: 'TIMEOUT' })); await renewing;
+      assert(!files.has(join(run, 'stop-reason.json')), 'one rejected read must not stop the run');
+      const retry = [...timers.values()].find(t => t.ms === 1000); assert(retry);
+      now = 230000;
+      await assert.doesNotReject(retry.fn(), 'the retry must fail closed on expiry, not reject');
+      expectedReason = 'permit_expired';
+      assert.equal(files.get(join(run, 'stop-reason.json')).details.phase, 'permit_expiry');
+    } else {
+      now = 130000;
+      if (scenario !== 'delayed-expiry-callback') expiry.fn();
+      if (scenario === 'expired-rejection') rejectRpc(Object.assign(new Error('late rejection'), { code: 'TIMEOUT' }));
+      else resolveRpc('2000000000000000');
+      await renewing;
+      expectedReason = 'permit_expired';
+      assert.equal(files.get(join(run, 'stop-reason.json')).details.phase, 'permit_expiry');
+      assert.equal(files.get(join(run, 'permit.json')).validUntilMs, 0, 'late RPC cannot revive an expired run');
+    }
+    assert.equal(rpcCalls, 1, 'no automatic retry or new session');
+    const kill = [...timers.values()].find(t => t.ms === 60000); assert(kill); kill.fn();
+  } else if (scenario.startsWith('revoke-')) {
     expectedReason = 'renewal_safety_failed';
     const renew = [...timers.values()].find(t => t.ms === 3000); assert(renew);
     await assert.doesNotReject(renew.fn(), 'timer renewal must never reject while stopping');
-    if (scenario === 'renewal-failure') {
-      const kill = [...timers.values()].find(t => t.ms === 5000); assert(kill); kill.fn();
-    }
+  } else if (scenario === 'renewal-failure') {
+    // A refused balance read is retried inside the permit; only expiry stops.
+    expectedReason = 'permit_expired';
+    const renew = [...timers.values()].find(t => t.ms === 3000); assert(renew);
+    await assert.doesNotReject(renew.fn(), 'timer renewal must never reject while retrying');
+    assert(!files.has(join(run, 'stop-reason.json')), 'one RPC refusal must not stop the run');
+    const retry = [...timers.values()].find(t => t.ms === 1000); assert(retry);
+    now = 130000;
+    await assert.doesNotReject(retry.fn(), 'the retry must fail closed on expiry, not reject');
+    assert.equal(files.get(join(run, 'stop-reason.json')).details.phase, 'permit_expiry');
+    const kill = [...timers.values()].find(t => t.ms === 60000); assert(kill); kill.fn();
+  } else if (scenario === 'renewal-permanent') {
+    // A permanent answer (bad credentials, malformed balance) stays fail-closed:
+    // it must not be retried as if it were throughput pressure.
+    expectedReason = 'renewal_safety_failed';
+    const renew = [...timers.values()].find(t => t.ms === 3000); assert(renew);
+    await assert.doesNotReject(renew.fn());
+    assert(![...timers.values()].some(t => t.ms === 1000), 'a permanent failure must not schedule a retry');
+    assert.equal(files.get(join(run, 'stop-reason.json')).details.code, 'HTTP_401');
+    const kill = [...timers.values()].find(t => t.ms === 60000); assert(kill); kill.fn();
+  } else if (scenario === 'oom-signal') {
+    expectedReason = 'memory_oom_kill'; oom = true; proc.emit('SIGTERM', 'SIGTERM');
+    const kill = [...timers.values()].find(t => t.ms === 60000); assert(kill); kill.fn();
   } else if (scenario === 'child-error') child.emit('error', new Error('mock spawn error'));
   await pending;
   assert.equal(spawnCount, 1); assert(child.closed); assert.equal(proc.exitCode, 1);
@@ -101,12 +191,33 @@ async function lifecycle(scenario) {
   assert(events.indexOf('child-close') < events.findIndex(e => e.startsWith('unlink:' + marker)));
   assert.equal(files.has(marker), false); assert.equal(timers.size, 0);
   assert.equal(files.get(join(run, 'ended.json')).reason, expectedReason);
+  if (scenario === 'renewal-failure' || scenario === 'renewal-timeout') {
+    // The renewed-attempt failure never becomes the stop reason; expiry does.
+    assert.equal(files.get(join(run, 'ended.json')).details.phase, 'permit_expiry');
+  }
+  assert(deadlines.every(ms => ms === 8000), 'every balance read must carry the 8 second deadline');
+  if (['renewal-failure', 'renewal-timeout', 'renewal-permanent', 'slow-renewal',
+    'expired-renewal', 'delayed-expiry-callback'].includes(scenario)) {
+    assert(renewals.some(r => r.phase === 'wallet_balance_rpc'), 'a balance read outcome must be recorded');
+  }
+  if (['renewal-failure', 'renewal-timeout', 'renewal-permanent'].includes(scenario)) {
+    const failed = renewals.find(r => r.ok === false);
+    assert(failed, 'a failed balance read must be recorded');
+    assert.equal(failed.deadlineMs, 8000);
+    assert.equal(failed.retryable, scenario !== 'renewal-permanent');
+  }
+  if (scenario === 'oom-signal') {
+    const evidence = files.get(join(run, 'stop-reason.json'));
+    assert.equal(evidence.requestedReason, 'supervisor_signal');
+    assert.equal(evidence.memory.events.oom_kill, 1);
+  }
   assert.equal(files.has(credential), true, 'systemd owns its credential; supervisor must not unlink it');
   if (!scenario.startsWith('revoke-')) assert.equal(files.get(join(run, 'permit.json')).status, 'stopped');
   if (scenario === 'revoke-write-failure') assert.equal(files.has(join(run, 'permit.json')), false);
   if (scenario.startsWith('revoke-')) assert.equal(events.find(e => e.startsWith('signal:')), 'signal:SIGKILL');
 }
-for (const scenario of ['record-failure', 'renewal-failure', 'revoke-write-failure', 'revoke-and-unlink-failure', 'child-error']) {
+for (const scenario of ['activation-failure', 'record-failure', 'renewal-failure', 'renewal-permanent', 'revoke-write-failure', 'revoke-and-unlink-failure', 'child-error', 'oom-signal',
+  'slow-renewal', 'renewal-timeout', 'expired-renewal', 'expired-rejection', 'delayed-expiry-callback']) {
   test('supervisor cleanup: ' + scenario, { timeout: 1000 }, () => lifecycle(scenario));
 }
 
@@ -115,11 +226,16 @@ test('real timer callback does not leak rejection when both revoke writes and un
   const renewSource = between('    const renew = async () => {', '\n    timer = setTimeout(renew, 3000);').replace(/^const renew = /, '');
   const signals = [], observed = [];
   const deps = { assert, permitPath: '/mock/permit', MARKER: '/mock/marker', markerContent: 'owned',
+    checkPermitExpiry: () => false, armPermitExpiry() {},
+    readMemoryState: () => ({}), classifyStopReason, failureEvidence, memoryBaseline: {}, stopDetails: null,
+    record() {},
     config: { SEARCHER_CREDIT_LIVE_MARKER_PATH: '/mock/credit' }, run: '/mock/run',
     readFileSync: () => 'owned', existsSync: () => false, statfsSync: () => ({ bavail: 10, bsize: 1024 ** 3 }),
     window: { renew: () => ({ status: 'active' }), stop: () => ({ status: 'stopped' }) },
     writeAtomic() { throw new Error('mock ENOSPC'); }, unlinkSync() { throw new Error('mock EACCES'); },
-    child: { kill: signal => signals.push(signal) }, check: { provider: { send: async () => '2000000000000000' } },
+    child: { kill: signal => signals.push(signal) }, check: { endpoint: 'mock-no-network' },
+    readWalletBalance: async () => 2_000_000_000_000_000n, retryableBalanceFailure,
+    RENEW_RPC_DEADLINE_MS, RENEW_RETRY_MS, RENEW_INTERVAL_MS, recordRenewal() {},
     setTimeout() { return 1; } };
   const harness = new Function(...Object.keys(deps), `let stopping=false,reason=null,timer,killTimer;
     const stop=${stopSource}\nconst renew=${renewSource}\nreturn {renew};`)(...Object.values(deps));
@@ -139,16 +255,17 @@ for (const outcome of ['success', 'nonzero', 'throws', 'active-service', 'cleanu
     const options = { profile: '/mock/profile.json', blocks: 3 }, release = { config: base, readySha256: sha('ready') };
     const files = new Map([[options.profile, 'profile'], [profile.ready, 'ready']]);
     let destroyed = 0, invoked = 0, cleaned = 0, diskChecked = 0; const logged = [];
-    const deps = { assert, join, sha, makeRunConfig, MARKER: '/mock/marker', UNIT: 'mock.service',
+    const deps = { assert, join, sha, shaFile: file => sha(files.get(file)), makeRunConfig, MARKER: '/mock/marker', UNIT: 'mock.service',
       MANUAL_RUNS: profile.runs,
       process: { getuid: () => 0 }, assertNoSearcher() {}, existsSync: file => files.has(file),
       inspector: async () => ({ provider: { destroy() { destroyed++; } },
         ethers: { Wallet: class { constructor() { this.address = profile.wallet; } } } }),
       receiveKey: async () => { if (outcome === 'no-confirmation') throw new Error('not confirmed'); return 'mock-not-a-key'; },
       randomUUID: () => '00000000-0000-0000-0000-000000000000',
+      statfsSync: () => ({ bavail: ['low-disk', 'cleanup-failure'].includes(outcome) ? 3 : 80, bsize: 1024 ** 3 }),
       cleanupOldRunLogs(root, current, options) {
         cleaned++; assert.equal(root, profile.runs); assert(current.startsWith(root + '/live-'));
-        assert.deepEqual(options, { apply: true }); assert.equal(invoked, 0);
+        assert.deepEqual(options, { apply: ['low-disk', 'cleanup-failure'].includes(outcome) }); assert.equal(invoked, 0);
         assert(![...files.keys()].some(path => path.endsWith('.credential.json')));
         if (outcome === 'cleanup-failure') throw new Error('mock cleanup failure');
         return { deletedFiles: 6, deletedBytes: 123, deletedAllocatedBytes: 4096, audit: current + '/old-runs-cleanup.jsonl' };
@@ -168,6 +285,8 @@ for (const outcome of ['success', 'nonzero', 'throws', 'active-service', 'cleanu
         invoked++; assert.equal(command, '/usr/bin/systemd-run');
         assert.equal(cleaned, 1); assert.equal(diskChecked, 1);
         assert(args.includes('--property=Type=exec')); assert(args.includes('--property=Restart=no'));
+        assert(args.includes('--property=MemoryMax=13G')); assert(args.includes('--property=MemorySwapMax=0'));
+        assert(args.includes('--property=OOMScoreAdjust=-900'));
         const credentialArg = args.find(arg => arg.startsWith('--property=LoadCredential=owner:')); assert(credentialArg);
         assert(files.has(credentialArg.slice('--property=LoadCredential=owner:'.length)));
         assert(!args.some(arg => arg.includes('mock-not-a-key')));

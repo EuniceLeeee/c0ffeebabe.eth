@@ -1,20 +1,20 @@
 import { ethers } from "ethers";
 import { RuntimeAmountProgram, runtimePayment, runtimeProgramScript, type RuntimeAmountLeg, type RuntimeSettlementRequest } from "../../../../adapters/runtime-amount-program.js";
 import { concatBytes, encodeReturn } from "../../../../encoder.js";
-import { ADDR } from "../../../../shared/constants/addresses.js";
+import { runtimeDeferredAssetBoundary } from "../../../execution-asset-boundary.js";
+import { runtimeExecutor } from "../../runtime-execution.js";
 import type { UniV4Descriptor, UniV4Route } from "./types.js";
 import { poolKeyFingerprint, sameAddress } from "./codec.js";
 
+const tokenAbi = new ethers.Interface(["function balanceOf(address) view returns(uint256)"]);
 const managerAbi = new ethers.Interface([
   "function unlock(bytes data)",
   "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) params,bytes hookData) returns (int256)",
   "function take(address currency,address recipient,uint256 amount)",
   "function sync(address currency)", "function settle() payable returns(uint256)",
 ]);
-const tokenAbi = new ethers.Interface(["function withdraw(uint256)", "function deposit() payable", "function transfer(address,uint256)", "function balanceOf(address) view returns(uint256)"]);
 
-export function buildUniV4RuntimeLeg(input: { descriptor: UniV4Descriptor; route: UniV4Route; executor: string;
-  settlement?: RuntimeSettlementRequest }): RuntimeAmountLeg | null {
+export function buildUniV4RuntimeLeg(input: { descriptor: UniV4Descriptor; route: UniV4Route; executor: string; settlement?: RuntimeSettlementRequest }): RuntimeAmountLeg | null {
   const { descriptor: d, route: r, executor } = input;
   // Hook-specific execution/account semantics remain an explicit unsupported
   // capability, not a central protocol branch or synthetic Exact evidence.
@@ -25,21 +25,36 @@ export function buildUniV4RuntimeLeg(input: { descriptor: UniV4Descriptor; route
 /** PoolManager mechanics shared by the two owning V4 Families. Hook authority
  * and hook data remain the caller Family's responsibility. */
 export function buildV4RuntimeProgram(input: { descriptor: UniV4Descriptor; route: UniV4Route;
-  executor: string; hookData: string; actionAdapterId: string; settlement?: RuntimeSettlementRequest }): RuntimeAmountLeg {
+  executor: string; hookData: string; actionAdapterId: string; settlement?: RuntimeSettlementRequest }): RuntimeAmountLeg | null {
   const { descriptor: d, route: r, executor } = input;
   const zero = r.direction === "zero-for-one", key = d.poolKey, manager = d.managerBinding.manager;
+  runtimeExecutor(executor, manager);
   const request = input.settlement;
-  if (request?.kind === "quote-output") throw new Error("univ4 runtime static quote unavailable");
+  const native = sameAddress(r.realTokenIn, ethers.ZeroAddress) || sameAddress(r.realTokenOut, ethers.ZeroAddress);
+  if (request?.kind === "quote-output") return null;
+  const nativeInput = sameAddress(r.realTokenIn, ethers.ZeroAddress);
+  const nativeDeferred = native && request?.kind === "deferred-input";
   const recipient = request?.kind === "direct-output" ? ethers.getAddress(request.recipient) : executor;
   if (sameAddress(recipient, ethers.ZeroAddress) || sameAddress(recipient, manager)) throw new Error("univ4 runtime output recipient");
+  if (request?.kind === "direct-output") {
+    runtimeExecutor(recipient, manager, r.tokenIn, r.tokenOut);
+    // Raw ETH must first reach the common measured wrapping boundary.
+    if (native && !nativeInput && !sameAddress(recipient, executor)) return null;
+  }
+  if (nativeDeferred && (request.paymentAmount <= 0n || request.paymentAmount > ethers.MaxUint256)) throw new Error("univ4 deferred payment amount");
   if ((r.direction !== "zero-for-one" && r.direction !== "one-for-zero") ||
       r.instanceKey !== d.instanceKey || r.poolId !== d.poolId || !sameAddress(r.manager, manager) ||
       poolKeyFingerprint(r.poolKey) !== poolKeyFingerprint(key) ||
       !sameAddress(r.tokenIn, zero ? d.graphToken0 : d.graphToken1) ||
       !sameAddress(r.tokenOut, zero ? d.graphToken1 : d.graphToken0) ||
+      r.executionAssets?.input !== (sameAddress(zero ? key.currency0 : key.currency1, ethers.ZeroAddress) ? "native" : "erc20") ||
+      r.executionAssets?.output !== (sameAddress(zero ? key.currency1 : key.currency0, ethers.ZeroAddress) ? "native" : "erc20") ||
       !sameAddress(r.realTokenIn, zero ? key.currency0 : key.currency1) ||
       !sameAddress(r.realTokenOut, zero ? key.currency1 : key.currency0)) throw new Error("univ4 runtime route mismatch");
   const p = new RuntimeAmountProgram();
+  const nativeBoundary = nativeDeferred ? runtimeDeferredAssetBoundary(p, r, executor,
+    { nativeBefore: 11, wrappedBefore: 12, scratch: 13, other: 9 }) : undefined;
+  const outputBefore = nativeDeferred ? 8 : 13;
   p.constant(8, 127n).math("shr", 9, 0, 8).constant(10, 0n).equal(9, 10)
     .math("neg", 7, 0).call(manager, managerAbi.encodeFunctionData("swap", [key,
     { zeroForOne: zero, amountSpecified: 0n, sqrtPriceLimitX96: zero ? 4295128740n : 1461446703485210103287273052203988822378723970341n }, input.hookData]),
@@ -51,37 +66,40 @@ export function buildV4RuntimeProgram(input: { descriptor: UniV4Descriptor; rout
   const out = zero ? 4 : 5, debt = zero ? 5 : 4;
   p.constant(2, 1n << 128n).math("sub", 6, 2, debt).math("and", 6, 6, 3)
     .math("shr", 9, out, 8).equal(9, 10);
-  const payment = runtimePayment(p, 6, 12);
-  if (request?.kind === "deferred-input") p.call(r.tokenOut, tokenAbi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(13, 0);
-  const nativeOutput = sameAddress(r.realTokenOut, ethers.ZeroAddress);
-  p.call(manager, managerAbi.encodeFunctionData("take", [r.realTokenOut, nativeOutput ? executor : recipient, 0n]), { patches: [{ offset: 68, reg: out }] });
-  if (sameAddress(r.realTokenOut, ethers.ZeroAddress)) {
-    p.call(ADDR.WETH, tokenAbi.encodeFunctionData("deposit"), { valueReg: out });
-    if (!sameAddress(recipient, executor)) p.call(ADDR.WETH, tokenAbi.encodeFunctionData("transfer", [recipient, 0n]),
-      { patches: [{ offset: 36, reg: out }] });
+  const payment = runtimePayment(p, 6, nativeDeferred ? 7 : 12);
+  if (request?.kind === "deferred-input" || native && request?.kind === "direct-output") {
+    p.equal(6, 0);
+    if (native) p.constant(14, 1n).math("sub", 15, 6, 14);
   }
+  if (request?.kind === "deferred-input") p.call(r.tokenOut, tokenAbi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(outputBefore, 0);
+  p.call(manager, managerAbi.encodeFunctionData("take", [r.realTokenOut, recipient, 0n]), { patches: [{ offset: 68, reg: out }] });
+  if (nativeBoundary && !nativeInput) nativeBoundary.wrapOutput();
   if (request?.kind === "deferred-input") p.call(r.tokenOut, tokenAbi.encodeFunctionData("balanceOf", [executor]), { static: true }).load(15, 0)
-    .math("sub", 15, 15, 13).constant(14, request.paymentAmount).math("sub", 15, 15, 14);
+    .math("sub", 15, 15, outputBefore).constant(14, request.paymentAmount).math("sub", 15, 15, 14);
   if (sameAddress(r.realTokenIn, ethers.ZeroAddress)) {
-    if (request?.kind === "deferred-input") p.constant(14, request.paymentAmount)
-      .run(request.paymentProgram, 14, 15).equal(15, 6);
-    p.call(ADDR.WETH, tokenAbi.encodeFunctionData("withdraw", [0n]), { patches: [{ offset: 4, reg: 6 }] })
-      .call(manager, managerAbi.encodeFunctionData("sync", [ethers.ZeroAddress]));
+    // Funded default/direct input is supplied by the issuer. Deferred input
+    // arrives as fresh WETH from the continuation and is converted only now.
+    if (nativeBoundary && request?.kind === "deferred-input") {
+      p.constant(14, request.paymentAmount).run(request.paymentProgram, 14, 15).equal(15, 6);
+      nativeBoundary.unwrapPayment(6);
+    }
+    p.call(manager, managerAbi.encodeFunctionData("sync", [ethers.ZeroAddress]));
     payment.callValue(manager, managerAbi.encodeFunctionData("settle"));
   } else {
     p.call(manager, managerAbi.encodeFunctionData("sync", [r.realTokenIn]));
-    if (request?.kind === "deferred-input") p.constant(14, request.paymentAmount)
-      .run(request.paymentProgram, 14, 15).equal(15, 6);
+    if (request?.kind === "deferred-input") p.constant(14, request.paymentAmount).run(request.paymentProgram, 14, 15).equal(15, 6);
     else payment.transfer(r.realTokenIn, manager);
     p.call(manager, managerAbi.encodeFunctionData("settle"));
   }
-  payment.verifySettled(11);
+  // Read settle's result before helpers issue any other external call.
+  payment.verifySettled(nativeDeferred ? 10 : 11);
+  nativeBoundary?.assertRestored();
   const callback = concatBytes(runtimeProgramScript(p.bytes()),
     encodeReturn(ethers.getBytes(ethers.AbiCoder.defaultAbiCoder().encode(["bytes"], ["0x"]))));
   const outer = new RuntimeAmountProgram().call(manager, managerAbi.encodeFunctionData("unlock", [callback]), {
     callback: { incomingOffset: 68, outgoingOffset: 68 }, patches: [{ offset: 69, reg: 0 }],
   });
   return { actionAdapterId: input.actionAdapterId, program: ethers.hexlify(outer.bytes()),
-    settlement: { directOutput: true, deferredInput: sameAddress(r.realTokenIn, ethers.ZeroAddress) ? executor : manager },
+    settlement: { directOutput: true as const, deferredInput: nativeInput ? executor : manager },
     ...(request === undefined ? {} : { settlementRequest: request }) };
 }

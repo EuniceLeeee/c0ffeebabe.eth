@@ -138,7 +138,9 @@ const feeHookRequestProgram: ExactRequestProgram<
 export function createUniv4FeeHookExact(sat1Mode: "local" | "quoter" = "local"):
   ExactQuoteSemantics<FeeHookDescriptor, FeeHookRoute, FeeHookExactEvidence> {
   return {
-    methods: (input: ExactQuoteInput<FeeHookDescriptor, FeeHookRoute>) => Object.freeze([
+    // Non-Sat1 Quoter observations do not establish the sender-sensitive
+    // production output. This workspace has no trusted tiered receipt backend.
+    methods: (input: ExactQuoteInput<FeeHookDescriptor, FeeHookRoute>) => input.descriptor.hookModel !== "sat1" ? [] : Object.freeze([
       localZeroExactMethod<FeeHookDescriptor, FeeHookRoute, FeeHookExactEvidence>(
         "local-zero",
         (input) => {
