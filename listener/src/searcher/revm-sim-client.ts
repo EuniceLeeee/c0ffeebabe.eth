@@ -131,11 +131,25 @@ export interface DaemonResponse {
   };
 }
 
-export type StrictExecutionOutcome = (
+export type InputFundingOverrides = Readonly<Record<string, { readonly stateDiff: Readonly<Record<string, string>> }>>;
+
+/** Only the verified initializer's storage writes cross to the node simulator. */
+export function validateInputFundingOverrides(value: unknown): asserts value is InputFundingOverrides {
+  const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+  if (!object(value)) throw new Error("invalid input funding overrides");
+  for (const [account, entry] of Object.entries(value)) {
+    if (!address20(account) || !object(entry) || Object.keys(entry).length !== 1 || !object(entry.stateDiff) ||
+      Object.entries(entry.stateDiff).some(([slot, amount]) => !hash32(slot) || !hash32(amount))) {
+      throw new Error("invalid input funding overrides");
+    }
+  }
+}
+
+export type StrictExecutionOutcome = { kind: "InputPrepared"; phase?: never; stateOverrides: InputFundingOverrides } | ((
   | { kind: "Success"; output: string }
   | { kind: "Revert"; output: string; nestedHalt?: string | null }
   | { kind: "Halt"; reason: string }
-) & ({ phase: "main" } | { phase: "preCall"; preCallIndex: number });
+) & ({ phase: "main" } | { phase: "preCall"; preCallIndex: number }));
 
 export class RevmStrictError extends Error {
   constructor(readonly kind: "validation" | "execution" | "observation", message: string) {
@@ -160,6 +174,8 @@ export type StrictStateRead =
   | { kind: "get-code"; address: string };
 
 export interface StrictSimulateRequest {
+  /** Preparation is not an execution result; consumed only by standalone sim. */
+  inputStateOnly?: true;
   blockNumber: number;
   sourcePin?: RevmSourcePin;
   executorRuntimeCode?: ExecutorRuntimeCode;
@@ -205,7 +221,7 @@ function strictRequest(req: StrictSimulateRequest): void {
     && Object.keys(v).every(k => keys.includes(k));
   if (!record(req, ["blockNumber", "sourcePin", "rpcUrl", "from", "to", "data", "gasLimit", "executionGasLimit",
     "transactionOrigin", "nativeBalanceWei", "observeNativeBalances", "observeTokenBalances", "preCalls", "tokenDeals",
-    "observeTokens", "observeAccounts", "observeTotalSupply", "observeLogs", "callerMode", "executorRuntimeCode", "trialPrefix", "stateRead"])
+    "observeTokens", "observeAccounts", "observeTotalSupply", "observeLogs", "callerMode", "executorRuntimeCode", "trialPrefix", "stateRead", "inputStateOnly"])
     || !Number.isSafeInteger(req.blockNumber) || req.blockNumber < 0 || !address20(req.from) || !address20(req.to)
     || (req.rpcUrl !== undefined && (typeof req.rpcUrl !== "string" || !req.rpcUrl.trim()))
     || !bytesHex(req.data) || (req.gasLimit !== undefined && !gasAmount(req.gasLimit))
@@ -214,6 +230,11 @@ function strictRequest(req: StrictSimulateRequest): void {
     || (req.callerMode !== undefined && !["top-level", "impersonated-call-frame"].includes(req.callerMode))
     || (req.transactionOrigin !== undefined && !address20(req.transactionOrigin))
     || (req.observeLogs !== undefined && typeof req.observeLogs !== "boolean")) bad();
+  if (req.inputStateOnly !== undefined && (req.inputStateOnly !== true || !req.trialPrefix || req.data !== "0x" ||
+    req.stateRead !== undefined || req.from.toLowerCase() !== req.trialPrefix.executor.toLowerCase() ||
+    req.to.toLowerCase() !== req.from.toLowerCase() || req.preCalls?.length || req.observeLogs ||
+    [req.observeTokenBalances, req.observeNativeBalances, req.observeTokens, req.observeAccounts,
+      req.observeTotalSupply].some(v => v?.length))) bad();
   if (req.executorRuntimeCode !== undefined) {
     const v = req.executorRuntimeCode;
     const selfCall = req.to.toLowerCase() === req.from.toLowerCase();
@@ -296,6 +317,14 @@ function strictResponse(resp: DaemonResponse, req: StrictSimulateRequest): void 
   if (override ? s?.counterfactualExecutorCode?.address !== overrideAddress.toLowerCase()
     || s.counterfactualExecutorCode.keccak256 !== override.keccak256.toLowerCase()
     : s?.counterfactualExecutorCode !== undefined) bad();
+  if (req.inputStateOnly) {
+    if (!s || o?.kind !== "InputPrepared" || s.executionGasUsed !== "0" ||
+      [resp.success, resp.output, resp.gasUsed, resp.revertReason, resp.errorKind, resp.error].some(v => v !== undefined) ||
+      [s.tokenDeltas, s.nativeDeltas, s.totalSupplyDeltas, s.logs].some(v => !Array.isArray(v) || v.length)) bad();
+    validateInputFundingOverrides(o.stateOverrides);
+    return;
+  }
+  if (o?.kind === "InputPrepared") bad();
   if (!s || !o || !["Success", "Revert", "Halt"].includes(o.kind)
     || resp.errorKind !== undefined || resp.error !== undefined
     || (o.phase !== "main" && o.phase !== "preCall")
@@ -391,7 +420,7 @@ function sourcePin(payload: Record<string, unknown>): Readonly<RevmSourcePin> | 
 
 export type RevmFatalReason = Readonly<{
   kind: "rpc-throttle";
-  category: "http429" | "rpc-limit-code" | "rpc-rate-limit" | "rpc-quota";
+  category: "http429" | "rpc-limit-code" | "rpc-rate-limit" | "rpc-quota" | "rpc-quota-exhausted";
   httpStatus?: 429;
   rpcCode?: number;
 }> | Readonly<{ kind: "source-fault" | "protocol-fault" }>;
@@ -411,7 +440,7 @@ function normalizedFatal(fatal: RevmFatalReason | undefined): RevmFatalReason | 
   }
   if (!fatal || fatal.kind !== "rpc-throttle"
     || Object.keys(fatal).some(k => !["kind", "category", "httpStatus", "rpcCode"].includes(k))
-    || !["http429", "rpc-limit-code", "rpc-rate-limit", "rpc-quota"].includes(fatal.category)
+    || !["http429", "rpc-limit-code", "rpc-rate-limit", "rpc-quota", "rpc-quota-exhausted"].includes(fatal.category)
     || (fatal.category === "http429" ? fatal.httpStatus !== 429 || fatal.rpcCode !== undefined : fatal.httpStatus !== undefined)
     || (fatal.category === "rpc-limit-code" && fatal.rpcCode !== 429 && fatal.rpcCode !== -32005)
     || (fatal.rpcCode !== undefined && !Number.isSafeInteger(fatal.rpcCode))) throw new Error("fatal shape");
@@ -440,7 +469,7 @@ interface Pending {
 // Only context-identical prefix reads can share a physical validation bridge.
 // Main calls still execute independently. No target/selector/Family knowledge.
 function prefixReadPairKey(req: StrictSimulateRequest | undefined): string | undefined {
-  if (!req?.sourcePin || !req.trialPrefix || req.callerMode !== "impersonated-call-frame"
+  if (!req?.sourcePin || req.inputStateOnly || !req.trialPrefix || req.callerMode !== "impersonated-call-frame"
     || req.nativeBalanceWei !== undefined || req.executorRuntimeCode !== undefined
     || req.preCalls?.length || req.tokenDeals?.length || req.observeLogs
     || req.observeTokenBalances?.length || req.observeNativeBalances?.length
@@ -481,18 +510,24 @@ export class RevmSimClient {
   private readonly manifestPath: string;
   private readonly executablePath?: string;
   private readonly diagnosticCandidateKey?: string;
+  private readonly readyRpcBatchMaxCount?: number;
 
   get isTerminal(): boolean {
     return this.terminal !== undefined;
   }
 
   constructor(options: { manifestPath?: string; executablePath?: string; timeoutMs?: number;
-    onFatal?: (reason: RevmFatalReason) => void; diagnosticCandidateKey?: string } = {}) {
+    onFatal?: (reason: RevmFatalReason) => void; diagnosticCandidateKey?: string;
+    readyRpcBatchMaxCount?: number } = {}) {
     this.timeoutMs = options.timeoutMs ?? 60_000;
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0) throw new Error("invalid revm-sim timeout");
     this.manifestPath = options.manifestPath ?? resolve("revm-sim", "Cargo.toml");
     this.executablePath = options.executablePath;
     this.onFatal = options.onFatal;
+    if (options.readyRpcBatchMaxCount !== undefined && ![1, 2, 4, 8].includes(options.readyRpcBatchMaxCount)) {
+      throw new Error("invalid Ready RPC batch cap");
+    }
+    this.readyRpcBatchMaxCount = options.readyRpcBatchMaxCount;
     // An invalid diagnostic label is omitted, never a new execution failure.
     this.diagnosticCandidateKey = typeof options.diagnosticCandidateKey === "string"
       && /^[0-9a-f]{64}$/.test(options.diagnosticCandidateKey) ? options.diagnosticCandidateKey : undefined;
@@ -512,9 +547,10 @@ export class RevmSimClient {
     const binary = resolve(this.manifestPath, "..", "target", "debug", "revm-sim");
     const useBinary = Boolean(this.executablePath) || existsSync(binary);
     const command = this.executablePath ?? (useBinary ? binary : "cargo");
-    const args = useBinary
-      ? ["serve"]
-      : ["run", "--quiet", "--manifest-path", this.manifestPath, "--", "serve"];
+    const serveArgs = this.readyRpcBatchMaxCount === undefined ? ["serve"]
+      : ["serve-ready", "--batch-max-count", String(this.readyRpcBatchMaxCount)];
+    const args = useBinary ? serveArgs
+      : ["run", "--quiet", "--manifest-path", this.manifestPath, "--", ...serveArgs];
     // The legacy cargo launcher can own a descendant daemon. Isolate that
     // launch in its own POSIX group; never kill an ambient process/group.
     if (!useBinary && process.platform === "win32") throw new Error("revm-sim requires a direct binary on Windows");

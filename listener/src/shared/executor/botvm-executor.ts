@@ -61,23 +61,57 @@ export function buildExecuteCalldata(script: Uint8Array): string {
   return BOTVM_EXECUTE_SELECTOR + encoded.slice(2);
 }
 
-/** Code-only preparation on an owned fork; never funds or impersonates accounts. */
-export async function installForkBotVmRuntimeCode(
-  provider: Pick<ethers.JsonRpcProvider, "send">,
-  executor: string,
-  runtime: BotVmRuntimeCode,
-): Promise<void> {
-  const addr = ethers.getAddress(executor);
-  if (!ethers.isHexString(runtime.code) || runtime.code === "0x" ||
-    ethers.keccak256(runtime.code) !== runtime.keccak256) {
-    throw new Error("invalid frozen BotVM runtime code");
-  }
-  await provider.send("anvil_setCode", [addr, runtime.code]);
-  // Bypass provider caching: a reset or a prior code lookup may have returned 0x.
-  const code: unknown = await provider.send("eth_getCode", [addr, "latest"]);
-  if (typeof code !== "string" || code.toLowerCase() !== runtime.code.toLowerCase()) {
-    throw new Error(`failed to install exact BotVM runtime at ${addr}`);
-  }
+/** Explicit new-executor entry. Existing deployed executors keep the ABI path.
+ * Callers must final-sim and submit this exact returned input, never swap it
+ * after simulation. The uncompressed script remains the diagnostic witness. */
+export function buildRawExecuteCalldata(script: Uint8Array): string {
+  // Only raw-entry-independent runtime programs qualify. Reading an outer
+  // ABI word would change meaning; callback calldata remains a separate frame.
+  if (!canUseRawExecuteCalldata(script)) throw new Error("script requires ABI entry context");
+  return ethers.id("executeRaw()").slice(0, 10) + ethers.hexlify(script).slice(2);
+}
+
+export function rawExecutionEntryEnabled(flag: string | undefined): boolean {
+  if (flag !== undefined && flag !== "0" && flag !== "1") throw new Error("SEARCHER_BOTVM_RAW_ENTRY must be 0 or 1");
+  return flag === "1";
+}
+
+export function canUseRawExecuteCalldata(script: Uint8Array): boolean {
+  const u24 = (p: number) => script[p]! * 65536 + script[p + 1]! * 256 + script[p + 2]!;
+  const walk = (start: number, end: number, depth: number): boolean => {
+    if (depth > 8 || end - start < 2 || (script[start] !== 1 && script[start] !== 2)) return false;
+    const sequence = script[start] === 2;
+    let p = start + 1, count = 0;
+    while (p < end) {
+      if (++count > 128) return false;
+      const op = script[p]!;
+      if (sequence && op !== 9 && op !== 10 && op !== 11 && op !== 12) return false;
+      let size: number | undefined = ({ 0: 34, 2: 5, 3: 3, 4: 74, 5: 2, 6: 5, 9: 34, 11: 37 } as Record<number, number>)[op];
+      if (op === 1) {
+        if (p + 30 > end) return false;
+        const at = p + 30 + script[p + 29]! * 4;
+        if (at + 3 > end) return false;
+        size = at + 3 + u24(at) - p;
+      } else if (op === 12 && sequence) {
+        if (p + 30 > end) return false;
+        size = 30 + u24(p + 27);
+      } else if (op === 10) {
+        if (p + 24 > end) return false;
+        size = 24 + u24(p + 21);
+      } else if (op === 8) {
+        if (p + 7 > end) return false;
+        size = 7 + u24(p + 4);
+        if (p + size > end || !walk(p + 7, p + size, depth + 1)) return false;
+      }
+      // In particular, opcode 7 reads this call frame's original calldata.
+      if (size === undefined || p + size > end) return false;
+      p += size;
+    }
+    return p === end;
+  };
+  if (script.length >= 3 && script[0] === 15 && script[1] === 2) return walk(1, script.length, 0);
+  return script.length >= 38 && script[0] === 14 && u24(33) === script.length - 36
+    && walk(36, script.length, 0);
 }
 
 export async function installForkBotVm(

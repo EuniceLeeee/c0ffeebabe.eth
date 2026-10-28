@@ -1,13 +1,17 @@
-import { UniverseRebuildCheckpointStore } from "./universe-rebuild-checkpoint.js";
+import { once } from "node:events";
+import { checkpointJsonChunks } from "./universe-rebuild-checkpoint.js";
+import { loadCheckpointStatusSnapshot } from "./universe-rebuild-status-snapshot.js";
 
 /**
- * Audit §6: read-only/repair entry points for the durable universe rebuild.
+ * Audit §6: read-only diagnostic snapshot of the universe rebuild.
  *
  *   npm run searcher:universe-rebuild-status -- --checkpoint <path> [--json]
  *
  * Prints the envelope: revision, verified memo count, the in-progress run
  * (fixed cutoff, candidate set, outcome breakdown by status) and the ready
- * generation. --json emits the raw envelope for machine consumption.
+ * generation. --json emits the raw envelope for machine consumption. A visible
+ * journal prefix is integrity-checked, but its writer fsync is not asserted;
+ * this output is never a Ready/admission or completed-publication authority.
  */
 
 interface StatusArgs {
@@ -37,12 +41,7 @@ function parseArgs(argv: readonly string[]): StatusArgs {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const store = new UniverseRebuildCheckpointStore({ path: args.checkpoint });
-  const snapshot = await store.loadReadOnlySnapshot();
-  const envelope = snapshot.envelope;
-  const { envelope: _envelope, ...capture } = snapshot;
-  console.error("[universe-rebuild/status-snapshot] " + JSON.stringify({ ...capture,
-    revision: envelope?.revision ?? null, consistency: "coherent captured state; not a latest-state promise" }));
+  const envelope = await loadCheckpointStatusSnapshot(args.checkpoint);
   if (envelope === null) {
     if (args.json) {
       console.log(JSON.stringify({ status: "absent", checkpoint: args.checkpoint }));
@@ -54,7 +53,10 @@ async function main(): Promise<void> {
     return;
   }
   if (args.json) {
-    console.log(JSON.stringify(envelope, null, 2));
+    for (const chunk of checkpointJsonChunks(envelope)) {
+      if (!process.stdout.write(chunk)) await once(process.stdout, "drain");
+    }
+    process.stdout.write("\n");
     return;
   }
   const run = envelope.inProgressRun;

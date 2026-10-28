@@ -73,7 +73,7 @@ test("BigQuery aggregate halves merge to the same result as the whole export", (
   assert.deepEqual(merged, whole);
 });
 
-test("receipt-log coverage separates protocol gaps from unknown emitters and requires trace", () => {
+test("receipt-log coverage separates unassessed protocol identity from unknown topics", () => {
   const logs = [
     { address: HG_USDC, topics: [TOPICS.erc4626Withdraw] },
     { address: ADDR.SKY_PSM_LITE, topics: [TOPICS.psmSellGem] },
@@ -84,7 +84,8 @@ test("receipt-log coverage separates protocol gaps from unknown emitters and req
 
   assert.deepEqual(deriveEdgeKindsFromLogs([logs[2]]), ["swap"]);
   assert.deepEqual(result.vaults, []);
-  assert.deepEqual(result.protocolVenues, [HG_USDC, ADDR.SKY_PSM_LITE.toLowerCase()].sort());
+  assert.deepEqual(result.protocolVenues, []);
+  assert.deepEqual(result.unassessedProtocolVenues.map(v => v.addr), [HG_USDC, ADDR.SKY_PSM_LITE.toLowerCase()].sort());
   assert.deepEqual(result.observedSwapVenues, [
     {
       addr: ADDR.FLUID_DEX_USDC_USDT.toLowerCase(),
@@ -99,14 +100,14 @@ test("receipt-log coverage separates protocol gaps from unknown emitters and req
   assert.equal(result.observedSwapEmitterCount, 1);
   assert.deepEqual(result.protocolVenueGaps, []);
   assert.deepEqual(result.unclassifiedEmitters, [{ addr: UNKNOWN_HELPER, topic0: UNKNOWN_TOPIC }]);
-  assert.equal(result.protocolAdapterCandidate, true);
+  assert.equal(result.protocolAdapterCandidate, false);
   assert.equal(result.receiptRouteCoverageComplete, false);
   assert.equal(result.coverageScope, "receipt_log_emitters_only");
   assert.equal(result.routabilityScope, "production_listener_descriptors_receipt_only");
   assert.equal(result.comparability, "requires_trace");
 });
 
-test("an ERC4626 event without a registered adapter is a known protocol venue gap", () => {
+test("an ERC4626 event without identity evidence remains unassessed", () => {
   const result = classifyTxLoopCoverage({
     txHash: "0xunsupported",
     receiptLogs: [
@@ -115,7 +116,8 @@ test("an ERC4626 event without a registered adapter is a known protocol venue ga
     ],
   });
 
-  assert.deepEqual(result.protocolVenueGaps, [
+  assert.deepEqual(result.protocolVenueGaps, []);
+  assert.deepEqual(result.unassessedProtocolVenues.map(({ addr, topic0 }) => ({ addr, topic0 })), [
     { addr: UNKNOWN_PROTOCOL, topic0: TOPICS.erc4626Deposit.toLowerCase() },
   ]);
   assert.deepEqual(result.unclassifiedEmitters, []);

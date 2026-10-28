@@ -16,6 +16,7 @@ import {
 } from "./transport-schedule-policy.js";
 import type { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { createHash } from "node:crypto";
+import { recordAdapterRequestCompletion } from "./adapter-request-observation.js";
 import { ethers } from "ethers";
 import { getEthersCallRpcError, isRpcThrottleError } from "./rpc-throttle-guard.js";
 import {
@@ -53,8 +54,19 @@ interface StrictProvider {
 }
 
 export interface StrictSimulationTransport {
-  /** Construction-bound trusted code, never a Family-supplied declaration. */
+  /** Trusted transport configuration, never supplied by a Family. */
   readonly executorProgramCodeHash?: string;
+  /** Standalone execution, not an Exact quote or a profitable-plan verdict. */
+  simulateStandalone?(input: {
+    readonly source: CanonicalSource;
+    readonly callerAuthority: CentralCallerAuthority;
+    readonly control?: AdapterWorkControl;
+    readonly scriptHex: string;
+    readonly inputToken: string;
+    readonly inputAmount: bigint;
+  }): Promise<import("./simulator/eth-simulate-v1.js").StandaloneExecutionResult & {
+    readonly inputPreparationMs: number; readonly simulationMs: number; readonly reusedInputFunding: boolean;
+  }>;
   simulatePrefix?(input: ExactPrefixReadInput): Promise<ExactPrefixReadResult>;
   simulate(input: {
     readonly request: Extract<
@@ -320,6 +332,7 @@ export function createStrictCentralAdapterRuntime(input: {
               // executor use without executeAdapterWork's outer fence.
               try {
                 assertCurrent();
+                recordAdapterRequestCompletion(requestOutcome);
               } catch (error) {
                 requestOutcome = "fenced";
                 throw error;
@@ -667,7 +680,17 @@ async function executeRequest(
       request.call.executionMode === "executor-program";
     const executorProgramCodeHash = executorProgram ? simulator?.executorProgramCodeHash : undefined;
     if (executorProgram && (executorProgramCodeHash === undefined || !/^0x[0-9a-f]{64}$/.test(executorProgramCodeHash))) {
-      throw new Error("executor program trusted code unavailable");
+      // Capability gap, not an RPC failure: no trusted executor program code is
+      // bound in this transport (e.g. a dry-run Ready probe without the
+      // BotVM code override). Surface it as a resource gap so the family
+      // decode reports the real cause instead of "rpc".
+      console.warn(`[strict-runtime] executor program trusted code unavailable: ${request.id}`);
+      return Object.freeze({
+        id: request.id,
+        ok: false as const,
+        source: Object.freeze(source),
+        failure: "resource-limited" as const,
+      });
     }
     if (prefix !== undefined) {
       if (simulator?.simulatePrefix === undefined) throw new Error("exact prefix transport unavailable");

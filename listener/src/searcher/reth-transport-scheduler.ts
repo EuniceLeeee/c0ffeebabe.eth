@@ -27,18 +27,30 @@ export interface RethTransportAttempt {
   readonly version: number;
   readonly batchSize: number;
   readonly concurrency: number;
+  readonly batch?: RethTransportRetryBatch;
+}
+
+/** Shared only by the failed envelope and its split retries, never by a scope. */
+export interface RethTransportRetryBatch {
+  version: number;
+  level: number;
+  notBeforeMs: number;
+  delayMs: number;
 }
 
 export interface RethTransportRetryState {
   transportRetriesAtOne?: number;
+  transportRetryBatch?: RethTransportRetryBatch;
 }
 
 export interface RethTransportLoad {
   readonly timeoutMs: number;
-  limits(batchSize: number, concurrency: number): RethTransportAttempt;
-  retryDelayMs(): number;
+  limits(batchSize: number, concurrency: number, items?: readonly RethTransportRetryState[]): RethTransportAttempt;
+  retryDelayMs(items?: readonly RethTransportRetryState[]): number;
   /** Only report actual wire failures, while the caller/scope is still live. */
   retry(error: unknown, items: readonly RethTransportRetryState[], attempt: RethTransportAttempt): boolean;
+  /** Effective per-batch retry budget at concurrency 1, so logs can report the real denominator. */
+  readonly maxRetriesAtOne?: number;
 }
 
 /** No message matching: a logical deadline/revert is not a socket timeout. */
@@ -75,13 +87,7 @@ function emptyLaneCounts(): Record<RethTransportLane, number> {
 }
 
 export class RethTransportScheduler {
-  // The attempt version stays monotonic across the one-time phase reset.
-  private reductionVersion = 0;
-  private reductionLevel = 0;
-  private steadyVersion: number | undefined;
-  private retryNotBeforeMs = 0;
-  private lastRetryDelayMs = 0;
-  private retryWake: ReturnType<typeof setTimeout> | undefined;
+  private startupCompleted = false;
   private readonly load: RethTransportLoad;
   private activeTotal = 0;
   private readonly activeByLane = emptyLaneCounts();
@@ -101,6 +107,16 @@ export class RethTransportScheduler {
       readonly producerReserved: number;
       readonly transportTimeoutMs?: number;
       readonly retryDelayMs?: number;
+      /**
+       * Throttle/timeout retries still allowed once this batch's ladder has
+       * degraded to concurrency 1. A metered provider can refuse one batch for
+       * minutes while the caller still holds a valid budget; giving up after a
+       * handful of attempts turns a recoverable throughput dip into a dead
+       * pass. Only the throttled batch pays this, never the whole scope.
+       */
+      readonly maxRetriesAtOne?: number;
+      /** Ceiling for the exponential retry backoff of a degraded batch. */
+      readonly maxRetryDelayMs?: number;
     },
   ) {
     if (
@@ -123,59 +139,63 @@ export class RethTransportScheduler {
     for (const value of [options.transportTimeoutMs ?? 30_000, options.retryDelayMs ?? 1_000]) {
       if (!Number.isSafeInteger(value) || value <= 0) throw new Error("invalid reth transport timing");
     }
+    const maxRetriesAtOne = options.maxRetriesAtOne ?? 3;
+    const maxRetryDelayMs = options.maxRetryDelayMs ?? 30_000;
+    if (!Number.isSafeInteger(maxRetriesAtOne) || maxRetriesAtOne < 1) {
+      throw new Error("invalid reth transport retry budget");
+    }
+    if (!Number.isSafeInteger(maxRetryDelayMs) || maxRetryDelayMs <= 0) {
+      throw new Error("invalid reth transport retry delay");
+    }
     this.load = Object.freeze({
       timeoutMs: options.transportTimeoutMs ?? 30_000,
-      limits: (batchSize: number, concurrency: number) => Object.freeze({
-        version: this.reductionVersion,
-        batchSize: this.reduced(batchSize),
-        concurrency: this.reduced(concurrency),
-      }),
-      retryDelayMs: () => this.lastRetryDelayMs,
+      maxRetriesAtOne,
+      limits: (batchSize: number, concurrency: number, items: readonly RethTransportRetryState[] = []) => {
+        const batch = items[0]?.transportRetryBatch;
+        const reduce = (n: number) => Math.max(1, Math.floor(n / 2 ** (batch?.level ?? 0)));
+        return Object.freeze({version: batch?.version ?? 0, batchSize: reduce(batchSize),
+          concurrency: reduce(concurrency), ...(batch ? {batch} : {})});
+      },
+      retryDelayMs: (items: readonly RethTransportRetryState[] = []) => items[0]?.transportRetryBatch?.delayMs ?? 0,
       retry: (error: unknown, items: readonly RethTransportRetryState[], attempt: RethTransportAttempt) => {
         if ((!isRethTransportTimeout(error) && !isRpcThrottleError(error)) ||
             isRpcQuotaExhaustedError(error) || items.length === 0) return false;
-        // A remaining unrelated lane may finish an old physical request after
-        // startup drained. Retry it at current limits, without importing the
-        // startup failure/cooldown into steady state.
-        if (this.steadyVersion !== undefined && attempt.version < this.steadyVersion) return true;
-        // One failure wave lowers one shared tier. Already-in-flight siblings
-        // retain their original attempt tier; they do not create controllers.
-        if (attempt.version === this.reductionVersion) {
-          this.reductionVersion++;
-          this.reductionLevel++;
+        const batch = attempt.batch ?? items[0]?.transportRetryBatch ?? {
+          version: 0, level: 0, notBeforeMs: 0, delayMs: 0,
+        };
+        for (const item of items) item.transportRetryBatch = batch;
+        // In-flight split siblings from one tier lower their own group once.
+        if (attempt.version === batch.version) {
+          batch.version++;
+          batch.level++;
         }
-        const exhausted = attempt.concurrency === 1 && items.some(item => (item.transportRetriesAtOne ?? 0) >= 3);
+        const exhausted = attempt.concurrency === 1 &&
+          items.some(item => (item.transportRetriesAtOne ?? 0) >= maxRetriesAtOne);
         if (!exhausted && attempt.concurrency === 1) for (const item of items) {
           item.transportRetriesAtOne = (item.transportRetriesAtOne ?? 0) + 1;
         }
         const atOne = Math.max(...items.map(item => item.transportRetriesAtOne ?? 0));
-        const delayMs = (options.retryDelayMs ?? 1_000) * 2 ** Math.max(0, atOne - 1);
-        this.lastRetryDelayMs = delayMs;
-        this.retryNotBeforeMs = Math.max(this.retryNotBeforeMs, Date.now() + delayMs);
+        const delayMs = Math.min(
+          (options.retryDelayMs ?? 1_000) * 2 ** Math.max(0, atOne - 1),
+          maxRetryDelayMs,
+        );
+        batch.delayMs = delayMs;
+        batch.notBeforeMs = Math.max(batch.notBeforeMs, Date.now() + delayMs);
         return !exhausted;
       },
     });
   }
 
-  private reduced(limit: number): number {
-    return Math.max(1, Math.floor(limit / 2 ** this.reductionLevel));
-  }
-
   /** Call after startup-owned work drains, before dispatching the first steady head. */
   completeStartup(): boolean {
-    if (this.steadyVersion !== undefined) return false;
-    this.steadyVersion = ++this.reductionVersion;
-    this.reductionLevel = 0;
-    this.retryNotBeforeMs = 0;
-    this.lastRetryDelayMs = 0;
-    // Preserve active permits/queues; drain also clears any inherited wake timer.
-    this.drain();
+    if (this.startupCompleted) return false;
+    this.startupCompleted = true;
     return true;
   }
 
-  private get capacity(): number { return Math.max(2, this.reduced(this.options.capacity)); }
+  private get capacity(): number { return this.options.capacity; }
   private get producerReserved(): number {
-    return Math.min(this.capacity - 1, this.reduced(this.options.producerReserved));
+    return this.options.producerReserved;
   }
 
   async run<T>(
@@ -213,8 +233,9 @@ export class RethTransportScheduler {
       activeTotal: this.activeTotal,
       capacity: this.capacity,
       producerReserved: this.producerReserved,
-      reductionVersion: this.reductionVersion,
-      reductionLevel: this.reductionLevel,
+      // Compatibility diagnostics: there is no run-wide reduction anymore.
+      reductionVersion: 0,
+      reductionLevel: 0,
       activeByLane: Object.freeze({ ...this.activeByLane }),
       queuedByLane: Object.freeze({
         "producer-critical": this.queues["producer-critical"].length,
@@ -281,15 +302,7 @@ export class RethTransportScheduler {
   }
 
   private drain(): void {
-    if (this.retryWake !== undefined) {
-      clearTimeout(this.retryWake);
-      this.retryWake = undefined;
-    }
     if (!LANE_ORDER.some(lane => this.queues[lane].length > 0)) return;
-    if (Date.now() < this.retryNotBeforeMs) {
-      this.retryWake = setTimeout(() => { this.retryWake = undefined; this.drain(); }, this.retryNotBeforeMs - Date.now());
-      return;
-    }
     for (;;) {
       let admitted = false;
 

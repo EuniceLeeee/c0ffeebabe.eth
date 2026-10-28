@@ -6,7 +6,6 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import { UNIV4_POOL_MANAGER_INTERFACE, UNIV4_STATE_VIEW_INTERFACE } from "../venues/swaps/univ4-abi.js";
 import { univ4FeeHookStrictFamilyPlugin } from "../venues/swaps/univ4-fee-hook-family-plugin.js";
 import { UNIV4_FEE_HOOK_ADDRESS, UNIV4_FEE_HOOK_CODE_HASH, UNIV4_FEE_HOOK_PATTERN_IDS } from "../venues/swaps/univ4-fee-hook-family/manifest.js";
-import { createUniv4FeeHookExact } from "../venues/swaps/univ4-fee-hook-family/exact.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
 
 /**
@@ -15,8 +14,7 @@ import { v4PoolId } from "../venues/swaps/univ4-common.js";
  * chain truth. Runs: discovery decode of the real Initialize log, identity
  * active proof (manager/hook code + state view reads pinned at the swap
  * block), instance compile, route projection (fee-hook owned adapter), and a
- * diagnostic Quoter quote. This is not an executor-context quote or execution
- * acceptance. Requires MAINNET_RPC_URL (archive).
+ * real quoter exact quote. Requires MAINNET_RPC_URL (archive).
  */
 const rpcUrl = process.env.MAINNET_RPC_URL;
 if (rpcUrl === undefined || rpcUrl.length === 0) {
@@ -190,7 +188,7 @@ console.log(
   ).join(", "),
 );
 
-// 5. Explicit diagnostic Quoter context, not the production tiered exact method.
+// 5. Exact: real quoter quote at the swap block, direction from the real swap.
 const decodedSwap = UNIV4_POOL_MANAGER_INTERFACE.decodeEventLog(
   "Swap", swap.data, swap.topics,
 );
@@ -214,7 +212,7 @@ const exactInput = {
   executor: ADDR.UNISWAP_V4_POOL_MANAGER,
   runtimeEvidence: Object.freeze([]),
 };
-const method = createUniv4FeeHookExact("local", "quoter").methods(exactInput).find(
+const method = univ4FeeHookStrictFamilyPlugin.exact.methods(exactInput).find(
   (item) => item.id === "univ4-fee-hook-quoter",
 )!;
 if (method.kind !== "request-program") throw new Error("quoter method shape changed");
@@ -234,9 +232,9 @@ assert.equal(
 );
 assert(quoteRecord.amountOut > 0n, "retained Swap amount must quote positively");
 console.log(
-  "diagnostic-quoter: " + (zeroForOne ? "USDC" : "WETH") + " " + amountIn + " -> amountOut=" +
+  "exact: " + (zeroForOne ? "USDC" : "WETH") + " " + amountIn + " -> amountOut=" +
     quoteRecord.amountOut + " evidenceKind=" +
     (quoteRecord.evidence as { kind?: string }).kind,
 );
 
-console.log("univ4-fee-hook diagnostic probe PASS (identity and Quoter response only; executor quote and execution unverified)");
+console.log("univ4-fee-hook live probe PASS (adaptation and retained exact quote verified)");

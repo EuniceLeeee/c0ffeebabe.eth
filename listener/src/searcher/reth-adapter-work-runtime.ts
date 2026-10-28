@@ -1,5 +1,4 @@
 import type { JsonRpcPayload } from "ethers";
-import { applyStrictAssetBoundary } from "./execution-asset-boundary.js";
 import {
   postJsonRpc,
   type JsonRpcHttpResponse,
@@ -1414,13 +1413,6 @@ export function materializeAdapterRequests(
         if (from !== overrideCaller) {
           throw new Error("materialized simulation override caller mismatch");
         }
-        if (request.executionAssetBoundary !== undefined &&
-            (request.call.executionMode !== "executor-program" || request.call.caller.kind !== "executor" ||
-             request.call.to.toLowerCase() !== from || (request.preCalls?.length ?? 0) !== 0)) {
-          throw new Error("materialized native boundary requires executor self-call");
-        }
-        const callData = request.executionAssetBoundary === undefined ? request.call.data :
-          applyStrictAssetBoundary({ boundary: request.executionAssetBoundary, executor: from, data: request.call.data });
         const preCalls = request.preCalls?.map((call) => {
           const preCallFrom = resolveCallerRef(call.caller, authority);
           if (preCallFrom !== from) {
@@ -1439,7 +1431,7 @@ export function materializeAdapterRequests(
               ? {}
               : { executionMode: request.call.executionMode }),
             to: request.call.to,
-            data: callData,
+            data: request.call.data,
           }),
           ...(request.observeTokenBalances === undefined
             ? {}
@@ -1453,9 +1445,6 @@ export function materializeAdapterRequests(
                   })
                 )),
               }),
-          ...(request.observeTotalSupplies === undefined ? {} : {
-            observeTotalSupplies: Object.freeze(request.observeTotalSupplies.map(token => token.toLowerCase())),
-          }),
           overrideIntent: Object.freeze({
             caller: overrideCaller,
             ...(request.overrideIntent.nativeBalanceWei === undefined
@@ -1561,9 +1550,6 @@ function materializedAdapterRequestFingerprint(
                 account: item.account.toLowerCase(),
               })),
             }),
-        ...(request.observeTotalSupplies === undefined ? {} : {
-          observeTotalSupplies: request.observeTotalSupplies.map(token => token.toLowerCase()),
-        }),
         overrideIntent: {
           caller: request.overrideIntent.caller.toLowerCase(),
           nativeBalanceWei: request.overrideIntent.nativeBalanceWei ?? null,

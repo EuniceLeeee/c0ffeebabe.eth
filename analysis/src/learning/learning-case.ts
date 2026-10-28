@@ -32,7 +32,7 @@ export interface LearningCase {
    *  short-circuits to manual_required — no close action may consume it. */
   strategy_kind: StrategyKind | "unknown";
   edge_kinds: EdgeKind[];
-  trigger: "bundle_not_included" | "competitor_not_seen" | "tooling_defect";
+  trigger: "bundle_not_included" | "competitor_not_seen";
   competitor_tx?: string;
   our_opportunity_id?: string;
   source_block?: number;      // block-scan: competitor_execution_block − 1 (user pt 1)
@@ -147,14 +147,6 @@ export function advanceStatus(id: string, next: LearningCase["status"]): Learnin
 
 function normalizeCaseForStore(c: LearningCase): LearningCase {
   if (!c.learning_case_id) throw new Error("LearningCase.learning_case_id is required");
-  if (c.trigger === "tooling_defect") {
-    if (c.tooling_defect === null || typeof c.tooling_defect !== "object") {
-      throw new Error("Tooling-defect LearningCases require tooling_defect evidence");
-    }
-    if (c.primary_gap !== "manual_required" || c.comparable !== false) {
-      throw new Error("Tooling-defect LearningCases require a non-comparable manual_required gap");
-    }
-  }
   if (c.strategy_kind === "unknown") {
     if (c.trigger !== "competitor_not_seen") {
       throw new Error("Unknown strategy_kind is only legal for competitor_not_seen LearningCases");

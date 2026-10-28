@@ -10,7 +10,7 @@ import type { UniV3Descriptor, UniV3ExactEvidence, UniV3Route } from "./types.js
 type RuntimeInput = Pick<Parameters<ExecutionSemantics<UniV3Descriptor, UniV3Route, UniV3ExactEvidence>["buildFragment"]>[0],
   "descriptor" | "route" | "executor" | "transactionOrigin" | "runtimeEvidence"> & { settlement?: RuntimeSettlementRequest };
 
-export function buildUniV3RuntimeLeg(input: RuntimeInput): RuntimeAmountLeg | null {
+export function buildUniV3RuntimeLeg(input: RuntimeInput): RuntimeAmountLeg {
   const { descriptor: d, route: r } = input;
   const expected = univ3Routes.project({ descriptor: d }).find(route => route.direction === r.direction);
   if (!expected || r.familyId !== expected.familyId || r.lineageId !== expected.lineageId ||
@@ -28,7 +28,7 @@ export function buildUniV3RuntimeLeg(input: RuntimeInput): RuntimeAmountLeg | nu
   }
   const zeroForOne = r.direction === "zero-for-one";
   const request = input.settlement;
-  if (request?.kind === "quote-output") return null;
+  if (request?.kind === "quote-output") throw new Error("univ3 runtime static quote unavailable");
   const recipient = request?.kind === "direct-output" ? ethers.getAddress(request.recipient) : executor;
   if (sameAddress(recipient, ethers.ZeroAddress) || sameAddress(recipient, d.pool)) throw new Error("univ3 runtime output recipient");
   let payment = runtimeCallbackPayment(r.tokenIn, d.pool, zeroForOne ? 4 : 36);
@@ -52,8 +52,8 @@ export function buildUniV3RuntimeLeg(input: RuntimeInput): RuntimeAmountLeg | nu
     })
     .load(1, zeroForOne ? 0 : 32)
     .math("sub", 2, 0, 1); // partial fills are legal; input debt must stay within the cap
-  if(request?.kind==="deferred-input")program.equal(1,0);
+  if (request?.kind === "deferred-input" && request.paymentInput !== "debt") program.equal(1, 0);
   return { actionAdapterId: "univ3-swap", program: ethers.hexlify(program.bytes()),
-    settlement: { directOutput: true, deferredInput: d.pool },
+    settlement: { directOutput: true, deferredInput: d.pool, deferredDebtInput: true },
     ...(request === undefined ? {} : { settlementRequest: request }) };
 }

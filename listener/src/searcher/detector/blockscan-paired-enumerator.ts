@@ -27,6 +27,7 @@ export const resolveRustEnumerationScratchMb = (raw?: string) =>
 
 export function enumeratePaired(input: PairedEnumerationInput, method: PairedEnumerationMethod,
   backend: PairedEnumerationBackend) {
+  const started = performance.now();
   // Validate at dispatch too: a deserialized/explicit config cannot bypass the switch.
   resolvePairedEnumerationBackend(backend);
   // Pool and token limits have separate scopes. Every retained pair keeps its
@@ -38,11 +39,17 @@ export function enumeratePaired(input: PairedEnumerationInput, method: PairedEnu
   // Other signal policy (including its own top-K) remains unchanged.
   const signals = input.signals.filter(signal => kept.has(signal.buy) && kept.has(signal.sell));
   const selected = { ...input, quotes, signals };
+  const selectedAt = performance.now();
   const stats = backend === "rust" ? enumerateRustPaired(selected, method)
     : method === "joint-dfs" ? enumerateJointDfs(selected)
     : method === "dfs" ? enumeratePairedDfs(selected)
     : method === "layered" ? enumeratePairedLayered(selected)
     : (() => { throw new Error("unsupported enumeration method"); })();
+  if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1") {
+    try { console.log(`[searcher/blockscan-dispatch-timing] ${JSON.stringify({
+      poolSelectionMs: selectedAt - started, enumerationMs: performance.now() - selectedAt,
+    })}`); } catch { /* Diagnostic observers cannot alter enumeration. */ }
+  }
   return { ...stats, hopPoolsPerPair, hopQuotesBefore: input.quotes.length,
     hopQuotesSelected: quotes.length, hopQuotesPruned: input.quotes.length - quotes.length,
     hopSignalPairsAfterBestPool: signals.length };

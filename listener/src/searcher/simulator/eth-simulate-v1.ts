@@ -4,16 +4,19 @@ import { isDeepStrictEqual } from "node:util";
 import { getBytes, Interface, keccak256, toUtf8Bytes } from "ethers";
 import { compilePlan } from "../../shared/compiler/compiler.js";
 import { bytesToHex } from "../../shared/compiler/encoder.js";
-import { buildExecuteCalldata, type BotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
+import { buildExecuteCalldata, buildRawExecuteCalldata, canUseRawExecuteCalldata, type BotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
 import { postJsonRpc, StateCallAbortedError } from "../../shared/state/state-backend.js";
 import type { BlockScanObservedHeader } from "../blockscan-observed-header.js";
 import { nextBlockBaseFee } from "../ev-evaluator.js";
-import { isRpcThrottleError } from "../rpc-throttle-guard.js";
+import { isRpcThrottleError, isRpcQuotaExhaustedError } from "../rpc-throttle-guard.js";
 import type { ResolvedPlan } from "../solver/solver.js";
 import type { CanonicalSource } from "../venues/adapter-request-program.js";
 import type { SimulationResult } from "./botvm-simulator.js";
+import { RevmStrictError, validateInputFundingOverrides, type InputFundingOverrides } from "../revm-sim-client.js";
 import type { RevertCallFrame, RevertTraceEvidence } from "./revert-hop.js";
 import { HOP_DIAGNOSTIC_SLOT, supportsHopDiagnostics } from "./direct-revert-hop.js";
+import { compileStartupPrefix, startupPrefixReceipts, startupPrefixFailure,
+  type StartupPrefixInput, type StartupPrefixReceipt } from "./startup-prefix-program.js";
 
 const ERC20 = new Interface(["function balanceOf(address) view returns (uint256)"]);
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -51,6 +54,25 @@ type Context = {
   deadlineAtMs: number;
 };
 
+export type StandaloneExecutionResult = Readonly<{
+  kind: "success" | "revert";
+  returnData: string;
+  gasUsed: bigint;
+  targetBlock: number;
+  calldata: string;
+}>;
+export type StartupPrefixExecutionResult = Readonly<{
+  kind: "success" | "revert";
+  returnData: string;
+  gasUsed: bigint;
+  targetBlock: number;
+  scriptHash: string;
+  inputFundingMode: "native-prefix";
+  receipts: readonly StartupPrefixReceipt[];
+  failure?: { hop: number; callTarget: string; reason: string };
+}>;
+type SimulationRpc = (id: number, method: "eth_call" | "eth_simulateV1", params: readonly unknown[]) => Promise<unknown>;
+
 type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } : T;
 
 /** Versioned, endpoint-free snapshot. Source identity retains CanonicalSource's
@@ -58,6 +80,9 @@ type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonl
  * Schemas 3/4 measure pre/post in N+1, excluding passive N→N+1 yield; 4 adds a
  * failure-only diagnostic slot. Schemas
  * 1/2 retain their original N pre-balance and exact two-request wire replay.
+ * 5/6 are the corresponding same-block raw-entry forms (without/with diagnosis).
+ * 7/8 diagnose the verified chain executor (ABI/raw) without replacing its code.
+ * The schema binds the entry independently of the replay process configuration.
  */
 export type EthSimulateV1ExecutionInput = DeepReadonly<ReturnType<typeof prepareExecutionInput> |
   ReturnType<typeof prepareLegacyExecutionInput>>;
@@ -71,7 +96,9 @@ export function buildEthSimulateV1ExecutionInput(input: {
   source: CanonicalSource; header: BlockScanObservedHeader; executor: string;
   owner: string; profitToken: string; scriptHex: string;
   executorRuntimeCode?: BotVmRuntimeCode;
+  chainExecutorRuntimeCode?: BotVmRuntimeCode;
   diagnosticKey?: string;
+  executionEntry?: "raw";
 }) {
   return freezeInput(prepareExecutionInput(input));
 }
@@ -80,7 +107,9 @@ type PreparationInput = {
   source: CanonicalSource; header: BlockScanObservedHeader; executor: string;
   owner: string; profitToken: string; scriptHex: string;
   executorRuntimeCode?: BotVmRuntimeCode;
+  chainExecutorRuntimeCode?: BotVmRuntimeCode;
   diagnosticKey?: string;
+  executionEntry?: "raw";
 };
 
 function prepareExecutionInput(input: PreparationInput) {
@@ -102,16 +131,24 @@ function prepareExecutionInput(input: PreparationInput) {
   const block = simulateParams[0].blockStateCalls[0];
   const observer = { from: OBSERVER_SENDER, to: OBSERVER, data: "0x", value: "0x0", gasPrice: "0x0" };
   const diagnosticKey = input.diagnosticKey?.toLowerCase();
+  const chainExecutorRuntimeCode = validateExecutorRuntimeCode(input.chainExecutorRuntimeCode);
+  if (chainExecutorRuntimeCode && (input.executorRuntimeCode || diagnosticKey === undefined)) {
+    throw new Error("chain executor diagnosis cannot override code or omit its key");
+  }
+  const diagnosticCode = input.executorRuntimeCode ?? chainExecutorRuntimeCode;
   if (diagnosticKey !== undefined && (!HASH.test(diagnosticKey) || BigInt(diagnosticKey) === 0n ||
-      !input.executorRuntimeCode || !supportsHopDiagnostics(input.executorRuntimeCode.code))) {
+      !diagnosticCode || !supportsHopDiagnostics(diagnosticCode.code))) {
     throw new Error("invalid final simulation hop diagnostic key or executor");
   }
-  return { ...primary, schemaVersion: diagnosticKey === undefined ? 3 as const : 4 as const,
+  return { ...primary, schemaVersion: chainExecutorRuntimeCode ? input.executionEntry === "raw" ? 8 as const : 7 as const : input.executionEntry === "raw"
+      ? diagnosticKey === undefined ? 5 as const : 6 as const
+      : diagnosticKey === undefined ? 3 as const : 4 as const,
     ...(diagnosticKey === undefined ? {} : { diagnosticKey }),
+    ...(chainExecutorRuntimeCode === undefined ? {} : { chainExecutorRuntimeCode }),
     simulateParams: [{ ...simulateParams[0], blockStateCalls: [{ ...block,
       stateOverrides: { ...block.stateOverrides,
         ...(diagnosticKey === undefined ? {} : { [input.executor]: {
-          code: input.executorRuntimeCode!.code,
+          ...(input.executorRuntimeCode ? { code: input.executorRuntimeCode.code } : {}),
           stateDiff: { [HOP_DIAGNOSTIC_SLOT]: diagnosticKey },
         } }),
         [OBSERVER]: { code: observerCode(input.profitToken, input.executor) } },
@@ -120,14 +157,15 @@ function prepareExecutionInput(input: PreparationInput) {
 }
 
 // Private reconstruction only: no production mode/configuration switch.
-function prepareLegacyExecutionInput({ source, header, executor, owner, profitToken, scriptHex, executorRuntimeCode: codeInput }: PreparationInput) {
+function prepareLegacyExecutionInput({ source, header, executor, owner, profitToken, scriptHex, executorRuntimeCode: codeInput, executionEntry }: PreparationInput) {
   const blockOverrides = targetContext(source, header);
   validateCaller(executor, owner);
   if (typeof profitToken !== "string" || !ADDRESS.test(profitToken) ||
       typeof scriptHex !== "string" || !/^0x(?:[0-9a-fA-F]{2})*$/.test(scriptHex)) {
     throw new Error("invalid final simulation profit token or script");
   }
-  const calldata = buildExecuteCalldata(getBytes(scriptHex));
+  if (executionEntry !== undefined && executionEntry !== "raw") throw new Error("invalid final simulation execution entry");
+  const calldata = executionEntry === "raw" ? buildRawExecuteCalldata(getBytes(scriptHex)) : buildExecuteCalldata(getBytes(scriptHex));
   const pinnedBlock = { blockHash: source.hash, requireCanonical: true as const };
   // Preserve historical direct-call wire semantics exactly (not STATICCALL).
   const observer = { from: ZERO_ADDRESS, to: profitToken,
@@ -168,7 +206,7 @@ function prepareLegacyExecutionInput({ source, header, executor, owner, profitTo
 export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulateV1ExecutionInput {
   try {
     const saved = record(value), source = record(saved?.source), header = record(saved?.sourceHeader);
-    if (!saved || ![1, 2, 3, 4].includes(saved.schemaVersion as number) || !source || !header ||
+    if (!saved || ![1, 2, 3, 4, 5, 6, 7, 8].includes(saved.schemaVersion as number) || !source || !header ||
         typeof source.number !== "number" || typeof source.hash !== "string" ||
         typeof source.generation !== "number" || typeof header.hash !== "string" ||
         typeof header.parentHash !== "string" || typeof saved.executor !== "string" ||
@@ -178,7 +216,7 @@ export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulate
       if (typeof field !== "string" || !/^(?:0|[1-9][0-9]*)$/.test(field)) throw new Error();
       return BigInt(field);
     };
-    const canonical = freezeInput((saved.schemaVersion === 3 || saved.schemaVersion === 4 ? prepareExecutionInput : prepareLegacyExecutionInput)({
+    const canonical = freezeInput(((saved.schemaVersion as number) >= 3 ? prepareExecutionInput : prepareLegacyExecutionInput)({
       source: { number: source.number, hash: source.hash, generation: source.generation },
       header: { number: Number(decimal(header.number)), hash: header.hash, parentHash: header.parentHash,
         timestamp: Number(decimal(header.timestamp)), baseFeePerGas: decimal(header.baseFeePerGas),
@@ -187,7 +225,11 @@ export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulate
       ...(saved.executorRuntimeCode === undefined ? {} : {
         executorRuntimeCode: validateExecutorRuntimeCode(saved.executorRuntimeCode),
       }),
-      ...(saved.schemaVersion === 4 ? { diagnosticKey: typeof saved.diagnosticKey === "string"
+      ...(saved.schemaVersion === 7 || saved.schemaVersion === 8 ? {
+        chainExecutorRuntimeCode: validateExecutorRuntimeCode(saved.chainExecutorRuntimeCode),
+      } : {}),
+      ...(saved.schemaVersion === 5 || saved.schemaVersion === 6 || saved.schemaVersion === 8 ? { executionEntry: "raw" as const } : {}),
+      ...([4, 6, 7, 8].includes(saved.schemaVersion as number) ? { diagnosticKey: typeof saved.diagnosticKey === "string"
         ? saved.diagnosticKey : "invalid" } : {}),
     }));
     if (!isDeepStrictEqual(value, canonical)) throw new Error();
@@ -238,14 +280,24 @@ export class EthSimulateV1Simulator {
   private readonly revertDiagnosticsPath = process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH;
   private recordedReverts = 0;
   private readonly executorRuntimeCode: BotVmRuntimeCode | undefined;
+  private readonly chainExecutorRuntimeCode: BotVmRuntimeCode | undefined;
   constructor(
     private readonly rpcUrl: string,
     readonly executor: string,
     readonly owner: string,
     executorRuntimeCode?: BotVmRuntimeCode,
+    private readonly preferRawEntry = false,
+    // Caller verifies these owner-bound bytes against chain code once at startup.
+    // They are evidence, not a code override; no read or trace is added per sim.
+    chainExecutorRuntimeCode?: BotVmRuntimeCode,
   ) {
     validateCaller(executor, owner);
     this.executorRuntimeCode = validateExecutorRuntimeCode(executorRuntimeCode);
+    this.chainExecutorRuntimeCode = validateExecutorRuntimeCode(chainExecutorRuntimeCode);
+    if (this.chainExecutorRuntimeCode && (this.executorRuntimeCode || !supportsHopDiagnostics(this.chainExecutorRuntimeCode.code))) {
+      throw new Error("invalid verified chain executor diagnostics");
+    }
+    if (typeof preferRawEntry !== "boolean") throw new Error("invalid final simulation entry preference");
   }
 
   /** Opt-in bounded evidence only: exact endpoint-free input and public hex
@@ -283,8 +335,10 @@ export class EthSimulateV1Simulator {
     const scriptHex = bytesToHex(compilePlan(plan.root, this.executor));
     const input = buildEthSimulateV1ExecutionInput({ source, header, executor: this.executor,
       owner: this.owner, profitToken, scriptHex,
+      ...(this.preferRawEntry && canUseRawExecuteCalldata(getBytes(scriptHex)) ? { executionEntry: "raw" as const } : {}),
       ...(this.executorRuntimeCode === undefined ? {} : { executorRuntimeCode: this.executorRuntimeCode }),
-      ...(this.executorRuntimeCode && supportsHopDiagnostics(this.executorRuntimeCode.code)
+      ...(this.chainExecutorRuntimeCode ? { chainExecutorRuntimeCode: this.chainExecutorRuntimeCode } : {}),
+      ...((this.executorRuntimeCode && supportsHopDiagnostics(this.executorRuntimeCode.code)) || this.chainExecutorRuntimeCode
         ? { diagnosticKey: `0x${randomBytes(32).toString("hex")}` } : {}) });
     return this.simulateExecutionInput(input, { signal, deadlineAtMs });
   }
@@ -300,17 +354,146 @@ export class EthSimulateV1Simulator {
     if (!isDeepStrictEqual(saved.executorRuntimeCode, this.executorRuntimeCode)) {
       throw new Error("final simulation execution input executor code mismatch");
     }
+    if ("chainExecutorRuntimeCode" in saved && !isDeepStrictEqual(saved.chainExecutorRuntimeCode, this.chainExecutorRuntimeCode)) {
+      throw new Error("final simulation execution input chain executor code mismatch");
+    }
     const { signal, deadlineAtMs } = control;
     if (!Number.isSafeInteger(deadlineAtMs) || !signal) {
       throw new Error("invalid final simulation control or profit token");
     }
     const { profitToken, calldata, scriptHex, simulateParams } = saved;
-    const sameBlock = saved.schemaVersion === 3 || saved.schemaVersion === 4;
+    const sameBlock = saved.schemaVersion >= 3;
     const codeEvidence = saved.executorRuntimeCode === undefined ? {} : {
       counterfactualExecutorCode: { address: this.executor.toLowerCase(), keccak256: saved.executorRuntimeCode.keccak256 },
     };
     const blockOverrides = simulateParams[0].blockStateCalls[0].blockOverrides;
     const pinnedBlock = simulateParams[1];
+    return this.withRpc(control, async request => {
+      const legacyPre = "preBalanceParams" in saved
+        ? balance(await request(1, "eth_call", saved.preBalanceParams)) : undefined;
+      const raw = await request(sameBlock ? 1 : 2, "eth_simulateV1", simulateParams);
+      const block = checkedBlock(raw, pinnedBlock.blockHash, blockOverrides, sameBlock ? 3 : 2);
+      const calls = simulateParams[0].blockStateCalls[0].calls;
+      const main = parseCall(block.calls[sameBlock ? 1 : 0], TX_GAS);
+      const pre = sameBlock
+        ? observedBalance(parseCall(block.calls[0], quantity(calls[0].gas))) : legacyPre!;
+      const postIndex = sameBlock ? 2 : 1;
+      const post = parseCall(block.calls[postIndex], quantity(calls[postIndex]!.gas));
+      const postBalance = sameBlock ? observedBalance(post) : (() => {
+        if (post.status !== "0x1") throw rpcFailure(post.error);
+        return balance(post.returnData);
+      })();
+      if (main.status === "0x0") {
+        const error = record(main.error);
+        if (error?.code !== 3) throw rpcFailure(main.error);
+        this.recordRevert(saved, main);
+        const cause = Object.assign(new Error("final simulation transaction reverted"), {
+          kind: "revert", code: "TRANSACTION_REVERTED",
+        });
+        const result: EthSimulateV1SimulationResult = { ...codeEvidence, success: false, profitToken, grossProfit: 0n, gasUsed: 0n, netProfit: 0n,
+          calldata, scriptHex, revertReason: cause.message,
+          failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause } };
+        Object.defineProperty(result, "revertEvidence", { value: Object.freeze({
+          executionInput: saved, returnData: main.returnData as string,
+          ...(typeof error.data === "string" && /^0x(?:[0-9a-fA-F]{2})*$/.test(error.data)
+            ? { errorData: error.data } : {}), gasUsed: quantity(main.gasUsed).toString(),
+        }) });
+        Object.defineProperty(result, "traceRevert", { value: (work: Pick<Context, "signal" | "deadlineAtMs">) =>
+          this.traceRevert(saved, main, work) });
+        return result;
+      }
+      const grossProfit = postBalance - pre;
+      return { ...codeEvidence, success: grossProfit > 0n, profitToken, grossProfit,
+        gasUsed: grossProfit > 0n ? quantity(main.gasUsed) : 0n,
+        netProfit: grossProfit, calldata, scriptHex };
+    });
+  }
+
+  /** Startup observation only: one native seed, one production transaction,
+   * and actual per-leg receipts. Intermediate token state is never overridden.
+   * This does not change final simulation, profitability or rejection policy. */
+  async simulateStartupPrefix(input: StartupPrefixInput & { source: CanonicalSource; header: BlockScanObservedHeader },
+    control: Pick<Context, "signal" | "deadlineAtMs">): Promise<StartupPrefixExecutionResult> {
+    const compiled = compileStartupPrefix(input, this.executor);
+    if ([this.owner, this.executor, OBSERVER, OBSERVER_SENDER].some(address =>
+      address.toLowerCase() === compiled.recorder.toLowerCase())) throw new Error("startup prefix observer collision");
+    const key = `0x${randomBytes(32).toString("hex")}`;
+    const saved = buildEthSimulateV1ExecutionInput({ source: input.source, header: input.header,
+      executor: this.executor, owner: this.owner, profitToken: input.legs.at(-1)?.tokenOut ?? this.executor,
+      scriptHex: compiled.scriptHex,
+      ...(this.executorRuntimeCode ? { executorRuntimeCode: this.executorRuntimeCode } : {}),
+      ...(this.preferRawEntry && canUseRawExecuteCalldata(getBytes(compiled.scriptHex)) ? { executionEntry: "raw" as const } : {}) });
+    const block = saved.simulateParams[0].blockStateCalls[0];
+    // The diagnostic slot only changes failure envelopes on supporting
+    // production executors. Missing support yields an unattributed revert.
+    // No executable code is silently substituted when the caller supplied none.
+    const stateOverrides = { [this.owner]: { balance: hex(OWNER_GAS_BALANCE) },
+      [this.executor]: { balance: hex(compiled.amount),
+        ...(this.executorRuntimeCode ? { code: this.executorRuntimeCode.code } : {}),
+        stateDiff: { [HOP_DIAGNOSTIC_SLOT]: key } },
+      [compiled.recorder]: { code: compiled.recorderCode } };
+    const params = [{ ...saved.simulateParams[0], blockStateCalls: [{ ...block, stateOverrides,
+      calls: [block.calls[1]],
+    }] }, saved.simulateParams[1]];
+    return this.withRpc(control, async request => {
+      const result = checkedBlock(await request(1, "eth_simulateV1", params), saved.source.hash, block.blockOverrides, 1);
+      const main = parseCall(result.calls[0], TX_GAS);
+      if (main.status === "0x0" && record(main.error)?.code !== 3) throw rpcFailure(main.error);
+      const success = main.status === "0x1";
+      return Object.freeze({ kind: success ? "success" : "revert", returnData: main.returnData as string,
+        gasUsed: quantity(main.gasUsed), targetBlock: saved.source.number + 1,
+        scriptHash: keccak256(compiled.scriptHex), inputFundingMode: "native-prefix",
+        receipts: success ? startupPrefixReceipts(main.logs, compiled) : [],
+        ...(success ? {} : { failure: startupPrefixFailure(main.returnData as string, record(main.error)?.data, key, compiled) }) });
+    });
+  }
+
+  /** Same production transaction entry, source/target check and RPC. No Exact
+   * quotation, prefix execution, output balance, trace, or profitability verdict.
+   * The input probe shares this one RPC and prevents failed funding from being
+   * attributed to the leg. Funding writes come from the source-owned initializer.
+   */
+  async simulateStandalone(input: { source: CanonicalSource; header: BlockScanObservedHeader;
+    scriptHex: string; inputToken: string; inputAmount: bigint; funding: InputFundingOverrides },
+    control: Pick<Context, "signal" | "deadlineAtMs">): Promise<StandaloneExecutionResult> {
+    if (typeof input.inputAmount !== "bigint" || input.inputAmount <= 0n || input.inputAmount >= 1n << 256n) {
+      throw new Error("invalid standalone input amount");
+    }
+    const inputAmount = input.inputAmount;
+    validateInputFundingOverrides(input.funding);
+    const saved = buildEthSimulateV1ExecutionInput({ source: input.source, header: input.header,
+      executor: this.executor, owner: this.owner, profitToken: input.inputToken, scriptHex: input.scriptHex,
+      ...(this.executorRuntimeCode ? { executorRuntimeCode: this.executorRuntimeCode } : {}),
+      ...(this.preferRawEntry && canUseRawExecuteCalldata(getBytes(input.scriptHex)) ? { executionEntry: "raw" as const } : {}) });
+    const block = saved.simulateParams[0].blockStateCalls[0];
+    const protectedAccounts = [this.executor, this.owner, OBSERVER, OBSERVER_SENDER].map(a => a.toLowerCase());
+    if (Object.keys(input.funding).some(a => protectedAccounts.includes(a.toLowerCase()))) {
+      throw new Error("standalone funding aliases execution infrastructure");
+    }
+    // Own all caller-supplied writes before yielding, as for saved final inputs.
+    const funding = JSON.parse(JSON.stringify(input.funding)) as InputFundingOverrides;
+    const params = [{ ...saved.simulateParams[0], blockStateCalls: [{ ...block,
+      stateOverrides: { ...block.stateOverrides, ...funding }, calls: block.calls.slice(0, 2),
+    }] }, saved.simulateParams[1]];
+    return this.withRpc(control, async request => {
+      const result = checkedBlock(await request(1, "eth_simulateV1", params),
+        saved.source.hash, block.blockOverrides, 2);
+      let available: bigint;
+      try { available = observedBalance(parseCall(result.calls[0], quantity(block.calls[0].gas))); }
+      catch { throw new RevmStrictError("observation", "standalone input balance unavailable"); }
+      if (available < inputAmount) throw new RevmStrictError("observation", "standalone input funding insufficient");
+      const main = parseCall(result.calls[1], TX_GAS);
+      if (main.status === "0x0" && record(main.error)?.code !== 3) throw rpcFailure(main.error);
+      return Object.freeze({ kind: main.status === "0x1" ? "success" : "revert",
+        returnData: main.returnData as string, gasUsed: quantity(main.gasUsed),
+        targetBlock: saved.source.number + 1, calldata: saved.calldata });
+    });
+  }
+
+  private async withRpc<T>(control: Pick<Context, "signal" | "deadlineAtMs">,
+    operation: (request: SimulationRpc) => Promise<T>): Promise<T> {
+    const { signal, deadlineAtMs } = control;
+    if (!signal || !Number.isSafeInteger(deadlineAtMs)) throw new Error("invalid final simulation control");
     const controller = new AbortController();
     const cancel = (kind: "signal" | "deadline"): void => {
       if (!controller.signal.aborted) {
@@ -341,16 +524,18 @@ export class EthSimulateV1Simulator {
       }
       assertOpen();
       const body = record(response.body);
-      const validEnvelope = validResponseEnvelope(body, id);
+      const validEnvelope = body?.jsonrpc === "2.0" && body.id === id;
       const error = validEnvelope ? record(body.error) : null;
       const code = error && Number.isSafeInteger(error.code) ? error.code as number : undefined;
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Object.assign(new Error(`final simulation HTTP ${response.statusCode}`), {
+        const exhausted = isRpcQuotaExhaustedError({ ...error, statusCode: response.statusCode });
+        throw Object.assign(new Error(exhausted ? "final simulation RPC quota exhausted"
+          : `final simulation HTTP ${response.statusCode}`), {
           // Keep a revert-shaped RPC code from masking HTTP throttling in policy.
           statusCode: response.statusCode, ...(code === undefined ? {} : { rpcCode: code }),
         });
       }
-      if (!validEnvelope || !body) {
+      if (!validEnvelope || !body || Object.hasOwn(body, "error") === Object.hasOwn(body, "result")) {
         throw new Error("invalid final simulation JSON-RPC envelope");
       }
       if (Object.hasOwn(body, "error")) throw rpcFailure(body.error);
@@ -360,60 +545,9 @@ export class EthSimulateV1Simulator {
       assertOpen();
       signal.addEventListener("abort", onAbort, { once: true });
       armDeadline();
-      const legacyPre = "preBalanceParams" in saved
-        ? balance(await request(1, "eth_call", saved.preBalanceParams)) : undefined;
-      const raw = await request(sameBlock ? 1 : 2, "eth_simulateV1", simulateParams);
-      if (!Array.isArray(raw) || raw.length !== 1) throw new Error("invalid final simulation block count");
-      const block = record(raw[0]);
-      if (!block || typeof block.parentHash !== "string" || !HASH.test(block.parentHash) ||
-          block.parentHash.toLowerCase() !== pinnedBlock.blockHash.toLowerCase() ||
-          quantity(block.number) !== quantity(blockOverrides.number) ||
-          quantity(block.timestamp) !== quantity(blockOverrides.time) ||
-          quantity(block.gasLimit) !== quantity(blockOverrides.gasLimit) ||
-          quantity(block.baseFeePerGas) !== quantity(blockOverrides.baseFeePerGas)) {
-        throw new Error("final simulation source or target header mismatch");
-      }
-      if (!Array.isArray(block.calls) || block.calls.length !== (sameBlock ? 3 : 2)) {
-        throw new Error("invalid final simulation call count");
-      }
-      const calls = simulateParams[0].blockStateCalls[0].calls;
-      const main = parseCall(block.calls[sameBlock ? 1 : 0], TX_GAS);
-      const pre = sameBlock
-        ? observedBalance(parseCall(block.calls[0], quantity(calls[0].gas))) : legacyPre!;
-      const postIndex = sameBlock ? 2 : 1;
-      const post = parseCall(block.calls[postIndex], quantity(calls[postIndex]!.gas));
-      const postBalance = sameBlock ? observedBalance(post) : (() => {
-        if (post.status !== "0x1") throw rpcFailure(post.error);
-        return balance(post.returnData);
-      })();
+      const result = await operation(request);
       assertOpen();
-      if (main.status === "0x0") {
-        // Only the explicit execution-reverted RPC code is a confirmed revert.
-        // Unknown VM/validation/provider failures remain thrown, never cached as
-        // route reverts. Remote prose is discarded; hex is diagnostic evidence,
-        // never a pool attribution until its executor proof is verified.
-        const error = record(main.error);
-        if (error?.code !== 3) throw rpcFailure(main.error);
-        this.recordRevert(saved, main);
-        const cause = Object.assign(new Error("final simulation transaction reverted"), {
-          kind: "revert", code: "TRANSACTION_REVERTED",
-        });
-        const result: EthSimulateV1SimulationResult = { ...codeEvidence, success: false, profitToken, grossProfit: 0n, gasUsed: 0n, netProfit: 0n,
-          calldata, scriptHex, revertReason: cause.message,
-          failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause } };
-        Object.defineProperty(result, "revertEvidence", { value: Object.freeze({
-          executionInput: saved, returnData: main.returnData as string,
-          ...(typeof error.data === "string" && /^0x(?:[0-9a-fA-F]{2})*$/.test(error.data)
-            ? { errorData: error.data } : {}), gasUsed: quantity(main.gasUsed).toString(),
-        }) });
-        Object.defineProperty(result, "traceRevert", { value: (work: Pick<Context, "signal" | "deadlineAtMs">) =>
-          this.traceRevert(saved, main, work) });
-        return result;
-      }
-      const grossProfit = postBalance - pre;
-      return { ...codeEvidence, success: grossProfit > 0n, profitToken, grossProfit,
-        gasUsed: grossProfit > 0n ? quantity(main.gasUsed) : 0n,
-        netProfit: grossProfit, calldata, scriptHex };
+      return result;
     } finally {
       if (timer !== undefined) clearTimeout(timer);
       signal.removeEventListener("abort", onAbort);
@@ -425,7 +559,7 @@ export class EthSimulateV1Simulator {
     const remaining = Math.min(3000, control.deadlineAtMs - Date.now());
     if (remaining <= 0 || control.signal.aborted) return null;
     const block = saved.simulateParams[0].blockStateCalls[0];
-    const tx = block.calls[saved.schemaVersion === 3 || saved.schemaVersion === 4 ? 1 : 0];
+    const tx = block.calls[saved.schemaVersion >= 3 ? 1 : 0];
     try {
       const response = await postJsonRpc(this.rpcUrl, { jsonrpc: "2.0", id: 1, method: "debug_traceCall",
         params: [tx, saved.simulateParams[1], { tracer: "callTracer", timeout: "3s",
@@ -433,8 +567,7 @@ export class EthSimulateV1Simulator {
         AbortSignal.any([control.signal, AbortSignal.timeout(Math.ceil(remaining))]));
       const body = record(response.body), trace = body?.result as RevertCallFrame | undefined;
       const expected = record(main.error)?.data;
-      if (response.statusCode !== 200 || !validResponseEnvelope(body, 1) ||
-          Object.hasOwn(body, "error") || trace?.error !== "execution reverted" ||
+      if (response.statusCode !== 200 || body?.error || trace?.error !== "execution reverted" ||
           trace.from?.toLowerCase() !== saved.owner.toLowerCase() || trace.to?.toLowerCase() !== saved.executor.toLowerCase() ||
           trace.input?.toLowerCase() !== saved.calldata.toLowerCase() ||
           typeof expected !== "string" || trace.output?.toLowerCase() !== expected.toLowerCase() ||
@@ -442,6 +575,20 @@ export class EthSimulateV1Simulator {
       return { executionInput: saved, trace };
     } catch { return null; }
   }
+}
+
+function checkedBlock(raw: unknown, sourceHash: string,
+  expected: ReturnType<typeof targetContext>, callCount: number): { calls: unknown[] } {
+  if (!Array.isArray(raw) || raw.length !== 1) throw new Error("invalid final simulation block count");
+  const block = record(raw[0]);
+  if (!block || typeof block.parentHash !== "string" || !HASH.test(block.parentHash) ||
+    block.parentHash.toLowerCase() !== sourceHash.toLowerCase() ||
+    quantity(block.number) !== quantity(expected.number) || quantity(block.timestamp) !== quantity(expected.time) ||
+    quantity(block.gasLimit) !== quantity(expected.gasLimit) || quantity(block.baseFeePerGas) !== quantity(expected.baseFeePerGas)) {
+    throw new Error("final simulation source or target header mismatch");
+  }
+  if (!Array.isArray(block.calls) || block.calls.length !== callCount) throw new Error("invalid final simulation call count");
+  return { calls: block.calls };
 }
 
 function targetContext(source: CanonicalSource, header: BlockScanObservedHeader) {
@@ -461,11 +608,6 @@ function targetContext(source: CanonicalSource, header: BlockScanObservedHeader)
   if (baseFee === null || baseFee <= 0n) throw new Error("final simulation next base fee unavailable");
   return { number: hex(source.number + 1), time: hex(header.timestamp + 12),
     gasLimit: hex(header.gasLimit), baseFeePerGas: hex(baseFee) };
-}
-
-function validResponseEnvelope(body: Record<string, unknown> | null, id: number): body is Record<string, unknown> {
-  return body !== null && body.jsonrpc === "2.0" && body.id === id &&
-    Object.hasOwn(body, "error") !== Object.hasOwn(body, "result");
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -502,7 +644,9 @@ function rpcFailure(value: unknown): Error {
   if (!error || !Number.isSafeInteger(error.code) || typeof error.message !== "string") {
     return new Error("invalid final simulation RPC error");
   }
-  return Object.assign(new Error(isRpcThrottleError(error)
+  return Object.assign(new Error(isRpcQuotaExhaustedError(error)
+    ? "final simulation RPC quota exhausted"
+    : isRpcThrottleError(error)
     ? `final simulation HTTP 429 RPC throttle code ${error.code}`
     : `final simulation RPC error code ${error.code}`), { code: error.code });
 }

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, unlinkSync, symlinkSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 import { tableRef, sourcePin, decodeRow, observationsFromTx, emptyCounts, makeApi } from './bigquery-table.mjs';
 import { main } from './ready-bigquery.mjs';
 
@@ -50,12 +50,13 @@ function fixture(withOpaque = false) {
   mkdirSync(out); mkdirSync(root + '/listener/src/searcher/venues/production-families', { recursive: true });
   mkdirSync(root + '/release/runtime/listener/revm-sim/target/release', { recursive: true });
   writeFileSync(root + '/release/runtime/listener/revm-sim/target/release/revm-sim', 'fixture');
+  mkdirSync(root + '/listener/revm-sim/target/release', { recursive: true });
+  writeFileSync(root + '/listener/revm-sim/target/release/revm-sim-ready', 'fixture');
   writeFileSync(root + '/rpc.json', JSON.stringify({ MAINNET_RPC_URL: 'https://unused.invalid' }));
   writeFileSync(root + '/profile.json', JSON.stringify({ rpcFile: root + '/rpc.json', release: root + '/release', executor: 'executor', wallet: 'wallet' }));
   writeFileSync(out + '/bigquery-auth.json', JSON.stringify({ token: 'fixture-token', expiresAt: Date.now() + 60000 }));
   writeFileSync(root + '/listener/src/searcher/universe-rebuild-production.ts', `import {writeFileSync} from 'node:fs';
 export const rebuildFamilyInstanceDedupeKey = c => c.address;
-export const candidateFingerprint = c => c.address;
 export function createRebuildWiring(input) { return {
  startupCandidates: input.startupCandidates,
  expectedSourcePlanFingerprints: () => ({startup:'s',activity:'a'}),
@@ -66,23 +67,15 @@ export function createRebuildWiring(input) { return {
 }; }
 `);
   writeFileSync(root + '/listener/src/searcher/venues/production-family-composition.ts', withOpaque
-    ? `export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[{plugin:{manifest:{familyId:'test'}}},{plugin:{manifest:{familyId:'opaque'},discovery:{reverseBinding:{kind:'implementation'},logPatterns:[{id:'pool-id',emitter:{mode:'singleton-indexed-bytes32',topicIndex:1}}]}}}],matches:o=>o.topics.length===2?[{familyId:'opaque',patternId:'pool-id'}]:[]};`
-    : `export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[{plugin:{manifest:{familyId:'test'}}}],matches:()=>[]};`);
-  // Exercise the real publication guard; only the rebuild/RPC boundary is stubbed.
-  writeFileSync(root + '/listener/src/searcher/strict-ready-runtime.ts',
-    `export { assertReadyCheckpointPublicationCurrent } from '${new URL('../listener/src/searcher/strict-ready-runtime.ts', import.meta.url).href}';`);
-  const compositionPath = root + '/listener/src/searcher/venues/production-family-composition.ts';
-  writeFileSync(compositionPath, readFileSync(compositionPath, 'utf8') +
-    `\nexport const PRODUCTION_FAMILY_ACTIVATIONS=[{familyId:'test',enabled:true},{familyId:'opaque',enabled:true},{familyId:'disabled',enabled:false}];`);
+    ? `export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[{plugin:{manifest:{familyId:'opaque'},discovery:{reverseBinding:{kind:'implementation'},logPatterns:[{id:'pool-id',emitter:{mode:'singleton-indexed-bytes32',topicIndex:1}}]}}}],matches:o=>o.topics.length===2?[{familyId:'opaque',patternId:'pool-id'}]:[]};`
+    : 'export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[],matches:()=>[]};');
   writeFileSync(root + '/listener/src/searcher/universe-rebuild-checkpoint.ts', `import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 export class UniverseRebuildCheckpointStore {
  constructor(input){this.path=input.path;}
  async load(){return existsSync(this.path)?JSON.parse(readFileSync(this.path,'utf8')):null;}
- async loadReadOnlySnapshot(){const envelope=await this.load();return envelope===null?null:{envelope,capturedAt:new Date().toISOString(),sourcePath:this.path};}
- async inheritRebuildProofsFrom(source){const prior=await source.load();const result={verifiedMemos:prior.verifiedMemos,retryableAttemptsByCandidateKey:prior.retryableAttemptsByCandidateKey,readyGeneration:null,inProgressRun:null,checkpointFingerprint:'proof-only'};writeFileSync(this.path,JSON.stringify(result),{flag:'wx'});return result;}
  async inheritReadyFrom(source){const prior=await source.load();if(!prior?.readyGeneration||prior.inProgressRun)throw Error('Ready inheritance requires a completed source checkpoint');writeFileSync(this.path,JSON.stringify(prior),{flag:'wx'});return prior;}
 }`);
-  writeFileSync(root + '/listener/src/searcher/universe-rebuild-runner.ts', `import {writeFileSync,existsSync,mkdirSync} from 'node:fs'; export async function rebuildUniverse(input){await input.freezeCanonicalHead(input.observationRange.toBlock);if(input.resumeCompletedOutcomes)throw Error('completed-outcome resume requires a sealed unfinished run');if(existsSync('${root}/fail-strict'))throw Error('fixture strict failed');const prior=await input.store.load();writeFileSync(input.store.path,JSON.stringify({candidates:input.startupCandidates,range:input.observationRange,inheritedFingerprint:prior?.checkpointFingerprint,checkpointFingerprint:'result:'+input.runId,verifiedMemos:{},retryableAttemptsByCandidateKey:{},inProgressRun:null,readyGeneration:{generation:1,catalogSnapshot:{format:'strict-rebuild-catalog-v1',instances:[]},cutoff:{number:123,hash:'${blockHash}'}}}));if(existsSync('${root}/fail-publication'))mkdirSync('${root}/profile.json.latest-ready.json');return {cutoff:{number:123,hash:'${blockHash}'},generation:1,candidateAccounting:{total:2,verified:2,retryable:0}};}`);
+  writeFileSync(root + '/listener/src/searcher/universe-rebuild-runner.ts', `import {writeFileSync,existsSync,mkdirSync} from 'node:fs'; export async function rebuildUniverse(input){if(input.resumeCompletedOutcomes)throw Error('completed-outcome resume requires a sealed unfinished run');if(existsSync('${root}/fail-strict'))throw Error('fixture strict failed');const prior=await input.store.load();writeFileSync(input.store.path,JSON.stringify({candidates:input.startupCandidates,range:input.observationRange,inheritedFingerprint:prior?.checkpointFingerprint,checkpointFingerprint:'result:'+input.runId,verifiedMemos:{},retryableAttemptsByCandidateKey:{},inProgressRun:null,readyGeneration:{cutoff:{number:123,hash:'${blockHash}'}}}));if(existsSync('${root}/fail-publication'))mkdirSync('${root}/profile.json.latest-ready.json');return {cutoff:{number:123,hash:'${blockHash}'},generation:1,candidateAccounting:{total:2,verified:2,retryable:0}};}`);
   const fields = [
     ...['tx_hash', 'block_number', 'block_hash', 'receipt_status'].map(name => ({ name, type: 'STRING' })),
     { name: 'logs', type: 'RECORD', mode: 'REPEATED', fields: [{name:'log_address',type:'STRING'},{name:'topics',type:'STRING',mode:'REPEATED'},{name:'data',type:'STRING'},{name:'log_index',type:'INTEGER'}] },
@@ -105,6 +98,32 @@ export class UniverseRebuildCheckpointStore {
   const argv = ['--table','project1.Ready.table','--root',root,'--out',out,'--profile',root+'/profile.json'];
   return { root, out, meta, fetcher, requests, argv };
 }
+
+test('Ready simulator identity pins the real file and cannot inherit another simulator from the environment', async () => {
+  const f = fixture(), oldFetch = globalThis.fetch, oldBin = process.env.SEARCHER_REVM_SIM_BIN,
+    oldReady = process.env.SEARCHER_READY_REVM_SIM_BIN;
+  globalThis.fetch = f.fetcher;
+  const alias = f.root + '/listener/revm-sim/target/release/revm-sim-ready', real = f.root + '/ready-v1';
+  try {
+    writeFileSync(real, 'immutable-ready-fixture'); unlinkSync(alias); symlinkSync(real, alias);
+    process.env.SEARCHER_READY_REVM_SIM_BIN = '/unrelated-inherited-simulator';
+    await main([...f.argv, '--max-pages', '1']);
+    const identity = JSON.parse(readFileSync(f.out + '/run-identity.json'));
+    assert.equal(identity.simulator, realpathSync(real));
+    assert.equal(identity.simulatorSha256, createHash('sha256').update(readFileSync(real)).digest('hex'));
+    assert.equal(process.env.SEARCHER_REVM_SIM_BIN, realpathSync(real));
+    assert.equal(process.env.SEARCHER_READY_REVM_SIM_BIN, realpathSync(real));
+    writeFileSync(f.root + '/ready-v2', 'different-ready-fixture');
+    unlinkSync(alias); symlinkSync(f.root + '/ready-v2', alias);
+    await assert.rejects(main([...f.argv, '--resume']), /Run code\/config changed/);
+    assert(!existsSync(f.out + '/checkpoint.json'));
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldBin === undefined) delete process.env.SEARCHER_REVM_SIM_BIN; else process.env.SEARCHER_REVM_SIM_BIN = oldBin;
+    if (oldReady === undefined) delete process.env.SEARCHER_READY_REVM_SIM_BIN; else process.env.SEARCHER_READY_REVM_SIM_BIN = oldReady;
+    rmSync(f.root, { recursive: true });
+  }
+});
 test('actual entry point stops safely after a sample, then resumes every row into one Ready without refetching page 1', async () => {
   const f = fixture(), oldFetch = globalThis.fetch; globalThis.fetch = f.fetcher;
   try {
@@ -195,91 +214,6 @@ function nextRun(f, name) {
   argv[argv.indexOf('--out') + 1] = out;
   return { out, argv };
 }
-
-function sqlFixture(withOpaque = false) {
-  const f = fixture(withOpaque), directory = f.root + '/sql';
-  const hashBytes = value => createHash('sha256').update(value).digest('hex');
-  const save = (name, value) => writeFileSync(directory + '/' + name, JSON.stringify(value));
-  mkdirSync(directory); mkdirSync(directory + '/source-packages');
-  mkdirSync(f.root + '/listener/src/searcher/generated');
-  const familyIds = withOpaque ? ['test', 'opaque'] : ['test'];
-  const catalog = { format: 'adapter-family-capability-shadow-v1', complete: true, issues: [], legacy: [],
-    exact: familyIds.map(familyId => ({ identity: { familyId, capability: 'discovery', contentHash: 'fixture-' + familyId } })) };
-  const packageBytes = JSON.stringify(catalog);
-  writeFileSync(directory + '/source-packages/00001.json', packageBytes);
-  writeFileSync(f.root + '/listener/src/searcher/generated/family-capability-shadow.generated.json', packageBytes);
-  const sql = 'SELECT fixture'; writeFileSync(directory + '/full-query.sql', sql);
-  const candidate = { familyId: 'test', address: 'pool-one', blockNumber: 123, blockHash, transactionHash: hash };
-  const entries = [{ kind: 'candidate', family: 'test', instance_key: 'pool-one', source_block: '123', fingerprint: 'pool-one', snapshot: JSON.stringify(candidate), tx_hash: hash }];
-  if (withOpaque) for (const id of ['c', 'd']) {
-    const poolId = '0x' + id.repeat(64), log = { address: 'shared-emitter', blockNumber: 123, blockHash, transactionHash: hash, topics: ['0x' + 'e'.repeat(64), poolId], data: '0x', logIndex: 0 };
-    entries.push({ kind: 'opaque', family: 'opaque', instance_key: 'opaque|shared-emitter|' + poolId, source_block: '123', fingerprint: '', snapshot: JSON.stringify(log), tx_hash: hash });
-  }
-  const fields = Object.keys(entries[0]).map(name => ({ name, type: 'STRING' }));
-  const page = { jobComplete: true, jobReference: { jobId: 'fixture-job' }, totalRows: String(entries.length), schema: { fields }, rows: entries.map(entry => ({ f: fields.map(field => ({ v: entry[field.name] })) })) };
-  save('full-result-page-00001.json', page);
-  save('plan.json', { packageFiles: [{ sha256: hashBytes(packageBytes) }], familyCount: familyIds.length, sqlSha256: hashBytes(sql), rangeStart: 'start', rangeEnd: 'end', blockRange: {fromBlock: 100,toBlock: 123}, cutoff: {number:123,hash:blockHash} });
-  save('full-job.json', { jobReference: { jobId: 'fixture-job' }, status: { state: 'DONE' }, configuration: { query: { query: sql } } });
-  save('full-download-state.json', { jobId: 'fixture-job', complete: true, nextPageToken: null, pages: 1, rows: entries.length, totalRows: String(entries.length) });
-  save('result-pages-manifest.json', { jobId: 'fixture-job', rows: entries.length, pages: [{ name: 'full-result-page-00001.json', rows: entries.length, sha256: hashBytes(JSON.stringify(page)) }] });
-  const argv = f.argv.slice(2);
-  argv.push('--discovery-results', directory);
-  return { ...f, directory, sqlArgv: argv, save, catalog };
-}
-
-test('completed SQL results enter normal strict and default checkpoint reuse without fetching raw transactions', async () => {
-  const f = sqlFixture(), oldFetch = globalThis.fetch;
-  globalThis.fetch = async () => { throw Error('No BigQuery read permitted'); };
-  try {
-    seedPreviousReady(f); unlinkSync(f.out + '/bigquery-auth.json');
-    await main(f.sqlArgv);
-    const ready = JSON.parse(readFileSync(f.out + '/checkpoint.json'));
-    assert.equal(ready.inheritedFingerprint, 'previous-proof');
-    assert.deepEqual(ready.candidates.map(item => item.address), ['pool-one']);
-    assert.deepEqual(ready.range, { fromBlock: 123, toBlock: 123 });
-    assert.equal(JSON.parse(readFileSync(f.out + '/sql-input-verified.json')).rows, 1);
-    assert.equal(JSON.parse(readFileSync(f.out + '/input-pin.json')).kind, 'discovery-sql-results-v1');
-    await main([...f.sqlArgv, '--resume']);
-  } finally { globalThis.fetch = oldFetch; rmSync(f.root, { recursive: true }); }
-});
-
-test('SQL opaque records retain each shared-entry instance and enter the existing reverse binder', async () => {
-  const f = sqlFixture(true);
-  try {
-    await main(f.sqlArgv);
-    const reverse = JSON.parse(readFileSync(f.out + '/reverse.json'));
-    assert.equal(reverse.length, 2);
-    assert.deepEqual(reverse.map(log => log.topics[1]).sort(), ['0x' + 'c'.repeat(64), '0x' + 'd'.repeat(64)]);
-    assert.equal(JSON.parse(readFileSync(f.out + '/checkpoint.json')).candidates.length, 3);
-  } finally { rmSync(f.root, { recursive: true }); }
-});
-
-test('incomplete SQL downloads and discovery-version drift fail before strict', async () => {
-  for (const mode of ['incomplete', 'changed-discovery']) {
-    const f = sqlFixture();
-    try {
-      if (mode === 'incomplete') {
-        const state = JSON.parse(readFileSync(f.directory + '/full-download-state.json')); state.complete = false;
-        f.save('full-download-state.json', state);
-      } else {
-        f.catalog.exact[0].identity.contentHash = 'changed';
-        writeFileSync(f.root + '/listener/src/searcher/generated/family-capability-shadow.generated.json', JSON.stringify(f.catalog));
-      }
-      await assert.rejects(main(f.sqlArgv), mode === 'incomplete' ? /download is incomplete/ : /definitions differ/);
-      assert(!existsSync(f.out + '/checkpoint.json'));
-    } finally { rmSync(f.root, { recursive: true }); }
-  }
-});
-
-test('a changed SQL page fails its hash check and cannot publish Ready', async () => {
-  const f = sqlFixture();
-  try {
-    f.save('full-result-page-00001.json', { tampered: true });
-    await assert.rejects(main(f.sqlArgv), /page hash mismatch/);
-    assert(!existsSync(f.out + '/checkpoint.json'));
-    assert(!existsSync(f.root + '/profile.json.latest-ready.json'));
-  } finally { rmSync(f.root, { recursive: true }); }
-});
 
 test('default inherits the configured Ready, then the latest completed result without any reuse flag', async () => {
   const f = fixture(), oldFetch = globalThis.fetch; globalThis.fetch = f.fetcher;
@@ -374,172 +308,4 @@ test('publication failure after strict recovers without re-reading or re-running
     assert.equal(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
     assert.equal(JSON.parse(readFileSync(f.root + '/profile.json.latest-ready.json')).checkpoint, f.out + '/checkpoint.json');
   } finally { globalThis.fetch = oldFetch; rmSync(f.root, { recursive: true }); }
-});
-
-function updateSqlPlan(f, update) {
-  const plan = JSON.parse(readFileSync(f.directory + '/plan.json'));
-  f.save('plan.json', { ...plan, ...update });
-}
-test('fixed SQL cutoff remains requested end block even when last candidate is earlier', async () => {
-  const f = sqlFixture();
-  try {
-    updateSqlPlan(f, {blockRange:{fromBlock:100,toBlock:125},cutoff:{number:125,hash:blockHash}});
-    await main(f.sqlArgv);
-    const result = JSON.parse(readFileSync(f.out + '/result.json'));
-    assert.deepEqual(JSON.parse(readFileSync(f.out + '/checkpoint.json')).range,{fromBlock:125,toBlock:125});
-    assert.deepEqual(result.inputRange,{fromBlock:100,toBlock:125});
-    assert.deepEqual(result.observedInputRange,{fromBlock:123,toBlock:123});
-    assert.deepEqual(result.productionActivityCoverage,{fromBlock:125,toBlock:125});
-  } finally {rmSync(f.root,{recursive:true});}
-});
-test('SQL rows outside range, mismatching cutoff hash, and malformed range fail before strict', async () => {
-  for (const [update, pattern] of [
-    [{blockRange:{fromBlock:124,toBlock:125},cutoff:{number:125,hash:blockHash}},/outside requested range/],
-    [{blockRange:{fromBlock:100,toBlock:122},cutoff:{number:122,hash:blockHash}},/outside requested range/],
-    [{cutoff:{number:123,hash:'0x'+'c'.repeat(64)}},/cutoff row hash/],
-    [{cutoff:{number:124,hash:blockHash}},/cutoff must equal/],
-    [{blockRange:null},/invalid SQL block range/],
-  ]) {
-    const f=sqlFixture();
-    try {
-      updateSqlPlan(f,update);
-      await assert.rejects(main(f.sqlArgv),pattern);
-      assert(!existsSync(f.out+'/checkpoint.json'));
-    } finally {rmSync(f.root,{recursive:true});}
-  }
-});
-test('public configuration preserves disabled families and accounts for their SQL rows without activating them', async () => {
-  const f=sqlFixture();
-  try {
-    const familyDir=f.root+'/listener/src/searcher/venues/production-families/';
-    writeFileSync(familyDir+'test.production.ts', "export const activation={envKey:'SEARCHER_FAMILY_TEST_ENABLED'};");
-    writeFileSync(f.root+'/listener/src/searcher/venues/production-family-composition.ts',`export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>process.env.SEARCHER_FAMILY_TEST_ENABLED==='1'?[{plugin:{manifest:{familyId:'test'}}}]:[],matches:()=>[]};export const PRODUCTION_FAMILY_ACTIVATIONS=[{familyId:'test',enabled:process.env.SEARCHER_FAMILY_TEST_ENABLED==='1'}];`);
-    const bin=f.root+'/configured-simulator';writeFileSync(bin,'fixture');
-    const env={SEARCHER_FAMILY_TEST_ENABLED:'0',BOTVM_ADDRESS:'public-executor',BOTVM_OWNER:'public-owner',SEARCHER_REVM_SIM_BIN:bin,SEARCHER_DRY_RUN:'1',SEARCHER_BLOCKSCAN_SUBMIT:'0'};
-    writeFileSync(f.root+'/public.json',JSON.stringify(env));
-    await main([...f.sqlArgv,'--public-env',f.root+'/public.json']);
-    const result=JSON.parse(readFileSync(f.out+'/result.json'));
-    assert.equal(result.nominatedCandidates,0);assert.deepEqual(result.read.counts.inactiveRecords,{test:1});
-    const identity=JSON.parse(readFileSync(f.out+'/run-identity.json'));
-    assert.deepEqual(identity.activations,[['SEARCHER_FAMILY_TEST_ENABLED','0']]);
-    assert.deepEqual(identity.executionIdentity,{executor:'public-executor',transactionOrigin:'public-owner'});
-    assert.equal(identity.simulator,bin);
-  } finally {delete process.env.SEARCHER_FAMILY_TEST_ENABLED;rmSync(f.root,{recursive:true});}
-});
-test('missing explicit family activation fails rather than silently enabling it',async()=>{
-  const f=sqlFixture();
-  try {
-    writeFileSync(f.root+'/listener/src/searcher/venues/production-families/test.production.ts',"export const activation={envKey:'SEARCHER_FAMILY_TEST_ENABLED'};");
-    await assert.rejects(main(f.sqlArgv),/explicitly configure SEARCHER_FAMILY_TEST_ENABLED/);
-    assert(!existsSync(f.out+'/checkpoint.json'));
-  } finally {rmSync(f.root,{recursive:true});}
-});
-
-function seedPartialProofs(f) {
-  const parentPath=f.root+'/parent-checkpoint.json', partialDir=f.root+'/partial-id';mkdirSync(partialDir);
-  const memo={familyId:'test',familyCandidateKey:'pool-one',fingerprint:'old-proof'};
-  const parent={revision:7,checkpointFingerprint:'parent-proof',verifiedMemos:{one:memo},retryableAttemptsByCandidateKey:{},readyGeneration:{cutoff:{number:123,hash:blockHash}},inProgressRun:null};
-  const partial={...parent,checkpointFingerprint:'partial-proof',verifiedMemos:{one:{...memo,fingerprint:'new-proof'},two:{familyId:'test',familyCandidateKey:'pool-two'}},inProgressRun:{fromBlock:100,cutoff:{number:123,hash:blockHash},familyUpdateScope:{parentCheckpointFingerprint:'parent-proof',familyIds:['test']},completedOutcomes:{bad:'terminal'}}};
-  const metadata={schema:'ready-family-supplement/v1',identity:'partial-id',range:{fromBlock:100,toBlock:123},source:{number:123,hash:blockHash},parentRevision:7,parentCheckpointFingerprint:'parent-proof',familyIds:['test']};
-  writeFileSync(parentPath,JSON.stringify(parent));writeFileSync(partialDir+'/checkpoint.json',JSON.stringify(partial));writeFileSync(partialDir+'/parent.json',JSON.stringify(metadata));
-  return {parentPath,partialDir,parent,partial,metadata,argv:[...f.sqlArgv,'--reuse-proofs-checkpoint',partialDir+'/checkpoint.json','--reuse-proofs-parent',parentPath]};
-}
-test('proof-only SQL inheritance verifies parent linkage and preserves checkpoints without copying coverage/outcomes',async()=>{
-  const f=sqlFixture();
-  try {
-    const p=seedPartialProofs(f);writeFileSync(f.root+'/fail-strict','1');
-    await assert.rejects(main(p.argv),/fixture strict failed/);
-    const imported=JSON.parse(readFileSync(f.out+'/checkpoint.json'));
-    assert.equal(imported.readyGeneration,null);assert.equal(imported.inProgressRun,null);
-    assert.deepEqual(imported.verifiedMemos,p.partial.verifiedMemos);
-    assert.deepEqual(JSON.parse(readFileSync(p.parentPath)),p.parent);
-    assert.deepEqual(JSON.parse(readFileSync(p.partialDir+'/checkpoint.json')),p.partial);
-    const receipt=JSON.parse(readFileSync(f.out+'/proof-inheritance.json'));
-    assert.equal(receipt.parentMemos,1);assert.equal(receipt.inheritedMemos,2);assert.equal(receipt.copiedCoverage,false);
-  } finally {rmSync(f.root,{recursive:true});}
-});
-test('proof-only inheritance rejects changed parent identity, scope, and lost memo before writing target',async()=>{
-  for (const mode of ['parent','scope','memo']) {
-    const f=sqlFixture();
-    try {
-      const p=seedPartialProofs(f);
-      if(mode==='parent')p.parent.checkpointFingerprint='changed';
-      if(mode==='scope')p.partial.inProgressRun.familyUpdateScope.familyIds=['other'];
-      if(mode==='memo')delete p.partial.verifiedMemos.one;
-      writeFileSync(p.parentPath,JSON.stringify(p.parent));writeFileSync(p.partialDir+'/checkpoint.json',JSON.stringify(p.partial));
-      await assert.rejects(main(p.argv),mode==='parent'?/parent fingerprint changed/:mode==='scope'?/scope differs/:/memo identity/);
-      assert(!existsSync(f.out+'/checkpoint.json'));
-    } finally {rmSync(f.root,{recursive:true});}
-  }
-});
-test('canonical hash changing between import preflight and production strict freeze cannot publish Ready',async()=>{
-  const f=sqlFixture();
-  try {
-    const path=f.root+'/listener/src/searcher/universe-rebuild-production.ts';
-    const source=readFileSync(path,'utf8').replace(/freezeCanonicalHead: async n => \(\{number:n,hash:'[^']+',generation:n\}\),/,`freezeCanonicalHead: async n => ({number:n,hash:++freezes>1?'0x'+'c'.repeat(64):'${blockHash}',generation:n}),`);
-    writeFileSync(path,'let freezes=0;\n'+source);
-    await assert.rejects(main(f.sqlArgv),/Strict cutoff hash changed/);
-    assert(!existsSync(f.out+'/result.json'));assert(!existsSync(f.root+'/profile.json.latest-ready.json'));
-  } finally {rmSync(f.root,{recursive:true});}
-});
-
-test('SQL entry point creates a new absolute output directory before writing its first pin', async () => {
-  const f = sqlFixture();
-  try {
-    rmSync(f.out, { recursive: true });
-    assert(!existsSync(f.out));
-    await main(f.sqlArgv);
-    assert(existsSync(f.out + '/input-pin.json'));
-    assert.equal(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
-    assert.deepEqual(JSON.parse(readFileSync(f.out + '/checkpoint.json')).range, { fromBlock: 123, toBlock: 123 });
-  } finally { rmSync(f.root, { recursive: true }); }
-});
-
-function addUnpublishedProof(f, familyId) {
-  const path = f.root + '/listener/src/searcher/universe-rebuild-runner.ts';
-  const source = readFileSync(path, 'utf8');
-  const value = { familyId, familyCandidateKey: 'extra', familyInstanceKey: 'extra-instance', memoFingerprint: 'extra-proof' };
-  writeFileSync(path, source.replace('verifiedMemos:{}', 'verifiedMemos:' + JSON.stringify({ extra: value })));
-}
-
-test('SQL Ready retains installed disabled proof cache without publishing it', async () => {
-  const f = sqlFixture();
-  try {
-    addUnpublishedProof(f, 'disabled');
-    await main(f.sqlArgv);
-    const checkpoint = JSON.parse(readFileSync(f.out + '/checkpoint.json'));
-    assert.equal(checkpoint.verifiedMemos.extra.familyId, 'disabled');
-    assert.deepEqual(checkpoint.readyGeneration.catalogSnapshot.instances, []);
-    assert.equal(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
-  } finally { rmSync(f.root, { recursive: true }); }
-});
-
-test('SQL publication rejects enabled and unknown unpublished proofs before success/reference', async () => {
-  for (const familyId of ['test', 'unknown']) {
-    const f = sqlFixture();
-    try {
-      addUnpublishedProof(f, familyId);
-      await assert.rejects(main(f.sqlArgv), /added=1/);
-      assert(existsSync(f.out + '/checkpoint.json'), 'completed evidence remains available');
-      assert(!existsSync(f.out + '/result.json'));
-      assert(!existsSync(f.root + '/profile.json.latest-ready.json'));
-      assert.notEqual(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
-    } finally { rmSync(f.root, { recursive: true }); }
-  }
-});
-
-test('publication bookkeeping recovery also rejects newly stale admission without rerunning strict', async () => {
-  const f = sqlFixture();
-  try {
-    writeFileSync(f.root + '/fail-publication', '1');
-    await assert.rejects(main(f.sqlArgv), /EISDIR/);
-    rmSync(f.root + '/profile.json.latest-ready.json', { recursive: true });
-    const path = f.out + '/checkpoint.json', checkpoint = JSON.parse(readFileSync(path));
-    checkpoint.verifiedMemos.extra = { familyId: 'test', familyCandidateKey: 'extra', familyInstanceKey: 'extra-instance', memoFingerprint: 'extra-proof' };
-    writeFileSync(path, JSON.stringify(checkpoint));
-    writeFileSync(f.root + '/fail-strict', '1');
-    await assert.rejects(main([...f.sqlArgv, '--resume']), /added=1/);
-    assert(!existsSync(f.root + '/profile.json.latest-ready.json'));
-    assert.notEqual(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'ready');
-  } finally { rmSync(f.root, { recursive: true }); }
 });

@@ -2,19 +2,14 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import {
   mkdir,
-  mkdtemp,
-  link,
-  rm,
   open,
   readFile,
   rename,
   stat,
   unlink,
   writeFile,
-  type FileHandle,
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { assertTransactionObservationScope, type TransactionObservationScope } from "./ready-transaction-input.js";
+import { dirname } from "node:path";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 
@@ -124,13 +119,16 @@ export type RunOutcome =
   | RetryableAttempt;
 
 export interface DurableSourceChunkReceipt {
-  /** With a TX scope, block bounds are an envelope, not continuous coverage. */
-  readonly observationScope?: TransactionObservationScope;
   readonly fromBlock: number;
   readonly toBlock: number;
   readonly resultCount: number;
   readonly resultHash: string;
 }
+
+export type ReadyRefreshRejection = Extract<RunOutcome, { readonly status: "terminal-rejected" }>;
+export type ReadyRefreshResult =
+  | { readonly status: "verified"; readonly memo: DurableVerifiedMemo }
+  | ReadyRefreshRejection;
 
 /**
  * Durable proof that one exact source plan completed at the fixed cutoff.
@@ -139,7 +137,6 @@ export interface DurableSourceChunkReceipt {
  * itself. Every receipt names the exact key set and completed range chunks.
  */
 export interface DurableSourceReceipt {
-  readonly observationScope?: TransactionObservationScope;
   readonly sourceKey: string;
   readonly sourceKind:
     | "startup-candidate-union"
@@ -162,7 +159,6 @@ export interface DurableSourceReceipt {
 }
 
 export interface InProgressUniverseRun {
-  readonly observationScope?: TransactionObservationScope;
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly runId: string;
   readonly cutoff: CanonicalSource;
@@ -201,7 +197,8 @@ export interface ReadyFamilyPartition {
 }
 
 export interface ReadyUniverseGeneration {
-  readonly observationScope?: TransactionObservationScope;
+  /** Chain-proven rejections of previously admitted candidates, not operator exclusions. */
+  readonly refreshRejections?: Readonly<Record<string, ReadyRefreshRejection>>;
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly generation: number;
   readonly cutoff: CanonicalSource;
@@ -225,7 +222,6 @@ export interface ReadyUniverseGeneration {
   readonly observedThrough: { readonly number: number; readonly hash: string };
   readonly appliedThrough: { readonly number: number; readonly hash: string };
   readonly sourceCoverage: readonly {
-    readonly observationScope?: TransactionObservationScope;
     readonly familyId: string;
     readonly sourceId: string;
     readonly completeThroughBlock: number;
@@ -352,6 +348,43 @@ export function assertDurableVerifiedMemoFingerprint(
   }
 }
 
+/** A refresh may renew a proof/descriptor, never change its historical subject. */
+function assertReadyRefreshMemo(
+  old: DurableVerifiedMemo | undefined,
+  memo: DurableVerifiedMemo,
+  cutoff: CanonicalSource,
+): void {
+  assertDurableVerifiedMemoFingerprint(memo);
+  if (old === undefined || memo.familyCandidateKey !== old.familyCandidateKey ||
+    memo.familyInstanceKey !== old.familyInstanceKey || memo.familyId !== old.familyId ||
+    memo.instanceKey !== old.instanceKey || memo.candidateKey !== old.candidateKey ||
+    memo.candidateFingerprint !== old.candidateFingerprint ||
+    canonicalJson(memo.candidateSnapshot) !== canonicalJson(old.candidateSnapshot) ||
+    (memo.memoFingerprint !== old.memoFingerprint && (
+      memo.validity.proofSource.number !== cutoff.number ||
+      memo.validity.proofSource.hash.toLowerCase() !== cutoff.hash.toLowerCase()
+    ))) {
+    throw new Error("ready refresh changed identity/candidate or used a different proof source");
+  }
+}
+
+function assertReadyRefreshRejection(
+  old: DurableVerifiedMemo | undefined,
+  rejection: ReadyRefreshRejection,
+  cutoff: CanonicalSource,
+): void {
+  if (old === undefined || rejection.status !== "terminal-rejected" ||
+    rejection.familyCandidateKey !== old.familyCandidateKey ||
+    rejection.candidateFingerprint !== old.candidateFingerprint ||
+    rejection.cutoff?.number !== cutoff.number ||
+    rejection.cutoff.hash.toLowerCase() !== cutoff.hash.toLowerCase() ||
+    [rejection.reasonCode, rejection.familyDefinitionHash, rejection.authorityFingerprint]
+      .some(value => typeof value !== "string" || value.length === 0) ||
+    [rejection.requestFingerprint, rejection.trustedResultsFingerprint].some(value => typeof value !== "string")) {
+    throw new Error("ready refresh rejection lacks bound negative evidence");
+  }
+}
+
 export function buildReadyCatalogSnapshot(memos: readonly DurableVerifiedMemo[]): unknown {
   return Object.freeze({
     format: "strict-rebuild-catalog-v1",
@@ -394,7 +427,7 @@ export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly 
     canonicalJson(keys) !== canonicalJson([...ready.activeInstanceKeys].sort()) ||
     ready.candidateAccounting.verified !== keys.length ||
     ready.candidateAccounting.remainingUnaccounted !== 0 ||
-    canonicalJson(buildReadyCatalogSnapshot(memos)) !== canonicalJson(ready.catalogSnapshot) ||
+    ready.catalogHash !== readyRootHash("catalog-v1:", buildReadyCatalogSnapshot(memos)) ||
     ready.graphHash !== readyRootHash("graph-v2:", ready.graphSnapshot) ||
     ready.catalogHash !== readyRootHash("catalog-v1:", ready.catalogSnapshot) ||
     ready.publicationSetHash !== readyRootHash("publications-v2:", ready.catalogSnapshot)) {
@@ -434,6 +467,17 @@ export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly 
   }
   if (ready.familyPartitions !== undefined) {
     assertReadyFamilyPartitions(envelope, memos);
+  }
+  const rejected = Object.entries(ready.refreshRejections ?? {});
+  if (rejected.length > ready.candidateAccounting.terminalRejected) {
+    throw new Error("ready refresh rejection accounting mismatch");
+  }
+  const activeCandidates = new Set(memos.map(memo => memo.familyCandidateKey));
+  for (const [key, outcome] of rejected) {
+    if (key !== outcome.familyCandidateKey || activeCandidates.has(key)) {
+      throw new Error("ready refresh rejection is still active");
+    }
+    assertReadyRefreshRejection(envelope.verifiedMemos[key], outcome, ready.cutoff);
   }
   return Object.freeze(memos);
 }
@@ -488,8 +532,7 @@ function assertReadyFamilyPartitions(
       throw new Error("Ready Family partition candidate membership/hash mismatch");
     }
     assertCompleteSourceReceipts(partition.sourceReceipts);
-    assertSourceReceiptsBindRun(partition.sourceReceipts, { cutoff: ready.cutoff, fromBlock: ready.universeRange.fromBlock,
-      observationScope: ready.observationScope });
+    assertSourceReceiptsBindRun(partition.sourceReceipts, { cutoff: ready.cutoff, fromBlock: ready.universeRange.fromBlock });
     const coverage = new Set(partition.sourceReceipts.flatMap(receipt => receipt.coverageKeys));
     if (ready.sourceCoverage.filter(entry => entry.familyId === familyId)
       .some(entry => !coverage.has(entry.familyId + "|" + entry.sourceId))) {
@@ -517,7 +560,7 @@ function assertReadyFamilyPartitions(
 }
 
 function readyRootHash(prefix: string, value: unknown): string {
-  return createHash("sha256").update(prefix + canonicalJson(value)).digest("hex");
+  return canonicalJsonFingerprint(value, prefix);
 }
 
 export interface ReadyFamilyUpdateInput {
@@ -604,7 +647,6 @@ export function prepareReadyFamilyUpdate(base: StartupCheckpointEnvelope, input:
       canonicalJson([...ids].sort()) !== canonicalJson(Object.keys(delta.familyPartitions).sort()) ||
       [...ids].some(id => replaced.has(id) || !enabled.has(id)) ||
       Object.values(delta.familyPartitions).some(partition => !partition.enabled) ||
-      canonicalJson(delta.observationScope ?? null) !== canonicalJson(ready.observationScope ?? null) ||
       canonicalJson(delta.cutoff) !== canonicalJson(ready.cutoff) ||
       canonicalJson(delta.universeRange) !== canonicalJson(ready.universeRange) ||
       canonicalJson(delta.observedThrough) !== canonicalJson(ready.observedThrough) ||
@@ -763,8 +805,15 @@ export function envelopeFingerprint(
 }
 
 function fingerprintProjection(projection: unknown): string {
+  return canonicalJsonFingerprint(projection);
+}
+
+/** Same digest as sha256(prefix + canonicalJson(value)), including legacy
+ * roots, without concatenating a catalog or graph into a single string. */
+export function canonicalJsonFingerprint(value: unknown, prefix = ""): string {
   const hash = createHash("sha256");
-  canonicalWrite(hash, projection);
+  hash.update(prefix);
+  canonicalWrite(hash, value);
   return hash.digest("hex");
 }
 
@@ -910,49 +959,82 @@ function parseEnvelopeValue(parsed: unknown): StartupCheckpointEnvelope {
   });
 }
 
-/**
- * Parse one top-level JSON field at a time. A production checkpoint contains
- * two independently large objects (verified memos and the last ready graph),
- * and their combined file can exceed V8's maximum string length even though
- * each field is valid and individually parseable. This reader never creates
- * a string for the whole file; it retains only the current field's source
- * text until JSON.parse has materialized that field.
+/** Materialize containers incrementally: even one nested memo map can exceed
+ * V8's string limit. Only scalar tokens, never whole containers, are joined.
+ * JSON.parse remains the authority for scalar syntax and escape decoding.
  */
 async function readTopLevelJsonObject(
   path: string,
   chunkBytes: number,
 ): Promise<Record<string, unknown> | null> {
-  const fields: Record<string, unknown> = {};
-  let rootStarted = false;
-  let done = false;
-  let depth = 0;
-  let inString = false;
+  type Frame = {
+    value: Record<string, unknown> | unknown[];
+    state: "key-or-end" | "key" | "colon" | "value-or-end" | "value" | "comma-or-end";
+    key?: string;
+  };
+  const stack: Frame[] = [];
+  let root: Record<string, unknown> | null = null;
+  let token: "string" | "atom" | null = null;
+  let parts: string[] = [];
   let escape = false;
-  let sawNonWhitespace = false;
-  let fieldParts: string[] = [];
 
   const whitespace = (char: string): boolean =>
     char === " " || char === "\n" || char === "\r" || char === "\t";
   const invalid = (detail: string): never => {
     throw new Error("universe rebuild checkpoint is not valid JSON: " + detail);
   };
-  const completeField = (): void => {
-    const raw = fieldParts.join("").trim();
-    fieldParts = [];
-    if (raw.length === 0) invalid("empty top-level field");
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse("{" + raw + "}") as Record<string, unknown>;
-    } catch (error) {
-      invalid(error instanceof Error ? error.message : String(error));
+  const accept = (value: unknown): void => {
+    const frame = stack.at(-1);
+    if (!frame) invalid("top-level value must be an object");
+    if (frame!.state !== "value" && frame!.state !== "value-or-end") {
+      invalid("unexpected value");
     }
-    const keys = Object.keys(parsed!);
-    if (keys.length !== 1) invalid("top-level field is malformed");
-    const key = keys[0]!;
-    if (Object.prototype.hasOwnProperty.call(fields, key)) {
-      invalid("duplicate top-level field " + key);
+    if (Array.isArray(frame!.value)) frame!.value.push(value);
+    else {
+      // Match JSON.parse for own __proto__ keys and nested duplicate keys.
+      Object.defineProperty(frame!.value, frame!.key!, {
+        value, enumerable: true, writable: true, configurable: true,
+      });
     }
-    fields[key] = parsed![key];
+    frame!.state = "comma-or-end";
+  };
+  const scalar = (): void => {
+    let value: unknown;
+    try { value = JSON.parse(parts.join("")); }
+    catch (error) { invalid(error instanceof Error ? error.message : String(error)); }
+    parts = [];
+    token = null;
+    const frame = stack.at(-1);
+    if (frame && (frame.state === "key" || frame.state === "key-or-end")) {
+      if (typeof value !== "string") invalid("object key must be a string");
+      if (stack.length === 1 && Object.hasOwn(frame.value, value as string)) {
+        invalid("duplicate top-level field " + value);
+      }
+      frame.key = value as string;
+      frame.state = "colon";
+    } else accept(value);
+  };
+  const punctuation = (char: string): void => {
+    const frame = stack.at(-1);
+    if (char === "{" || char === "[") {
+      const value = char === "{" ? {} : [];
+      if (root === null && stack.length === 0 && char === "{") root = value;
+      else accept(value);
+      stack.push({ value, state: char === "{" ? "key-or-end" : "value-or-end" });
+    } else if (char === "}" || char === "]") {
+      if (!frame || Array.isArray(frame.value) !== (char === "]") ||
+        (frame.state !== "comma-or-end" &&
+         frame.state !== (char === "}" ? "key-or-end" : "value-or-end"))) {
+        invalid("unexpected closing delimiter");
+      }
+      stack.pop();
+    } else if (char === ":") {
+      if (!frame || frame.state !== "colon") invalid("unexpected colon");
+      frame!.state = "value";
+    } else {
+      if (!frame || frame.state !== "comma-or-end") invalid("unexpected comma");
+      frame!.state = Array.isArray(frame!.value) ? "value" : "key";
+    }
   };
 
   const stream = createReadStream(path, {
@@ -962,86 +1044,86 @@ async function readTopLevelJsonObject(
   for await (const rawChunk of stream) {
     const chunk = String(rawChunk);
     let index = 0;
-    let segmentStart = rootStarted && !done ? 0 : -1;
+    let segmentStart = 0;
     while (index < chunk.length) {
       const char = chunk[index]!;
-      if (!whitespace(char)) sawNonWhitespace = true;
-
-      if (!rootStarted) {
-        if (whitespace(char)) {
+      if (token === "string") {
+        if (escape) escape = false;
+        else if (char === "\\") escape = true;
+        else if (char === "\"") {
+          parts.push(chunk.slice(segmentStart, index + 1));
+          scalar();
+        }
+        index++;
+        continue;
+      }
+      const delimiter = "{}[],:".includes(char);
+      if (token === "atom") {
+        if (!whitespace(char) && !delimiter && char !== "\"") {
           index++;
           continue;
         }
-        if (char !== "{") invalid("top-level value must be an object");
-        rootStarted = true;
-        depth = 1;
-        segmentStart = index + 1;
+        parts.push(chunk.slice(segmentStart, index));
+        scalar();
+      }
+      if (whitespace(char)) {
         index++;
         continue;
       }
-
-      if (done) {
-        if (!whitespace(char)) invalid("trailing content after top-level object");
-        index++;
-        continue;
-      }
-
-      if (inString) {
-        if (escape) {
-          escape = false;
-        } else if (char === "\\") {
-          escape = true;
-        } else if (char === "\"") {
-          inString = false;
-        }
-        index++;
-        continue;
-      }
-      if (char === "\"") {
-        inString = true;
-        index++;
-        continue;
-      }
-      if (char === "{" || char === "[") {
-        depth++;
-        index++;
-        continue;
-      }
-      if (char === "}" && depth === 1) {
-        const tail = chunk.slice(segmentStart, index);
-        if (tail.trim().length > 0 || fieldParts.length > 0) {
-          fieldParts.push(tail);
-          completeField();
-        }
-        segmentStart = -1;
-        depth = 0;
-        done = true;
-        index++;
-        continue;
-      }
-      if (char === "}" || char === "]") {
-        depth--;
-        if (depth < 1) invalid("unbalanced JSON container");
-        index++;
-        continue;
-      }
-      if (char === "," && depth === 1) {
-        fieldParts.push(chunk.slice(segmentStart, index));
-        completeField();
-        segmentStart = index + 1;
-        index++;
-        continue;
+      if (root !== null && stack.length === 0) invalid("trailing content after top-level object");
+      if (delimiter) punctuation(char);
+      else {
+        token = char === "\"" ? "string" : "atom";
+        segmentStart = index;
       }
       index++;
     }
-    if (rootStarted && !done && segmentStart >= 0) {
-      fieldParts.push(chunk.slice(segmentStart));
+    if (token !== null) parts.push(chunk.slice(segmentStart));
+  }
+  if (token !== null || stack.length !== 0) invalid("unexpected end of file");
+  return root;
+}
+
+/** The envelope is already sealed/JSON-safe. Keep ordinary JSON.stringify
+ * ordering and encoding without constructing any container-sized string. */
+function* jsonTokens(value: unknown): Generator<string> {
+  if (value === null || typeof value !== "object") {
+    yield JSON.stringify(value);
+  } else if (Array.isArray(value)) {
+    yield "[";
+    for (let i = 0; i < value.length; i++) {
+      if (i) yield ",";
+      yield* jsonTokens(value[i]);
+    }
+    yield "]";
+  } else {
+    yield "{";
+    let first = true;
+    for (const key of Object.keys(value)) {
+      if (!first) yield ",";
+      first = false;
+      yield JSON.stringify(key) + ":";
+      yield* jsonTokens((value as Record<string, unknown>)[key]);
+    }
+    yield "}";
+  }
+}
+
+/** Bounded serialization shared by durable writes and the raw-JSON status
+ * export. Containers may exceed the single-string limit; scalars may not. */
+export function* checkpointJsonChunks(value: unknown): Generator<string> {
+  let parts: string[] = [];
+  let length = 0;
+  for (const token of jsonTokens(value)) {
+    parts.push(token);
+    length += token.length;
+    if (length >= 1024 * 1024) {
+      yield parts.join("");
+      parts = [];
+      length = 0;
     }
   }
-
-  if (!sawNonWhitespace) return null;
-  if (!done || inString || depth !== 0) invalid("unexpected end of file");
-  return fields;
+  if (parts.length) yield parts.join("");
 }
 
 interface AttestationJournalRecord {
@@ -1272,98 +1354,90 @@ export class UniverseRebuildCheckpointStore {
     });
   }
 
-  /** A coherent, possibly stale diagnostic view; never holds the writer lock while parsing. */
-  async loadReadOnlySnapshot(): Promise<{
-    readonly envelope: StartupCheckpointEnvelope | null;
-    readonly capturedAt: string;
-    readonly sourcePath: string;
-    readonly sourceBaseSignature: string | null;
-    readonly sourceJournalSignature: string | null;
-    readonly journalCommittedBytes: number;
-  }> {
-    const stamp = (value: { dev: bigint; ino: bigint; size: bigint; mtimeNs: bigint; ctimeNs: bigint }): string =>
-      [value.dev, value.ino, value.size, value.mtimeNs, value.ctimeNs].join(":");
-    const pathStamp = async (path: string): Promise<string | null> => {
-      try { return stamp(await stat(path, { bigint: true })); }
-      catch (error) { if ((error as { code?: string }).code === "ENOENT") return null; throw error; }
-    };
-    try { await stat(dirname(this.#path)); }
-    catch (error) {
-      if ((error as { code?: string }).code !== "ENOENT") throw error;
-      return Object.freeze({ envelope: null, capturedAt: new Date().toISOString(), sourcePath: this.#path,
-        sourceBaseSignature: null, sourceJournalSignature: null, journalCommittedBytes: 0 });
+  #refreshMemoPath(checkpoint: StartupCheckpointEnvelope, candidateKey: string): string {
+    if (!/^[0-9a-f]{64}$/.test(checkpoint.checkpointFingerprint)) {
+      throw new Error("ready refresh parent fingerprint is invalid");
     }
-    // Same filesystem: an atomic-rename-only base can be pinned without copying it under the source lock.
-    const directory = await mkdtemp(join(dirname(this.#path), ".readonly-snapshot-"));
-    const snapshotPath = join(directory, "checkpoint.json");
-    const deadline = Date.now() + this.#lockWaitTimeoutMs;
-    let journal: FileHandle | null = null;
+    const key = createHash("sha256").update(candidateKey).digest("hex");
+    return this.#path + ".ready-refresh/" + checkpoint.checkpointFingerprint + "/" + key + ".json";
+  }
+
+  /** Progress is separate from the sealed Ready; readers never see a partial Graph. */
+  async loadReadyRefreshResult(
+    checkpoint: StartupCheckpointEnvelope,
+    old: DurableVerifiedMemo,
+  ): Promise<ReadyRefreshResult | null> {
+    let raw: string;
     try {
-      while (Date.now() < deadline) {
-        try { journal = await open(this.#journalPath, "r"); }
-        catch (error) { if ((error as { code?: string }).code !== "ENOENT") throw error; }
-        const initial = journal === null ? null : await journal.stat({ bigint: true });
-        const journalSignature = initial === null ? null : stamp(initial);
-        let committedBytes = 0;
-        if (journal !== null && initial !== null) {
-          const buffer = Buffer.alloc(64 * 1024);
-          let end = Number(initial.size), changed = false;
-          if (!Number.isSafeInteger(end)) throw new Error("checkpoint snapshot journal exceeds safe file size");
-          while (end > 0) {
-            if (Date.now() >= deadline) throw new Error("checkpoint snapshot prefix preparation timed out");
-            const length = Math.min(buffer.length, end), start = end - length;
-            let bytes = 0;
-            while (bytes < length) {
-              const read = await journal.read(buffer, bytes, length - bytes, start + bytes);
-              if (read.bytesRead === 0) { changed = true; break; }
-              bytes += read.bytesRead;
-            }
-            if (changed) break;
-            const newline = buffer.subarray(0, length).lastIndexOf(0x0a);
-            if (newline >= 0) { committedBytes = start + newline + 1; break; }
-            end = start;
-          }
-          if (changed || stamp(await journal.stat({ bigint: true })) !== journalSignature) {
-            await journal.close(); journal = null; continue;
-          }
-        }
-        const pinned = await this.#withLock(async () => {
-          await this.#acquireLock();
-          try {
-            // Recheck the PATH as well as the pre-scanned FD: promotion can unlink/recreate the journal.
-            if (await pathStamp(this.#journalPath) !== journalSignature ||
-              (journal !== null && stamp(await journal.stat({ bigint: true })) !== journalSignature)) return null;
-            try { await link(this.#path, snapshotPath); }
-            catch (error) { if ((error as { code?: string }).code !== "ENOENT") throw error; }
-            return { capturedAt: new Date().toISOString(), sourceBaseSignature: await pathStamp(snapshotPath) };
-          } finally { await unlink(this.#lockPath).catch(() => undefined); }
-        });
-        if (pinned === null) { await journal?.close(); journal = null; continue; }
-        // Only this newline-terminated prefix was committed at capture; a writer may repair its later tail.
-        if (journal !== null) {
-          const copy = await open(snapshotPath + ".attestation-journal", "wx", 0o600);
-          try {
-            const buffer = Buffer.alloc(64 * 1024);
-            let offset = 0;
-            while (offset < committedBytes) {
-              const read = await journal.read(buffer, 0, Math.min(buffer.length, committedBytes - offset), offset);
-              if (read.bytesRead === 0) throw new Error("checkpoint snapshot committed prefix truncated");
-              await copy.writeFile(buffer.subarray(0, read.bytesRead));
-              offset += read.bytesRead;
-            }
-          } finally { await copy.close(); }
-          await journal.close(); journal = null;
-        }
-        const envelope = await new UniverseRebuildCheckpointStore({ path: snapshotPath, readChunkBytes: this.#readChunkBytes }).load();
-        return Object.freeze({ envelope, capturedAt: pinned.capturedAt, sourcePath: this.#path,
-          sourceBaseSignature: pinned.sourceBaseSignature, sourceJournalSignature: journalSignature,
-          journalCommittedBytes: committedBytes });
-      }
-      throw new Error("checkpoint snapshot could not pin a stable journal within its preparation budget");
-    } finally {
-      await journal?.close();
-      await rm(directory, { recursive: true, force: true });
+      raw = await readFile(this.#refreshMemoPath(checkpoint, old.familyCandidateKey), "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
     }
+    const record = JSON.parse(raw);
+    if (record.version !== 1 || record.parentCheckpointFingerprint !== checkpoint.checkpointFingerprint ||
+      record.priorMemoFingerprint !== old.memoFingerprint || checkpoint.readyGeneration === null) {
+      throw new Error("ready refresh saved memo binding mismatch");
+    }
+    if (record.result.status === "verified") {
+      assertReadyRefreshMemo(old, record.result.memo, checkpoint.readyGeneration.cutoff);
+    } else {
+      assertReadyRefreshRejection(old, record.result, checkpoint.readyGeneration.cutoff);
+    }
+    if (record.resultFingerprint !== canonicalJsonFingerprint(record.result, "ready-refresh-result-v1:")) {
+      throw new Error("ready refresh saved result fingerprint mismatch");
+    }
+    return immutableReadyValue(record.result as ReadyRefreshResult);
+  }
+
+  /** One successful proof -> fsync + atomic rename before reporting completion.
+   * Retryable outcomes never enter this cache. A different parent has a
+   * different namespace; the runner must still check the current Family definition.
+   */
+  async saveReadyRefreshResult(
+    checkpoint: StartupCheckpointEnvelope,
+    result: ReadyRefreshResult,
+  ): Promise<void> {
+    result = immutableReadyValue(result);
+    return this.#withLock(async () => {
+      await this.#acquireLock();
+      try {
+        const current = await this.#loadUnlocked();
+        if (current?.checkpointFingerprint !== checkpoint.checkpointFingerprint ||
+          current.revision !== checkpoint.revision || current.inProgressRun !== null ||
+          current.readyGeneration === null) {
+          throw new Error("ready refresh progress parent changed (CAS conflict)");
+        }
+        const key = result.status === "verified" ? result.memo.familyCandidateKey : result.familyCandidateKey;
+        const old = current.verifiedMemos[key];
+        if (result.status === "verified") assertReadyRefreshMemo(old, result.memo, current.readyGeneration.cutoff);
+        else assertReadyRefreshRejection(old, result, current.readyGeneration.cutoff);
+        if (!current.readyGeneration.activeInstanceKeys.includes(old!.familyInstanceKey)) {
+          throw new Error("ready refresh progress cannot add an inactive instance");
+        }
+        const path = this.#refreshMemoPath(checkpoint, key);
+        await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+        const tmp = path + ".tmp." + process.pid;
+        const file = await open(tmp, "w", 0o600);
+        try {
+          await file.writeFile(JSON.stringify({ version: 1,
+            parentCheckpointFingerprint: checkpoint.checkpointFingerprint,
+            priorMemoFingerprint: old!.memoFingerprint, result,
+            resultFingerprint: canonicalJsonFingerprint(result, "ready-refresh-result-v1:") }) + "\n");
+          await file.sync();
+        } finally {
+          await file.close();
+        }
+        await rename(tmp, path);
+        // Persist the rename and any newly created parent directories as well.
+        for (const dirPath of [dirname(path), dirname(dirname(path)), dirname(this.#path)]) {
+          const dir = await open(dirPath, "r");
+          try { await dir.sync(); } finally { await dir.close(); }
+        }
+      } finally {
+        await unlink(this.#lockPath).catch(() => undefined);
+      }
+    });
   }
 
   /** Seed a new run directory with an existing completed Ready checkpoint.
@@ -1381,39 +1455,6 @@ export class UniverseRebuildCheckpointStore {
     activeReadyMemos(checkpoint);
     // Never overwrite either an existing destination or the source itself.
     return this.#cas(0, () => checkpoint);
-  }
-
-  /** Seed a fresh rebuild with reusable proofs, never with discovery or Ready
-   * authority. Source may be unfinished: load validates its base and journal;
-   * the ordinary runner still rechecks every memo under the new candidate,
-   * definition and canonical source before any publication.
-   */
-  async inheritRebuildProofsFrom(
-    source: UniverseRebuildCheckpointStore,
-  ): Promise<StartupCheckpointEnvelope> {
-    if (resolve(this.#path) === resolve(source.#path)) {
-      throw new Error("Rebuild proof inheritance requires a different destination");
-    }
-    const checkpoint = await source.load();
-    if (checkpoint === null) {
-      throw new Error("Rebuild proof inheritance source checkpoint is absent");
-    }
-    for (const [key, memo] of Object.entries(checkpoint.verifiedMemos)) {
-      assertDurableVerifiedMemoFingerprint(memo);
-      if (key !== memo.familyCandidateKey || !hasDurableCandidateSnapshot(memo)) {
-        throw new Error("Rebuild proof inheritance requires a bound candidate snapshot");
-      }
-    }
-    // One atomic write regardless of proof count. A pre-existing destination
-    // fails CAS; old outcomes, coverage and Ready roots are deliberately absent.
-    return this.#cas(0, (current) => {
-      if (current !== null) throw new Error("Rebuild proof inheritance destination already exists");
-      return Object.freeze({
-        ...UniverseRebuildCheckpointStore.emptyEnvelope(),
-        verifiedMemos: checkpoint.verifiedMemos,
-        retryableAttemptsByCandidateKey: checkpoint.retryableAttemptsByCandidateKey,
-      });
-    });
   }
 
   async #fileSignature(path: string): Promise<string | null> {
@@ -1479,9 +1520,9 @@ export class UniverseRebuildCheckpointStore {
   async #replayAttestationJournal(
     base: StartupCheckpointEnvelope | null,
   ): Promise<StartupCheckpointEnvelope | null> {
-    let raw: Buffer;
+    let file: Awaited<ReturnType<typeof open>>;
     try {
-      raw = await readFile(this.#journalPath);
+      file = await open(this.#journalPath, "r");
     } catch (error) {
       const code = error && typeof error === "object" && "code" in error
         ? String((error as { code?: unknown }).code)
@@ -1493,14 +1534,11 @@ export class UniverseRebuildCheckpointStore {
       }
       throw error;
     }
-    this.#journalTotalBytes = raw.byteLength;
-    const lastNewline = raw.lastIndexOf(0x0a);
-    this.#journalCommittedBytes = lastNewline < 0 ? 0 : lastNewline + 1;
-    const committed = raw.subarray(0, this.#journalCommittedBytes)
-      .toString("utf8");
+    this.#journalTotalBytes = 0;
+    this.#journalCommittedBytes = 0;
     let current = base;
-    for (const line of committed.split("\n")) {
-      if (line.length === 0) continue;
+    const applyLine = (line: string): void => {
+      if (line.length === 0) return;
       const record = parseJournalRecord(line);
       if (current === null) {
         throw new Error(
@@ -1513,7 +1551,7 @@ export class UniverseRebuildCheckpointStore {
             "universe rebuild attestation journal compacted-state mismatch",
           );
         }
-        continue;
+        return;
       }
       if (
         record.expectedRevision !== current.revision ||
@@ -1538,38 +1576,52 @@ export class UniverseRebuildCheckpointStore {
         ...next,
         checkpointFingerprint: record.resultCheckpointFingerprint,
       });
+    };
+    try {
+      const buffer = Buffer.allocUnsafe(this.#readChunkBytes);
+      let pending: Buffer[] = [];
+      while (true) {
+        const { bytesRead } = await file.read(buffer, 0, buffer.length, null);
+        if (bytesRead === 0) break;
+        const chunk = buffer.subarray(0, bytesRead);
+        let start = 0;
+        let end: number;
+        while ((end = chunk.indexOf(0x0a, start)) !== -1) {
+          pending.push(chunk.subarray(start, end));
+          // Decode only after joining a complete line; UTF-8 may cross chunks.
+          applyLine(Buffer.concat(pending).toString("utf8"));
+          pending = [];
+          this.#journalCommittedBytes = this.#journalTotalBytes + end + 1;
+          start = end + 1;
+        }
+        if (start < bytesRead) pending.push(Buffer.from(chunk.subarray(start)));
+        this.#journalTotalBytes += bytesRead;
+      }
+      // No LF means uncommitted. A later append truncates only this byte tail.
+    } finally {
+      await file.close();
     }
     return current;
   }
 
-  /**
-   * Write the envelope one top-level field per chunk. Stringifying the
-   * whole envelope (verifiedMemos + run outcomes + a ready generation with
-   * its catalog/graph snapshots) pretty-printed exceeds V8's single-string
-   * limit ("Invalid string length"); each field alone stays well under it.
-   * The file remains plain JSON (JSON.parse-compatible).
-   */
+  /** Stream nested containers too; one memo dictionary can exceed V8's limit. */
   async #writeEnvelope(
     path: string,
     envelope: StartupCheckpointEnvelope,
   ): Promise<void> {
-    const field = (key: string, value: unknown): string =>
-      JSON.stringify(key) + ":" + JSON.stringify(value);
     const file = await open(path, "w", 0o600);
     try {
-      await file.write("{");
-      await file.write(field("revision", envelope.revision) + ",");
-      await file.write(field("verifiedMemos", envelope.verifiedMemos) + ",");
-      await file.write(field("inProgressRun", envelope.inProgressRun) + ",");
-      await file.write(
-        field(
-          "retryableAttemptsByCandidateKey",
-          envelope.retryableAttemptsByCandidateKey,
-        ) + ",",
-      );
-      await file.write(field("readyGeneration", envelope.readyGeneration) + ",");
-      await file.write(field("checkpointFingerprint", envelope.checkpointFingerprint));
-      await file.write("}\n");
+      for (const chunk of checkpointJsonChunks({
+        revision: envelope.revision,
+        verifiedMemos: envelope.verifiedMemos,
+        inProgressRun: envelope.inProgressRun,
+        retryableAttemptsByCandidateKey: envelope.retryableAttemptsByCandidateKey,
+        readyGeneration: envelope.readyGeneration,
+        checkpointFingerprint: envelope.checkpointFingerprint,
+      })) {
+        await file.writeFile(chunk);
+      }
+      await file.writeFile("\n");
     } finally {
       await file.close();
     }
@@ -1995,13 +2047,14 @@ export class UniverseRebuildCheckpointStore {
 
   /**
    * Refresh only the materialization of an incumbent Ready's exact instance
-   * set. This does not claim discovery under a new source plan. The cutoff,
-   * universe, coverage, candidate accounting and retryable queue stay intact.
-   * Any rejection/missing instance must leave the old Ready untouched.
+   * candidate set. A bound terminal rejection can remove an active instance;
+   * an unaccounted missing instance or retryable failure cannot. No discovery,
+   * cutoff/coverage movement or partially published Graph is permitted.
    */
   async casRefreshReadyInstances(input: {
     readonly expectedRevision: number;
     readonly memos: readonly DurableVerifiedMemo[];
+    readonly rejections?: readonly ReadyRefreshRejection[];
     readonly graphSnapshot: unknown;
   }): Promise<StartupCheckpointEnvelope> {
     return this.#cas(input.expectedRevision, (base) => {
@@ -2009,24 +2062,17 @@ export class UniverseRebuildCheckpointStore {
       const oldMemos = activeReadyMemos(base);
       const ready = base.readyGeneration!;
       const priorByKey = new Map(oldMemos.map((memo) => [memo.familyCandidateKey, memo]));
-      if (input.memos.length !== oldMemos.length ||
-        new Set(input.memos.map((memo) => memo.familyCandidateKey)).size !== oldMemos.length) {
-        throw new Error("ready refresh cannot add or remove active instances");
+      const rejections = input.rejections ?? [];
+      const resultKeys = [...input.memos.map(memo => memo.familyCandidateKey), ...rejections.map(outcome => outcome.familyCandidateKey)];
+      if (resultKeys.length !== oldMemos.length || new Set(resultKeys).size !== oldMemos.length ||
+        resultKeys.some(key => !priorByKey.has(key))) {
+        throw new Error("ready refresh cannot add or remove unaccounted active instances");
       }
+      const rejectedByKey = new Map(rejections.map(outcome => [outcome.familyCandidateKey, outcome]));
+      for (const rejection of rejections) assertReadyRefreshRejection(priorByKey.get(rejection.familyCandidateKey), rejection, ready.cutoff);
       const verifiedMemos = { ...base.verifiedMemos };
       for (const memo of input.memos) {
-        assertDurableVerifiedMemoFingerprint(memo);
-        const old = priorByKey.get(memo.familyCandidateKey);
-        if (old === undefined || memo.familyInstanceKey !== old.familyInstanceKey ||
-          memo.familyId !== old.familyId || memo.instanceKey !== old.instanceKey ||
-          memo.candidateFingerprint !== old.candidateFingerprint ||
-          canonicalJson(memo.candidateSnapshot) !== canonicalJson(old.candidateSnapshot) ||
-          (memo.memoFingerprint !== old.memoFingerprint && (
-            memo.validity.proofSource.number !== ready.cutoff.number ||
-            memo.validity.proofSource.hash.toLowerCase() !== ready.cutoff.hash.toLowerCase()
-          ))) {
-          throw new Error("ready refresh changed identity/candidate or used a different proof source");
-        }
+        assertReadyRefreshMemo(priorByKey.get(memo.familyCandidateKey), memo, ready.cutoff);
         verifiedMemos[memo.familyCandidateKey] = Object.freeze(memo);
       }
       const catalogSnapshot = buildReadyCatalogSnapshot(input.memos);
@@ -2034,17 +2080,24 @@ export class UniverseRebuildCheckpointStore {
         Object.fromEntries(Object.entries(ready.familyPartitions).map(([id, partition]) => [id, Object.freeze({
           ...partition,
           outcomesByCandidateKey: Object.freeze(Object.fromEntries(Object.entries(partition.outcomesByCandidateKey)
-            .map(([key, outcome]) => [key, outcome.status === "verified" && verifiedMemos[key] !== undefined
-              ? Object.freeze({ ...outcome, memoFingerprint: verifiedMemos[key]!.memoFingerprint }) : outcome]))),
+            .map(([key, outcome]) => [key, rejectedByKey.get(key) ?? (outcome.status === "verified" && verifiedMemos[key] !== undefined
+              ? Object.freeze({ ...outcome, memoFingerprint: verifiedMemos[key]!.memoFingerprint }) : outcome)]))),
         })])),
       );
-      return Object.freeze({
+      const next = Object.freeze({
         ...base,
         revision: base.revision + 1,
         verifiedMemos: Object.freeze(verifiedMemos),
         readyGeneration: Object.freeze({
           ...ready,
           generation: ready.generation + 1,
+          activeInstanceKeys: Object.freeze(input.memos.map(memo => memo.familyInstanceKey).sort()),
+          candidateAccounting: Object.freeze({ ...ready.candidateAccounting,
+            verified: input.memos.length,
+            terminalRejected: ready.candidateAccounting.terminalRejected + rejections.length }),
+          ...(rejections.length === 0 ? {} : { refreshRejections: Object.freeze({
+            ...ready.refreshRejections, ...Object.fromEntries(rejectedByKey),
+          }) }),
           graphSnapshot: input.graphSnapshot,
           graphHash: readyRootHash("graph-v2:", input.graphSnapshot),
           catalogSnapshot,
@@ -2053,6 +2106,8 @@ export class UniverseRebuildCheckpointStore {
           ...(familyPartitions === undefined ? {} : { familyPartitions }),
         }),
       });
+      activeReadyMemos(next);
+      return next;
     });
   }
 
@@ -2169,7 +2224,9 @@ export class UniverseRebuildCheckpointStore {
         supplements: input.supplements }, input.graphSnapshot, graphValidation);
       const plan = prepareReadyFamilyUpdate(base, input);
       const ready = base.readyGeneration!;
-      const { activationRestriction: _restriction, familyUpdateScope: _scope, ...prior } = ready;
+      const { activationRestriction: _restriction, familyUpdateScope: _scope, refreshRejections: _rejections, ...prior } = ready;
+      const remainingRejections = Object.fromEntries(Object.entries(_rejections ?? {})
+        .filter(([key]) => !plan.replacedFamilyIds.includes(base.verifiedMemos[key]!.familyId)));
       const disabledFamilyIds = Object.keys(plan.familyPartitions).filter(id => !plan.familyPartitions[id]!.enabled).sort();
       const catalogSnapshot = buildReadyCatalogSnapshot(plan.activeMemos);
       const excludedVerified = Object.freeze(plan.excludedMemos.map(memo => Object.freeze({
@@ -2183,6 +2240,7 @@ export class UniverseRebuildCheckpointStore {
         retryableAttemptsByCandidateKey: plan.retryableAttemptsByCandidateKey,
         readyGeneration: Object.freeze({
           ...prior,
+          ...(Object.keys(remainingRejections).length === 0 ? {} : { refreshRejections: Object.freeze(remainingRejections) }),
           generation: ready.generation + 1,
           universeHash: readyRootHash("ready-family-universe-v1:", Object.fromEntries(
             Object.entries(plan.familyPartitions).map(([id, partition]) => [id, partition.candidateSetHash]))),
@@ -2218,7 +2276,6 @@ export class UniverseRebuildCheckpointStore {
 
   /** Create the fixed-cutoff run or return the existing one for it. */
   async beginOrResumeRun(input: {
-    readonly observationScope?: TransactionObservationScope;
     readonly expectedRevision: number;
     readonly runId: string;
     readonly cutoff: CanonicalSource;
@@ -2240,7 +2297,6 @@ export class UniverseRebuildCheckpointStore {
     assertSourceReceiptsBindRun(input.sourceReceipts, {
       cutoff: input.cutoff,
       fromBlock: input.fromBlock,
-      observationScope: input.observationScope,
     });
     return this.#cas(input.expectedRevision, (current) => {
       const base = current ?? UniverseRebuildCheckpointStore.emptyEnvelope();
@@ -2253,7 +2309,6 @@ export class UniverseRebuildCheckpointStore {
           );
         }
         if (
-          canonicalJson(existing.observationScope ?? null) !== canonicalJson(input.observationScope ?? null) ||
           canonicalJson(existing.familyUpdateScope ?? null) !== canonicalJson(input.familyUpdateScope ?? null) ||
           existing.cutoff.number !== input.cutoff.number ||
           existing.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
@@ -2298,7 +2353,6 @@ export class UniverseRebuildCheckpointStore {
         ...base,
         revision: base.revision + 1,
         inProgressRun: Object.freeze({
-          ...(input.observationScope === undefined ? {} : { observationScope: immutableReadyValue(input.observationScope) }),
           ...(input.familyUpdateScope === undefined ? {} : { familyUpdateScope: immutableReadyValue(input.familyUpdateScope) }),
           runId: input.runId,
           cutoff: Object.freeze({ ...input.cutoff }),
@@ -2327,7 +2381,6 @@ export class UniverseRebuildCheckpointStore {
    * carried and every candidate re-enters findReusableMemo.
    */
   async reconcileFixedRunPlan(input: {
-    readonly observationScope?: TransactionObservationScope;
     readonly expectedRevision: number;
     readonly runId: string;
     readonly cutoff: CanonicalSource;
@@ -2358,7 +2411,6 @@ export class UniverseRebuildCheckpointStore {
       // The run's time identity is checked FIRST: reconcile can never move
       // the cutoff/range, regardless of what the receipts claim.
       if (
-        canonicalJson(run.observationScope ?? null) !== canonicalJson(input.observationScope ?? null) ||
         run.cutoff.number !== input.cutoff.number ||
         run.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
         run.cutoff.generation !== input.cutoff.generation ||
@@ -2375,7 +2427,6 @@ export class UniverseRebuildCheckpointStore {
       assertSourceReceiptsBindRun(input.sourceReceipts, {
         cutoff: input.cutoff,
         fromBlock: input.fromBlock,
-        observationScope: input.observationScope,
       });
       // Old outcomes are not verification authority under the new discovery
       // plan: keep only outcomes still bound to the new partition (their
@@ -2654,8 +2705,7 @@ function assertReadyPromotion(
   run: InProgressUniverseRun,
   ready: ReadyUniverseGeneration,
 ): void {
-  if (canonicalJson(run.observationScope ?? null) !== canonicalJson(ready.observationScope ?? null) ||
-    canonicalJson(run.familyUpdateScope ?? null) !== canonicalJson(ready.familyUpdateScope ?? null) ||
+  if (canonicalJson(run.familyUpdateScope ?? null) !== canonicalJson(ready.familyUpdateScope ?? null) ||
     (run.familyUpdateScope !== undefined && canonicalJson([...run.familyUpdateScope.familyIds].sort()) !==
       canonicalJson(Object.keys(ready.familyPartitions ?? {}).sort()))) {
     throw new Error("Ready Family promotion lost scoped parent lineage");
@@ -2724,16 +2774,10 @@ function assertReadyPromotion(
       run.observedThrough.hash.toLowerCase();
   const appliedAtCutoff = ready.appliedThrough.number === run.cutoff.number &&
     ready.appliedThrough.hash.toLowerCase() === run.cutoff.hash.toLowerCase();
-  const graphRootMatches = ready.graphHash === createHash("sha256")
-    .update("graph-v2:" + canonicalJson(ready.graphSnapshot))
-    .digest("hex");
-  const catalogRootMatches = ready.catalogHash === createHash("sha256")
-    .update("catalog-v1:" + canonicalJson(ready.catalogSnapshot))
-    .digest("hex");
+  const graphRootMatches = ready.graphHash === readyRootHash("graph-v2:", ready.graphSnapshot);
+  const catalogRootMatches = ready.catalogHash === readyRootHash("catalog-v1:", ready.catalogSnapshot);
   const publicationRootMatches = ready.publicationSetHash ===
-    createHash("sha256")
-      .update("publications-v2:" + canonicalJson(ready.catalogSnapshot))
-      .digest("hex");
+    readyRootHash("publications-v2:", ready.catalogSnapshot);
   const sourceReceipts = run.sourceReceipts;
   assertCompleteSourceReceipts(sourceReceipts);
   assertSourceReceiptsBindRun(sourceReceipts, run);
@@ -2755,7 +2799,6 @@ function assertReadyPromotion(
     ready.sourceCoverage.length === 0 || !exactCoverageSet ||
     coverageKeys.size !== ready.sourceCoverage.length ||
     ready.sourceCoverage.some((coverage) =>
-      canonicalJson(coverage.observationScope ?? null) !== canonicalJson(run.observationScope ?? null) ||
       coverage.completeThroughBlock !== run.cutoff.number ||
       coverage.completeThroughHash?.toLowerCase() !==
         run.cutoff.hash.toLowerCase()
@@ -2795,10 +2838,6 @@ function assertCompleteSourceReceipts(
   const sourceKeys = new Set<string>();
   const coverageKeys = new Set<string>();
   for (const receipt of receipts) {
-    assertTransactionObservationScope(receipt.observationScope);
-    if (receipt.observationScope !== undefined && receipt.completedChunks.length !== 1) {
-      throw new Error("transaction source receipt requires one exact selection completion");
-    }
     if (
       !/^[0-9a-f]{64}$/.test(receipt.sourceKey) ||
       !/^[0-9a-f]{64}$/.test(receipt.queryFingerprint) ||
@@ -2829,7 +2868,6 @@ function assertCompleteSourceReceipts(
     let expectedFrom = receipt.fromBlock;
     for (const chunk of receipt.completedChunks) {
       if (
-        canonicalJson(chunk.observationScope ?? null) !== canonicalJson(receipt.observationScope ?? null) ||
         chunk.fromBlock !== expectedFrom ||
         chunk.toBlock < chunk.fromBlock ||
         chunk.toBlock > receipt.toBlock ||
@@ -2870,12 +2908,9 @@ function assertSourceReceiptsBindRun(
   run: {
     readonly cutoff: CanonicalSource;
     readonly fromBlock: number;
-    readonly observationScope?: TransactionObservationScope;
   },
 ): void {
-  assertTransactionObservationScope(run.observationScope);
   if (receipts.some((receipt) =>
-    canonicalJson(receipt.observationScope ?? null) !== canonicalJson(run.observationScope ?? null) ||
     receipt.fromBlock !== run.fromBlock ||
     receipt.toBlock !== run.cutoff.number ||
     receipt.cutoffNumber !== run.cutoff.number ||

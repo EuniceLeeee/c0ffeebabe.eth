@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { assertTransactionObservationScope, type TransactionObservationScope } from "./ready-transaction-input.js";
 import {
   AttestationCheckpointWriter,
   UniverseRebuildCheckpointStore,
@@ -7,6 +6,7 @@ import {
   activeReadyMemos,
   buildReadyCatalogSnapshot,
   canonicalJson,
+  canonicalJsonFingerprint,
   hasDurableCandidateSnapshot,
   prepareReadyFamilyUpdate,
   immutableReadyValue,
@@ -16,6 +16,8 @@ import {
   type InProgressUniverseRun,
   type LegacyDurableVerifiedMemo,
   type ReadyUniverseGeneration,
+  type ReadyRefreshRejection,
+  type ReadyRefreshResult,
   type ReadyFamilyPartition,
   type ReadyFamilyUpdateInput,
   type ReadyFamilyUpdateScope,
@@ -27,6 +29,7 @@ import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import { strictEdgeCollectionFromBlock } from
   "./strict-edge-collection-policy.js";
+import type { ReadyRpcThrottle } from "./ready-rpc-throttle.js";
 
 /**
  * Durable universe rebuild runner (adversarial audit §5-§6). Every rebuild
@@ -59,9 +62,7 @@ export class UniverseRunIncomplete extends Error {
 }
 
 export interface UniverseRebuildDependencies {
-  /** Sparse input reuses this runner; absence preserves the continuous window. */
-  readonly observationScope?: TransactionObservationScope;
-  readonly resolveTransactionObservationRange?: () => Promise<{ readonly fromBlock: number; readonly toBlock: number }>;
+  readonly readyThrottle?: ReadyRpcThrottle;
   /** Freeze the canonical head, or one explicitly requested historical cutoff. */
   readonly freezeCanonicalHead: (
     requestedBlock?: number,
@@ -164,6 +165,8 @@ export interface UniverseRebuildDependencies {
   /** Pure definition check for rematerializing the already-validated Ready
    * at its unchanged cutoff. Not cross-block authority or discovery reuse. */
   readonly isReadyMemoDefinitionCurrent?: (memo: DurableVerifiedMemo) => boolean;
+  /** Same-cutoff negative outcomes may resume only under the same Family definition. */
+  readonly isReadyRefreshRejectionCurrent?: (outcome: ReadyRefreshRejection, candidate: unknown) => boolean;
   /** Pure production full-Graph/route/funding validation before subset publication. */
   readonly assertReadyGraphSnapshot?: (input: {
     readonly publications: readonly { readonly familyId: string; readonly instances: readonly unknown[] }[];
@@ -270,21 +273,12 @@ export async function rebuildUniverse(
       "universe rebuild: explicit range and rolling window are mutually exclusive",
     );
   }
-  assertTransactionObservationScope(input.observationScope);
-  if ((input.observationScope === undefined) !== (input.resolveTransactionObservationRange === undefined) ||
-    (input.observationScope !== undefined && (input.observationRange !== undefined || input.observationWindowBlocks !== undefined || familyUpdateScope !== undefined))) {
-    throw new Error("transaction input requires its own source resolver and cannot be combined with a block window or Family delta");
-  }
-  let explicitRange = input.observationRange === undefined
+  const explicitRange = input.observationRange === undefined
     ? null
     : validateExplicitObservationRange(input.observationRange);
   const encodeCandidate = input.encodeCandidateSnapshot ?? ((value) => value);
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
   let checkpoint = await input.store.load() ?? null;
-  const previousScopeOwner = checkpoint?.inProgressRun ?? checkpoint?.readyGeneration;
-  if (previousScopeOwner && canonicalJson(previousScopeOwner.observationScope ?? null) !== canonicalJson(input.observationScope ?? null)) {
-    throw new Error("Ready observation scope differs from checkpoint; use the same TX list or a separate checkpoint");
-  }
   if (familyUpdateScope !== undefined || checkpoint?.inProgressRun?.familyUpdateScope !== undefined) {
     if (familyUpdateScope === undefined || checkpoint?.readyGeneration?.familyPartitions === undefined) {
       throw new Error("Ready Family scoped rebuild requires its partitioned parent and scope");
@@ -474,13 +468,6 @@ export async function rebuildUniverse(
     }
   } else {
     // ★ Only with no unfinished run do we create a new time world.
-    if (input.resolveTransactionObservationRange !== undefined) {
-      explicitRange = await input.resolveTransactionObservationRange();
-      if (!Number.isSafeInteger(explicitRange.fromBlock) || !Number.isSafeInteger(explicitRange.toBlock) ||
-        explicitRange.fromBlock < 0 || explicitRange.toBlock < explicitRange.fromBlock) {
-        throw new Error("invalid transaction observation bounds");
-      }
-    }
     cutoff = await input.freezeCanonicalHead(explicitRange?.toBlock);
     if (familyUpdateScope !== undefined && (canonicalJson(cutoff) !== canonicalJson(checkpoint!.readyGeneration!.cutoff) ||
       explicitRange?.fromBlock !== checkpoint!.readyGeneration!.universeRange.fromBlock ||
@@ -541,7 +528,7 @@ export async function rebuildUniverse(
     }
   }
   log(
-    "universe rebuild fixed source " + (input.observationScope === undefined ? "range" : "TX envelope") + ": run=" + input.runId +
+    "universe rebuild fixed source range: run=" + input.runId +
       " from=" + fromBlock + " cutoff=" + cutoff.number + ":" + cutoff.hash +
       " resumed=" + String(incumbentRun !== null && !discoveryPlanChanged) +
       " discoveryPlanChanged=" + String(discoveryPlanChanged) +
@@ -571,7 +558,6 @@ export async function rebuildUniverse(
   // reconciles the SAME run's partition/receipts (time identity immutable).
   checkpoint = discoveryPlanChanged
     ? await input.store.reconcileFixedRunPlan({
-        ...(input.observationScope === undefined ? {} : { observationScope: input.observationScope }),
         expectedRevision: checkpoint?.revision ?? 0,
         runId: input.runId,
         cutoff,
@@ -587,7 +573,6 @@ export async function rebuildUniverse(
         sourceReceipts,
       })
     : await input.store.beginOrResumeRun({
-        ...(input.observationScope === undefined ? {} : { observationScope: input.observationScope }),
         ...(familyUpdateScope === undefined ? {} : { familyUpdateScope }),
         expectedRevision: checkpoint?.revision ?? 0,
         runId: input.runId,
@@ -751,7 +736,9 @@ export async function rebuildUniverse(
           checkpoint: attestationCheckpoint,
           cutoff,
         });
+        input.readyThrottle?.assertOpen();
       } catch (error) {
+        if (input.readyThrottle?.isThrottle(error)) throw error;
         log(
           "universe rebuild memo revalidation failed for " + candidateKey +
             ": " + (error instanceof Error ? error.message : String(error)),
@@ -808,6 +795,7 @@ export async function rebuildUniverse(
       cutoff,
       ...(evidenceRef === undefined ? {} : { evidenceRef }),
     });
+    input.readyThrottle?.assertOpen();
     if (result.status === "verified") {
       const memo = input.sealDurableVerifiedMemo({
         candidate,
@@ -871,8 +859,18 @@ export async function rebuildUniverse(
   if (!Number.isSafeInteger(requestedConcurrency) || requestedConcurrency < 1) {
     throw new Error("universe rebuild attestation concurrency is invalid");
   }
+  input.readyThrottle?.limitConcurrency(requestedConcurrency);
   try {
-    await Promise.all(Array.from({
+    if (input.readyThrottle) {
+      try {
+        await input.readyThrottle.runCandidates(candidates, processCandidate, recordAttestationProgress);
+      } catch (error) {
+        log("universe rebuild attestation stopped: processed=" + completedPending +
+          "/" + candidates.length + " pending=" + (candidates.length - completedPending) +
+          " error=" + (error instanceof Error ? error.message : String(error)));
+        throw error;
+      }
+    } else await Promise.all(Array.from({
       length: Math.min(requestedConcurrency, Math.max(1, candidates.length)),
     }, async () => {
       while (true) {
@@ -955,7 +953,6 @@ export async function rebuildUniverse(
   const catalogSnapshot = buildReadyCatalogSnapshot(activeMemos);
   const familyPartitions = buildReadyFamilyPartitions(input, currentRun);
   const ready = Object.freeze({
-    ...(currentRun.observationScope === undefined ? {} : { observationScope: currentRun.observationScope }),
     ...(currentRun.familyUpdateScope === undefined ? {} : { familyUpdateScope: currentRun.familyUpdateScope }),
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,
     cutoff: Object.freeze({ ...cutoff }),
@@ -1031,7 +1028,7 @@ const READY_REFRESH_MAX_ATTEMPTS = 3;
 /** Same attestation/Graph pipeline, restricted to the existing Ready set.
  * Never scans, invents source receipts, retries excluded candidates or moves
  * the historical cutoff. Only explicitly retryable attestations get bounded
- * retries; non-verified results cannot shrink the reused set.
+ * retries; only bound terminal rejections may remove an admitted instance.
  */
 export async function refreshReadyInstances(input: UniverseRebuildDependencies & {
   readonly store: UniverseRebuildCheckpointStore;
@@ -1051,19 +1048,17 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
   }
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value: unknown) => value);
   await input.assertCanonicalHead(cutoff);
-  const memos = new Array<DurableVerifiedMemo>(oldMemos.length);
+  const memos = new Array<DurableVerifiedMemo | undefined>(oldMemos.length);
+  const rejections = new Array<ReadyRefreshRejection | undefined>(oldMemos.length);
   let next = 0;
   let completed = 0;
   let refreshed = 0;
+  let resumed = 0;
+  let reused = 0;
+  let rejected = 0;
   let stop = false;
-  const workers = await Promise.allSettled(Array.from({
-    length: Math.min(concurrency, oldMemos.length),
-  }, async () => {
-    try {
-      for (;;) {
-      if (stop) return;
-      const index = next++;
-      if (index >= oldMemos.length) return;
+  const refreshOne = async (index: number): Promise<void> => {
+      input.readyThrottle?.assertOpen();
       const old = oldMemos[index]!;
       const candidate = decodeCandidate(old.candidateSnapshot);
       if (input.familyCandidateKey(candidate) !== old.familyCandidateKey) {
@@ -1072,19 +1067,37 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
       // Ready already validated this exact set at this exact cutoff. Do not
       // re-attest unrelated dependency-proof Funding when only code-defined
       // descriptors changed; its stored proof is neither moved nor renewed.
-      const reusable = input.isReadyMemoDefinitionCurrent === undefined
+      let reusable = input.isReadyMemoDefinitionCurrent === undefined
         ? await input.findReusableMemo({ candidate, checkpoint, cutoff })
         : input.isReadyMemoDefinitionCurrent(old) ? old : null;
+      if (reusable !== null) reused++;
+      if (reusable === null) {
+        const saved = await input.store.loadReadyRefreshResult(checkpoint, old);
+        if (saved?.status === "verified") {
+          reusable = input.isReadyMemoDefinitionCurrent === undefined
+            ? await input.findReusableMemo({ candidate,
+              checkpoint: { ...checkpoint, verifiedMemos: { ...checkpoint.verifiedMemos,
+                [saved.memo.familyCandidateKey]: saved.memo } }, cutoff })
+            : input.isReadyMemoDefinitionCurrent(saved.memo) ? saved.memo : null;
+          if (reusable !== null) resumed++;
+        } else if (saved?.status === "terminal-rejected" && input.isReadyRefreshRejectionCurrent?.(saved, candidate)) {
+          rejections[index] = saved;
+          rejected++;
+          resumed++;
+        }
+      }
+      input.readyThrottle?.assertOpen();
       if (reusable !== null) {
         memos[index] = reusable;
-      } else {
+      } else if (rejections[index] === undefined) {
         if (stop) return;
         let attempt = 1;
         let result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
-        while (result.status !== "verified") {
+        while (result.status === "retryable") {
+          input.readyThrottle?.assertOpen();
           const failure = `ready refresh ${old.familyCandidateKey}: attempt=${attempt}/${READY_REFRESH_MAX_ATTEMPTS} ${result.status} ${result.reasonCode}`;
           input.log?.(failure);
-          if (result.status !== "retryable" || attempt === READY_REFRESH_MAX_ATTEMPTS) {
+          if (attempt === READY_REFRESH_MAX_ATTEMPTS) {
             throw new Error(`${failure}; incumbent unchanged`);
           }
           await new Promise<void>((resolve) => setTimeout(resolve, attempt * 250));
@@ -1092,47 +1105,67 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
           attempt++;
           result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
         }
-        memos[index] = input.sealDurableVerifiedMemo({
-          candidate, result: result.result, proofSource: cutoff,
-          familyCandidateKey: old.familyCandidateKey,
-        });
-        refreshed++;
+        let progress: ReadyRefreshResult;
+        if (result.status === "terminal-rejected") {
+          const outcome: ReadyRefreshRejection = Object.freeze({ status: "terminal-rejected",
+            familyCandidateKey: old.familyCandidateKey, reasonCode: result.reasonCode, ...result.binding });
+          rejections[index] = outcome;
+          progress = outcome;
+        } else {
+          memos[index] = input.sealDurableVerifiedMemo({ candidate, result: result.result,
+            proofSource: cutoff, familyCandidateKey: old.familyCandidateKey });
+          progress = { status: "verified", memo: memos[index]! };
+        }
+        await input.store.saveReadyRefreshResult(checkpoint, progress);
+        if (progress.status === "verified") refreshed++;
+        else {
+          rejected++;
+          input.log?.(`ready refresh ${old.familyCandidateKey}: terminal-rejected ${progress.reasonCode}; saved, continuing`);
+        }
+        // A sibling may exhaust the budget while this proof finishes. Persist
+        // the completed proof before honouring the shared stop; never lose it.
+        input.readyThrottle?.assertOpen();
       }
       completed++;
       if (completed === 1 || completed % 100 === 0 || completed === oldMemos.length) {
-        input.log?.(`ready instance refresh ${completed}/${oldMemos.length} reattested=${refreshed}`);
+        input.log?.(`ready instance refresh ${completed}/${oldMemos.length} reattested=${refreshed} resumed=${resumed} reused=${reused} rejected=${rejected}`);
       }
-      }
-    } catch (error) {
-      stop = true;
-      throw error;
-    }
-  }));
-  const failed = workers.find((worker) => worker.status === "rejected");
-  if (failed?.status === "rejected") throw failed.reason;
-  if (memos.every((memo, index) => memo.memoFingerprint === oldMemos[index]!.memoFingerprint)) {
+  };
+  if (input.readyThrottle) {
+    input.readyThrottle.limitConcurrency(concurrency);
+    await input.readyThrottle.runCandidates(oldMemos.map((_, index) => index), refreshOne, () => {});
+  } else {
+    const workers = await Promise.allSettled(Array.from({ length: Math.min(concurrency, oldMemos.length) }, async () => {
+      try {
+        for (;;) {
+          if (stop) return;
+          const index = next++;
+          if (index >= oldMemos.length) return;
+          await refreshOne(index);
+        }
+      } catch (error) { stop = true; throw error; }
+    }));
+    const failed = workers.find(worker => worker.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
+  }
+  if (rejected === 0 && memos.every((memo, index) => memo?.memoFingerprint === oldMemos[index]!.memoFingerprint)) {
     await input.assertCanonicalHead(cutoff);
     if ((await input.store.load())?.revision !== checkpoint.revision) {
       throw new Error("ready refresh checkpoint changed during validation");
     }
     return ready;
   }
-  const instances = memos.map((memo) => input.rehydrateVerifiedInstance({ memo, cutoff }));
-  const graphSnapshot = input.buildGraphSnapshot(input.aggregateOnceByFamily(instances), cutoff);
+  const retained = memos.filter((memo): memo is DurableVerifiedMemo => memo !== undefined);
+  const excluded = rejections.filter((outcome): outcome is ReadyRefreshRejection => outcome !== undefined);
+  const instances = retained.map((memo) => input.rehydrateVerifiedInstance({ memo, cutoff }));
+  const publications = input.aggregateOnceByFamily(instances);
+  const graphSnapshot = input.buildGraphSnapshot(publications, cutoff);
+  input.assertReadyGraphSnapshot?.({ publications, graphSnapshot, cutoff });
   await input.assertCanonicalHead(cutoff);
   const updated = await input.store.casRefreshReadyInstances({
-    expectedRevision: checkpoint.revision, memos, graphSnapshot,
+    expectedRevision: checkpoint.revision, memos: retained, rejections: excluded, graphSnapshot,
   });
   return updated.readyGeneration!;
-}
-
-// Initial discovery and catalog rehydration can enumerate the same validated
-// strict graph in different orders. Only no-op comparison ignores edge order;
-// publication hashes and the incumbent's actual order remain unchanged.
-function canonicalReadyGraphContent(snapshot: unknown): string {
-  const graph = snapshot as { format?: unknown; edges?: readonly unknown[] } | null;
-  if (graph?.format !== "strict-rebuild-graph-v1" || !Array.isArray(graph.edges)) return canonicalJson(snapshot);
-  return canonicalJson({ ...graph, edges: graph.edges.map(edge => canonicalJson(edge)).sort() });
 }
 
 /** Explicit activation-only subset of one completed Ready. No discovery,
@@ -1176,7 +1209,7 @@ export async function restrictReadyFamilies(input: UniverseRebuildDependencies &
     assertGraph: graph => input.assertReadyGraphSnapshot!({ publications, graphSnapshot: graph, cutoff: ready.cutoff }) });
   await input.assertCanonicalHead(ready.cutoff);
   if (disabledFamilyIds.length === 0) {
-    if (canonicalReadyGraphContent(graphSnapshot) !== canonicalReadyGraphContent(ready.graphSnapshot)) {
+    if (canonicalJson(graphSnapshot) !== canonicalJson(ready.graphSnapshot)) {
       throw new Error("Ready restriction no-op Graph differs from incumbent");
     }
     if ((await input.store.load())?.revision !== checkpoint.revision) {
@@ -1238,7 +1271,7 @@ export async function updateReadyFamilies(input: UniverseRebuildDependencies & {
     assertGraph: graph => input.assertReadyGraphSnapshot!({ publications, graphSnapshot: graph, cutoff: ready.cutoff }) });
   await input.assertCanonicalHead(ready.cutoff);
   if (update.supplements.length === 0 && canonicalJson(plan.familyPartitions) === canonicalJson(ready.familyPartitions)) {
-    if (canonicalReadyGraphContent(graphSnapshot) !== canonicalReadyGraphContent(ready.graphSnapshot) ||
+    if (canonicalJson(graphSnapshot) !== canonicalJson(ready.graphSnapshot) ||
       (await input.store.load())?.revision !== checkpoint.revision) {
       throw new Error("Ready Family no-op validation differs from incumbent");
     }
@@ -1642,23 +1675,19 @@ function hashCandidateSet(
 function hashUniverseCandidatePartition(
   candidatesByKey: Readonly<Record<string, unknown>>,
 ): string {
-  return createDigest(
-    "universe-candidate-partition-v1:" + canonicalJson(candidatesByKey),
-  );
+  return canonicalJsonFingerprint(candidatesByKey, "universe-candidate-partition-v1:");
 }
 
 export function hashReadyPublicationSet(catalogSnapshot: unknown): string {
-  return createDigest(
-    "publications-v2:" + canonicalJson(catalogSnapshot),
-  );
+  return canonicalJsonFingerprint(catalogSnapshot, "publications-v2:");
 }
 
 export function hashReadyGraphSnapshot(graph: unknown): string {
-  return createDigest("graph-v2:" + canonicalJson(graph));
+  return canonicalJsonFingerprint(graph, "graph-v2:");
 }
 
 export function hashReadyCatalogSnapshot(catalog: unknown): string {
-  return createDigest("catalog-v1:" + canonicalJson(catalog));
+  return canonicalJsonFingerprint(catalog, "catalog-v1:");
 }
 
 function createDigest(seed: string): string {

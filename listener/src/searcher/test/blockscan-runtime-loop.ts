@@ -11,15 +11,15 @@ import { ethers } from "ethers";
 import { BlockScanRuntimeLoop, SourceSimulationWork, startBlockScanBackgroundFork, type BlockScanRuntimeLoopDependencies,
   type SourceSimulationFactory } from "../blockscan-runtime-loop.js";
 import { createLiveRuntimeStop, createLiveSourceSimulationFactory, maybeSubmitBlockScanAtomic,
-  resolveBlockScanAtomicPolicy, createBlockScanLiveAmountSelectorFactory } from "../main.js";
+  resolveBlockScanAtomicPolicy, createBlockScanLiveAmountSelectorFactory, logBlockScanAmountEvent } from "../main.js";
 import { BlockScanSimRejectCache } from "../blockscan-sim-reject-cache.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
 import { detectProductionBlockScanOpportunities } from "../detector/blockscan-scanner-production.js";
 import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { RevmFatalError, RevmStrictError, type RevmFatalReason, type StrictSimulateRequest } from "../revm-sim-client.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
-import { BlockActivityRangeInvalidatedError } from "../blockscan-touched-state.js";
-import { isRpcQuotaExhaustedError, LiveRpcThrottleObservation, type LiveRpcThrottleRecord } from "../rpc-throttle-guard.js";
+import { BlockActivityRangeInvalidatedError, MAX_ACTIVITY_TRANSITIONS } from "../blockscan-touched-state.js";
+import { isRpcQuotaExhaustedError, isRpcThrottleError, LiveRpcThrottleObservation, type LiveRpcThrottleRecord } from "../rpc-throttle-guard.js";
 import { BlockScanActivityPrefetch } from "../blockscan-activity-prefetch.js";
 import { PinnedRethQuoteBackend } from "../pinned-reth-quote-backend.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
@@ -144,9 +144,9 @@ test("actual shared activity provider latches spent quota before joined reads se
       async send(_method: string, _params: unknown[]) { calls++; if (method === "trace") throw throttle; await slow.promise; return []; },
     };
     const guarded = runInNewContext(js, {
-      provider, blockScanRuntimeAbort: runtimeAbort, console: { error() {} },
-      process: { env: {} },
-      isRpcQuotaExhaustedError,
+      provider, activityTransport: provider, blockScanRuntimeAbort: runtimeAbort, console: { error() {} },
+      process: { env: {} }, blindProductionAudit: false,
+      isRpcQuotaExhaustedError, isRpcThrottleError,
       onSimulationFatal: stop.fatal,
     }, { timeout: 1000 }) as typeof provider;
     const a = guarded.getLogs({ fromBlock: 1, toBlock: 1 }), b = guarded.send("debug_traceBlockByNumber", ["0x1"]);
@@ -182,13 +182,14 @@ test("actual full-header spent quota latches before speculative trace drain, the
     let fatalities = 0, done = false, traces = 0;
     const throttle = Object.assign(new Error("fixture header HTTP 429 monthly quota exhausted"), { statusCode: 429 });
     const stop = createLiveRuntimeStop({ runtimeAbort, emitFatal() { fatalities++; }, exit: code => { exits.push(code); } });
+    const provider = { getLogs: async () => [], send: async (method: string) => {
+      if (method === "eth_getBlockByNumber") throw throttle;
+      traces++; await slow.promise; return [];
+    } };
     const wired = runInNewContext(js, {
       readyUniverse: { generation: 4, graphHash: hash(4) }, config: { rpcUrl: "http://fixture.invalid" },
       blockScanChainId: 1n, blockScanRuntimeAbort: runtimeAbort, ethers, BlockScanActivityPrefetch,
-      provider: { getLogs: async () => [], send: async (method: string) => {
-        if (method === "eth_getBlockByNumber") throw throttle;
-        traces++; await slow.promise; return [];
-      } },
+      provider, activityTransport: provider, blindProductionAudit: false, isRpcThrottleError,
       readBlockScanObservedHeader: async () => { throw throttle; },
       parseBlockScanObservedHeader: () => { throw new Error("unexpected successful header"); },
       process: { env: {} }, console: { error() {}, log() {} }, isRpcQuotaExhaustedError,
@@ -207,7 +208,7 @@ test("actual full-header spent quota latches before speculative trace drain, the
   }
 });
 
-test("actual idle child exits nonzero after fatal drain instead of remaining in disabled-hint wait", { timeout: 15_000 }, async () => {
+test("actual idle child exits nonzero after fatal drain instead of remaining in disabled-hint wait", { timeout: 10_000 }, async () => {
   const mainUrl = new URL("../main.ts", import.meta.url).href;
   const child = spawn(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
     import { createLiveRuntimeStop } from ${JSON.stringify(mainUrl)};
@@ -229,9 +230,7 @@ test("actual idle child exits nonzero after fatal drain instead of remaining in 
     child.once("error", reject); child.once("close", (code, signal) => resolve({ code, signal }));
   });
   try {
-    // Cold TS module loading is preparation, not the fatal/drain lifecycle under
-    // test. Keep a bounded startup allowance without changing live timeouts.
-    await until(() => stdout.includes("drain-start") || child.exitCode !== null || child.signalCode !== null, 10_000);
+    await until(() => stdout.includes("drain-start") || child.exitCode !== null || child.signalCode !== null, 8000);
     assert(stdout.includes("drain-start"), stderr); assert.equal(child.exitCode, null); assert.equal(child.signalCode, null);
     assert.equal(stdout.split("strict_simulation_fatal").length - 1, 1);
     assert(stdout.includes('"kind":"rpc-throttle"'));
@@ -381,6 +380,76 @@ function loopFixture(factory: SourceSimulationFactory, startupWarmEnabled = fals
   };
   return { loop: new BlockScanRuntimeLoop(deps), deps, inputs, coordinator, runtimeAbort };
 }
+
+test("cross-live resume uses the ordinary price/activity producer, defers startup sim, and bars full pipeline until caught up", async () => {
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("no catchup execution"); } },
+    async closeAndDrain() {} }));
+  let latest: any = { sourceBlock: 100, sourceBlockHash: hash(100), generation: 7, effectiveMids: { complete: true } };
+  let revalidated = 0;
+  f.coordinator.latestPricingSnapshot = () => latest;
+  (f.deps as any).startupWarmBudgetMs = 10_000;
+  (f.deps as any).liveContinuation = { async revalidateStartup(pricing: any) {
+    assert.equal(pricing.sourceBlock, 103); revalidated++;
+    f.loop.schedule(104); // real scheduler admission during startup revalidation
+  } };
+  const ranges: number[][] = [];
+  f.deps.readBlockSwapTouched = async (n, _header, range) => {
+    assert(range); ranges.push([range.previousSource.number, n]); return new Set([target]);
+  };
+  f.coordinator.prepareCoarsePricing = async (input: any) => {
+    assert.equal(input.fundingTokens, undefined);
+    assert.equal(input.canonicalActivity.previousSource.number, latest.sourceBlock);
+    latest = { sourceBlock: input.graph.sourceBlock, sourceBlockHash: input.graph.sourceBlockHash,
+      generation: input.graph.generation, effectiveMids: { complete: true } };
+    return { status: "complete", snapshot: latest };
+  };
+  try {
+    f.loop.restoreLiveContinuation();
+    f.loop.schedule(103);
+    await f.loop.waitForIdle();
+    assert.deepEqual(ranges, [[100, 103], [103, 104]]);
+    assert.equal(revalidated, 1);
+    assert.equal(f.inputs.length, 0, "neither Funding nor full runtime prepare runs during catch-up");
+    assert.equal((f.loop as any).liveContinuationPending, false);
+    await assert.rejects(f.loop.runHead(105, { sourceHeadSeenAtMs: Date.now(),
+      sourceHeadSeenAtMonotonicMs: performance.now() }), /fixture prepared boundary/);
+    assert(f.inputs.some(input => input.kind === "funding"), "next head reacquires Funding");
+    assert(f.inputs.some(input => input.kind === "runtime"), "next head takes the normal complete pipeline");
+  } finally { await f.loop.shutdown(); }
+});
+
+test("cross-live large gaps use bounded activity ranges and failed catch-up never enables trading", async () => {
+  for (const fail of [false, true]) {
+    const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("no catchup execution"); } },
+      async closeAndDrain() {} }));
+    let latest: any = { sourceBlock: 100, sourceBlockHash: hash(100), generation: 7, effectiveMids: { complete: true } };
+    f.coordinator.latestPricingSnapshot = () => latest;
+    (f.deps as any).startupWarmBudgetMs = 10_000;
+    let revalidated = 0;
+    (f.deps as any).liveContinuation = { async revalidateStartup() { revalidated++; } };
+    const ranges: number[][] = [];
+    f.deps.readBlockSwapTouched = async (n, _header, range) => {
+      assert(range); ranges.push([range.previousSource.number, n]); return new Set();
+    };
+    f.coordinator.prepareCoarsePricing = async (input: any) => {
+      if (!fail) latest = { sourceBlock: input.graph.sourceBlock, sourceBlockHash: input.graph.sourceBlockHash,
+        generation: input.graph.generation, effectiveMids: { complete: true } };
+      return { status: fail ? "incomplete" : "complete", snapshot: latest };
+    };
+    try {
+      f.loop.restoreLiveContinuation();
+      const end = 100 + MAX_ACTIVITY_TRANSITIONS * 2 + 1;
+      const run = (f.loop as any).runScheduledHead(end, { sourceHeadSeenAtMs: Date.now(),
+        sourceHeadSeenAtMonotonicMs: performance.now() });
+      if (fail) await assert.rejects(run, /no pricing progress/); else await run;
+      assert(ranges.every(([a, b]) => b - a <= MAX_ACTIVITY_TRANSITIONS));
+      assert.equal(ranges.length, fail ? 1 : 3);
+      assert.equal(revalidated, fail ? 0 : 1);
+      assert.equal((f.loop as any).liveContinuationPending, fail);
+      assert.equal(f.inputs.length, 0);
+    } finally { await f.loop.shutdown(); }
+  }
+});
 
 test("historical effective continuation is read-only, verified-data-only and cannot bypass live preparation", async () => {
   const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("unexpected sim"); } }, async closeAndDrain() {} }));
@@ -552,11 +621,18 @@ test("runHead creates SOURCE-controlled context before prefunding and drains it 
     assert.deepEqual(f.inputs.map(i => i.kind), ["funding", "runtime"]);
     for (const i of f.inputs) { assert.equal(i.simulationTransport, transport); assert.equal(i.signal, contexts[0]!.control.signal);
       assert.equal(i.deadlineAtMs, contexts[0]!.control.deadlineAtMs); }
+    const funding = f.inputs.find(i => i.kind === "funding")!.pricingCallBackend;
+    const pricing = f.inputs.find(i => i.kind === "runtime")!.pricingCallBackend;
+    assert.notEqual(funding, pricing, "funding must not join the bulk pending queue");
+    assert.equal(funding.stats().lane, "producer-critical");
+    assert.equal(pricing.stats().lane, "producer-bulk");
+    assert.equal(funding.stats().activeTransports, 0, "failed preparation drains funding too");
+    await assert.rejects(funding.call({ to: target, data: "0x" }), /aborted|closed/i);
     assert.equal(closes, 1);
   } finally { await f.loop.shutdown(); }
 });
 
-test("startup retains64-item batches; steady source-N pricing uses1000 with the same8-batch limit", async context => {
+test("startup uses64-item batches with4 lanes; steady source-N pricing uses1000 with8 lanes", async context => {
   const records: Array<Record<string, number>> = [];
   const marker = "[searcher/blockscan-source-n-call-stats-final] ";
   context.mock.method(console, "log", (line: string) => {
@@ -572,7 +648,7 @@ test("startup retains64-item batches; steady source-N pricing uses1000 with the 
       assert.equal(records.length, 1, "the real phase-owned backend emits one drained receipt");
       const stats = records[0]!;
       assert.equal(stats.maxBatchSize, startup ? 64 : 1000);
-      assert.equal(stats.maxConcurrentBatches, 8);
+      assert.equal(stats.maxConcurrentBatches, startup ? 4 : 8);
       assert.equal(stats.totalCalls, 0, "phase selection is offline and does not manufacture calls");
       assert.equal(stats.singleCallFallbacks, 0);
     } finally { await f.loop.shutdown(); }
@@ -688,7 +764,7 @@ test("startup retry retires the old generation before creating a new source cont
   const work = new SourceSimulationWork(f.deps.sourceSimulationFactory); const pass = new AbortController();
   const graph = f.deps.buildGraphView({ id: "fixture", generation: f.loop.nextGeneration(), sourceBlock: 101,
     sourceBlockHash: hash(101), edges: [], landedCoverage: [], topologyKey: "fixture" });
-  let attempts = 0;
+  let attempts = 0, checkpoints = 0;
   f.coordinator.prepare = async (input: any) => {
     attempts++; assert.equal(input.simulationTransport, contexts.length && work.transportFor({ number: 101,
       hash: hash(101), generation: input.graph.generation }, control()));
@@ -700,7 +776,11 @@ test("startup retry retires the old generation before creating a new source cont
   try {
     await assert.rejects((f.loop as any).prepareStartupWarm(f.coordinator, { graph, fundingTokens: [],
       deadlineAtMs: Date.now() + 30, preparationSettleDeadlineAtMs: Date.now() + 20 },
-      [], { async drain() {}, abort() {}, stats: () => ({}) }, pass, work), /second attempt observed/);
+      [], { async drain() {}, abort() {}, stats: () => ({}), async checkpoint() {
+        checkpoints++;
+        assert.deepEqual(closes, [graph.generation], "checkpoint follows retirement of the failed generation");
+      } }, pass, work), /second attempt observed/);
+    assert.equal(checkpoints, 1, "one completed checkpoint before the retry");
     assert.equal(contexts.length, 2); assert.equal(contexts[0]!.source.generation + 1, contexts[1]!.source.generation);
     assert.equal(contexts[0]!.control.signal, pass.signal); assert.equal(contexts[1]!.control.signal, pass.signal);
   } finally { await work.closeAndDrain(); await f.loop.shutdown(); }
@@ -889,6 +969,38 @@ function pendingEvidenceFixture(number: number) {
       evidenceHash: ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
         ["string", "bytes32", "uint256", "bytes32", "bytes32"], ["fixture", txHash, number, hash(number), payloadHash])) }] };
 }
+
+test("historical prices-only warmup clears bootstrap and the next pass consumes the published predecessor", async context => {
+  context.mock.method(console, "log", () => {});
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("unexpected sim"); } }, async closeAndDrain() {} }), true);
+  let latest: any = null;
+  const modes: string[] = [], ranges: Array<number | undefined> = [], snapshots: number[] = [];
+  f.coordinator.latestPricingSnapshot = () => latest;
+  const prepare = async (input: any) => {
+    modes.push(input.cacheMode);
+    const runtime = completeRuntimeFixture(input.graph);
+    latest = runtime.snapshot.pricing;
+    return runtime;
+  };
+  f.coordinator.prepare = prepare;
+  // Only the cold batch driver is substituted: publication, state transition,
+  // activity range and both runHead invocations are the production loop.
+  context.mock.method(f.loop as any, "prepareStartupWarm", async (_coordinator: any, input: any) =>
+    ({ runtime: await prepare(input), graph: input.graph }));
+  f.deps.readBlockSwapTouched = async (_number, _header, range) => {
+    ranges.push(range?.previousSource.number); return new Set();
+  };
+  try {
+    for (const block of [101, 102]) await f.loop.runHead(block,
+      { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }, {
+        through: "prices", onSnapshot: value => snapshots.push(value.sourceBlock),
+        onEnumeration() { throw new Error("unexpected enumeration"); }, onComplete() {},
+      });
+    assert.deepEqual(modes, ["warm", "hot"]);
+    assert.deepEqual(snapshots, [101, 102]);
+    assert.deepEqual(ranges, [undefined, 101]);
+  } finally { await f.loop.shutdown(); }
+});
 
 test("periodic Source-N settles its original budget, publishes the baseline, drains, then searches only the newest head", async context => {
   const activity = deferred(), preparation = deferred(), drain = deferred();
@@ -1205,7 +1317,7 @@ test("backfill preserves original enumeration indexes in Exact diagnostics", () 
   return runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`, {}).outputText,
     { blockScanSimRejects: cache, blockScanRouteId });
 }
-for (const rejection of ["none", "first", "all", "all-but-last", "before-coarse-cap"] as const)
+for (const rejection of ["none", "first", "all", "all-but-last", "before-coarse-cap", "pool-before-cap"] as const)
 test(`cached sim reverts backfill ranked candidates before the downstream cap: ${rejection}`, async context => {
   const eventDir = mkdtempSync(join(tmpdir(), "blockscan-backfill-"));
   const eventPath = join(eventDir, "events.jsonl");
@@ -1252,6 +1364,16 @@ test(`cached sim reverts backfill ranked candidates before the downstream cap: $
       }
       enumerated.push(...input.opportunities.map((opp: any) => blockScanRouteId(opp.seedEdges)));
       assert(enumerated.length > 2, "natural enumeration must provide replacement candidates");
+      if (rejection === "pool-before-cap") {
+        const failed = input.opportunities.flatMap((opp: any) => opp.seedEdges).find((edge: any) =>
+          !input.opportunities.every((opp: any) => opp.seedEdges.some((other: any) => other.target === edge.target)));
+        assert(failed, "fixture needs a pool not shared by every candidate");
+        cache.recordPool(failed, revert, { amount: 1n, p: 1n });
+        for (const opp of input.opportunities) {
+          if (opp.seedEdges.some((edge: any) => cache.hasPool(edge))) rejected.add(blockScanRouteId(opp.seedEdges));
+        }
+        assert(rejected.size > 0 && rejected.size < enumerated.length, "only attributed-pool routes are rejected");
+      }
       for (const [index, routeId] of enumerated.entries()) {
         if (rejection === "all" || (rejection === "first" && index === 0) ||
             (rejection === "all-but-last" && index < enumerated.length - 1)) {
@@ -1287,10 +1409,12 @@ test(`cached sim reverts backfill ranked candidates before the downstream cap: $
 });
 
 
-for (const cacheCase of ["absent", "known", "unknown", "queued", "in-flight", "fresh-cache", "cleared-cache"] as const)
+for (const rejectionScope of ["route", "pool"] as const)
+for (const cacheCase of rejectionScope === "pool" ? ["known", "queued", "in-flight"] as const
+  : ["absent", "known", "unknown", "queued", "in-flight", "fresh-cache", "cleared-cache"] as const)
 for (const historicalExecutionMode of cacheCase === "known" || cacheCase === "in-flight"
   ? [undefined, "source-block"] as const : [undefined])
-test(`disabled independent Exact keeps Solver strict-session wiring; sim reject policy ${cacheCase} ${historicalExecutionMode ?? "next-block"}`, async () => {
+test(`disabled independent Exact keeps Solver strict-session wiring; sim reject policy ${rejectionScope} ${cacheCase} ${historicalExecutionMode ?? "next-block"}`, async () => {
   const contexts: Parameters<SourceSimulationFactory>[0][] = []; const transports: unknown[] = []; let closes = 0;
   const f = loopFixture(input => { contexts.push(input); const transport = { async simulate() { return { data: "0x" }; } };
     transports.push(transport); return { transport, async closeAndDrain() { closes++; } }; });
@@ -1309,6 +1433,7 @@ test(`disabled independent Exact keeps Solver strict-session wiring; sim reject 
     failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: new Error("fixture revert") },
   };
   const plannedRoutes: string[] = [], solvedRoutes: string[] = [], simulatedRoutes: string[] = [];
+  const plannedEdges: typeof edges[] = [];
   const enumeratedRoutes: string[] = [];
   const predicateChecks: Array<{ routeId: string; rejected: boolean }> = [];
   const atomicResults: Awaited<ReturnType<typeof maybeSubmitBlockScanAtomic>>[] = [];
@@ -1364,8 +1489,11 @@ test(`disabled independent Exact keeps Solver strict-session wiring; sim reject 
       plannerCenters.push(opp.searchSeed.searchCenter);
       const routeId = blockScanRouteId(opp.seedEdges);
       plannedRoutes.push(routeId);
+      plannedEdges.push(opp.seedEdges);
       if (cacheCase === "known" || cacheCase === "absent" || cacheCase === "cleared-cache") {
-        assert(simRejects.record(routeId, revert, { amount: 1n, p: 1n }));
+        assert(rejectionScope === "pool"
+          ? simRejects.recordPool(opp.seedEdges[0], revert, { amount: 1n, p: 1n })
+          : simRejects.record(routeId, revert, { amount: 1n, p: 1n }));
         if (cacheCase === "cleared-cache") simRejects.clear();
       }
       if (cacheCase === "fresh-cache") {
@@ -1414,12 +1542,18 @@ test(`disabled independent Exact keeps Solver strict-session wiring; sim reject 
       assert.notEqual(routeId, plannedRoutes[1]);
       assert(!simRejects.has(plannedRoutes[1]!));
       await turn();
-      assert(simRejects.record(plannedRoutes[1]!, revert, { amount: 1n, p: 1n }));
+      if (rejectionScope === "pool") {
+        const failed = plannedEdges[1]!.find(edge => !plannedEdges[0]!.some(other => other.target === edge.target));
+        assert(failed, "fixture requires a distinct failed pool in the queued route");
+        assert(simRejects.recordPool(failed, revert, { amount: 1n, p: 1n }));
+      } else assert(simRejects.record(plannedRoutes[1]!, revert, { amount: 1n, p: 1n }));
     }
     if (cacheCase === "in-flight") {
       assert(!simRejects.has(routeId), "the route was eligible when Solver began");
       await turn();
-      assert(simRejects.record(routeId, revert, { amount: 1n, p: 1n }));
+      assert(rejectionScope === "pool"
+        ? simRejects.recordPool(plan.tokenPath.edges[0], revert, { amount: 1n, p: 1n })
+        : simRejects.record(routeId, revert, { amount: 1n, p: 1n }));
     }
     // Keep the original absent-dependency harness's non-positive result.
     if (cacheCase === "absent") return { netProfit: 0n };
@@ -1703,7 +1837,7 @@ function liveSimAmountFactory(cache = new BlockScanSimRejectCache()): NonNullabl
   visit(ast); assert(expression);
   return runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
-  }).outputText, { createBlockScanSimAmountSelector, createBlockScanLiveAmountSelectorFactory,
+  }).outputText, { createBlockScanSimAmountSelector, createBlockScanLiveAmountSelectorFactory, logBlockScanAmountEvent,
     blockScanSimRejects: cache,
     blockScanPoolRevertAttributor: undefined,
     blockScanStageSettings: { singleFunding: false },

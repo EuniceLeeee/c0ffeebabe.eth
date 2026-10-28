@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ObservedEffects } from "../../../adapter-request-program.js";
-import { assertExecutorCodeProvenance, assertObservedLeg } from "./historical-dual.js";
+import { assertAllSamplesPassed, assertExecutorCodeProvenance, assertObservedLeg } from "./historical-dual.js";
 
 const executor = "0x1000000000000000000000000000000000000002";
 const input = "0x0000000000000000000000000000000000000011", output = "0x0000000000000000000000000000000000000012";
@@ -27,4 +27,16 @@ test("dual observation requires exact debit, independent output and native conse
     { ...effects(), nativeDeltas: [{ account: executor, delta: -1n }] },
     { ...effects(), nativeDeltas: [] },
   ]) assert.throws(() => assertObservedLeg(e, input, output, 100n, 99n));
+});
+
+// A state-dependent refusal remains useful rejection evidence, but it cannot
+// authorize an unconditional all-sample execution PASS.
+test("historical completion rejects failed, skipped and missing additional amounts", () => {
+  const complete = Array.from({ length: 8 }, () => ({ status: "pass" }));
+  assert.doesNotThrow(() => assertAllSamplesPassed(complete, 8));
+  for (const status of ["failed", "skipped", "rejected", "not-run"])
+    assert.throws(() => assertAllSamplesPassed([...complete.slice(0, 7), { status }], 8),
+      /failed or remains unverified/);
+  assert.throws(() => assertAllSamplesPassed(complete.slice(0, 7), 8), /coverage is incomplete/);
+  assert.throws(() => assertAllSamplesPassed([...complete, { status: "pass" }], 8), /coverage is incomplete/);
 });

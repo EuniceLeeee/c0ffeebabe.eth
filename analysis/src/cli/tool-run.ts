@@ -112,4 +112,4 @@ const temporary = `${manifestPath}.${process.pid}.tmp`;
 fs.writeFileSync(temporary, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
 fs.renameSync(temporary, manifestPath);
 console.error(`tool-run receipt=${tool.id} exit=${exitCode} manifest=${manifestPath}`);
-process.exit(exitCode);
+process.exitCode = exitCode;

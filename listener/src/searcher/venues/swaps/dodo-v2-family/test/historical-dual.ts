@@ -33,9 +33,9 @@ import { DODO_V2_EVENT_INTERFACE } from "../../dodo-v2-abi.js";
 import { referenceAmount } from "./reference-amount.js";
 import { assertRecipientEffects } from "./recipient-observations.js";
 
-const N = 26016874, HASH = "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d";
-const TX = "0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e";
-const POOLS = ["0x04571c32a4e1c5f39bc3a238cb95b215058c432c", "0xb9a4406982d990648093c71eff9f1f63a040152e"];
+let N = 26016874, HASH = "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d";
+let TX = "0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e";
+let POOLS = ["0x04571c32a4e1c5f39bc3a238cb95b215058c432c", "0xb9a4406982d990648093c71eff9f1f63a040152e"];
 const EXECUTOR = "0x1000000000000000000000000000000000000002", OWNER = "0x1000000000000000000000000000000000000001";
 const EFFECTS = ["return-data", "revert-data", "token-delta", "native-delta", "logs"] as const;
 const json = (v: unknown) => JSON.stringify(v, (_, x) => typeof x === "bigint" ? x.toString() : x, 2);
@@ -79,6 +79,11 @@ export function assertObservedLeg(effects: ObservedEffects | undefined, input: s
   assert(same(effects.nativeDeltas![0]!.account, EXECUTOR)); assert.equal(effects.nativeDeltas![0]!.delta, 0n);
 }
 
+export function assertAllSamplesPassed(samples: readonly { readonly status: string }[], expectedCount: number): void {
+  assert.equal(samples.length, expectedCount, "historical sample coverage is incomplete");
+  assert(samples.every(sample => sample.status === "pass"), "historical sample failed or remains unverified");
+}
+
 function sourcePin() {
   const root = fileURLToPath(new URL("../../../../../", import.meta.url)), files: [string, string][] = [];
   const visit = (relative: string) => {
@@ -94,7 +99,7 @@ function sourcePin() {
 async function main() {
   const args = new Map<string, string>();
   const required = ["--ready", "--prices", "--revm-bin", "--out"];
-  const allowed = [...required, "--rpc-env", "--rpc-file", "--amounts-prices", "--amount-edge-keys", "--recipient"];
+  const allowed = [...required, "--rpc-env", "--rpc-file", "--amounts-prices", "--amount-edge-keys", "--recipient", "--pools", "--block", "--hash", "--tx"];
   for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i]!, value = process.argv[i + 1];
     assert(allowed.includes(key) && !args.has(key) && value); args.set(key, value);
@@ -102,6 +107,10 @@ async function main() {
   for (const key of required) assert(args.has(key));
   assert(args.has("--rpc-env") !== args.has("--rpc-file"));
   if (args.has("--rpc-env")) assert.equal(args.get("--rpc-env"), "MAINNET_RPC_URL");
+  if (args.has("--pools")) POOLS = args.get("--pools")!.split(",").map(p => p.toLowerCase());
+  if (args.has("--block")) N = Number(args.get("--block"));
+  if (args.has("--hash")) HASH = args.get("--hash")!;
+  if (args.has("--tx")) TX = args.get("--tx")!;
   const recipient = args.has("--recipient") ? ethers.getAddress(args.get("--recipient")!) : undefined;
   if (recipient) assert(!same(recipient, EXECUTOR) && recipient !== ethers.ZeroAddress);
   assert.equal(args.has("--amounts-prices"), args.has("--amount-edge-keys"));
@@ -151,7 +160,7 @@ async function main() {
     for (const s of [provenance.topologySource, provenance.stateSource]) { assert.equal(s.number, N); assert.equal(s.hash, HASH); }
     assert.equal(prices.runtime.sourceBlock, N); assert.equal(prices.runtime.sourceBlockHash, HASH);
     const memos = activeReadyMemos(envelope).filter(m => m.familyId === DODO_V2_FAMILY_ID && POOLS.includes(m.instanceKey.toLowerCase()));
-    assert.equal(memos.length, 2); assert.equal(new Set(memos.map(m => m.instanceKey.toLowerCase())).size, 2);
+    assert.equal(memos.length, POOLS.length); assert.equal(new Set(memos.map(m => m.instanceKey.toLowerCase())).size, POOLS.length);
     const wiring = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1", familyIds: [DODO_V2_FAMILY_ID], executionIdentity: { executor: EXECUTOR, transactionOrigin: OWNER } });
     const family = asPricedFamily(catalog.forStrictFamily(DODO_V2_FAMILY_ID));
     const rows = memos.flatMap(memo => {
@@ -172,7 +181,7 @@ async function main() {
         return { row, route, handle, ref, pool: instance.instanceKey, descriptor: instance.descriptor as any };
       });
     });
-    assert.equal(rows.length, 4);
+    assert.equal(rows.length, POOLS.length * 2);
     report.ready = { graphHash: ready.graphHash, memos: memos.map(m => ({ fingerprint: m.memoFingerprint, familyDefinitionHash: m.familyDefinitionHash, candidate: m.candidateSnapshot })) };
     report.prices = rows.map(r => ({ targetRow: r.row, reference: r.ref }));
     rpcUrl = args.has("--rpc-file") ? JSON.parse(readFileSync(args.get("--rpc-file")!, "utf8")).MAINNET_RPC_URL : process.env.MAINNET_RPC_URL!; assert(typeof rpcUrl === "string" && /^https?:\/\//.test(rpcUrl));
@@ -325,7 +334,7 @@ async function main() {
         abort.signal.throwIfAborted();
       }
     }
-    assert.equal(report.samples.length, 8); assert(report.samples.every((s: any) => s.status === "pass"));
+    assertAllSamplesPassed(report.samples, POOLS.length * 4);
     if (recipient) { assert.equal(report.controls.length, 32); assert(report.controls.every((c: any) => c.status === "pass")); }
     assert.equal((await rpc("eth_getBlockByNumber", [ethers.toQuantity(N), false])).hash, HASH);
     assert.equal(sourcePin(), report.sourceTreeSha256); assert.deepEqual(inputPins(), report.inputs);
@@ -340,4 +349,4 @@ async function main() {
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
-  main().catch(() => { console.error("invalid DODO dual inputs; existing outputs untouched"); process.exitCode = 1; });
+  main().catch((e) => { console.error("invalid DODO dual inputs:", e instanceof Error ? e.message : e); process.exitCode = 1; });

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { createCatalogLogAccumulator, type CatalogActivityDigestState } from "./catalog-log-accumulator.js";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { ethers } from "ethers";
-import { dryRunBotVmCodeOverrideEnabled, loadBotVmRuntimeCode } from "../shared/executor/botvm-executor.js";
 import { RebuildReadProvider } from "./rebuild-read-provider.js";
+import { ReadyRpcThrottle } from "./ready-rpc-throttle.js";
 import { readyActivityPayloadBytes, type ReadyActivityArchive } from "./ready-activity-archive.js";
 import { createSourceCodeProviders } from "./source-code-cache.js";
 import {
@@ -713,7 +713,6 @@ function decodeDurableValue(value: unknown): unknown {
 function sealMemoFromPublication(input: {
   readonly candidate: Readonly<Record<string, unknown>>;
   readonly familyId: string;
-  readonly familyCandidateKey: string;
   readonly familyInstanceKey: string;
   readonly instanceKey: string;
   readonly verifiedIdentity: unknown;
@@ -729,9 +728,6 @@ function sealMemoFromPublication(input: {
     input.familyId,
     candidateInstanceIdentity(input.candidate),
   );
-  if (familyCandidateKey !== rebuildFamilyCandidateKey(input.candidate) || familyCandidateKey !== input.familyCandidateKey) {
-    throw new Error("universe rebuild: verified Family does not match nomination key");
-  }
   const memo = Object.freeze({
     familyCandidateKey,
     familyInstanceKey: input.familyInstanceKey,
@@ -897,6 +893,7 @@ export function createProbeWiring(
     readonly familyIds?: readonly string[];
     readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
     readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
+    readonly readyThrottle?: ReadyRpcThrottle;
   },
 ): UniverseRebuildProbeWiring {
   const scopedCatalog = rebuildCatalog(input?.familyIds);
@@ -911,7 +908,10 @@ export function createProbeWiring(
     );
   }
   // Runtime capability is generic; each Family declares its own programs.
-  const revmBin = process.env.SEARCHER_REVM_SIM_BIN;
+  const revmBin = input?.readyThrottle
+    ? process.env.SEARCHER_READY_REVM_SIM_BIN ?? (process.env.SEARCHER_REVM_SIM_BIN
+      ? resolve(import.meta.dirname, "../../revm-sim/target/release/revm-sim-ready") : undefined)
+    : process.env.SEARCHER_REVM_SIM_BIN;
   const executionIdentity = input?.executionIdentity === undefined
     ? undefined : Object.freeze({ ...input.executionIdentity });
   const executor = executionIdentity?.executor ?? process.env.BOTVM_ADDRESS;
@@ -927,18 +927,12 @@ export function createProbeWiring(
     }
     normalizeTransactionOrigin(transactionOrigin);
   }
-  // Same opt-in trusted artifact and dry-run-only safety gate as main. No
-  // candidate/Family may supply code; unchanged startup defaults inject none.
-  const executorRuntimeCode = canSimulate && dryRunBotVmCodeOverrideEnabled(
-    process.env.SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE,
-    process.env.SEARCHER_DRY_RUN === "1", process.env.SEARCHER_BLOCKSCAN_SUBMIT === "1",
-  ) ? loadBotVmRuntimeCode(transactionOrigin!) : undefined;
   const notifyFatal = input?.onSimulationFatal;
   const probeController = new AbortController();
   let fatal: RevmFatalError | undefined;
   let chainId: Promise<number> | undefined;
   const simulations = new Set<ReturnType<typeof createRevmStrictSourceSimulation>>();
-  const assertOpen = (): void => { if (fatal) throw fatal; };
+  const assertOpen = (): void => { if (fatal) throw fatal; input?.readyThrottle?.assertOpen(); };
   const read = async <T>(operation: () => Promise<T>): Promise<T> => {
     assertOpen();
     const result = await operation();
@@ -947,11 +941,12 @@ export function createProbeWiring(
   };
   // Ethers' short cache keys code by height, not canonical hash/generation.
   // Source-bound code reuse below owns caching instead, including reorg changes.
-  const provider = new RebuildReadProvider(read, rpcUrl, undefined, {
-    cacheTimeout: -1, requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
-  });
+  const provider = new RebuildReadProvider(read, rpcUrl, undefined, { cacheTimeout: -1, readyThrottle: input?.readyThrottle });
   const strictProviderFor = createSourceCodeProviders(
     providerAdapter(provider, assertOpen), assertOpen,
+    { onReadError(error) {
+      if (error instanceof Error && input?.readyThrottle?.isThrottle(error)) input.readyThrottle.markFailure(error);
+    } },
   );
   const onFatal = (reason: RevmFatalReason): void => {
     if (fatal) return;
@@ -979,19 +974,27 @@ export function createProbeWiring(
       const id = Number(network.chainId);
       if (!Number.isSafeInteger(id) || id <= 0) throw new Error("invalid rebuild simulation chain identity");
       return id;
-    })) : undefined;
+    }).catch(error => { chainId = undefined; throw error; })).catch(error => {
+      // The chain-id promise is shared; fence every consuming candidate.
+      if (error instanceof Error && input?.readyThrottle?.isThrottle(error)) input.readyThrottle.markFailure(error);
+      throw error;
+    }) : undefined;
     assertOpen();
     let diagnosticCandidateKey: string | undefined;
     try { diagnosticCandidateKey = rebuildFamilyCandidateKey(candidate); } catch { /* Observability only. */ }
+    const failAttempt = input?.readyThrottle?.captureFailure();
+    const readyBatch = input?.readyThrottle?.inAttempt ? input.readyThrottle.batchMaxCount : undefined;
     const simulation = networkChainId === undefined ? undefined : createRevmStrictSourceSimulation({
       identity: { source, rpcUrl, chainId: networkChainId },
       control: { signal: probeController.signal },
       // Preserve the engine's existing DEFAULT_GAS_LIMIT; make it explicit at
       // the transport boundary rather than relying on an unbound wire default.
       executionGasLimit: 0x1000000,
-      ...(executorRuntimeCode === undefined ? {} : { executorRuntimeCode }),
-      createClient: ({ onFatal }) => new RevmSimClient({ executablePath: revmBin, timeoutMs, onFatal, diagnosticCandidateKey }),
+      createClient: ({ onFatal }) => new RevmSimClient({ executablePath: revmBin, timeoutMs, onFatal, diagnosticCandidateKey,
+        ...(readyBatch === undefined ? {} : { readyRpcBatchMaxCount: readyBatch }) }),
       onFatal(reason) {
+        const ownedAttempt = failAttempt?.(reason);
+        if (ownedAttempt && input?.readyThrottle?.isTemporary(reason)) return;
         if (!fatal) logRevmFault("rebuild-candidate", reason, { candidateKey: diagnosticCandidateKey, blockNumber: source.number });
         onFatal(reason);
       },
@@ -1149,6 +1152,7 @@ export function createProbeWiring(
             candidate: canonicalCandidateSnapshot(candidate),
           }));
         } catch (error) {
+          if (input?.readyThrottle?.isThrottle(error)) throw error;
           const reason = error instanceof Error ? error.message : String(error);
           return retryable({
             candidate,
@@ -1258,9 +1262,10 @@ export function createProbeWiring(
           source: attestInput.cutoff,
           pools: Object.freeze([pool]),
           channelOrder: "reverse-binding-first",
-          requiredFamilyId: candidateFamilyId as FamilyId,
+          onlyFamilyId: candidateFamilyId as FamilyId,
         });
       } catch (error) {
+        if (input?.readyThrottle?.isThrottle(error)) throw error;
         if (error instanceof ObservedSenderEvidenceMismatch) {
           return terminalRejected(
             "observed_sender_evidence_mismatch:" + error.message,
@@ -1320,13 +1325,13 @@ export function createProbeWiring(
           }),
         });
       }
-      if (hashFamilyCandidateKey(accepted.familyId, candidateInstanceIdentity(candidate)) !== rebuildFamilyCandidateKey(candidate)) {
-        return retryable({ candidate, stage: "identity", failureCode: "resource-limited",
-          reasonCode: "strict identity Family mismatch: nominated=" + candidateFamilyId + " accepted=" + accepted.familyId,
-          ...(attestInput.evidenceRef === undefined ? {} : { evidenceRef: attestInput.evidenceRef }),
-        });
+      if (accepted.familyId !== candidateFamilyId) {
+        throw new Error("strict attestation changed candidate Family");
       }
       const publication = result.publications[0] ?? null;
+      if (publication !== null && publication.familyId !== candidateFamilyId) {
+        throw new Error("strict publication changed candidate Family");
+      }
       const instance = publication?.instances[0] ?? null;
       if (instance === null) {
         // Identity alone is not a verified universe instance. A missing
@@ -1358,6 +1363,17 @@ export function createProbeWiring(
     ) => {
       assertOpen();
       const candidate = sealInput.candidate as Readonly<Record<string, unknown>>;
+      const expectedFamilyId = candidateFamilyId(candidate);
+      const expectedCandidateKey = rebuildFamilyCandidateKey(candidate);
+      if (sealInput.familyCandidateKey !== expectedCandidateKey) {
+        throw new Error("memo sealer candidate key mismatch");
+      }
+      const bindMemo = (memo: DurableVerifiedMemo): DurableVerifiedMemo => {
+        if (memo.familyId !== expectedFamilyId || memo.familyCandidateKey !== expectedCandidateKey) {
+          throw new Error("memo sealer changed candidate Family/key");
+        }
+        return memo;
+      };
       const domainResult = sealInput.result as {
         readonly domain?: unknown;
         readonly familyId?: unknown;
@@ -1378,10 +1394,9 @@ export function createProbeWiring(
         const evidenceRefs = Object.freeze([
           ...(domainResult.evidenceRefs ?? []),
         ]);
-        return sealMemoFromPublication({
+        return bindMemo(sealMemoFromPublication({
           candidate,
           familyId,
-          familyCandidateKey: sealInput.familyCandidateKey,
           familyInstanceKey,
           instanceKey,
           verifiedIdentity: Object.freeze({
@@ -1409,7 +1424,7 @@ export function createProbeWiring(
             domainResult.authorityFingerprint ?? "",
           ),
           validityPolicy: "dependency-proof",
-        });
+        }));
       }
       const result = sealInput.result as {
         readonly accepted: {
@@ -1436,10 +1451,9 @@ export function createProbeWiring(
       const familyInstanceKey = digest(
         "family-instance-v1:" + familyId + "|" + instanceKey,
       );
-      return sealMemoFromPublication({
+      return bindMemo(sealMemoFromPublication({
         candidate,
         familyId,
-        familyCandidateKey: sealInput.familyCandidateKey,
         familyInstanceKey,
         instanceKey,
         verifiedIdentity: Object.freeze({
@@ -1470,7 +1484,7 @@ export function createProbeWiring(
         proofSource: sealInput.proofSource,
         candidateFingerprint: candidateFingerprint(candidate),
         authorityFingerprint: result.authorityFingerprint,
-      });
+      }));
     },
     assertCanonicalHead: async (cutoff: CanonicalSource) => {
       assertOpen();
@@ -1936,54 +1950,6 @@ export function candidatesFromLog(
   familyIds?: readonly string[],
 ): readonly Readonly<Record<string, unknown>>[] {
   return candidatesFromLogInCatalog(log, rebuildCatalog(familyIds));
-}
-
-function familyMaterializationKey(
-  catalog: FamilyCapabilityCatalog,
-  familyId: string,
-  candidate: Readonly<Record<string, unknown>>,
-): string | null {
-  let family;
-  try {
-    family = catalog.forStrictFamily(familyId as never);
-  } catch {
-    return null;
-  }
-  if (!("discovery" in family.plugin)) return null;
-  const discovery = family.plugin.discovery;
-  if (discovery.reverseBinding?.kind !== "implementation") return null;
-  if (discovery.instanceNominationKey === undefined) return null;
-  try {
-    const localKey = discovery.instanceNominationKey(candidate);
-    return typeof localKey === "string" && localKey.trim().length > 0
-      ? familyId + "\u001f" + localKey
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function opaqueLogMaterializationKeys(log: RebuildScanObservation, catalog: FamilyCapabilityCatalog): readonly string[] {
-  const matches = catalog.matches(Object.freeze({
-    kind: "log", source: Object.freeze({ number: log.blockNumber ?? 0,
-      hash: log.blockHash ?? "0x" + "00".repeat(32), generation: log.blockNumber ?? 0 }),
-    address: log.address.toLowerCase(), topics: Object.freeze([...(log.topics ?? [])]), data: log.data,
-  }) as never);
-  const keys: string[] = [];
-  for (const match of matches) {
-    const family = catalog.forStrictFamily(match.familyId);
-    if (!("discovery" in family.plugin)) continue;
-    const discovery = family.plugin.discovery;
-    if (discovery.reverseBinding?.kind !== "implementation") continue;
-    const pattern = discovery.logPatterns?.find(item => item.id === match.patternId);
-    if (pattern?.emitter?.mode !== "singleton-indexed-bytes32") continue;
-    const poolId = log.topics[pattern.emitter.topicIndex]?.toLowerCase();
-    if (poolId === undefined || !/^0x[0-9a-fA-F]{64}$/.test(poolId)) continue;
-    const key = familyMaterializationKey(catalog, match.familyId,
-      Object.freeze({ familyId: match.familyId, address: log.address.toLowerCase(), poolId }));
-    if (key !== null) keys.push(key);
-  }
-  return keys;
 }
 
 function candidatesFromLogInCatalog(
@@ -2500,7 +2466,7 @@ async function readDeclaredCallActivity(input: {
   readonly fromBlock: number;
   readonly toBlock: number;
   readonly selectors: ReadonlySet<string>;
-  readonly digestState: CatalogActivityDigestState;
+  readonly logs: readonly RebuildScanObservation[];
 }): Promise<{
   readonly calls: readonly RebuildCallObservation[];
   readonly method: CatalogCallTraceMethod;
@@ -2519,7 +2485,11 @@ async function readDeclaredCallActivity(input: {
       " range=" +
       input.fromBlock + "-" + input.toBlock,
   );
-  const digestState = input.digestState;
+  const digestState = beginCatalogActivityDigest({
+    fromBlock: input.fromBlock,
+    toBlock: input.toBlock,
+    logs: input.logs,
+  });
   const representativeByCandidate = new Map<string, ClassifiedCallRepresentative>();
   const totalBlocks = input.toBlock - input.fromBlock + 1;
   const concurrency = input.activityArchive === undefined ? SOURCE_TRACE_SCAN_CONCURRENCY : ARCHIVE_ACTIVITY_CONCURRENCY;
@@ -2836,6 +2806,62 @@ function updateActivityDigest(
   hash.update(String.fromCharCode(0));
 }
 
+interface CatalogActivityChunkDigestState {
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  readonly hash: ReturnType<typeof createHash>;
+  resultCount: number;
+}
+
+interface CatalogActivityDigestState {
+  readonly observationHash: ReturnType<typeof createHash>;
+  readonly chunks: readonly CatalogActivityChunkDigestState[];
+}
+
+function beginCatalogActivityDigest(input: {
+  readonly fromBlock: number;
+  readonly toBlock: number;
+  readonly logs: readonly RebuildScanObservation[];
+}): CatalogActivityDigestState {
+  const observationHash = createHash("sha256");
+  observationHash.update("catalog-activity-observations-v1:");
+  for (const log of input.logs) updateActivityDigest(observationHash, log);
+
+  const chunks: CatalogActivityChunkDigestState[] = [];
+  let logIndex = 0;
+  for (
+    let fromBlock = input.fromBlock;
+    fromBlock <= input.toBlock;
+    fromBlock += SOURCE_SCAN_BATCH_BLOCKS
+  ) {
+    const toBlock = Math.min(
+      input.toBlock,
+      fromBlock + SOURCE_SCAN_BATCH_BLOCKS - 1,
+    );
+    const hash = createHash("sha256");
+    hash.update("catalog-activity-chunk-v1:");
+    let resultCount = 0;
+    while (logIndex < input.logs.length) {
+      const log = input.logs[logIndex];
+      if (!Number.isSafeInteger(log.blockNumber)) {
+        throw new Error("catalog activity log has no canonical block number");
+      }
+      if (log.blockNumber! > toBlock) break;
+      if (log.blockNumber! < fromBlock) {
+        throw new Error("catalog activity logs are outside ordered scan range");
+      }
+      updateActivityDigest(hash, log);
+      resultCount++;
+      logIndex++;
+    }
+    chunks.push({ fromBlock, toBlock, hash, resultCount });
+  }
+  if (logIndex !== input.logs.length) {
+    throw new Error("catalog activity logs escaped the scan range");
+  }
+  return { observationHash, chunks };
+}
+
 function appendCatalogActivityClassification(
   state: CatalogActivityDigestState,
   chunkIndex: number,
@@ -2870,7 +2896,70 @@ function finishCatalogActivityDigest(
   });
 }
 
+function catalogActivityObservationHash(
+  logs: readonly RebuildScanObservation[],
+  calls: readonly RebuildCallObservation[],
+): string {
+  const hash = createHash("sha256");
+  hash.update("catalog-activity-observations-v1:");
+  for (const log of logs) updateActivityDigest(hash, log);
+  for (const call of calls) updateActivityDigest(hash, call);
+  return hash.digest("hex");
+}
+
+function catalogActivityChunks(input: {
+  readonly ranges: readonly {
+    readonly fromBlock: number;
+    readonly toBlock: number;
+  }[];
+  readonly logs: readonly RebuildScanObservation[];
+  readonly calls: readonly RebuildCallObservation[];
+}): readonly DurableSourceChunkReceipt[] {
+  let logIndex = 0;
+  let callIndex = 0;
+  const chunks: DurableSourceChunkReceipt[] = [];
+  for (const range of input.ranges) {
+    const hash = createHash("sha256");
+    hash.update("catalog-activity-chunk-v1:");
+    let resultCount = 0;
+    while (logIndex < input.logs.length) {
+      const log = input.logs[logIndex];
+      if (!Number.isSafeInteger(log.blockNumber)) {
+        throw new Error("catalog activity log has no canonical block number");
+      }
+      if (log.blockNumber! > range.toBlock) break;
+      if (log.blockNumber! < range.fromBlock) {
+        throw new Error("catalog activity logs are outside ordered scan range");
+      }
+      updateActivityDigest(hash, log);
+      resultCount++;
+      logIndex++;
+    }
+    while (callIndex < input.calls.length) {
+      const call = input.calls[callIndex];
+      if (call.blockNumber > range.toBlock) break;
+      if (call.blockNumber < range.fromBlock) {
+        throw new Error("catalog activity calls are outside ordered scan range");
+      }
+      updateActivityDigest(hash, call);
+      resultCount++;
+      callIndex++;
+    }
+    chunks.push(Object.freeze({
+      fromBlock: range.fromBlock,
+      toBlock: range.toBlock,
+      resultCount,
+      resultHash: hash.digest("hex"),
+    }));
+  }
+  if (logIndex !== input.logs.length || callIndex !== input.calls.length) {
+    throw new Error("catalog activity observations escaped the scan range");
+  }
+  return Object.freeze(chunks);
+}
+
 export function createRebuildWiring(input?: {
+  readonly readyThrottle?: ReadyRpcThrottle;
   readonly rpcUrl?: string;
   /** Scratch incremental rebuild only; the owner merges sealed Ready at the same cutoff. */
   readonly familyIds?: readonly string[];
@@ -2882,6 +2971,7 @@ export function createRebuildWiring(input?: {
   readonly candidateFamilyId: (candidate: unknown) => string;
   readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
 } {
+  const readyThrottle = input?.readyThrottle ?? new ReadyRpcThrottle();
   const activityArchive = input?.activityArchive?.withEntryLimit(ARCHIVE_ACTIVITY_ENTRY_BYTES);
   const archiveTransportLimits = activityArchive === undefined ? {} : {
     maxReceivedBytes: ARCHIVE_ACTIVITY_RESPONSE_BYTES,
@@ -2909,7 +2999,7 @@ export function createRebuildWiring(input?: {
   // The probe, memo reuse, and discovery transports belong to one rebuild.
   // A simulation fatal revokes all three before notifying the runtime owner.
   let fatal: RevmFatalError | undefined;
-  const assertOpen = (): void => { if (fatal) throw fatal; };
+  const assertOpen = (): void => { if (fatal) throw fatal; readyThrottle.assertOpen(); };
   const read = async <T>(operation: () => Promise<T>): Promise<T> => {
     assertOpen();
     const result = await operation();
@@ -2923,6 +3013,7 @@ export function createRebuildWiring(input?: {
   };
   const provider = new RebuildReadProvider(read, rpcUrl, undefined, {
     requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
+    readyThrottle,
     ...archiveTransportLimits,
   });
   // A trace response is already large. Ethers batches concurrent send()
@@ -2939,6 +3030,7 @@ export function createRebuildWiring(input?: {
       // The existing trace scheduler already bounds these independent requests.
       maxPhysicalRequests: Infinity,
       requestTimeoutMs: SOURCE_SCAN_REQUEST_TIMEOUT_MS,
+      readyThrottle,
       ...archiveTransportLimits,
     },
   );
@@ -2983,7 +3075,7 @@ export function createRebuildWiring(input?: {
   // and fails closed on resume. Call tracing is another physical transport
   // inside this same catalog activity plan, not a second discovery source.
   const probe = createProbeWiring({ rpcUrl, familyIds, executionIdentity: input?.executionIdentity,
-    onSimulationFatal });
+    onSimulationFatal, readyThrottle });
 
   const disabledPlugins = PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins;
   const disabledFamilyIds = new Set<string>(disabledPlugins.map(module => module.familyId));
@@ -2994,6 +3086,7 @@ export function createRebuildWiring(input?: {
     readonly candidateFamilyId: (candidate: unknown) => string;
     readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
   } = {
+    readyThrottle,
     candidateFamilyId,
     familyDiscoveryDefinitionHash,
     isFamilyEnabled: (familyId) => inScope(familyId) && !disabledFamilyIds.has(familyId),
@@ -3034,12 +3127,7 @@ export function createRebuildWiring(input?: {
         : (input?.startupCandidates ?? []).filter(candidateInScope);
       await activityArchive?.assertScope({ chainId: 1, fromBlock: scanInput.fromBlock,
         toBlock: scanInput.cutoff.number, cutoffHash: scanInput.cutoff.hash });
-      const logAccumulator = createCatalogLogAccumulator<RebuildScanObservation, Readonly<Record<string, unknown>>>({
-        fromBlock: scanInput.fromBlock, toBlock: scanInput.cutoff.number, chunkBlocks: SOURCE_SCAN_BATCH_BLOCKS,
-        blockNumber: log => log.blockNumber, identity: fullLogIdentityKey, updateDigest: updateActivityDigest,
-        candidates: log => candidatesFromLogInCatalog(log, catalog), candidateKey: rebuildFamilyInstanceDedupeKey,
-        prefer: preferCandidateRepresentative, opaqueKeys: log => opaqueLogMaterializationKeys(log, catalog),
-      });
+      const logs: RebuildScanObservation[] = [];
       const totalBlocks = scanInput.cutoff.number - scanInput.fromBlock + 1;
       let completedBlocks = 0;
       let logClassificationHits = 0;
@@ -3202,7 +3290,7 @@ export function createRebuildWiring(input?: {
             ), activityArchive,
           );
           for (const slice of slices) {
-            for (const log of slice.logs) logAccumulator.append(log);
+            for (const log of slice.logs) logs.push(log);
             completedBlocks += slice.range.toBlock - slice.range.fromBlock + 1;
           }
           console.log(
@@ -3210,7 +3298,7 @@ export function createRebuildWiring(input?: {
               Math.min(groupStart + slices.length, ranges.length) +
               "/" + ranges.length +
               " completedBlocks=" + completedBlocks + "/" + totalBlocks +
-              " cumulativeLogs=" + logAccumulator.count() + " classificationHits=" + logClassificationHits,
+              " cumulativeLogs=" + logs.length + " classificationHits=" + logClassificationHits,
           );
         }
       }
@@ -3224,7 +3312,7 @@ export function createRebuildWiring(input?: {
             fromBlock: scanInput.fromBlock,
             toBlock: scanInput.cutoff.number,
             selectors: callSelectors,
-            digestState: logAccumulator.digestState,
+            logs,
           });
       if (activityArchive !== undefined) {
         if (callScan === null) throw new Error("raw activity archive requires complete call traces");
@@ -3239,15 +3327,7 @@ export function createRebuildWiring(input?: {
           candidate,
         }));
       }
-      const logRepresentatives = logAccumulator.representatives();
-      for (const candidate of logRepresentatives.candidates) {
-        mutableObservations.push(Object.freeze({ kind: "startup-candidate", candidate }));
-      }
-      // Reverse-binding-only evidence must not re-enter ordinary candidate
-      // decode after full-log-identity dedupe selected its original winner.
-      for (const log of logRepresentatives.opaqueLogs) {
-        mutableObservations.push(Object.freeze({ ...log, kind: "opaque-log" as const }));
-      }
+      for (const log of logs) mutableObservations.push(log);
       for (const call of callScan?.calls ?? []) {
         mutableObservations.push(call);
       }
@@ -3306,8 +3386,9 @@ export function createRebuildWiring(input?: {
         // call pattern over this exact range. Neither physical transport can
         // independently grant source coverage.
         const activityQueryFingerprint = planFingerprints.activity;
-        const activityDigests = callScan ?? finishCatalogActivityDigest(logAccumulator.digestState);
-        const activityObservationHash = activityDigests.observationSetHash;
+        const calls = callScan?.calls ?? Object.freeze([]);
+        const activityObservationHash = callScan?.observationSetHash ??
+          catalogActivityObservationHash(logs, calls);
         receipts.push(Object.freeze({
           sourceKey: digest("source-key-v1:" + canonicalJson({
             sourceKind: "catalog-activity-union",
@@ -3325,7 +3406,8 @@ export function createRebuildWiring(input?: {
           cutoffNumber: scanInput.cutoff.number,
           cutoffHash: scanInput.cutoff.hash,
           coverageKeys: activityPlan.coverageKeys,
-          completedChunks: activityDigests.completedChunks,
+          completedChunks: callScan?.completedChunks ??
+            catalogActivityChunks({ ranges, logs, calls }),
           observationSetHash: activityObservationHash,
           observedThrough: Object.freeze({
             number: scanInput.cutoff.number,
@@ -3399,7 +3481,6 @@ export function createRebuildWiring(input?: {
           }
           continue;
         }
-        if ((observation as { kind?: unknown })?.kind === "opaque-log") continue;
         const log = observation as RebuildScanObservation;
         const logKey = fullLogIdentityKey(log);
         if (seenLogs.has(logKey)) continue;
@@ -3428,8 +3509,30 @@ export function createRebuildWiring(input?: {
       // truth (no recent activity needed); verified observations re-enter
       // through the same catalog matching + decodeCandidate admission the
       // scan channel uses.
-      const materializationKey = (familyId: string, candidate: Readonly<Record<string, unknown>>) =>
-        inScope(familyId) ? familyMaterializationKey(catalog, familyId, candidate) : null;
+      const materializationKey = (
+        familyId: string,
+        candidate: Readonly<Record<string, unknown>>,
+      ): string | null => {
+        if (!inScope(familyId)) return null;
+        let family;
+        try {
+          family = catalog.forStrictFamily(familyId as never);
+        } catch {
+          return null;
+        }
+        if (!("discovery" in family.plugin)) return null;
+        const discovery = family.plugin.discovery;
+        if (discovery.reverseBinding?.kind !== "implementation") return null;
+        if (discovery.instanceNominationKey === undefined) return null;
+        try {
+          const localKey = discovery.instanceNominationKey(candidate);
+          return typeof localKey === "string" && localKey.trim().length > 0
+            ? familyId + "\u001f" + localKey
+            : null;
+        } catch {
+          return null;
+        }
+      };
       const knownMaterializations = new Set<string>();
       for (const raw of reverseInput.knownCandidates) {
         if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -3718,6 +3821,11 @@ export function createRebuildWiring(input?: {
     isReadyMemoDefinitionCurrent: (memo) =>
       inScope(memo.familyId) && (memo.familyDefinitionHash === familyDefinitionHash(memo.familyId) ||
       memo.familyDefinitionHash === familyMemoDefinitionHash(memo.familyId)) && memoPricingProjectionCompatible(memo),
+    isReadyRefreshRejectionCurrent: (outcome, rawCandidate) => {
+      const candidate = rawCandidate as Readonly<Record<string, unknown>>;
+      return candidateInScope(candidate) && outcome.familyDefinitionHash === familyDefinitionHash(familyIdForCandidate(candidate)) &&
+        outcome.candidateFingerprint === candidateFingerprint(candidate);
+    },
     findReusableMemo: async (memoInput) => {
       assertOpen();
       const candidate = memoInput.candidate as

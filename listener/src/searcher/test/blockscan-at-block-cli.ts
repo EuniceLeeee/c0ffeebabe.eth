@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import ts from "typescript";
-import { historicalCandidateSelection } from "../blockscan-at-block-cli.js";
+import { historicalCandidateSelection, cleanupHistoricalResources, historicalContinuationIdentity } from "../blockscan-at-block-cli.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
 import { test } from "node:test";
 import { ethers } from "ethers";
@@ -15,107 +13,119 @@ import { historicalLiveConfig, historicalRejectedRoutes, historicalRankedRouteEl
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { scanBlockStateFromResolvedMids as scan, type ResolvedBlockScanQuote } from "../detector/blockscan-scanner-core.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
 import type { TokenEdge } from "../planner/token-graph.js";
-import { runInNewContext } from "node:vm";
-import { resolveBlockScanSolverSearchConfig } from "../blockscan-solver-search-config.js";
-import { RuntimeAmountProgram, runtimeAmountFlowAdapter } from "../../adapters/runtime-amount-program.js";
-import { executionInputMatches } from "../../shared/executor/amount-rounding.js";
+import { historicalBaselineData, writeHistoricalBenchmarkBaseline, readHistoricalBenchmarkBaseline,
+  historicalBenchmarkSummary, assertHistoricalSamplingPolicy } from "../blockscan-historical-benchmark.js";
 
 const base = ["--ready", "ready.json", "--block", "123", "--out", "logs/new-run"];
-test("restored live tolerance reaches actual runtime options and encoding in both simulation modes", () => {
-  const cli = ts.createSourceFile("at-block.ts", readFileSync(new URL("../blockscan-at-block-cli.ts", import.meta.url), "utf8"), ts.ScriptTarget.ES2022, true);
-  const loop = ts.createSourceFile("loop.ts", readFileSync(new URL("../blockscan-runtime-loop.ts", import.meta.url), "utf8"), ts.ScriptTarget.ES2022, true);
-  const constructors: ts.NewExpression[] = [], consumers: ts.PropertyAssignment[] = [];
-  const visit = (node: ts.Node) => {
-    if (ts.isNewExpression(node) && node.expression.getText(cli) === "BlockScanRuntimeLoop") constructors.push(node);
-    ts.forEachChild(node, visit);
-  };
-  const findConsumer = (node: ts.Node) => {
-    if (ts.isPropertyAssignment(node) && node.name.getText(loop) === "quoteToleranceRawUnits" &&
-      node.initializer.getText(loop).includes("this.deps.solverQuoteToleranceRawUnits")) consumers.push(node);
-    ts.forEachChild(node, findConsumer);
-  };
-  visit(cli); findConsumer(loop);
-  assert.equal(constructors.length, 1); assert.equal(consumers.length, 1);
-  const options = constructors[0]!.arguments![0]!;
-  assert(ts.isObjectLiteralExpression(options));
-  const spreads = options.properties.filter((node): node is ts.SpreadAssignment =>
-    ts.isSpreadAssignment(node) && node.getText(cli).includes("solverQuoteToleranceRawUnits"));
-  assert.equal(spreads.length, 1);
-  const consume = runInNewContext(`(function () { return ${consumers[0]!.initializer.getText(loop)}; })`);
-  const address = (n: number) => `0x${n.toString(16).padStart(40, "0")}`;
-  const tokenIn = address(1), tokenOut = address(2), executor = address(3);
-  const abi = new ethers.Interface(["function swap(uint256)"]);
-  const program = ethers.hexlify(new RuntimeAmountProgram().call(address(4), abi.encodeFunctionData("swap", [0n]),
-    { patches: [{ offset: 4, reg: 0 }] }).bytes());
-  for (const mode of ["next-block", "source-block"] as const) {
-    for (const restoredLive of [false, true]) {
-      for (const enabled of ["0", "1"]) {
-        const search = resolveBlockScanSolverSearchConfig({ SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED: enabled });
-        const deps = runInNewContext(`(${spreads[0]!.expression.getText(cli)})`, {
-          sourceSimulator: mode === "source-block" ? {} : undefined,
-          restored: restoredLive ? { provenance: {} } : undefined, search,
-        });
-        const expected = mode === "source-block" || restoredLive ? BigInt(enabled) : 0n;
-        const actual = consume.call({ deps });
-        assert.equal(actual, expected, `${mode}, restored=${restoredLive}, enabled=${enabled}`);
-        assert.equal(Object.hasOwn(deps, "solverQuoteToleranceRawUnits"), mode === "source-block" || restoredLive);
-        const encoded = runtimeAmountFlowAdapter.encode({ adapterId: "runtime-amount-flow", target: executor,
-          tokenIn, tokenOut: tokenIn, amount: 100n, children: [], params: {
-            legs: JSON.stringify([{ tokenIn, tokenOut, program }, { tokenIn: tokenOut, tokenOut: tokenIn, program }]), minimumReturn: 101n,
-            quoteToleranceRawUnits: actual,
-          } }, new Uint8Array());
-        assert.equal(encoded[36], expected === 1n ? 130 : 2);
-        assert.equal(executionInputMatches(99n, 100n, actual), expected === 1n);
-        assert.equal(executionInputMatches(98n, 100n, actual), false);
-        assert.equal(executionInputMatches(101n, 100n, actual), false);
-        assert.equal(executionInputMatches(0n, 100n, actual), false);
-      }
-    }
-  }
+test("historical continuation binds a bigint sampling policy without serializing raw bigint", () => {
+  const policy = { spreadBps: 0, fixedWethInput: 20_000_000_000_000_000n, cascade: false };
+  const first = historicalContinuationIdentity("baseline", policy);
+  assert.match(first, /^[0-9a-f]{64}$/);
+  assert.equal(first, historicalContinuationIdentity("baseline", policy));
+  assert.notEqual(first, historicalContinuationIdentity("baseline", { ...policy, fixedWethInput: null }));
+  assert.notEqual(first, historicalContinuationIdentity("baseline", { ...policy, fixedWethInput: 1n }));
 });
-test("historical sizing and final simulation share the same per-run rejection cache", () => {
-  const file = ts.createSourceFile("at-block.ts", readFileSync(new URL("../blockscan-at-block-cli.ts", import.meta.url), "utf8"), ts.ScriptTarget.ES2022, true);
-  const calls: ts.CallExpression[] = [], allocations: ts.VariableDeclaration[] = [];
-  const visit = (node: ts.Node) => {
-    if (ts.isCallExpression(node) && ["createBlockScanLiveAmountSelectorFactory", "maybeSubmitBlockScanAtomic"].includes(node.expression.getText(file))) calls.push(node);
-    if (ts.isVariableDeclaration(node) && node.initializer && ts.isNewExpression(node.initializer) && node.initializer.expression.getText(file) === "BlockScanSimRejectCache") allocations.push(node);
-    ts.forEachChild(node, visit);
-  };
-  visit(file);
-  assert.equal(allocations.length, 1, "cache must be scoped to this run, not recreated per consumer");
-  assert.equal(calls.length, 2);
-  for (const call of calls) {
-    const input = call.arguments[0]; assert(input && ts.isObjectLiteralExpression(input));
-    const field = input.properties.find(p => p.name?.getText(file) === "simRejects");
-    assert(field, `${call.expression.getText(file)} must receive simRejects`);
-    const value = ts.isShorthandPropertyAssignment(field) ? field.name : ts.isPropertyAssignment(field) ? field.initializer : undefined;
-    assert(value && ts.isIdentifier(value));
-    assert.equal(value.text, allocations[0]!.name.getText(file));
-  }
+test("historical cleanup drains every resource even when evidence writes fail", async () => {
+  const calls: number[] = [], diskError = new Error("ENOSPC");
+  const actions = [() => { calls.push(1); throw diskError; }, async () => { calls.push(2); throw new Error("close"); },
+    () => { calls.push(3); }];
+  await assert.rejects(cleanupHistoricalResources(actions, false), error => error === diskError);
+  assert.deepEqual(calls, [1, 2, 3]);
+  calls.length = 0;
+  await cleanupHistoricalResources(actions, true);
+  assert.deepEqual(calls, [1, 2, 3], "original run failure is preserved without skipping final cleanup");
 });
-test("historical sizing and final simulation share the live pool attributor and per-run cache", () => {
-  const file = ts.createSourceFile("at-block.ts", readFileSync(new URL("../blockscan-at-block-cli.ts", import.meta.url), "utf8"), ts.ScriptTarget.ES2022, true);
-  const calls: ts.CallExpression[] = [], constructors: ts.NewExpression[] = [], fields: ts.PropertyAssignment[] = [];
-  const visit = (node: ts.Node) => {
-    if (ts.isCallExpression(node) && ["createBlockScanLiveAmountSelectorFactory", "maybeSubmitBlockScanAtomic"].includes(node.expression.getText(file))) calls.push(node);
-    if (ts.isNewExpression(node) && node.expression.getText(file) === "BlockScanPoolRevertAttributor") constructors.push(node);
-    if (ts.isPropertyAssignment(node) && node.name.getText(file) === "isPoolSimRejected") fields.push(node);
-    ts.forEachChild(node, visit);
-  };
-  visit(file);
-  assert.equal(constructors.length, 1);
-  assert.equal(constructors[0]!.arguments?.[0]?.getText(file), "simRejects");
-  assert.equal(calls.length, 2);
-  for (const call of calls) {
-    const input = call.arguments[0]; assert(input && ts.isObjectLiteralExpression(input));
-    assert(input.properties.some(p => ts.isShorthandPropertyAssignment(p) && p.name.text === "poolRevertAttributor"));
-  }
-  assert.equal(fields.length, 1);
-  assert.equal(fields[0]!.initializer.getText(file).includes("simRejects.hasPool(edge)"), true);
+test("expired run deadline cannot let unref-only cleanup silently exit zero", () => {
+  const url = new URL("../blockscan-at-block-cli.ts", import.meta.url).href;
+  const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+    import { cleanupHistoricalResources } from ${JSON.stringify(url)};
+    await new Promise(resolve => setTimeout(resolve, 1)); // run deadline already fired
+    void (async () => {
+      try { throw new Error("original run failure"); }
+      finally { await cleanupHistoricalResources([() => new Promise(resolve => {
+        setTimeout(() => { console.log("drained"); resolve(); }, 20).unref();
+      })], true); }
+    })().catch(error => { console.error(error.message); process.exitCode = 1; });
+  `], { encoding: "utf8", timeout: 10_000 });
+  assert.equal(child.status, 1, child.stderr);
+  assert.match(child.stdout, /drained/);
+  assert.match(child.stderr, /original run failure/);
+});
+test("fixed-input baseline permits enumeration-only threshold changes but not sampling changes", () => {
+  const fixed = { spreadBps: 0, fixedWethInput: 20_000_000_000_000_000n, cascade: false };
+  assert.doesNotThrow(() => assertHistoricalSamplingPolicy(fixed, { ...fixed, spreadBps: 100 }));
+  assert.equal(fixed.spreadBps, 0, "the stored baseline policy is not relabelled");
+  for (const changed of [{ ...fixed, fixedWethInput: 1n }, { ...fixed, fixedWethInput: null },
+    { ...fixed, cascade: true }]) assert.throws(() => assertHistoricalSamplingPolicy(fixed, changed));
+  const dynamic = { ...fixed, fixedWethInput: null };
+  assert.throws(() => assertHistoricalSamplingPolicy(dynamic, { ...dynamic, spreadBps: 100 }));
+  assert.doesNotThrow(() => assertHistoricalSamplingPolicy(dynamic, dynamic));
+  assert.throws(() => assertHistoricalSamplingPolicy({ ...fixed, fixedWethInput: 0n },
+    { ...fixed, fixedWethInput: 0n, spreadBps: 100 }));
+});
+test("benchmark supports one or several full production blocks from a fixed baseline without injection", () => {
+  const args = [...base, "--benchmark-baseline", "baseline.json"];
+  assert.equal(parseAtBlockArgs(args)?.amountSelector, "sim");
+  assert.equal(parseAtBlockArgs(args)?.through, "ev");
+  assert.equal(parseAtBlockArgs([...args, "--through-block", "125"])?.throughBlock, 125);
+  assert.throws(() => parseAtBlockArgs([...base, "--save-baseline", "--through", "prices"]));
+  for (const extra of [["--offline"], ["--live-mids", "mids.json"], ["--amount-selector", "solver"],
+    ["--only-enumerated-rank", "1"], ["--max-candidates", "2"], ["--execution-mode", "source-block"]])
+    assert.throws(() => parseAtBlockArgs([...args, ...extra]));
+});
+
+test("extended execution-screen budget is bounded and only available for existing-baseline benchmarks", () => {
+  const benchmark = [...base, "--benchmark-baseline", "baseline.json", "--through-block", "222"];
+  assert.equal(parseAtBlockArgs(base)?.budgetMs, 120_000);
+  assert.equal(parseAtBlockArgs(benchmark)?.budgetMs, 120_000);
+  assert.equal(parseAtBlockArgs([...base, "--budget-ms", "3600000"])?.budgetMs, 3_600_000);
+  assert.throws(() => parseAtBlockArgs([...base, "--budget-ms", "3600001"]), /invalid --budget-ms/);
+  assert.throws(() => parseAtBlockArgs([...base, "--budget-ms", "43200000"]), /invalid --budget-ms/);
+  assert.equal(parseAtBlockArgs([...benchmark, "--budget-ms", "43200000"])?.budgetMs, 43_200_000);
+  for (const value of ["0", "-1", "1.5", "NaN", "Infinity", "43200001", "9007199254740992"])
+    assert.throws(() => parseAtBlockArgs([...benchmark, `--budget-ms=${value}`]), /invalid --budget-ms/);
+});
+
+test("baseline serialization preserves shared integer data, rejects authority and checks bytes", () => {
+  const shared = { amount: 17n }, source = { a: new Map([["one", shared]]), b: shared, nonfinite: Infinity };
+  const copy = historicalBaselineData(source);
+  assert.equal(copy.a.get("one"), copy.b); assert.equal(copy.b.amount, 17n); assert.equal(copy.nonfinite, Infinity);
+  assert.throws(() => historicalBaselineData({ issueExact() {} }));
+  const dir = mkdtempSync(join(tmpdir(), "production-baseline-")), path = join(dir, "baseline.json");
+  try {
+    const baseline: any = { version: 1, readySha256: "hash", pricing: { pricing: { sourceBlock: 123, sourceBlockHash: "source" } }, data: source };
+    writeHistoricalBenchmarkBaseline(path, baseline);
+    assert.deepEqual(readHistoricalBenchmarkBaseline(path).baseline, baseline);
+    assert.throws(() => writeHistoricalBenchmarkBaseline(path, baseline));
+    writeFileSync(path + ".bin", "changed"); assert.throws(() => readHistoricalBenchmarkBaseline(path), /bytes changed/);
+  } finally { rmSync(dir, { recursive: true }); }
+});
+
+test("benchmark statistics exclude censored and not-run stages but retain their counts", () => {
+  const stage = (ms: number, status = "ran") => ({ status, stage_ms: ms, started_at_ms: 1, finished_at_ms: 2, cumulative_ms: ms });
+  const sample = (block: number, time: number): any => ({ block, outcome: "ran", totalMs: time, callWallMs: time + 1,
+    completePrices: true, timing: {}, stages: { state: stage(time / 2), ev: stage(0, "not-run") } });
+  const result = historicalBenchmarkSummary([sample(2, 10), sample(3, 30), { ...sample(4, 100), outcome: "budget_exceeded" }], 4);
+  assert.equal(result.totalMs.mean, 20); assert.equal(result.totalMs.p50, 10); assert.equal(result.totalMs.p90, 30);
+  assert.equal(result.afterFirstTransitionTotalMs.mean, 30); assert.equal(result.stages.ev.count, 0);
+  assert.equal(result.censoredBlocks.length, 1); assert.equal(result.missingBlocks, 1); assert.equal(result.reachedEvBlocks, 0);
+});
+test("historical benchmark windows require an existing baseline and never start full-table warmup", () => {
+  const valid = [...base, "--benchmark-baseline", "baseline.json", "--through", "prices", "--through-block", "125"];
+  assert.equal(parseAtBlockArgs(valid)?.throughBlock, 125);
+  for (const end of ["122", "123", "373", "NaN", "124.5"])
+    assert.throws(() => parseAtBlockArgs([...base, "--through", "prices", "--through-block", end]));
+  for (const extra of [["--offline"], ["--live-mids", "manifest.json"]])
+    assert.throws(() => parseAtBlockArgs([...valid, ...extra]));
+  for (const stage of ["enumerate", "solver", "ev"])
+    assert.throws(() => parseAtBlockArgs([...base, "--through", stage, "--through-block", "125"]));
+  assert.throws(() => parseAtBlockArgs([...base, "--through", "prices", "--through-block", "125"]), /cold-start windows/);
+  assert.equal(parseAtBlockArgs(base)?.throughBlock, undefined);
 });
 test("experiment P reverts are hash-bound, single-source and distinct from historical cache knowledge", () => {
   const dir = mkdtempSync(join(tmpdir(), "p-revert-proof-"));
@@ -249,14 +259,10 @@ test("historical rejection evidence is source-bound and cannot leak later revert
     evidence: { prefixBytes: 4096, prefixSha256: "c".repeat(64) },
     routes: [{ routeId, observedAtMs: 999, sourceBlock: 122, line: 1, byteOffset: 0, lineSha256: sha(rawLine), rawLine }] };
   assert.deepEqual([...historicalRejectedRoutes(JSON.stringify(input), expected).ids], [routeId]);
-  const early = JSON.stringify({ ...event, stage: "enumeration" }) + "\n";
-  assert.deepEqual([...historicalRejectedRoutes(JSON.stringify({ ...input,
-    routes: [{ ...input.routes[0], rawLine: early, lineSha256: sha(early) }],
-  }), expected).ids], [routeId], "current live rejects remembered routes before the coarse cap");
   for (const patch of [{ coverage: "complete" }, { runId: "other-run" }, { sourceBlock: 124 }, { generation: 4 },
     { sourceBlockHash: `0x${"d".repeat(64)}` }, { routes: [...input.routes, ...input.routes] }])
     assert.throws(() => historicalRejectedRoutes(JSON.stringify({ ...input, ...patch }), expected));
-  for (const patch of [{ type: "sim_amount_execution" }, { stage: "final_sim" }, { reason: "rpc-throttle" }, { source_block: 123 },
+  for (const patch of [{ type: "sim_amount_execution" }, { reason: "rpc-throttle" }, { source_block: 123 },
     { emitted_at_ms: 1000 }, { run_id: "restart" }]) {
     const changed = JSON.stringify({ ...event, ...patch });
     assert.throws(() => historicalRejectedRoutes(JSON.stringify({ ...input,
@@ -303,9 +309,6 @@ test("historical target selection only filters actual natural outputs and preser
   await assert.rejects(planner.planBlockScanFromSeedEdges(opportunities[1], []), /enumeration must finish/);
   const natural: any = { opportunities, selectionProvenance: { kind: "natural_coarse_ranked" },
     forcedSelectionCount: 0, selectionMode: "production" };
-  for (const selectionProvenance of [undefined, null, {}, "natural_coarse_ranked"])
-    assert.throws(() => select({ ...natural, selectionProvenance }), /natural producer metadata/);
-  assert.throws(() => select({ ...natural, selectionMode: "diagnostic" }));
   assert.throws(() => select({ ...natural, forcedSelectionCount: 1 }));
   assert.throws(() => select({ ...natural, opportunities: [] }));
   const before = atBlockJson(natural);
@@ -315,11 +318,6 @@ test("historical target selection only filters actual natural outputs and preser
   const templates: any[] = [], opts = { deadlineAtMs: 123 };
   assert.deepEqual(await planner.planBlockScanFromSeedEdges(opportunities[1], templates, opts), ["original plan"]);
   assert.deepEqual(called, [[opportunities[1], templates, opts]]);
-  const core: any = { opportunities, selection: { mode: "natural_ranked", forcedSelectionCount: 0 } };
-  assert.equal(select(core).routeId, blockScanRouteId(opportunities[1].seedEdges));
-  assert.throws(() => select({ ...core, selection: null }), /natural producer metadata/);
-  assert.throws(() => select({ ...core, selection: { mode: "diagnostic", forcedSelectionCount: 0 } }));
-  assert.throws(() => select({ ...core, selection: { mode: "natural_ranked", forcedSelectionCount: 1 } }));
 });
 
 test("fixed effective P requires online repricing and preserves live default", () => {

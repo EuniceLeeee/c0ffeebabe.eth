@@ -1,9 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { BlockScanStartupCache, startupCacheNamespace } from "./blockscan-startup-cache.js";
+import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveContinuationIdentity, compatibleLiveContinuationIdentity, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
+import { createBlockScanActivityTransport } from "./blockscan-activity-transport.js";
+import { startupRevertFilterEnabled } from "./blockscan-startup-filter.js";
+import { writeEffectiveMidProgress } from "./effective-mid-progress-file.js";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
-import { loadLiveEnvironment, buildLiveExecutionWallet } from "./live-runtime-identity.js";
 import "../shared/adapters/index.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { AnvilStateBackend, StateCallAbortedError, type StateBackend, type StateCallControl } from "../shared/state/state-backend.js";
@@ -12,14 +16,14 @@ import {
   forkBotVmInstallationEnabled,
   forkBotVmRuntimeReceipt,
   installForkBotVm,
-  installForkBotVmRuntimeCode,
-  type BotVmRuntimeCode,
   loadBotVmRuntimeCode,
+  canUseRawExecuteCalldata,
+  rawExecutionEntryEnabled,
   type ForkBotVmRuntimeReceipt,
 } from "../shared/executor/botvm-executor.js";
 import { BackrunDetector, type BlockScanOpportunity, type Opportunity } from "./detector/detector.js";
 import type { BlockScanCoreConfig } from "./detector/blockscan-scanner-core.js";
-import { resolveAllowRepeatedPools, resolveAllowRepeatedTokens, resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
+import { resolveAllowRepeatedPools, resolveAllowRepeatedTokens, resolveAllowProtocolRepeats, resolvePairedEnumerationMethod } from "./detector/blockscan-paired-dfs.js";
 import { resolvePairedEnumerationBackend, resolveRustEnumerationThreads, resolveRustEnumerationScratchMb } from "./detector/blockscan-paired-enumerator.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS, resolveHopTokensPerStep, resolveHopPoolsPerPair } from "./blockscan-enumeration-config.js";
 import {
@@ -35,7 +39,6 @@ import {
 import { readBlockTouchedStateKeys, type BlockTouchedProvider } from "./blockscan-touched-state.js";
 import { BlockScanActivityPrefetch } from "./blockscan-activity-prefetch.js";
 import { startBlockScanHeadFeed } from "./blockscan-head-feed.js";
-import { LiveHeadWindow, parseLiveMaxNewHeads } from "./live-head-window.js";
 import { isRpcQuotaExhaustedError, isRpcThrottleError, LiveRpcThrottleObservation } from "./rpc-throttle-guard.js";
 import {
   initBlockScanEnumerationSolverTelemetry,
@@ -43,16 +46,21 @@ import {
 import { blockScanRouteId, blockScanRouteLocator } from "./blockscan-route-identity.js";
 import { createSolverExecutionInputRecorder } from "./solver-execution-input-recorder.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
-import { BlockScanPoolRevertAttributor, poolRevertFilterEnabled, assertPoolRevertBackendSupport } from "./blockscan-pool-revert.js";
+import { createBlockScanStartupExecutionPreflight, type StartupExecutionPreflight } from "./blockscan-startup-execution-preflight.js";
+import { createStartupNodeSimulation } from "./blockscan-startup-node-simulation.js";
+import { BlockScanPoolRevertAttributor, poolRevertFilterEnabled } from "./blockscan-pool-revert.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import {
-  buildEffectiveMids, effectiveMidPairStatistics, effectiveMidRowCarried,
-  MAX_EFFECTIVE_INPUT_PATH_HOPS, resolveEffectiveAmountCascade,
+  buildEffectiveMids, createEffectiveQuoteSessions, effectiveMidPairStatistics, effectiveMidRowCarried,
+  MAX_EFFECTIVE_INPUT_PATH_HOPS, resolveEffectiveAmountCascade, type EffectiveMidSnapshot,
 } from "./blockscan-effective-mid.js";
-import { effectiveEthPricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
+import { effectiveEthPricing, organizeEffectivePricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { VictimSourceTracker } from "./detector/victim-source-quality.js";
-import { initEvents, emitEvent, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
+import { initEvents, emitEvent, emitSubmissionEvidence, makeBlockScanOpportunityId, makeOpportunityId } from "./events.js";
+import { resolveBribeGasBasis } from "../shared/submission-fees.js";
+import type { BuilderEvidenceSink } from "../shared/builder-observations.js";
+import { SubmissionFollowup } from "../shared/submission-followup.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
@@ -81,8 +89,6 @@ import { TemplatePlanner } from "./planner/planner.js";
 import { resolveBackrunExecutionSource, assertBackrunSourceSimulation,
   type HistoricalBackrunMode } from "./backrun-execution-source.js";
 import { createLiveBackrunPlanner, resolveLiveBackrunSettings } from "./backrun-live-policy.js";
-import { backrunCandidateFailure, backrunConsumerFailureIsTerminal, settleBackrunFinalOverlay,
-  type BackrunCandidateStage } from "./backrun-candidate-outcome.js";
 import { runBackrunCandidatePipeline } from "./backrun-candidate-pipeline.js";
 import {
   buildTokenIndex,
@@ -96,10 +102,8 @@ import type {
   PoolIdentityFailureReason,
   RejectedPoolIdentity,
 } from "./venues/identity.js";
-import {
-  UniverseRebuildCheckpointStore,
-  activeReadyMemos as selectActiveReadyMemos,
-} from "./universe-rebuild-checkpoint.js";
+import { UniverseRebuildCheckpointStore } from
+  "./universe-rebuild-checkpoint.js";
 import {
   UniverseRunIncomplete,
   assertReadyFamilyActivation,
@@ -107,10 +111,7 @@ import {
   refreshReadyInstances,
 } from "./universe-rebuild-runner.js";
 import { createRebuildWiring } from "./universe-rebuild-production.js";
-import {
-  assertReadyCheckpointPublicationCurrent,
-  resolveStrictReadyRuntime,
-} from "./strict-ready-runtime.js";
+import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 import {
   StrictProductionRuntimeRoot,
   type StrictProductionRuntimeSession,
@@ -243,7 +244,6 @@ import type { LiveStateBackend, QuoteHop, QuoteRequest } from "./live-state-back
 import { DEFAULT_BRIBE_BPS, validateLiveEnvelope } from "./live-envelope.js";
 import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
-import { SourceBlockSimulator } from "./simulator/source-block.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
 import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
@@ -332,7 +332,7 @@ interface LiveConfig {
   mevShareSseUrl: string;
   liveBackend: LiveBackendKind;
   botvmAddress: string;
-  wallet: ethers.Wallet | ethers.VoidSigner;
+  wallet: ethers.Wallet;
   minProfit: bigint;
   defaultGasUsed: number;
   inclusionWatchBlocks: number;
@@ -629,7 +629,21 @@ function replaceSet<T>(target: Set<T>, next: ReadonlySet<T>): void {
 }
 
 function loadEnv(): void {
-  loadLiveEnvironment(process.env, () => readFileSync(resolve("..", ".env"), "utf8"));
+  if (process.env.SEARCHER_TEST_DISABLE_DOTENV === "1") return;
+  const envPath = resolve("..", ".env");
+  let text = "";
+  try {
+    text = readFileSync(envPath, "utf8");
+  } catch {
+    return;
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+    const [rawKey, ...rest] = trimmed.split("=");
+    const key = rawKey.replace(/^export\s+/, "");
+    if (!process.env[key]) process.env[key] = rest.join("=").replace(/^["']|["']$/g, "");
+  }
 }
 
 function liveRpcUrl(): string {
@@ -695,6 +709,7 @@ export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env,
         deduplicateRotations: deduplicateRotations === "1",
         allowRepeatedPools: resolveAllowRepeatedPools(env.SEARCHER_BLOCKSCAN_ALLOW_REPEATED_POOLS_ENABLED),
         allowRepeatedTokens: resolveAllowRepeatedTokens(env.SEARCHER_BLOCKSCAN_ALLOW_REPEATED_TOKENS_ENABLED),
+        allowProtocolRepeats: resolveAllowProtocolRepeats(env.SEARCHER_BLOCKSCAN_ALLOW_PROTOCOL_REPEATS_ENABLED),
         prefixPruningEnabled: prefixPruning === "1",
         maxPrefixDrawdownBps,
         enumerationMethod,
@@ -797,6 +812,15 @@ export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = proce
   // Deliberately no rounding/fallback: the live transport constructor owns
   // validation of non-integer/non-finite state concurrency, as before.
   const stateRpcBatchConcurrency = Math.max(1, Number(env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4"));
+  // A throttled batch degrades to concurrency 1 and keeps retrying there; only
+  // that batch pays the patience, never the whole live scope. The backoff is
+  // capped so a long refusal cannot turn into an unbounded stall.
+  const throttleRetriesAtOneRaw = Number(env.SEARCHER_RPC_THROTTLE_RETRIES_AT_ONE ?? "3");
+  const throttleRetriesAtOne = Number.isSafeInteger(throttleRetriesAtOneRaw) && throttleRetriesAtOneRaw >= 1
+    ? throttleRetriesAtOneRaw : 3;
+  const throttleMaxDelayRaw = Number(env.SEARCHER_RPC_THROTTLE_MAX_DELAY_MS ?? "30000");
+  const throttleMaxDelayMs = Number.isSafeInteger(throttleMaxDelayRaw) && throttleMaxDelayRaw > 0
+    ? throttleMaxDelayRaw : 30_000;
   return Object.freeze({ singleFunding: singleFundingRaw === "1", fixedEffectiveWethInput,
     passBudgetMs, largeGraphPassBudgetMs, largeGraphEdgeThreshold,
     startupWarmBudgetMs, hotPricingFamilyBudgetMs, runtimePublicationReserveMs, solveReserveMs,
@@ -805,11 +829,24 @@ export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = proce
     exactRefineHardBudgetMs, exactConcurrency, exactProbeTimeoutMs, exactRpcBatchSize, exactRpcBatchConcurrency,
     stateRpcBatchConcurrency, transport: Object.freeze({
       capacity: stateRpcBatchConcurrency + exactRpcBatchConcurrency, producerReserved: stateRpcBatchConcurrency,
+      maxRetriesAtOne: throttleRetriesAtOne, maxRetryDelayMs: throttleMaxDelayMs,
     }) });
 }
 
 export type BlockScanLiveStageSettings = ReturnType<typeof resolveBlockScanLiveStageSettings>;
 type BlockScanAmountSelectorFactory = NonNullable<BlockScanRuntimeLoopDependencies["amountSelectorFactory"]>;
+
+export function logBlockScanAmountEvent({ source, workerIndex, event }: {
+  source: Parameters<BlockScanAmountSelectorFactory>[0]["source"];
+  workerIndex: number;
+  event: Record<string, unknown>;
+}): void {
+  try {
+    console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,
+      sourceBlock: source.number, generation: source.generation, workerIndex },
+      (_key, value) => typeof value === "bigint" ? value.toString() : value)}`);
+  } catch { /* Telemetry cannot alter amount selection. */ }
+}
 
 /** One live-runtime trial limit shared across every source/worker selector. */
 export function createBlockScanLiveAmountSelectorFactory(input: {
@@ -906,9 +943,19 @@ export function resolveBlockScanAtomicPolicy(env: NodeJS.ProcessEnv = process.en
 function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const rpcUrl = liveRpcUrl();
 
+  const privateKey = process.env.PRIVATE_KEY ?? process.env.OWNER_PRIVATE_KEY;
+  if (!privateKey) throw new Error("PRIVATE_KEY or OWNER_PRIVATE_KEY required");
+
   const botvmAddress = process.env.BOTVM_ADDRESS;
   if (!botvmAddress) throw new Error("BOTVM_ADDRESS required");
-  const wallet = buildLiveExecutionWallet(provider);
+
+  const wallet = new ethers.Wallet(privateKey, provider);
+  const botvmOwner = process.env.BOTVM_OWNER;
+  if (botvmOwner && wallet.address.toLowerCase() !== botvmOwner.toLowerCase()) {
+    throw new Error(
+      `PRIVATE_KEY wallet ${wallet.address} does not match BOTVM_OWNER ${botvmOwner}`,
+    );
+  }
   const dryRun = process.env.SEARCHER_DRY_RUN === "1";
   const backrunSettings = resolveLiveBackrunSettings();
   const maxHops = backrunSettings.planner.maxHops;
@@ -931,8 +978,7 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const enableBackrun = process.env.SEARCHER_ENABLE_BACKRUN !== "0";
   const enableMempool = enableBackrun && process.env.SEARCHER_ENABLE_MEMPOOL === "1";
   const enableMevShare = enableBackrun && process.env.SEARCHER_ENABLE_MEV_SHARE !== "0";
-  if (enableBackrun && !enableMempool && !enableMevShare &&
-      process.env.SEARCHER_HISTORICAL_BACKRUN_SPEC === undefined) {
+  if (enableBackrun && !enableMempool && !enableMevShare) {
     throw new Error("SEARCHER_ENABLE_BACKRUN=1 requires at least one victim source");
   }
 
@@ -1112,6 +1158,9 @@ export function createBlockScanPriceRuntime(input: {
   blockScanRuntimeAbort: AbortController;
   blockScanRethTransportScheduler?: RethTransportScheduler;
   blockScanCfg: BlockScanCoreConfig | undefined;
+  /** The same run-local, attributed-pool predicate used by enumeration. */
+  isPoolSimRejected: (edge: TokenEdge) => boolean;
+  startupExecutionPreflight?: Pick<StartupExecutionPreflight, "run" | "reset">;
   recordPricing: (publication: import("./strict-current-runtime-coordinator.js").StrictPricingPublication) => void;
 }) {
   const { provider, strictRuntimeRoot, blockScanRuntimeAbort,
@@ -1297,38 +1346,28 @@ export function createBlockScanPriceRuntime(input: {
     strictSessionFor,
     () => strictSessionCache.clear(),
     (publication) => {
-      // This callback follows the coordinator's atomic publication. The same
-      // source/generation's backend and simulation drain is recorded separately.
-      if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1") {
-        try {
-          console.log(`[searcher/pricing-publication] ${JSON.stringify({
-            sourceBlock: publication.snapshot.sourceBlock, sourceBlockHash: publication.snapshot.sourceBlockHash,
-            generation: publication.snapshot.generation, effectiveComplete: publication.snapshot.effectiveMids?.complete ?? false,
-            atMs: Date.now(), atMonotonicMs: performance.now(), pid: process.pid, timeOrigin: performance.timeOrigin,
-          })}`);
-        } catch { /* Timing evidence cannot change publication. */ }
-      }
       // Effective sampling amounts come only from successful forward quotes.
       blockScanRouteTelemetry.recordPricing(publication);
-      if (blockScanCfg !== undefined && publication.snapshot.effectiveMids?.complete) {
-        const start = Date.now();
-        const { view } = effectiveEthPricing(publication.snapshot, blockScanCfg.ethSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
-        console.log(`[searcher/effective-eth-view] ${JSON.stringify({
-          sourceBlock: publication.snapshot.sourceBlock,
-          sourceBlockHash: publication.snapshot.sourceBlockHash,
-          generation: publication.snapshot.generation,
-          algorithm: blockScanCfg.enumerationMethod === "joint-dfs" ? "joint-dfs"
-            : blockScanCfg.enumerationMethod === "layered" ? "paired-layered" : "paired-dfs",
-          reference: "WETH wei per token raw unit; effective-only <=3-hop valuation",
-          ...ethViewStatistics(view, blockScanCfg.minSpreadBps), wallMs: Date.now() - start,
-        })}`);
-      }
     },
     blockScanCfg === undefined ? undefined : async (pricing, control, pricingBackend, reuse, simulationTransport) => {
       const controller = new AbortController();
       const effectiveControl = { ...control, signal: control.signal === undefined
         ? controller.signal : AbortSignal.any([control.signal, controller.signal]) };
       const quoteTarget = reuse?.quoteGraph ?? pricing;
+      // Reuse the effective builder's exclusion path: no carry, amount
+      // references, bindings or quotes for an already attributed failed pool.
+      // Do not mutate the coordinator's cached automatic-exclusion set.
+      const quoteEdges = reuse?.quoteGraph?.edges ?? pricing.graph.edges;
+      const disabledEdgeIds = () => {
+        let poolDisabledEdgeIds: Set<string> | undefined;
+        for (const edge of quoteEdges) {
+          if (input.isPoolSimRejected(edge)) {
+            poolDisabledEdgeIds ??= new Set(reuse?.disabledEdgeIds);
+            poolDisabledEdgeIds.add(blockScanEdgeKey(edge));
+          }
+        }
+        return poolDisabledEdgeIds ?? reuse?.disabledEdgeIds;
+      };
       const source = Object.freeze({ number: quoteTarget.sourceBlock,
         hash: quoteTarget.sourceBlockHash, generation: quoteTarget.generation });
       // Use the existing source-pinned producer transport. The fallback is
@@ -1343,23 +1382,26 @@ export function createBlockScanPriceRuntime(input: {
           transportScheduler: blockScanRethTransportScheduler },
       ) : undefined;
       try {
-        let session: StrictProductionRuntimeSession | undefined;
+        const sessions = createEffectiveQuoteSessions(requiredEdgeIds =>
+          strictSessionFor({ purpose: "exact-execution", source, simulationTransport,
+            control: effectiveControl, fundingAssets: [], requiredEdgeIds,
+            exactCallBackend: pricingBackend ?? ownedBackend! }));
         console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=${MAX_EFFECTIVE_INPUT_PATH_HOPS} cascadeAmountChanges=${cascadeAmountChanges}`);
-        const effective = await buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
+        const build = (previous: EffectiveMidSnapshot | undefined, touchedStateKeys: ReadonlySet<string> | undefined) =>
+          buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
           fixedWethInput: input.fixedEffectiveWethInput,
           cascadeAmountChanges,
-          previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys, resumeSameSource: reuse?.resumeSameSource,
-          disabledEdgeIds: reuse?.disabledEdgeIds,
+          previous, touchedStateKeys, disabledEdgeIds: disabledEdgeIds(),
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
           enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 1024,
-          prepareQuote: async (requiredEdgeIds) => {
-            session = await strictSessionFor({ purpose: "exact-execution", source,
-              simulationTransport,
-              control: effectiveControl, fundingAssets: [], requiredEdgeIds,
-              exactCallBackend: pricingBackend ?? ownedBackend! });
+          onProgress: progress => {
+            try { writeEffectiveMidProgress(process.env.SEARCHER_EVENTS_PATH ?? "", progress); }
+            catch { console.error("[searcher/effective-mid-progress] snapshot_write_failed"); }
+            console.log(`[searcher/effective-mid-progress] ${JSON.stringify(progress)}`);
           },
+          prepareQuote: sessions.prepareQuote,
           quote: async (request) => {
-            if (!session) throw new Error("effective quote session was not prepared");
+            const session = sessions.sessionFor(request.edge);
             const startedAtMs = Date.now();
             let status = "failed";
             try {
@@ -1382,12 +1424,24 @@ export function createBlockScanPriceRuntime(input: {
             }
           },
         });
+        let effective = await build(reuse?.previous, reuse?.touchedStateKeys);
+        let effectiveBuildWallMs = effective.wallMs;
+        const preflightStarted = Date.now();
+        if (input.startupExecutionPreflight && await input.startupExecutionPreflight.run({
+          effective, edges: quoteEdges, control: effectiveControl,
+          prepareQuote: sessions.prepareQuote, sessionFor: sessions.sessionFor,
+        })) {
+          // Same source and successful amount tuples: reuse the existing
+          // exclusion path to invalidate prices before any publication.
+          effective = await build(effective, new Set());
+          effectiveBuildWallMs += effective.wallMs;
+        }
         console.log(`[searcher/effective-mid] ${JSON.stringify({
-          atMs: Date.now(), atMonotonicMs: performance.now(), pid: process.pid, timeOrigin: performance.timeOrigin,
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
           samplingSource: "effective-forward", maxInputPathHops: MAX_EFFECTIVE_INPUT_PATH_HOPS, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
-          complete: effective.complete, wallMs: effective.wallMs,
+          complete: effective.complete, wallMs: effectiveBuildWallMs,
+          startupExecutionAndInvalidationMs: Date.now() - preflightStarted,
           cascadeAmountChanges,
           localQuoteCache: strictExactQuoteCache.snapshot(),
           carried: [...effective.rows.values()].filter(row => effectiveMidRowCarried(effective, row)).length,
@@ -1399,6 +1453,20 @@ export function createBlockScanPriceRuntime(input: {
       }
     },
     strictExactQuoteCache,
+    blockScanCfg === undefined ? undefined : (pricing) => {
+      const start = Date.now();
+      const organized = organizeEffectivePricing(pricing, blockScanCfg.ethSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
+      const { view } = effectiveEthPricing(organized, blockScanCfg.ethSignalPairsPerToken, blockScanCfg.allowRepeatedPools);
+      try { console.log(`[searcher/effective-eth-view] ${JSON.stringify({
+        sourceBlock: organized.sourceBlock, sourceBlockHash: organized.sourceBlockHash,
+        generation: organized.generation,
+        algorithm: blockScanCfg.enumerationMethod === "joint-dfs" ? "joint-dfs"
+          : blockScanCfg.enumerationMethod === "layered" ? "paired-layered" : "paired-dfs",
+        reference: "WETH wei per token raw unit; effective-only <=3-hop valuation",
+        ...ethViewStatistics(view, blockScanCfg.minSpreadBps), wallMs: Date.now() - start,
+      })}`); } catch { /* Diagnostics cannot invalidate an organized publication. */ }
+      return organized;
+    },
   );
   return { strictSessionFor, currentRuntimeCoordinator, blockScanAmountReference };
 }
@@ -1628,8 +1696,6 @@ async function main(): Promise<void> {
     throw new Error("block-scan sim amount selection requires the P/10P/100P/1000P multiples grid");
   }
   const blockScanFinalSimulationMethod = resolveBlockScanFinalSimulationMethod();
-  const blockScanPoolRevertFilter = poolRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_POOL_REVERT_FILTER);
-  assertPoolRevertBackendSupport(enableBlockScan && blockScanPoolRevertFilter, blockScanFinalSimulationMethod);
   if (enableBlockScan && blindInstallForkBotVm && blockScanFinalSimulationMethod !== "anvil") {
     throw new Error("fork-only executor installation requires the anvil final simulation method");
   }
@@ -1638,6 +1704,24 @@ async function main(): Promise<void> {
   }
   const finalSimulationExecutorRuntimeCode = dryRunBotVmCodeOverride
     ? loadBotVmRuntimeCode(executionIdentity.transactionOrigin) : undefined;
+  const rawExecutionEntry = rawExecutionEntryEnabled(process.env.SEARCHER_BOTVM_RAW_ENTRY);
+  const blockScanPoolRevertFilter = poolRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_POOL_REVERT_FILTER);
+  const chainDiagnosticCode = !finalSimulationExecutorRuntimeCode && enableBlockScan &&
+    blockScanFinalSimulationMethod === "eth_simulateV1" && blockScanPoolRevertFilter
+    ? loadBotVmRuntimeCode(executionIdentity.transactionOrigin) : undefined;
+  if (chainDiagnosticCode && ethers.keccak256(await provider.getCode(executionIdentity.executor)) !== chainDiagnosticCode.keccak256) {
+    throw new Error("direct hop diagnosis requires the exact tested deployed runtime");
+  }
+  if (rawExecutionEntry) {
+    if (!enableBlockScan || blockScanFinalSimulationMethod !== "eth_simulateV1") {
+      throw new Error("raw executor entry requires block-scan eth_simulateV1 final simulation");
+    }
+    const expected = loadBotVmRuntimeCode(executionIdentity.transactionOrigin);
+    if (!dryRunBotVmCodeOverride && !chainDiagnosticCode && ethers.keccak256(await provider.getCode(executionIdentity.executor)) !== expected.keccak256) {
+      throw new Error("raw executor entry requires the exact tested deployed runtime");
+    }
+    console.log(`[searcher/live] executor=solidity-yul raw-entry=if-compatible codehash=${expected.keccak256}`);
+  }
   if (finalSimulationExecutorRuntimeCode !== undefined) {
     console.log(`[searcher/live] ${JSON.stringify({ counterfactualExecutorCode: true,
       keccak256: finalSimulationExecutorRuntimeCode.keccak256 })}`);
@@ -1782,7 +1866,24 @@ async function main(): Promise<void> {
   // revm/hybrid backends are constructed after the routing graph is built (they
   // need it to encode the victim overlay); default to rpc until then.
   let liveBackend: LiveStateBackend = rpcLiveBackend;
+  let submissionEvidenceFailure: Error | undefined;
+  const recordSubmissionEvidence: BuilderEvidenceSink = event => {
+    if (submissionEvidenceFailure) throw submissionEvidenceFailure;
+    try { emitSubmissionEvidence(event); }
+    catch {
+      const failure = new Error("submission evidence unavailable; stopping runtime");
+      submissionEvidenceFailure = failure;
+      requestRuntimeStop.fail(failure);
+      throw failure;
+    }
+  };
+  const submissionFollowup = config.dryRun ? undefined : new SubmissionFollowup({
+    evidence: recordSubmissionEvidence,
+    onError: () => requestRuntimeStop.fail(new Error("submission follow-up evidence unavailable")),
+  });
   const bundleRouter: BundleRouter = createBundleRouter({
+    bribeGasBasis: resolveBribeGasBasis(process.env.SEARCHER_BRIBE_GAS_BASIS),
+    evidence: recordSubmissionEvidence,
     dryRun: config.dryRun,
     wallet: config.wallet,
     provider,
@@ -1813,17 +1914,6 @@ async function main(): Promise<void> {
   const blockScanRouteEventsPath = enableBlockScan && !blindProductionAudit
     ? process.env.SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH ?? ""
     : "";
-  const configuredMidHistoryPath =
-    process.env.SEARCHER_BLOCKSCAN_MID_HISTORY_PATH;
-  const blockScanMidHistoryPath = enableBlockScan && !blindProductionAudit
-    ? configuredMidHistoryPath === undefined
-      ? blockScanRouteEventsPath.endsWith(".jsonl")
-        ? `${blockScanRouteEventsPath.slice(0, -6)}.mids.jsonl`
-        : blockScanRouteEventsPath
-          ? `${blockScanRouteEventsPath}.mids.jsonl`
-          : ""
-      : configuredMidHistoryPath
-    : "";
   const solverInputPath = (process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_PATH ?? "").trim();
   if (solverInputPath && (!enableBlockScan || blindProductionAudit || !eventContext.enabled ||
       blockScanFinalSimulationMethod !== "eth_simulateV1")) {
@@ -1835,14 +1925,13 @@ async function main(): Promise<void> {
     maxFileBytes: process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_MAX_BYTES === undefined
       ? undefined
       : Number(process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_MAX_BYTES),
-    protectedPaths: [eventContext.path, blockScanRouteEventsPath, blockScanMidHistoryPath,
+    protectedPaths: [eventContext.path, blockScanRouteEventsPath,
       process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH ?? ""],
   }) : undefined;
   if (solverInputRecorder) console.log("[searcher/solver-inputs] enabled private complete execution input recording");
   const blockScanRouteTelemetry =
     await initBlockScanEnumerationSolverTelemetry({
       path: blockScanRouteEventsPath,
-      midHistoryPath: blockScanMidHistoryPath,
       eventsPath: eventContext.path,
       runId: eventContext.runId,
     });
@@ -1852,20 +1941,12 @@ async function main(): Promise<void> {
         blockScanRouteEventsPath,
     );
   }
-  if (blockScanRouteTelemetry.enabled && blockScanMidHistoryPath) {
-    console.log(
-      `[searcher/live] block-scan mid history emit → ` +
-        blockScanMidHistoryPath,
-    );
-  }
   console.log(`[searcher/live] runtime_commit=${process.env.SEARCHER_RUNTIME_COMMIT ?? "unavailable"}`);
-  const sourceMode = process.env.SEARCHER_HISTORICAL_BACKRUN_SPEC !== undefined
-    ? ("disabled" as const)
-    : victimSourceMode(
-        config.enableBackrun,
-        config.enableMempool,
-        config.enableMevShare,
-      );
+  const sourceMode = victimSourceMode(
+    config.enableBackrun,
+    config.enableMempool,
+    config.enableMevShare,
+  );
   if (blindProductionAudit && sourceMode !== "disabled") {
     throw new Error("blind production audit requires the victim feed to be disabled");
   }
@@ -2064,22 +2145,9 @@ async function main(): Promise<void> {
     executionIdentity,
     onSimulationFatal,
   });
-  const readyPublicationActivation = new Map<string, boolean>(PRODUCTION_FAMILY_ACTIVATIONS
-    .map(({ familyId, enabled }) => [familyId, enabled] as const));
   let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
-  const historicalBackrunSpec = process.env.SEARCHER_HISTORICAL_BACKRUN_SPEC;
-  if (historicalBackrunSpec !== undefined) {
-    if (rebuildEnvelope?.readyGeneration == null || rebuildEnvelope.inProgressRun !== null) {
-      throw new Error("historical backrun requires one complete Ready checkpoint");
-    }
-    readyUniverse = rebuildEnvelope.readyGeneration;
-    console.log("[searcher/historical] ready generation=" + readyUniverse.generation +
-      " cutoff=" + readyUniverse.cutoff.number + " instances=" + readyUniverse.activeInstanceKeys.length);
-  } else if (blindUseIncumbentReady || useReadyGeneration) {
-    if (rebuildEnvelope?.readyGeneration != null) {
-      assertReadyCheckpointPublicationCurrent(rebuildEnvelope, familyId => readyPublicationActivation.get(familyId));
-    }
+  if (blindUseIncumbentReady || useReadyGeneration) {
     if (
       rebuildEnvelope === null ||
       rebuildEnvelope.readyGeneration === null ||
@@ -2147,11 +2215,19 @@ async function main(): Promise<void> {
     throw new Error("strict startup readyGeneration failed root verification");
   }
   const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
-  if (historicalBackrunSpec === undefined) assertReadyCheckpointPublicationCurrent(rebuildEnvelope, familyId => readyPublicationActivation.get(familyId));
   const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);
-  // Rehydrate the exact candidate evidence sealed into Ready, not the first
-  // historical alias that happens to share its instance key.
-  const activeReadyMemos = selectActiveReadyMemos(rebuildEnvelope);
+  // Historical checkpoints can contain more than one memo per instance.
+  // Current terminal outcomes revoke their candidate memo atomically, while
+  // this defensive dedupe keeps runtime rehydration one-instance-per-key
+  // during the one-time checkpoint transition.
+  const seenReadyInstances = new Set<string>();
+  const activeReadyMemos = Object.values(rebuildEnvelope.verifiedMemos)
+    .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
+    .filter((memo) => {
+      if (seenReadyInstances.has(memo.familyInstanceKey)) return false;
+      seenReadyInstances.add(memo.familyInstanceKey);
+      return true;
+    });
   assertReadyFamilyActivation(activeReadyMemos, rebuildWiring.isFamilyEnabled);
   const routeReadyMemos = activeReadyMemos.filter((memo) =>
     PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
@@ -2377,13 +2453,26 @@ async function main(): Promise<void> {
     timeoutMs: blockScanStageSettings.sourceSimulationTimeoutMs,
     runtimeAbort: blockScanRuntimeAbort,
     onFatal: onSimulationFatal,
-    ...(finalSimulationExecutorRuntimeCode === undefined ? {} : { executorRuntimeCode: finalSimulationExecutorRuntimeCode }),
   });
+  const blockScanSimRejects = new BlockScanSimRejectCache();
+  let continuationWriter: LivePricingContinuationWriter | undefined;
+  const startupExecutionPreflight = blockScanRethTransportScheduler ? createBlockScanStartupExecutionPreflight({ ...executionIdentity,
+    simRejects: blockScanSimRejects, concurrency: 32,
+    filterTargetReverts: startupRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_STARTUP_REVERT_FILTER),
+    simulateStandalone: createStartupNodeSimulation({ rpcUrl: config.rpcUrl, chainId: blockScanChainId,
+      ...executionIdentity, executorRuntimeCode: finalSimulationExecutorRuntimeCode,
+      rawExecutionEntry, scheduler: blockScanRethTransportScheduler, requestsPerSecond: 200 }) }) : undefined;
   const priceRuntime = createBlockScanPriceRuntime({
     provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
     fixedEffectiveWethInput: blockScanStageSettings.fixedEffectiveWethInput,
     blockScanRuntimeAbort, blockScanRethTransportScheduler, blockScanCfg,
-    recordPricing: publication => blockScanRouteTelemetry.recordPricing(publication),
+    recordPricing: publication => {
+      // Price history belongs to the baseline + native-delta journal, not a
+      // second worker which clones and diffs the complete effective table.
+      if (publication.snapshot.effectiveMids?.complete) continuationWriter?.capture();
+    },
+    isPoolSimRejected: edge => blockScanSimRejects.hasPool(edge),
+    startupExecutionPreflight,
   });
   const { strictSessionFor, blockScanAmountReference } = priceRuntime;
   currentRuntimeCoordinator = priceRuntime.currentRuntimeCoordinator;
@@ -2539,7 +2628,6 @@ async function main(): Promise<void> {
     });
   }
 
-  const blockScanSimRejects = new BlockScanSimRejectCache();
   const blockScanPoolRevertAttributor = blockScanPoolRevertFilter
     ? new BlockScanPoolRevertAttributor(blockScanSimRejects) : undefined;
   console.log(`[searcher/blockscan-pool-revert-filter] ${JSON.stringify({ enabled: blockScanPoolRevertFilter })}`);
@@ -2621,24 +2709,111 @@ async function main(): Promise<void> {
       } catch { /* Diagnostics never change activity completeness or failure. */ }
     }
   };
+  const activityTransport = createBlockScanActivityTransport(config.rpcUrl);
   const blockScanRawActivityProvider: BlockTouchedProvider = {
     getLogs(filter) {
       blockScanRuntimeAbort.signal.throwIfAborted();
       return timedActivityRead("eth_getLogs", "blockHash" in filter ? filter.blockHash : filter.fromBlock,
-        () => provider.getLogs(filter)).catch(activityReadFailed);
+        () => activityTransport.getLogs(filter)).catch(activityReadFailed);
     },
     send(method, params) {
       blockScanRuntimeAbort.signal.throwIfAborted();
-      return timedActivityRead(method, params[0], () => provider.send(method, params)).catch(activityReadFailed);
+      return timedActivityRead(method, params[0], () => activityTransport.send(method, params)).catch(activityReadFailed);
     },
   };
   const blockScanActivityProvider = new BlockScanActivityPrefetch(
     blockScanRawActivityProvider, blockScanRuntimeAbort.signal,
   );
-  const startupWarmEnabled = enableBlockScan && !blindProductionAudit;
-  let onStartupWarmDrained: BlockScanRuntimeLoopDependencies["onStartupWarmDrained"];
+  const continuePrices = liveContinuationEnabled(process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED);
+  const continuationDirectory = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR;
+  if (continuePrices && !continuationDirectory) throw new Error("live continuation directory is required");
+  let restoredContinuation = false;
+  if (continuationDirectory) {
+    if (!enableBlockScan || blindProductionAudit || blockScanNMinusOneFallback || !blockScanCfg || !startupExecutionPreflight) {
+      throw new Error("live continuation supports ordinary source-N blockscan only");
+    }
+    const continuationContext = {
+      chainId: String(blockScanChainId), topology: frozenProducerTopology.topologyKey,
+      ...executionIdentity, executorCode: ethers.keccak256(finalSimulationExecutorRuntimeCode?.code ??
+        await provider.getCode(executionIdentity.executor)), rawExecutionEntry,
+      fixedWethInput: blockScanStageSettings.fixedEffectiveWethInput?.toString() ?? null,
+      spreadBps: blockScanCfg.minSpreadBps,
+      cascade: resolveEffectiveAmountCascade(process.env.SEARCHER_BLOCKSCAN_EFFECTIVE_AMOUNT_CASCADE_ENABLED),
+    };
+    const identity = liveContinuationIdentity(continuationContext);
+    const compatibilityPath = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY;
+    const previousIdentity = continuePrices && compatibilityPath
+      ? compatibleLiveContinuationIdentity(continuationContext, compatibilityPath) : undefined;
+    const store = new LivePricingContinuationStore(continuationDirectory, identity, previousIdentity);
+    if (!continuePrices) {
+      const archived = await store.beginFreshRound();
+      console.log(`[searcher/live-continuation] ${JSON.stringify({
+        phase: "new-logical-round", previousCheckpointArchived: archived,
+      })}`);
+    }
+    const restored = continuePrices ? await store.read() : null;
+    if (restored) {
+      // Canonical anchors and current Ready/index are checked before installing
+      // data. No stored Funding, Exact handles, permit or final sim is restored.
+      await validateLiveContinuationAnchors(restored, blockScanAmountReference,
+        number => frozenProducerTopology.observeHeader(number));
+      const view = (at: typeof restored.pricing.pricing) => strictReadyGraphViews.build({
+        id: "live-continuation", edges: graph, topologyKey: frozenProducerTopology.topologyKey,
+        generation: at.generation, sourceBlock: at.sourceBlock, sourceBlockHash: at.sourceBlockHash,
+      });
+      await priceRuntime.currentRuntimeCoordinator.restoreHistoricalBaseline(restored.pricing, {
+        graph: view(restored.pricing.pricing), rawGraph: view(restored.pricing.raw), weth: ADDR.WETH,
+        control: { signal: blockScanRuntimeAbort.signal, deadlineAtMs: Date.now() + blockScanStartupWarmBudgetMs },
+      });
+      startupExecutionPreflight.restoreContinuation(restored.startup);
+      blockScanSimRejects.restoreContinuation(restored.simRejects, graph);
+      startupExecutionPreflight.defer(true);
+      restoredContinuation = true;
+      console.log(`[searcher/live-continuation] ${JSON.stringify({
+        phase: "restored", sourceBlock: restored.pricing.pricing.sourceBlock,
+        sourceBlockHash: restored.pricing.pricing.sourceBlockHash, observations: restored.startup.rows.length,
+        trading: false, identity,
+      })}`);
+    } else {
+      console.log(`[searcher/live-continuation] ${JSON.stringify({
+        phase: continuePrices ? "no-checkpoint-cold-start" : "disabled-cold-start", identity,
+      })}`);
+    }
+    continuationWriter = new LivePricingContinuationWriter({ store,
+      coordinator: priceRuntime.currentRuntimeCoordinator, amounts: blockScanAmountReference,
+      startup: startupExecutionPreflight, simRejects: blockScanSimRejects, restored: restoredContinuation,
+      onEvent: event => console.log(`[searcher/live-continuation] ${JSON.stringify(event)}`) });
+  }
   const blockScanRuntimeLoop = new BlockScanRuntimeLoop({
     enabled: enableBlockScan,
+    onPassSettled: () => continuationWriter?.capture(),
+    ...(restoredContinuation ? { liveContinuation: {
+      async revalidateStartup(pricing: import("./blockscan-state-coordinator.js").BlockScanStateSnapshot,
+        control: import("./adapter-work-intent.js").AdapterWorkControl) {
+        const effective = pricing.effectiveMids!;
+        const backend = new PinnedRethQuoteBackend(config.rpcUrl, effective.source.hash, {
+          ...control, maxBatchSize: 64, maxConcurrentBatches: 8, transportLane: "producer-bulk",
+          retryRpcThrottle: true, allowSingleCallFallback: false, transportScheduler: blockScanRethTransportScheduler,
+        });
+        const sessions = createEffectiveQuoteSessions(requiredEdgeIds => strictSessionFor({
+          purpose: "exact-execution", source: effective.source, control,
+          fundingAssets: [], requiredEdgeIds, exactCallBackend: backend,
+        }));
+        console.log(`[searcher/live-continuation] ${JSON.stringify({
+          phase: "revalidating-startup", sourceBlock: pricing.sourceBlock, trading: false,
+        })}`);
+        startupExecutionPreflight!.defer(false);
+        try {
+          await startupExecutionPreflight!.run({ effective, edges: pricing.graph.edges, control,
+            prepareQuote: sessions.prepareQuote, sessionFor: sessions.sessionFor });
+        } finally {
+          // Ordinary per-head pricing must not start another preflight while
+          // a failed/interrupted resume is still catching up.
+          startupExecutionPreflight!.defer(true);
+          await backend.closeAndDrain();
+        }
+      },
+    } } : {}),
     blockScanConfig: blockScanCfg,
     executionWorkers: blockScanExecutionWorkers,
     finalSimulationWorkers: blockScanFinalSimulationWorkers,
@@ -2647,18 +2822,11 @@ async function main(): Promise<void> {
       singleFunding: blockScanStageSettings.singleFunding,
       simRejects: blockScanSimRejects,
       poolRevertAttributor: blockScanPoolRevertAttributor,
-      record({ source, workerIndex, event }) {
-        try {
-          console.log(`[searcher/sim-amount] ${JSON.stringify({ ...event,
-            sourceBlock: source.number, generation: source.generation, workerIndex,
-            atMs: Date.now(), atMonotonicMs: performance.now(), pid: process.pid, timeOrigin: performance.timeOrigin },
-            (_key, value) => typeof value === "bigint" ? value.toString() : value)}`);
-        } catch { /* Telemetry cannot alter amount selection. */ }
-      },
+      record: logBlockScanAmountEvent,
     }),
     directFinalSimulation: enableBlockScan && blockScanFinalSimulationMethod === "eth_simulateV1"
       ? Object.assign(new EthSimulateV1Simulator(config.rpcUrl, executionIdentity.executor, executionIdentity.transactionOrigin,
-          finalSimulationExecutorRuntimeCode),
+          finalSimulationExecutorRuntimeCode, rawExecutionEntry, chainDiagnosticCode),
           { concurrency: blockScanFinalSimulationConcurrency })
       : undefined,
     rpcUrl: config.rpcUrl,
@@ -2677,6 +2845,8 @@ async function main(): Promise<void> {
             source: input.source, header: input.header,
             executor: executionIdentity.executor, owner: executionIdentity.transactionOrigin,
             profitToken: input.resolved.profitToken, scriptHex: input.scriptHex,
+            ...(rawExecutionEntry && canUseRawExecuteCalldata(ethers.getBytes(input.scriptHex))
+              ? { executionEntry: "raw" as const } : {}),
             ...(finalSimulationExecutorRuntimeCode === undefined ? {} : { executorRuntimeCode: finalSimulationExecutorRuntimeCode }),
           });
           const receipt = solverInputRecorder.record({
@@ -2716,9 +2886,15 @@ async function main(): Promise<void> {
     largeGraphEdgeThreshold: blockScanLargeGraphEdgeThreshold,
     largeGraphPassBudgetMs: blockScanLargeGraphPassBudgetMs,
     passBudgetMs: blockScanPassBudgetMs,
-    startupWarmEnabled,
-    onStartupWarmDrained: (source) => onStartupWarmDrained?.(source),
+    startupWarmEnabled: enableBlockScan && !blindProductionAudit,
     startupWarmBudgetMs: blockScanStartupWarmBudgetMs,
+    startupWarmCache: !blindProductionAudit && enableBlockScan && process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_DIR
+      ? new BlockScanStartupCache(process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_DIR,
+        startupCacheNamespace([1, Number(blockScanChainId), frozenProducerTopology.topologyKey,
+          executionIdentity.executor, executionIdentity.transactionOrigin,
+          blockScanStageSettings.fixedEffectiveWethInput?.toString() ?? null,
+          process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_NAMESPACE ?? null]))
+      : undefined,
     nMinusOneFallbackEnabled: blockScanNMinusOneFallback,
     nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
     nMinusOneFamilySettleBudgetMs: blockScanNMinusOneFamilySettleMs,
@@ -2803,10 +2979,9 @@ async function main(): Promise<void> {
     readBlockHash,
     formatRouteKey: formatBlockScanRouteKey,
     formatRing: formatBlockScanRing,
-    isRouteSimRejected: (opp) => blockScanSimRejects.has(blockScanRouteId(opp.seedEdges)),
-    ...(blockScanPoolRevertFilter ? {
-      isPoolSimRejected: (edge: TokenEdge) => blockScanSimRejects.hasPool(edge),
-    } : {}),
+    isRouteSimRejected: (opp) => blockScanSimRejects.has(blockScanRouteId(opp.seedEdges)) ||
+      opp.seedEdges.some(edge => blockScanSimRejects.hasPool(edge)),
+    isPoolSimRejected: (edge: TokenEdge) => blockScanSimRejects.hasPool(edge),
     submitAtomic(input) {
       return maybeSubmitBlockScanAtomic({
         ...input,
@@ -2972,6 +3147,7 @@ async function main(): Promise<void> {
         );
       }
       blockScanSimRejects.clear();
+      startupExecutionPreflight?.reset();
     }
     // A blind attempt may target the same source N/hash as the previous
     // attempt. Clear both dynamic publishers before rebuilding N-1: the
@@ -3157,52 +3333,16 @@ async function main(): Promise<void> {
   if (config.stateUpdaterEnabled && !enableBlockScan) {
     provider.on("block", (blockNumber: number) => runStateUpdate(blockNumber, "block"));
   }
-  const maxNewHeads = parseLiveMaxNewHeads(process.env.SEARCHER_LIVE_MAX_NEW_HEADS);
-  if (maxNewHeads > 0 && (!enableBlockScan || blindProductionAudit || !config.dryRun || config.enableMevShare)) {
-    throw new Error("bounded live requires dry-run block-scan with MEV-Share disabled");
-  }
-  const intakeAbort = new AbortController();
-  const seedHead = enableBlockScan && !blindProductionAudit ? await provider.getBlockNumber() : 0;
-  const headWindowLog = (event: Record<string, unknown>) =>
-    console.log(`[searcher/live-head-window] ${JSON.stringify({ ...event, pid: process.pid, timeOrigin: performance.timeOrigin })}`);
-  let boundedStartupFailure: Error | undefined;
-  const headWindow = maxNewHeads > 0
-    ? new LiveHeadWindow(seedHead, maxNewHeads, headWindowLog, () => {
-        intakeAbort.abort();
-        if (headWindow?.waitingForWarmup || blockScanRuntimeLoop.isStartupWarmPending()) {
-          boundedStartupFailure = new Error(`finite live window ended before startup completed (${headWindow?.warmupFailure ?? "pending"})`);
-          headWindowLog({ event: "startup_incomplete_at_window_close", status: "failed", reason: boundedStartupFailure.message,
-            observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
-          // Latch failure before a concurrent signal can finish the same drain.
-          // The stop controller also retains this result before installDrain.
-          requestRuntimeStop.fail(boundedStartupFailure);
-        }
-      }, { waitForWarmup: startupWarmEnabled, warmupMaxMs: 3_600_000 })
-    : undefined;
-  onStartupWarmDrained = (source) => {
-    if (headWindow?.armAfterWarmup()) {
-      headWindowLog({ event: "startup_publication_drained", sourceBlock: source.number,
-        sourceBlockHash: source.hash, generation: source.generation });
-    }
-  };
-  const observeLiveHead = (number: number, source: "ws" | "http", hash?: string): void => {
-    const observedAtMs = Date.now();
-    const observedAtMonotonicMs = performance.now();
-    if (hash && !headWindow?.closed) blockScanActivityProvider.noteHead(number, hash);
-    const schedule = () => {
-      blockScanRuntimeLoop.schedule(number, {
-        sourceHeadSeenAtMs: observedAtMs, sourceHeadSeenAtMonotonicMs: observedAtMonotonicMs,
-      });
-    };
-    if (headWindow) headWindow.observe({ number, hash, source, observedAtMs, observedAtMonotonicMs }, schedule);
-    else schedule();
-  };
+  submissionFollowup?.start();
+  if (restoredContinuation) blockScanRuntimeLoop.restoreLiveContinuation();
   const blockScanHeadFeed = enableBlockScan && !blindProductionAudit
     ? startBlockScanHeadFeed({
       url: config.wsUrl,
       signal: blockScanRuntimeAbort.signal,
       onHead(number, hash) {
-        observeLiveHead(number, "ws", hash);
+        submissionFollowup?.noteHead(number, hash, "ws");
+        blockScanActivityProvider.noteHead(number, hash);
+        blockScanRuntimeLoop.schedule(number);
       },
       onStatus(status) { console.log(`[searcher/blockscan-head-feed] ${status}`); },
     })
@@ -3212,12 +3352,17 @@ async function main(): Promise<void> {
     // latest-head scheduler; a hint cannot authorize a canonical source.
     provider.on(
       "block",
-      (blockNumber: number) => observeLiveHead(blockNumber, "http"),
+      (blockNumber: number) => {
+        submissionFollowup?.noteHead(blockNumber, null, "http");
+        blockScanRuntimeLoop.schedule(blockNumber);
+      },
     );
     // Close the listener-registration race and warm from the current canonical
     // head rather than the early startup discovery anchor. The runtime loop
     // owns discovery/CAS and retries fail-closed without taking down backrun.
-    blockScanRuntimeLoop.schedule(seedHead);
+    const startupHead = await provider.getBlockNumber();
+    submissionFollowup?.noteHead(startupHead, null, "startup");
+    blockScanRuntimeLoop.schedule(startupHead);
   }
 
   // Track the latest mined block from the WS newHeads stream so the per-hint hot
@@ -3226,26 +3371,18 @@ async function main(): Promise<void> {
   const blockTracker = { latest: await provider.getBlockNumber() };
   if (!blindProductionAudit) {
     provider.on("block", (blockNumber: number) => {
+      submissionFollowup?.noteHead(blockNumber, null, "http");
       if (blockNumber > blockTracker.latest) blockTracker.latest = blockNumber;
       submissionCoordinator.onBlock(blockNumber);
     });
   }
 
-  const baseHintCtx = {
-    config, provider, state, detector, planner, profitTokenValuation, solver, simulator,
-    bundleRouter, submissionCoordinator, graph, tokenIndex, poolAddrs: allPoolMap,
-    tokenQuery: mainnetBackend, counters, cache: poolStateCache, poolStateUpdater,
-    fixtureRecorder, liveBackend, victimSource, pendingVictimOutcomes, recentWarmPools,
-    pinnedWarmTargets, blockTracker, fundingAssets: flashTokens, strictSessionFor,
-  };
   let stopRuntimePromise: Promise<void> | null = null;
   const stopRuntime = (): Promise<void> => {
     if (stopRuntimePromise) return stopRuntimePromise;
     stopRuntimePromise = (async () => {
-      const cleanupFailures: unknown[] = [];
       console.log("\n[searcher/live] shutting down");
       shuttingDown = true;
-      intakeAbort.abort();
       if (!blockScanRuntimeAbort.signal.aborted) blockScanRuntimeAbort.abort(new Error("searcher shutdown"));
       blockScanHeadFeed?.close();
       logStageCounters(counters);
@@ -3254,34 +3391,37 @@ async function main(): Promise<void> {
       try {
         const settled = await Promise.allSettled([blockScanRuntimeLoop.shutdown(), blockScanActivityProvider.closeAndDrain(),
           activeHintSimulationWork?.closeAndDrain(), activeBlindSimulationWork?.closeAndDrain()]);
+        activityTransport.destroy();
         const failure = settled.find(result => result.status === "rejected");
         if (failure?.status === "rejected") throw failure.reason;
       } catch (error) {
-        cleanupFailures.push(error);
         console.warn(
           `[searcher/live] block-scan shutdown failed: ` +
             `${error instanceof Error ? error.message : String(error)}`,
         );
       }
       try {
+        continuationWriter?.capture();
+        await continuationWriter?.flush();
+      } catch {
+        console.error("[searcher/live-continuation] final_checkpoint_failed; latest prior checkpoint remains available");
+      }
+      // Keep recording receipts while existing runtime workers drain; never start new trading work.
+      try { await submissionFollowup?.close(); }
+      catch { console.warn("[searcher/live] submission follow-up evidence incomplete at shutdown"); }
+      try {
         await blockScanRouteTelemetry.shutdown();
       } catch (error) {
-        cleanupFailures.push(error);
         console.warn(
           `[searcher/live] block-scan route telemetry shutdown failed: ` +
             `${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      try {
-        if (solverInputRecorder) {
-          solverInputRecorder.close();
-          console.log(`[searcher/solver-inputs] closed ${JSON.stringify(solverInputRecorder.snapshot())}`);
-        }
-      } catch (error) {
-        cleanupFailures.push(error);
+      if (solverInputRecorder) {
+        solverInputRecorder.close();
+        console.log(`[searcher/solver-inputs] closed ${JSON.stringify(solverInputRecorder.snapshot())}`);
       }
-      try { state.stop(); } catch (error) { cleanupFailures.push(error); }
-      if (cleanupFailures.length > 0) throw new AggregateError(cleanupFailures, "live runtime shutdown failed");
+      state.stop();
     })();
     return stopRuntimePromise;
   };
@@ -3289,108 +3429,6 @@ async function main(): Promise<void> {
   const shutdown = requestRuntimeStop.shutdown;
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
-
-  // ── Historical backrun: replay one real mined trigger as a live mempool hint ──
-  const runHistoricalBackrunOnce = async (): Promise<void> => {
-    if (historicalBackrunSpec === undefined) throw new Error("missing historical spec");
-    const spec = JSON.parse(readFileSync(historicalBackrunSpec, "utf8")) as {
-      name?: string; N: number; triggerIndex: number; tx: string; out: string;
-    };
-    if (!Number.isSafeInteger(spec.N) || spec.N <= 0) throw new Error("invalid N");
-    if (!Number.isSafeInteger(spec.triggerIndex) || spec.triggerIndex < 0) throw new Error("invalid triggerIndex");
-    if (!/^0x[0-9a-f]{64}$/.test(spec.tx)) throw new Error("invalid trigger tx");
-    if (typeof spec.out !== "string" || !isAbsolute(spec.out)) throw new Error("invalid out");
-    mkdirSync(spec.out, { recursive: true, mode: 0o700 });
-    const save = (name: string, value: unknown): void => {
-      writeFileSync(resolve(spec.out, name),
-        JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v), 2) + "\n",
-        { mode: 0o600 });
-    };
-    const block = await provider.send("eth_getBlockByNumber", [ethers.toQuantity(spec.N), true]);
-    const headerB = await provider.send("eth_getBlockByNumber", [ethers.toQuantity(spec.N - 1), false]);
-    if (!block || block.parentHash !== headerB.hash) throw new Error("N/B parent mismatch");
-    const trigger = block.transactions[spec.triggerIndex];
-    if (!trigger || trigger.hash.toLowerCase() !== spec.tx.toLowerCase()) throw new Error("trigger hash mismatch at index");
-    const rawFor = async (t: Record<string, any>): Promise<string> => {
-      const fromRpc = await provider.send("eth_getRawTransactionByHash", [t.hash]);
-      if (typeof fromRpc === "string" && ethers.keccak256(fromRpc) === t.hash) return fromRpc;
-      const type = Number(BigInt(t.type ?? "0x0"));
-      const signature = ethers.Signature.from({ r: t.r, s: t.s, v: Number(BigInt(t.v)) });
-      const value: Record<string, any> = { type, to: t.to, nonce: Number(BigInt(t.nonce)),
-        gasLimit: BigInt(t.gas), data: t.input, value: BigInt(t.value),
-        chainId: BigInt(t.chainId ?? "0x1"), signature };
-      if (type <= 1) value.gasPrice = BigInt(t.gasPrice);
-      else { value.maxFeePerGas = BigInt(t.maxFeePerGas); value.maxPriorityFeePerGas = BigInt(t.maxPriorityFeePerGas); }
-      if (type > 0) value.accessList = t.accessList;
-      if (type === 3) { value.maxFeePerBlobGas = BigInt(t.maxFeePerBlobGas); value.blobVersionedHashes = t.blobVersionedHashes; }
-      const vNum = Number(BigInt(t.v));
-      if (type === 0 && (vNum === 27 || vNum === 28)) value.chainId = 0n;
-      const serialized = ethers.Transaction.from(value).serialized;
-      if (ethers.keccak256(serialized) !== t.hash) throw new Error("raw reserialize hash mismatch " + t.hash);
-      return serialized;
-    };
-    const prefixTxs: Array<{ rawTx: string; expectedHash: string }> = [];
-    for (let i = 0; i < spec.triggerIndex; i += 1) {
-      const t = block.transactions[i];
-      prefixTxs.push({ rawTx: await rawFor(t), expectedHash: t.hash });
-    }
-    const triggerRaw = await rawFor(trigger);
-    console.log(JSON.stringify({ stage: "historical-backrun-prepare", N: spec.N,
-      triggerIndex: spec.triggerIndex, prefixTxs: prefixTxs.length }));
-    // Live backrun semantics: fork at canonical B, queue the real prefix, then the
-    // prefetched trigger is applied by handleHint and mined as one local block.
-    await state.queueHistoricalRawTransactions(spec.N, prefixTxs);
-    // The production executor is counterfactual at this historical block (no
-    // code before its deployment). Install the current BotVM runtime code at the
-    // executor address: code-only counterfactual, reported as such.
-    const histOwner = ethers.getAddress(String(process.env.BOTVM_OWNER));
-    const histExecutor = ethers.getAddress(config.botvmAddress);
-    const installed = await installForkBotVm(state.provider, histOwner, histExecutor);
-    console.log(JSON.stringify({ stage: "historical-backrun-executor", installed,
-      counterfactualExecutorCode: true }));
-    blockTracker.latest = spec.N - 1;
-    const observed: unknown[] = [];
-    class RecordingBackend extends RpcAnvilLiveBackend {
-      override async simulate(plan: ResolvedPlan) {
-        const result = await super.simulate(plan);
-        observed.push({ mode: "simulate", plan, result });
-        return result;
-      }
-      override async finalVerify(plan: ResolvedPlan) {
-        const result = await super.finalVerify(plan);
-        observed.push({ mode: "finalVerify", plan, result });
-        return result;
-      }
-    }
-    const histWork = new SourceSimulationWork(sourceSimulationFactory);
-    const recordingBackend = new RecordingBackend(state, simulator);
-    const prefetchedTx = {
-      hash: spec.tx, from: trigger.from, nonce: Number(BigInt(trigger.nonce)),
-      to: trigger.to, data: trigger.input, value: BigInt(trigger.value), blockNumber: null,
-    };
-    try {
-      await handleHint(
-        { payload: {}, hashes: [spec.tx], source: "mempool",
-          prefetched: { tx: prefetchedTx as unknown as ethers.TransactionResponse, rawTx: triggerRaw } },
-        spec.tx,
-        {
-          ...baseHintCtx,
-          config: { ...config, oppTtlMs: 900_000 },
-          skipHintFork: true,
-          liveBackend: recordingBackend,
-          simulationWork: histWork,
-          simulationGeneration: 1,
-          sourceControl: { signal: blockScanRuntimeAbort.signal, deadlineAtMs: Date.now() + 900_000 },
-          startedAt: Date.now(),
-        },
-      );
-    } finally {
-      await histWork.closeAndDrain();
-      save("observed-sims.json", { name: spec.name ?? null, N: spec.N,
-        triggerIndex: spec.triggerIndex, observed });
-    }
-    console.log(JSON.stringify({ stage: "historical-backrun-done", out: spec.out, observed: observed.length }));
-  };
 
   const mempoolStream = () => {
     console.log(`[searcher/live] mempool=enabled ws=${config.wsUrl.slice(0, 40)}...`);
@@ -3402,22 +3440,12 @@ async function main(): Promise<void> {
       knownPoolAddrs,
       mempoolIntakeRefresh,
       (trigger) => {
-        if (!intakeAbort.signal.aborted) blockScanRuntimeLoop.schedulePendingEvidence(trigger);
+        blockScanRuntimeLoop.schedulePendingEvidence(trigger);
       },
-      intakeAbort.signal,
     );
   };
-  if (historicalBackrunSpec !== undefined) {
-    try {
-      await runHistoricalBackrunOnce();
-    } catch (error) {
-      console.error("[searcher/historical] failed: " + (error instanceof Error ? error.stack ?? error.message : String(error)));
-      process.exitCode = 1;
-    }
-    process.exit(process.exitCode ?? 0);
-  }
   const hintStream = sourceMode === "disabled"
-    ? disabledHints(intakeAbort.signal)
+    ? disabledHints()
     : sourceMode === "public-mempool"
       ? mempoolStream()
       : sourceMode === "mev-share"
@@ -3426,7 +3454,7 @@ async function main(): Promise<void> {
 
   try {
     for await (const hint of hintStream) {
-      if (shuttingDown || blockScanRuntimeAbort.signal.aborted || intakeAbort.signal.aborted) break;
+      if (shuttingDown || blockScanRuntimeAbort.signal.aborted) break;
       processedHints++;
       counters.hints++;
       if (busy) {
@@ -3436,7 +3464,7 @@ async function main(): Promise<void> {
       if (hint.hashes.length === 0) continue;
 
       for (const txHash of hint.hashes) {
-        if (shuttingDown || blockScanRuntimeAbort.signal.aborted || intakeAbort.signal.aborted) break;
+        if (shuttingDown || blockScanRuntimeAbort.signal.aborted) break;
         const key = txHash.toLowerCase();
         if (seen.has(key)) continue;
         seen.add(key);
@@ -3448,10 +3476,34 @@ async function main(): Promise<void> {
         activeHintSimulationWork = hintSimulationWork;
         try {
           await handleHint(hint, txHash, {
-            ...baseHintCtx,
+            config,
+            provider,
+            state,
+            detector,
+            planner,
+            profitTokenValuation,
+            solver,
+            simulator,
+            bundleRouter,
+            submissionCoordinator,
+            graph,
+            tokenIndex,
+            poolAddrs: allPoolMap,
+            tokenQuery: mainnetBackend,
+            counters,
             startedAt: tHint,
+            cache: poolStateCache,
+            poolStateUpdater,
+            fixtureRecorder,
+            liveBackend,
+            victimSource,
+            pendingVictimOutcomes,
+            recentWarmPools,
+            pinnedWarmTargets,
+            blockTracker,
+            fundingAssets: flashTokens,
+            strictSessionFor,
             simulationWork: hintSimulationWork,
-            ...(finalSimulationExecutorRuntimeCode === undefined ? {} : { executorRuntimeCode: finalSimulationExecutorRuntimeCode }),
             simulationGeneration: ++hintGeneration,
             sourceControl: { signal: blockScanRuntimeAbort.signal, deadlineAtMs: tHint + config.oppTtlMs },
           });
@@ -3475,54 +3527,13 @@ async function main(): Promise<void> {
       if (config.maxHints > 0 && processedHints >= config.maxHints) break;
     }
   } finally {
-    headWindow?.dispose();
-    const drainFailures: unknown[] = boundedStartupFailure === undefined ? [] : [boundedStartupFailure];
-    let windowDrainStarted = false;
-    const startupCancelled = boundedStartupFailure !== undefined;
-    let earlyDrainFailure = false;
-    try {
-      if (headWindow?.closed && (startupCancelled || !blockScanRuntimeAbort.signal.aborted)) {
-        windowDrainStarted = true;
-        headWindowLog({ event: "drain_started", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
-        if (startupCancelled) {
-          // Cold startup can renew its attempt budget indefinitely. A finite
-          // observation window cancels that setup through the ordinary drain.
-          await stopRuntime();
-        } else {
-          await blockScanRuntimeLoop.waitForIdle();
-        }
-        // Observe the next real head for the final pass's next-head budget, without admitting it.
-        if (!blockScanRuntimeAbort.signal.aborted) await Promise.race([
-          headWindow.nextHead,
-          new Promise<void>((resolve) => blockScanRuntimeAbort.signal.addEventListener("abort", () => resolve(), { once: true })),
-        ]);
-      }
-    } catch (error) {
-      drainFailures.push(error);
-      // Preserve immediate failure latching if SIGTERM is already draining.
-      earlyDrainFailure = true;
-      headWindowLog({ event: "drain_failed", startupCancelled, observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
-      requestRuntimeStop.fail(error instanceof Error ? error : new Error("live window drain failed"));
-    }
-    try { await stopRuntime(); } catch (error) { if (!drainFailures.includes(error)) drainFailures.push(error); }
-    if (drainFailures.length > 0) {
-      const error = new AggregateError(drainFailures, "live window drain failed");
-      if (!earlyDrainFailure) {
-        headWindowLog({ event: "drain_failed", startupCancelled, observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
-        if (!startupCancelled) requestRuntimeStop.fail(error);
-      }
-      throw error;
-    }
-    if (windowDrainStarted) headWindowLog({ event: "drained", startupCancelled, observedAtMs: Date.now(), observedAtMonotonicMs: performance.now() });
-    if (headWindow?.closed) shutdown();
+    await stopRuntime();
   }
 }
 
 interface HandleCtx {
   /** Explicit historical input only; never submit a materialized past source. */
   historicalExecutionMode?: HistoricalBackrunMode;
-  /** Caller already materialized the fork (prefix queued); do not re-fork it away. */
-  skipHintFork?: boolean;
   onHistoricalEv?: (input: { evaluation: Awaited<ReturnType<typeof evaluateEv>>;
     source: CanonicalSource; resolved: ResolvedPlan; sim: import("./simulator/botvm-simulator.js").SimulationResult }) => void;
   config: LiveConfig;
@@ -3559,8 +3570,6 @@ interface HandleCtx {
   fundingAssets: readonly string[];
   strictSessionFor: StrictSessionProvider;
   simulationWork: SourceSimulationWork;
-  /** Frozen owner-bound code, only supplied by explicit dry-run code override. */
-  executorRuntimeCode?: BotVmRuntimeCode;
   simulationGeneration: number;
   sourceControl: Parameters<SourceSimulationFactory>[0]["control"];
 }
@@ -3794,12 +3803,7 @@ export async function handleHint(
     fixturePath = "rawTx";
     rawTx = prefetchedRaw;
 
-    if (ctx.historicalExecutionMode || ctx.skipHintFork) {
-      // State was materialized by the historical caller; do not re-fork it away.
-      ctx.cache.beginHint(latestBlock);
-    } else {
-      await ensureHintFork(latestBlock);
-    }
+    await ensureHintFork(latestBlock);
     const appliedHash = await ctx.state.applyRawTx(rawTx);
     if (appliedHash.toLowerCase() !== txHash.toLowerCase()) {
       throw new Error(`local victim hash mismatch ${appliedHash}`);
@@ -3809,7 +3813,7 @@ export async function handleHint(
     // owner balance after mining would change the state behind the source hash.
     // The read-only simulator checks the actual caller/executor state instead.
     if (!ctx.historicalExecutionMode) {
-      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress, ctx.executorRuntimeCode);
+      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
     }
 
     const receipt = await ctx.state.provider.getTransactionReceipt(txHash);
@@ -3972,7 +3976,7 @@ export async function handleHint(
         throw new Error(`local victim hash mismatch ${appliedHash}`);
       }
 
-      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress, ctx.executorRuntimeCode);
+      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
 
       const receipt = await ctx.state.provider.getTransactionReceipt(txHash);
       if (!receipt || receipt.status !== 1) {
@@ -4592,7 +4596,7 @@ async function processOpportunities(
             Math.max(1, oppDeadlineAtMs - Date.now()),
           );
         }
-        await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress, ctx.executorRuntimeCode);
+        await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
       } catch (err) {
         const strictEdge = strictSession.edges.find((edge) =>
           edge.adapterId === oppImpact.matchedAdapterId &&
@@ -4618,7 +4622,7 @@ async function processOpportunities(
     }
     if (!localVictimApply && (ctx.config.liveBackend === "rpc" || !useConfiguredBackend) && fixturePath === "mined") {
       await ensureHintFork(sourceMeta.eventBlockNumber, true);
-      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress, ctx.executorRuntimeCode);
+      await prepareForkExecutor(ctx.state.provider, ctx.config.wallet.address, ctx.config.botvmAddress);
       deps.segMark("anvilMined");
     }
     const solveProbe = useConfiguredBackend ? ctx.liveBackend : ctx.simulator;
@@ -4645,7 +4649,6 @@ async function processOpportunities(
     let skipPostSolverDrop = false;
     console.log(`[searcher/live] backrun quote pipeline workers=${ctx.config.solverQuoteConcurrency} candidates=${plans.length} cap=${ctx.config.maxCandidatesPerOpp}`);
     let pipelineCompleted = true;
-    let terminalConsumerFailure = false;
     try {
       pipelineCompleted = await runBackrunCandidatePipeline({
         plans,
@@ -4669,11 +4672,8 @@ async function processOpportunities(
         },
         onQuoteStart: () => { ctx.counters.solverEntered++; candidatesTried++; },
         consume: async (candidate, quoted, index, signal) => {
-          terminalConsumerFailure = false;
           signal.throwIfAborted();
           console.log(`[searcher/live] backrun quote ready rank=${index + 1} elapsedMs=${quoted.elapsedMs.toFixed(2)} remainingMs=${oppDeadlineAtMs - Date.now()}`);
-          let failureStage: BackrunCandidateStage = "solver";
-          let failurePath: string | undefined;
           try {
             if (!quoted.ok) throw quoted.error;
             ctx.counters.solverSuccess++;
@@ -4681,8 +4681,6 @@ async function processOpportunities(
             let positiveSimulationSeen = false;
             for (const resolved of quoted.finalists) {
               if (positiveSimulationSeen) break;
-              failureStage = "final_verify";
-              failurePath = resolvedRouteSummary(resolved.root);
               signal.throwIfAborted();
               if (Date.now() >= oppDeadlineAtMs) throw new Error("backrun final simulation deadline elapsed");
         // Quote-only workers never simulate. This single final simulation owns
@@ -4709,7 +4707,7 @@ async function processOpportunities(
 	            deps.recordFinalState(lastTerminalState, lastTerminalError);
 	            continue;
 	          }
-          const overlay = await settleBackrunFinalOverlay(async () => {
+          try {
             if (jitWarmCurrent) {
               const waitStarted = Date.now();
               await jitWarmCurrent;
@@ -4722,10 +4720,7 @@ async function processOpportunities(
             });
             preparedSourceBlockHash = prepared.blockHash ?? null;
             deps.segMark("finalOverlay");
-            return prepared;
-          });
-          if (!overlay.ok) {
-            const err = overlay.error;
+          } catch (err) {
             ctx.counters.revmErrors++;
             const message = err instanceof Error ? err.message : String(err);
             lastTerminalState = "sim-revert";
@@ -4873,7 +4868,6 @@ async function processOpportunities(
         // damps the adverse-selection: we'd otherwise overbribe exactly the bundles
         // we most over-estimated, and win the losers). Calibrate the haircut from
         // the reconciliation of landed txs (real profit vs the logged sim profit).
-        failureStage = "ev";
         const ev = await evaluateEv(
           ctx.historicalExecutionMode ? ctx.state.provider : ctx.provider,
           resolved.profitToken,
@@ -5044,12 +5038,8 @@ async function processOpportunities(
         if (ctx.historicalExecutionMode) {
           deps.recordFinalState(netEvWei > ctx.config.minNetEth ? "would-submit" : "no-profitable-quote",
             "historical read-only: submission disabled", sim);
-          // Match the live successful-consumer stop: do not overwrite a passed
-          // fixture with a later candidate failure or the aggregate default.
-          if (netEvWei > ctx.config.minNetEth) return false;
           continue;
         }
-        failureStage = "submit_gate";
         const latestAtSubmit = await readUncachedLatestBlock(ctx.provider);
         if (
           latestAtSubmit.number !== prepareInput.baseBlock ||
@@ -5161,37 +5151,23 @@ async function processOpportunities(
             }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        const failure = backrunCandidateFailure(failureStage, err, isTimeoutMessage(message));
-        terminalConsumerFailure = backrunConsumerFailureIsTerminal(failureStage, signal, oppDeadlineAtMs);
-        lastTerminalState = failure.state;
-        lastTerminalError = `${failure.stage}/${failure.reason}: ${message}`;
-        if (failure.quoteTimeout) ctx.counters.quoteTimeouts++;
-        if (failure.stage === "final_verify") ctx.counters.finalVerifyFailed++;
+        lastTerminalState = isTimeoutMessage(message) ? "quote-timeout" : "no-profitable-quote";
+        lastTerminalError = message;
+        if (lastTerminalState === "quote-timeout") ctx.counters.quoteTimeouts++;
         if (message.toLowerCase().includes("missing")) ctx.counters.missingState++;
-	        emitPipelineDropped(failure.stage, failure.reason, lastTerminalError, {
-	          pathId: failurePath, templateId: candidate.templateName, plans: plans.length,
-	        });
-        deps.recordFinalState(lastTerminalState, lastTerminalError);
-        skipPostSolverDrop = true;
 	        console.log(
 	          `[searcher/live] candidate failed: ` +
 	            `${message}`.slice(0, 180),
 	        );
-        // A latched source/backend fault cannot be repaired by trying another
-        // candidate. Let the shared pipeline cancel and drain quote workers.
-        if (failure.fatal) throw err;
           }
           return true;
         },
       });
     } catch (error) {
-      if (error instanceof RevmFatalError) throw error;
       ctx.sourceControl.signal.throwIfAborted();
-      if (!terminalConsumerFailure) {
-        lastTerminalError = error instanceof Error ? error.message : String(error);
-        lastTerminalState = isTimeoutMessage(lastTerminalError) ? "quote-timeout" : "no-profitable-quote";
-        if (lastTerminalState === "quote-timeout") ctx.counters.quoteTimeouts++;
-      }
+      lastTerminalError = error instanceof Error ? error.message : String(error);
+      lastTerminalState = isTimeoutMessage(lastTerminalError) ? "quote-timeout" : "no-profitable-quote";
+      if (lastTerminalState === "quote-timeout") ctx.counters.quoteTimeouts++;
     }
     if (!pipelineCompleted) return;
     if (ctx.config.maxCandidatesPerOpp > 0 && plans.length > ctx.config.maxCandidatesPerOpp &&
@@ -5470,7 +5446,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
       drop(targetBlock, "final_verify", "blockscan_stale_state", error);
       return finish("blockscan_stale_state");
     }
-    if (simRejects.has(routeId)) {
+    if (simRejects.has(routeId) || opp.seedEdges.some(edge => simRejects.hasPool(edge))) {
       drop(targetBlock, "final_verify", "sim_revert_seen_this_live");
       return finish("sim_revert_seen_this_live");
     }
@@ -6358,18 +6334,13 @@ async function resolveAnvilBalanceSlot(
   });
 }
 
-export async function prepareForkExecutor(
+async function prepareForkExecutor(
   provider: ethers.JsonRpcProvider,
   owner: string,
   botvmAddress: string,
-  executorRuntimeCode?: BotVmRuntimeCode,
 ): Promise<void> {
-  if (executorRuntimeCode !== undefined) {
-    await installForkBotVmRuntimeCode(provider, botvmAddress, executorRuntimeCode);
-  } else {
-    const code = await provider.getCode(botvmAddress);
-    if (code === "0x") throw new Error(`BOTVM_ADDRESS has no code on fork: ${botvmAddress}`);
-  }
+  const code = await provider.getCode(botvmAddress);
+  if (code === "0x") throw new Error(`BOTVM_ADDRESS has no code on fork: ${botvmAddress}`);
   await provider.send("anvil_setBalance", [ethers.getAddress(owner), FORK_ETH_BALANCE]);
   await provider.send("anvil_impersonateAccount", [ethers.getAddress(owner)]);
 }
@@ -6440,7 +6411,6 @@ async function* mempoolHints(
   onPendingExecutionEvidence?: (
     trigger: BlockScanPendingEvidenceTrigger,
   ) => void,
-  intakeSignal?: AbortSignal,
 ): AsyncGenerator<HintEnvelope> {
   const routersPath = process.env.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH ?? undefined;
   const forceIncludeRouters = loadForceIncludeRouters(routersPath);
@@ -6481,13 +6451,12 @@ async function* mempoolHints(
       reportedEvidenceFailures,
       counters,
       onPendingExecutionEvidence,
-      intakeSignal,
     );
     return;
   }
 
   let lastIntakeKey = "";
-  while (!intakeSignal?.aborted) {
+  for (;;) {
     const intake = buildMempoolIntakeWithRouters(getPools(), forceIncludeRouters);
     const toAddress = [...intake.filteredTargets];
     const intakeKey = toAddress.map((address) => address.toLowerCase()).join(",");
@@ -6497,8 +6466,6 @@ async function* mempoolHints(
     }
 
     let ws: WebSocket | null = null;
-    const closeIntake = () => { try { ws?.close(); } catch { /* closed */ } };
-    intakeSignal?.addEventListener("abort", closeIntake, { once: true });
     let refreshRequested = false;
     const unsubscribeRefresh = refreshSignal?.subscribe(() => {
       refreshRequested = true;
@@ -6524,7 +6491,6 @@ async function* mempoolHints(
               reportedEvidenceFailures,
               counters,
               onPendingExecutionEvidence,
-              intakeSignal,
             );
             return;
           }
@@ -6537,7 +6503,6 @@ async function* mempoolHints(
         await sleep(1_000);
         continue;
       }
-      if (intakeSignal?.aborted) return;
       if (refreshRequested) continue;
 
       // Bounded queue: keep only the freshest victims; a stale pending tx is
@@ -6557,7 +6522,6 @@ async function* mempoolHints(
 
       ws.addEventListener("message", (event) => {
         void (async () => {
-          if (intakeSignal?.aborted) return;
           const msg = parseWsJson(event.data);
           const result = msg?.method === "eth_subscription"
             ? msg.params?.result
@@ -6591,7 +6555,7 @@ async function* mempoolHints(
       });
 
       for (;;) {
-        if (failed || intakeSignal?.aborted) break;
+        if (failed) break;
         if (queue.length === 0) {
           await new Promise<void>((res) => {
             wake = res;
@@ -6604,9 +6568,7 @@ async function* mempoolHints(
     } finally {
       try { ws?.close(); } catch { /* already closed */ }
       unsubscribeRefresh?.();
-      intakeSignal?.removeEventListener("abort", closeIntake);
     }
-    if (intakeSignal?.aborted) return;
     if (refreshRequested) {
       console.log("[searcher/live] mempool filtered targets refreshed; reconnecting");
       continue;
@@ -6667,7 +6629,6 @@ async function* localFirehoseMempoolHints(
   onPendingExecutionEvidence?: (
     trigger: BlockScanPendingEvidenceTrigger,
   ) => void,
-  intakeSignal?: AbortSignal,
 ): AsyncGenerator<HintEnvelope> {
   const maxInFlight = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_MAX_INFLIGHT ?? "64");
   const maxQueue = Number(process.env.SEARCHER_MEMPOOL_FIREHOSE_QUEUE_MAX ?? "64");
@@ -6718,10 +6679,8 @@ async function* localFirehoseMempoolHints(
       `evidenceReadMaxInFlight=${evidenceReadMaxInFlight}`,
   );
 
-  while (!intakeSignal?.aborted) {
+  for (;;) {
     let ws: WebSocket | null = null;
-    const closeIntake = () => { try { ws?.close(); } catch { /* closed */ } };
-    intakeSignal?.addEventListener("abort", closeIntake, { once: true });
     let pendingSubscriptionId = "";
     let headSubscriptionId = "";
     try {
@@ -6734,14 +6693,10 @@ async function* localFirehoseMempoolHints(
         `[searcher/live] mempool local firehose connect failed: ` +
           `${err instanceof Error ? err.message : String(err)}`,
       );
-      intakeSignal?.removeEventListener("abort", closeIntake);
-      if (intakeSignal?.aborted) return;
       console.log("[searcher/live] mempool_state=disconnected");
       await sleep(1_000);
       continue;
     }
-
-    if (intakeSignal?.aborted) { closeIntake(); intakeSignal.removeEventListener("abort", closeIntake); return; }
 
     // Canonical intake and evidence-promoted unknown targets never share an
     // eviction queue. Each evidence family gets its own bounded FIFO, drained
@@ -6755,7 +6710,6 @@ async function* localFirehoseMempoolHints(
     let wake: (() => void) | null = null;
     let failed = false;
     let inFlight = 0;
-    let evidenceWork = 0;
     const evidenceHeadSnapshot = new PendingEvidenceHeadSnapshot();
 
     const fail = () => {
@@ -6764,7 +6718,6 @@ async function* localFirehoseMempoolHints(
       wake?.();
     };
     const enqueueCanonical = (hint: HintEnvelope) => {
-      if (intakeSignal?.aborted) return;
       admissionQueue.enqueueCanonical(hint);
       wake?.();
     };
@@ -6772,7 +6725,6 @@ async function* localFirehoseMempoolHints(
       familyId: ExecutionFamilyId,
       hint: HintEnvelope,
     ) => {
-      if (intakeSignal?.aborted) return;
       admissionQueue.enqueueEvidence(familyId, hint);
       wake?.();
     };
@@ -6870,7 +6822,6 @@ async function* localFirehoseMempoolHints(
       }
       const evidenceReadyAtMs = Date.now();
       const evidenceReadyAtMonotonicMs = performance.now();
-      if (intakeSignal?.aborted) return validated;
       onPendingExecutionEvidence(Object.freeze({
         txHash: tx.hash,
         head: Object.freeze({
@@ -6897,8 +6848,7 @@ async function* localFirehoseMempoolHints(
         return PRODUCTION_STRICT_FAMILY_DECLARATIONS
           .isCurrentHeadEvidenceFamily(familyId);
       });
-      if (familyIds.length === 0 || intakeSignal?.aborted) return;
-      evidenceWork++;
+      if (familyIds.length === 0) return;
       void session.resolve(familyIds, "canonical")
         .then((evidence) =>
           publishCurrentHeadExecutionEvidence(tx, evidence, observation)
@@ -6913,14 +6863,13 @@ async function* localFirehoseMempoolHints(
           }
           // Route activation is independently bounded and cannot disrupt
           // victim intake.
-        }).finally(() => { evidenceWork--; });
+        });
     };
     const startUnknownEvidenceAdmission = (
       session: PendingEvidenceSession,
       baseHint: HintEnvelope,
     ): void => {
-      if (session.candidateFamilyIds.length === 0 || intakeSignal?.aborted) return;
-      evidenceWork++;
+      if (session.candidateFamilyIds.length === 0) return;
       void (async () => {
         const head = await session.head("unknown");
         let admitted = false;
@@ -6973,10 +6922,9 @@ async function* localFirehoseMempoolHints(
       })().catch(() => {
         // Speculative unknown-target admission has its own bounded scheduler;
         // failure cannot consume or disconnect canonical intake.
-      }).finally(() => { evidenceWork--; });
+      });
     };
     const processHash = (hash: string) => {
-      if (intakeSignal?.aborted) return;
       const observation = Object.freeze({
         observedAtMs: Date.now(),
         observedAtMonotonicMs: performance.now(),
@@ -7031,7 +6979,6 @@ async function* localFirehoseMempoolHints(
       })();
     };
     const processFullTransaction = (result: Record<string, unknown>) => {
-      if (intakeSignal?.aborted) return;
       const observation = Object.freeze({
         observedAtMs: Date.now(),
         observedAtMonotonicMs: performance.now(),
@@ -7081,7 +7028,6 @@ async function* localFirehoseMempoolHints(
     ws.addEventListener("error", fail);
     ws.addEventListener("close", fail);
     ws.addEventListener("message", (event) => {
-      if (intakeSignal?.aborted) return;
       const msg = parseWsJson(event.data);
       if (msg?.method !== "eth_subscription") return;
       const subscription = msg.params?.subscription;
@@ -7101,7 +7047,7 @@ async function* localFirehoseMempoolHints(
 
     try {
       for (;;) {
-        if (failed || intakeSignal?.aborted) break;
+        if (failed) break;
         const hint = admissionQueue.dequeue();
         if (!hint) {
           await new Promise<void>((res) => {
@@ -7114,14 +7060,7 @@ async function* localFirehoseMempoolHints(
       }
     } finally {
       try { ws.close(); } catch { /* already closed */ }
-      intakeSignal?.removeEventListener("abort", closeIntake);
-      if (intakeSignal?.aborted) {
-        console.log(`[searcher/live-head-window] ${JSON.stringify({ event: "mempool_drain_started", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now(), inFlight, evidenceWork })}`);
-        while (inFlight > 0 || evidenceWork > 0) await sleep(10);
-        console.log(`[searcher/live-head-window] ${JSON.stringify({ event: "mempool_drained", observedAtMs: Date.now(), observedAtMonotonicMs: performance.now(), inFlight, evidenceWork })}`);
-      }
     }
-    if (intakeSignal?.aborted) return;
     console.log("[searcher/live] mempool local firehose reconnect");
     await sleep(1_000);
   }
@@ -7525,13 +7464,9 @@ async function* mevShareHints(url: string): AsyncGenerator<HintEnvelope> {
   }
 }
 
-async function* disabledHints(signal?: AbortSignal): AsyncGenerator<HintEnvelope> {
-  while (!signal?.aborted) {
-    await new Promise<void>((resolve) => {
-      const done = () => { clearTimeout(timer); signal?.removeEventListener("abort", done); resolve(); };
-      const timer = setTimeout(done, 60_000);
-      signal?.addEventListener("abort", done, { once: true });
-    });
+async function* disabledHints(): AsyncGenerator<HintEnvelope> {
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 60_000));
   }
 }
 

@@ -1,0 +1,751 @@
+// SPDX-License-Identifier: MIT
+// Pure-Huff implementation of the production BotVM script/runtime-program ABI.
+// Compatibility is verified by the paired EVM harness, not inferred from a
+// successful compilation. No route, pool, fee formula or quote is hardcoded.
+// Compile with Huff2, overriding OWNER. No deployment is part of this experiment.
+#define constant OWNER = 0x0000000000000000000000000000000000000000
+#define constant TARGET = 0x4b35ed18119390ebda500ee1153b975f56c1308aa89642250bb78f6c7f039409
+#define constant HASH = 0x47dc154350c9d6e1abf71155179ebd00411f54aa0ddb6ff63cbfd2b8ffa351fe
+#define constant STATE = 0x1337
+#define constant WETH = 0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2
+#define constant DIAGNOSTIC_KEY = 0x9f02c8f7e056b1f289c9dc6de656e967d6b1e1b2eeb210324e2c0f27d2617e73
+// 0x80 current invocation-local frame; 0xa0 monotonically allocated free memory.
+// Frame: ip,end,return-label,parent,depth,readonly,return-register,count,
+// last-target,return-data,return-size; registers at 0x200; scratch at 0x400.
+#define macro GET(o) = takes(0) returns(1) { <o> 0x80 mload add mload }
+#define macro SET(o) = takes(1) returns(0) { <o> 0x80 mload add mstore }
+#define macro ALLOC() = takes(1) returns(1) {
+    0xa0 mload swap1 dup2 add 0xa0 mstore
+}
+#define macro NEED(n) = takes(0) returns(0) {
+    GET(0x20) <n> GET(0x00) add gt fail jumpi
+}
+#define macro ADVANCE(n) = takes(0) returns(0) { <n> GET(0x00) add SET(0x00) }
+#define macro BYTE() = takes(0) returns(1) {
+    NEED(0x01) GET(0x00) mload 0xf8 shr ADVANCE(0x01)
+}
+#define macro WORD() = takes(0) returns(1) {
+    NEED(0x20) GET(0x00) mload ADVANCE(0x20)
+}
+#define macro SIZE() = takes(0) returns(1) {
+    NEED(0x03) GET(0x00) mload 0xe8 shr ADVANCE(0x03)
+}
+#define macro ADDRESS() = takes(0) returns(1) {
+    NEED(0x14) GET(0x00) mload 0x60 shr ADVANCE(0x14)
+}
+#define macro REGADDR() = takes(1) returns(1) {
+    dup1 0x10 swap1 lt iszero fail jumpi
+    0x20 mul 0x0200 add 0x80 mload add
+}
+#define macro READREG() = takes(0) returns(1) { BYTE() REGADDR() mload }
+#define macro CHECKED_ADD() = takes(2) returns(1) {
+    dup1 swap2 add dup1 dup3 gt fail jumpi swap1 pop
+}
+// Caller puts a above b. a-b, no underflow.
+#define macro CHECKED_SUB() = takes(2) returns(1) {
+    dup2 dup2 lt fail jumpi sub
+}
+#define macro TRANSIENT_SAVE() = takes(0) returns(0) {
+    [TARGET] tload SET(0x04e0)
+    [HASH] tload SET(0x0500)
+    [STATE] tload SET(0x0520)
+}
+#define macro TRANSIENT_RESTORE() = takes(0) returns(0) {
+    GET(0x04e0) [TARGET] tstore
+    GET(0x0500) [HASH] tstore
+    GET(0x0520) [STATE] tstore
+}
+// Build allowance(address(this),spender), read exactly one word.
+#define macro ALLOWANCE_READ() = takes(0) returns(1) {
+    0xdd62ed3e 0xe0 shl 0x00 mstore address 0x04 mstore GET(0x0420) 0x24 mstore
+    0x20 0x60 0x44 0x00 GET(0x0400) gas staticcall iszero fail jumpi
+    returndatasize 0x20 eq iszero fail jumpi 0x60 mload
+}
+// stack amount -> success; grant stored by the frame, return bytes checked.
+#define macro APPROVE() = takes(1) returns(1) {
+    0x24 mstore 0x095ea7b3 0xe0 shl 0x00 mstore GET(0x0420) 0x04 mstore
+    0x20 0x60 0x44 0x00 0x00 GET(0x0400) gas call
+    dup1 iszero done jumpi
+    returndatasize iszero done jumpi
+    returndatasize 0x20 eq 0x60 mload 0x01 eq and and
+    done:
+}
+// Frame scratch token=0x400, account=0x420. Match IERC20's ABI decoder.
+#define macro BALANCE_READ() = takes(0) returns(1) {
+    0x70a08231 0xe0 shl 0x00 mstore GET(0x0420) 0x04 mstore
+    0x20 0x60 0x24 0x00 GET(0x0400) gas staticcall iszero fail jumpi
+    0x20 returndatasize lt fail jumpi 0x60 mload
+}
+// A bounded child script can return normally to an outer interpreter frame.
+// Explicit RETURN/REVERT still halt the EVM invocation, like Solidity _runVM.
+#define macro OUTER_CHILD(entry,resume) = takes(2) returns(0) {
+    // top=start, next=end
+    0x0800 ALLOC()
+    dup1 0x80 mload swap1 0x60 add mstore
+    dup1 <resume> swap1 0x40 add mstore
+    dup1 swap2 swap1 mstore
+    dup1 swap2 swap1 0x20 add mstore
+    0x80 mstore <entry> jump
+}
+// Used only on failure. The source flow, hop and last target live in this
+// invocation's frame; external revert bytes are opaque nested reason data.
+#define macro GUARD_REASON(word,size) = takes(0) returns(0) {
+    0x64 ALLOC() SET(0x0600) 0x64 SET(0x0620)
+    0x08c379a0 0xe0 shl GET(0x0600) mstore
+    0x20 GET(0x0600) 0x04 add mstore <size> GET(0x0600) 0x24 add mstore
+    <word> GET(0x0600) 0x44 add mstore hop_failure jump
+}
+
+#define macro MAIN() = takes(0) returns(0) {
+    // Match receive() before function dispatch. execute/owner are nonpayable.
+    calldatasize iszero receive jumpi
+    0x00 calldataload 0xe0 shr
+    dup1 0x061cf194 eq execute_raw jumpi
+    dup1 0x8da5cb5b eq owner jumpi
+    dup1 0x09c5eabe eq execute jumpi
+    dup1 0xb699a475 eq subscript jumpi
+    dup1 0x01681a62 eq sweep jumpi
+    pop callback jump
+    owner:
+        pop callvalue fail jumpi [OWNER] 0x00 mstore 0x20 0x00 return
+    execute:
+        pop callvalue fail jumpi caller [OWNER] eq iszero fail jumpi abi_entry jump
+    execute_raw:
+        pop callvalue fail jumpi caller [OWNER] eq iszero fail jumpi
+        // Matching all four nonzero selector bytes proves size >= 4. This
+        // slice ends exactly at CALLDATASIZE; no second bounds test is needed.
+        0x04 calldatasize sub 0x04 initialize_bounded jump
+    subscript:
+        pop callvalue fail jumpi caller address eq iszero fail jumpi
+        abi_entry jump
+    sweep:
+        pop callvalue fail jumpi caller [OWNER] eq iszero fail jumpi
+        0x24 calldatasize lt fail jumpi
+        0x04 calldataload dup1 0xa0 shr fail jumpi
+        0x1000 0xa0 mstore 0x0800 ALLOC() 0x80 mstore SET(0x0400)
+        address SET(0x0420) BALANCE_READ() dup1 iszero receive_pop jumpi
+        0x24 mstore 0xa9059cbb 0xe0 shl 0x00 mstore [OWNER] 0x04 mstore
+        0x00 0x00 0x44 0x00 0x00 GET(0x0400) gas call iszero fail jumpi
+        stop
+    abi_entry:
+        0x44 calldatasize lt fail jumpi
+        // Standard ABI dynamic offset with overflow and data bounds checks.
+        0x04 calldataload dup1 0xffffffffffffffff swap1 gt fail jumpi 0x04 add
+        dup1 0x20 add calldatasize swap1 gt fail jumpi
+        dup1 calldataload swap1 0x20 add // start,size
+        initialize jump
+    callback:
+        // Call-only frames pack their authenticated target in STATE's unused
+        // low 160 bits. Legacy frames keep the separate TARGET slot.
+        [STATE] tload
+        dup1 0xe0 shr 0xffffff and iszero receive_pop jumpi
+        dup1 0xffffffffffffffffffffffffffffffffffffffff and
+        dup1 iszero callback_legacy_state jumpi
+        caller eq iszero fail jumpi
+        dup1 0xe0 shr 0xffffff and dup1 0x20 swap1 lt fail jumpi
+        dup1 0x20 swap1 sub calldataload swap1 // start,size,state
+        dup2 dup2 add calldatasize swap1 gt fail jumpi
+        dup2 dup2 0x0400 calldatacopy
+        dup2 0x0400 sha3 [HASH] tload eq iszero fail jumpi
+        dup3 0xffffffffffffffffffffffffffffffffffffffff not and 0x01 or
+        dup1 [STATE] tstore 0x0380 mstore 0x01 0x0340 mstore
+        swap2 pop swap1
+        dup2 iszero initialize jumpi
+        0x0400 mload 0xf8 shr 0x0f eq sequence_callback_copied jumpi
+        initialize jump
+    callback_legacy_state:
+        pop
+        0xe0 shr 0xffffff and
+        dup1 0x20 swap1 lt fail jumpi
+        dup1 0x20 swap1 sub calldataload swap1 // start,size
+        [TARGET] tload dup1 iszero legacy_callback jumpi
+        caller eq iszero fail jumpi
+        dup2 dup2 add calldatasize swap1 gt fail jumpi
+        dup2 dup2 0x0400 calldatacopy
+        dup2 0x0400 sha3 [HASH] tload eq iszero fail jumpi
+        0x01 [TARGET] tstore
+        initialize jump
+    legacy_callback:
+        pop
+    initialize:
+        dup2 dup2 add calldatasize swap1 gt fail jumpi
+    initialize_bounded:
+        dup2 iszero initialize_legacy jumpi
+        dup1 calldataload 0xf8 shr 0x0f eq sequence_initialize jumpi
+    initialize_legacy:
+        // Keep script in allocated memory, distinct from all interpreter frames.
+        dup2 dup2 0x1000 calldatacopy pop // size
+        dup1 0x1000 add 0x1f add 0x1f not and 0xa0 mstore
+        0x0800 ALLOC() 0x80 mstore
+        0x1000 SET(0x00) 0x1000 add SET(0x20)
+        outer_loop jump
+    // Explicit call-only v2 root. Same packed instructions as Solidity;
+    // legacy register programs retain their existing interpreter and frames.
+    // Low memory is invocation-local; callbacks have a separate EVM memory.
+    // 200=cursor,220=end,240=hop,260=flow,280=self's old legacy target,
+    // 2a0=hasReturn,2c0=target,2e0=data,300=size,320=incoming,
+    // 340=old packed target,360=oldHash,380=oldState,3a0=frame,3c0=outgoing.
+    // The instruction counter stays on the EVM stack across each loop.
+    sequence_initialize:
+        dup2 dup2 0x0400 calldatacopy pop
+        [STATE] tload dup1 0x0380 mstore
+        0xffffffffffffffffffffffffffffffffffffffff and 0x0340 mstore
+        sequence_header jump
+    sequence_callback_copied:
+        // Authentication already bounded and copied this exact script. The
+        // consumed state above is the same state a fresh TLOAD would return.
+        pop
+    sequence_header:
+        dup1 0x0400 add 0x1f add 0x1f not and 0xa0 mstore
+        dup1 0x02 swap1 gt iszero fail jumpi
+        dup1 0x010001 swap1 gt fail jumpi
+        0x0401 mload 0xf8 shr 0x02 eq iszero fail jumpi
+        0x0400 add 0x0220 mstore 0x0402 0x0200 mstore
+        0x00
+    sequence_loop:
+        0x0200 mload 0x0220 mload eq receive jumpi
+        0x01 add dup1 0x80 swap1 gt fail jumpi
+        0x0200 mload dup1 0x01 add 0x0200 mstore mload 0xf8 shr
+        dup1 0x09 eq sequence_diagnostic jumpi
+        dup1 0x0b eq sequence_floor jumpi
+        dup1 0x0a eq sequence_direct jumpi
+        0x0c eq iszero fail jumpi sequence_callback jump
+    sequence_diagnostic:
+        pop 0x0200 mload dup1 0x21 add 0x0220 mload swap1 gt fail jumpi
+        dup1 mload 0xf8 shr dup1 0x05 swap1 gt fail jumpi 0x0240 mstore
+        dup1 0x01 add mload dup1 iszero fail jumpi 0x0260 mstore
+        0x21 add 0x0200 mstore sequence_loop jump
+    sequence_floor:
+        pop 0x0200 mload dup1 0x24 add 0x0220 mload swap1 gt fail jumpi
+        0x02a0 mload iszero fail jumpi
+        dup1 mload 0xf8 shr dup1 0x01 swap1 gt fail jumpi
+        swap1 dup1 0x01 add mload 0xe8 shr
+        dup1 0x20 add returndatasize swap1 gt fail jumpi
+        0x20 swap1 0x00 returndatacopy
+        // stack p,mode; validate signed negative before taking its magnitude.
+        swap1 iszero sequence_floor_unsigned jumpi
+        0x00 mload dup1 0xff shr iszero fail jumpi
+        0x00 sub sequence_floor_compare jump
+    sequence_floor_unsigned:
+        0x00 mload
+    sequence_floor_compare:
+        // value,p. Require value >= the encoded floor.
+        dup2 0x04 add mload gt fail jumpi
+        0x24 add 0x0200 mstore sequence_loop jump
+    sequence_direct:
+        pop 0x0200 mload dup1 0x17 add 0x0220 mload swap1 gt fail jumpi
+        dup1 mload dup1 0x60 shr 0x02c0 mstore
+        0x48 shr 0xffffff and 0x0300 mstore
+        0x17 add 0x02e0 mstore
+        // An external direct call cannot change our consumed callback scope.
+        // Self-calls retain the full legacy/packed save-and-restore path.
+        0x0340 mload 0x01 eq
+        0x02c0 mload address eq iszero and sequence_consumed_direct jumpi
+        0x00 0x0320 mstore sequence_call_header jump
+    sequence_consumed_direct:
+        0x02e0 mload 0x0300 mload add dup1 0x0220 mload swap1 gt fail jumpi 0x0200 mstore
+        0x02c0 mload extcodesize iszero fail jumpi
+        0x00 0x00 0x0300 mload 0x02e0 mload 0x00 0x02c0 mload gas call
+        iszero sequence_external_failure jumpi
+        0x01 0x02a0 mstore sequence_loop jump
+    sequence_callback:
+        0x0200 mload dup1 0x1d add 0x0220 mload swap1 gt fail jumpi
+        dup1 mload dup1 0x60 shr 0x02c0 mstore
+        dup1 0x48 shr 0xffffff and dup1 0x20 swap1 lt fail jumpi 0x0320 mstore
+        dup1 0x30 shr 0xffffff and dup1 0x20 swap1 lt fail jumpi 0x03c0 mstore
+        0x18 shr 0xffffff and 0x0300 mstore
+        0x1d add 0x02e0 mstore
+    sequence_call_header:
+        0x02e0 mload 0x0300 mload add dup1 0x0220 mload swap1 gt fail jumpi 0x0200 mstore
+        0x02c0 mload extcodesize iszero fail jumpi
+        0x0320 mload 0x02c0 mload address eq or dup1 0x03a0 mstore
+        iszero sequence_no_frame_save jumpi
+        [HASH] tload 0x0360 mstore
+        0x02c0 mload address eq iszero sequence_no_frame_save jumpi
+        [TARGET] tload 0x0280 mstore
+        // Legacy self-scripts can rewrite STATE. Keep their separate callback
+        // sentinel armed as well, so clearing packed state cannot reopen it.
+        0x01 [TARGET] tstore
+    sequence_no_frame_save:
+        0x0320 mload sequence_arm_callback jumpi
+        0x0340 mload 0x01 eq sequence_call jumpi
+        0x0380 mload 0xffffffffffffffffffffffffffffffffffffffff not and 0x01 or [STATE] tstore sequence_call jump
+    sequence_arm_callback:
+        0x03c0 mload 0x0300 mload swap1 gt fail jumpi
+        0x02e0 mload 0x03c0 mload add
+        dup1 0x20 swap1 sub mload
+        dup1 0x0300 mload 0x03c0 mload swap1 sub swap1 gt fail jumpi
+        swap1 sha3 [HASH] tstore
+        0x0320 mload 0xe0 shl 0x02c0 mload or [STATE] tstore
+    sequence_call:
+        0x00 0x00 0x0300 mload 0x02e0 mload 0x00 0x02c0 mload gas call
+        iszero sequence_external_failure jumpi
+        0x0320 mload iszero sequence_restore jumpi
+        [STATE] tload 0xffffffffffffffffffffffffffffffffffffffff and 0x01 eq iszero sequence_missing_callback jumpi
+    sequence_restore:
+        0x03a0 mload 0x0340 mload 0x01 eq iszero or iszero sequence_call_done jumpi
+        0x0380 mload [STATE] tstore
+        0x03a0 mload iszero sequence_call_done jumpi
+        0x0360 mload [HASH] tstore
+        0x02c0 mload address eq iszero sequence_call_done jumpi
+        0x0280 mload [TARGET] tstore
+    sequence_call_done:
+        0x01 0x02a0 mstore sequence_loop jump
+    sequence_external_failure:
+        0x0800 ALLOC() 0x80 mstore
+        0x0240 mload SET(0x01a0) 0x0260 mload SET(0x01c0) 0x02c0 mload SET(0x0100)
+        external_revert jump
+    sequence_missing_callback:
+        0x0800 ALLOC() 0x80 mstore
+        0x0240 mload SET(0x01a0) 0x0260 mload SET(0x01c0) 0x02c0 mload SET(0x0100)
+        runtime_callback_missing jump
+    outer_loop:
+        GET(0x20) GET(0x00) eq outer_done jumpi
+        BYTE()
+        dup1 0x0e eq outer_program jumpi
+        dup1 0x03 eq outer_return jumpi
+        dup1 0x0d eq outer_revert jumpi
+        dup1 0x00 eq outer_call jumpi
+        dup1 0x01 eq outer_value_call jumpi
+        dup1 0x02 eq outer_field2 jumpi
+        dup1 0x04 eq outer_unwrap jumpi
+        dup1 0x05 eq outer_clear jumpi
+        dup1 0x06 eq outer_field3 jumpi
+        dup1 0x07 eq outer_clear1 jumpi
+        dup1 0x08 eq outer_balance jumpi
+        dup1 0x0a eq outer_allowance jumpi
+        dup1 0x0b eq outer_wrap jumpi
+        dup1 0x0c eq outer_runtime_flow jumpi
+        dup1 0x09 eq outer_quoted_flow jumpi
+        pop
+        fail jump
+    outer_done:
+        GET(0x40) dup1 iszero receive_pop jumpi jump
+    outer_child_done:
+        GET(0x60) 0x80 mstore outer_loop jump
+    outer_return:
+        pop SIZE() dup1 GET(0x00) add GET(0x20) swap1 gt fail jumpi
+        GET(0x00) return
+    outer_revert:
+        pop SIZE() dup1 GET(0x00) add GET(0x20) swap1 gt fail jumpi
+        GET(0x00) revert
+    outer_call:
+        pop ADDRESS() SET(0x0400) 0x00 SET(0x0440) outer_call_payload jump
+    outer_value_call:
+        pop ADDRESS() SET(0x0400) NEED(0x0c)
+        GET(0x00) mload 0xa0 shr SET(0x0440) ADVANCE(0x0c)
+    outer_call_payload:
+        SIZE() SET(0x04a0) GET(0x00) SET(0x04c0)
+        GET(0x04a0) GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi SET(0x00)
+        0x00 0x00 GET(0x04a0) GET(0x04c0) GET(0x0440) GET(0x0400) gas call
+        iszero external_revert jumpi outer_loop jump
+    outer_field2:
+        pop SIZE() 0xe0 shl [STATE] tload 0xff0000000000000000000000ffffffffffffffffffffffffffffffffffffffff and or [STATE] tstore outer_loop jump
+    outer_field3:
+        pop SIZE() 0xc8 shl [STATE] tload 0xff0000000000000000000000ffffffffffffffffffffffffffffffffffffffff and or [STATE] tstore outer_loop jump
+    outer_clear:
+        pop [STATE] tload 0xff0000000000000000000000ffffffffffffffffffffffffffffffffffffffff and [STATE] tstore outer_loop jump
+    outer_clear1:
+        pop [STATE] tload 0x00ffffffffffff0000000000ffffffffffffffffffffffffffffffffffffffff and [STATE] tstore outer_loop jump
+    outer_balance:
+        pop ADDRESS() SET(0x0400) WORD() SET(0x0440)
+        address SET(0x0420) BALANCE_READ() GET(0x0440) gt fail jumpi outer_loop jump
+    outer_unwrap:
+        pop [WETH] SET(0x0400) address SET(0x0420) BALANCE_READ()
+        dup1 iszero outer_unwrap_empty jumpi
+        0x2e1a7d4d 0xe0 shl 0x00 mstore 0x04 mstore
+        0x00 0x00 0x24 0x00 0x00 [WETH] gas call iszero external_revert jumpi outer_loop jump
+    outer_unwrap_empty:
+        pop outer_loop jump
+    outer_allowance:
+        pop ADDRESS() SET(0x0400) ADDRESS() SET(0x0420) WORD() SET(0x0440) WORD() SET(0x0460)
+        GET(0x0400) iszero GET(0x0420) iszero or GET(0x0440) iszero or fail jumpi
+        GET(0x0400) extcodesize iszero fail jumpi
+        GET(0x0460) GET(0x0440) gt fail jumpi
+        outer_loop SET(0x05c0) 0x00 SET(0x05e0) allowance_check jump
+    outer_wrap:
+        pop selfbalance SET(0x0380) SIZE() SET(0x0340)
+        GET(0x0340) GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi SET(0x0360)
+        GET(0x0340) 0x1f add 0x1f not and 0x44 add ALLOC() SET(0x04c0)
+        0xb699a475 0xe0 shl GET(0x04c0) mstore
+        0x20 GET(0x04c0) 0x04 add mstore GET(0x0340) GET(0x04c0) 0x24 add mstore
+        GET(0x0340) GET(0x00) GET(0x04c0) 0x44 add mcopy GET(0x0360) SET(0x00)
+        0x00 0x00 GET(0x0340) 0x1f add 0x1f not and 0x44 add GET(0x04c0) 0x00 address gas call
+        iszero external_revert jumpi
+        GET(0x0380) selfbalance CHECKED_SUB() dup1 SET(0x0340) iszero outer_wrap_done jumpi
+        [WETH] SET(0x0400) address SET(0x0420) BALANCE_READ() SET(0x0360)
+        0xd0e30db0 0xe0 shl 0x00 mstore
+        0x00 0x00 0x04 0x00 GET(0x0340) [WETH] gas call iszero external_revert jumpi
+        BALANCE_READ() GET(0x0340) GET(0x0360) CHECKED_ADD() eq iszero fail jumpi
+    outer_wrap_done:
+        selfbalance GET(0x0380) eq iszero fail jumpi outer_loop jump
+    outer_runtime_flow:
+        pop SIZE() GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi
+        GET(0x00) dup2 SET(0x00) OUTER_CHILD(runtime_flow_start,outer_child_done)
+    runtime_flow_start:
+        GET(0x00) SET(0x0200) GET(0x00) SET(0x0160)
+        GET(0x00) GET(0x20) sub SET(0x0180)
+        WORD() dup1 iszero fail jumpi SET(0x0240)
+        BYTE() dup1 iszero fail jumpi dup1 0x06 swap1 gt fail jumpi SET(0x0260)
+        0x0180 ALLOC() SET(0x0280)
+    runtime_scan_leg:
+        NEED(0x4b) ADDRESS() dup1 iszero fail jumpi SET(0x0300)
+        ADDRESS() dup1 iszero fail jumpi dup1 GET(0x0300) eq fail jumpi SET(0x0320)
+        GET(0x02c0) iszero runtime_scan_continuity_ok jumpi
+        GET(0x0300) GET(0x03c0) eq iszero fail jumpi
+    runtime_scan_continuity_ok:
+        GET(0x0320) SET(0x03c0) ADVANCE(0x20)
+        SIZE() GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi SET(0x00)
+        0x00 SET(0x0440)
+    runtime_scan_find:
+        GET(0x0440) GET(0x02a0) eq runtime_scan_new jumpi
+        GET(0x0440) 0x40 mul GET(0x0280) add mload GET(0x0300) eq runtime_scan_next jumpi
+        GET(0x0440) 0x01 add SET(0x0440) runtime_scan_find jump
+    runtime_scan_new:
+        GET(0x0300) GET(0x02a0) 0x40 mul GET(0x0280) add mstore
+        GET(0x0300) SET(0x0400) address SET(0x0420) BALANCE_READ()
+        GET(0x02a0) 0x40 mul GET(0x0280) add 0x20 add mstore
+        GET(0x02a0) 0x01 add SET(0x02a0)
+    runtime_scan_next:
+        GET(0x02c0) 0x01 add dup1 SET(0x02c0) GET(0x0260) eq iszero runtime_scan_leg jumpi
+        GET(0x00) GET(0x20) eq iszero fail jumpi
+        GET(0x03c0) GET(0x0280) mload eq iszero fail jumpi
+        GET(0x0240) GET(0x0280) 0x20 add mload CHECKED_SUB() GET(0x0280) 0x20 add mstore
+        selfbalance SET(0x0380) 0x00 SET(0x02c0)
+        GET(0x0200) 0x21 add SET(0x00)
+    runtime_flow_leg:
+        NEED(0x4b) ADVANCE(0x14) ADDRESS() SET(0x0320) WORD() SET(0x0340)
+        SIZE() GET(0x00) add SET(0x0360)
+        0x0800 ALLOC()
+        GET(0x00) dup2 mstore GET(0x0360) dup2 0x20 add mstore
+        runtime_flow_resume dup2 0x40 add mstore 0x80 mload dup2 0x60 add mstore
+        GET(0x0240) dup2 0x0200 add mstore
+        GET(0x0160) dup2 0x0160 add mstore GET(0x0180) dup2 0x0180 add mstore
+        GET(0x02c0) dup2 0x01a0 add mstore GET(0x02c0) SET(0x01a0)
+        GET(0x0360) SET(0x00) 0x80 mstore program_start jump
+    runtime_flow_resume:
+        GET(0x0100) GET(0x60) 0x80 mstore SET(0x0100)
+        0x00 SET(0x0440) 0x00 SET(0x03e0)
+    runtime_flow_find_output:
+        GET(0x0440) GET(0x02a0) eq runtime_flow_receipt jumpi
+        GET(0x0440) 0x40 mul GET(0x0280) add dup1 mload GET(0x0320) eq runtime_flow_output_found jumpi
+        pop GET(0x0440) 0x01 add SET(0x0440) runtime_flow_find_output jump
+    runtime_flow_output_found:
+        0x20 add mload SET(0x03e0)
+    runtime_flow_receipt:
+        GET(0x0320) SET(0x0400) address SET(0x0420) BALANCE_READ()
+        GET(0x03e0) dup2 lt runtime_output_inventory_failure jumpi
+        GET(0x03e0) swap1 sub dup1 SET(0x0240) dup1 iszero swap1 GET(0x0340) gt or
+        runtime_minimum_failure jumpi
+        GET(0x02c0) 0x01 add dup1 SET(0x02c0) GET(0x0260) eq iszero runtime_flow_leg jumpi
+        0x01 SET(0x0440)
+    runtime_flow_inventory:
+        GET(0x0440) GET(0x02a0) eq runtime_flow_done jumpi
+        GET(0x0440) 0x40 mul GET(0x0280) add dup1 mload SET(0x0400)
+        0x20 add mload SET(0x0460) address SET(0x0420) BALANCE_READ()
+        GET(0x0460) eq iszero fail jumpi
+        GET(0x0440) 0x01 add SET(0x0440) runtime_flow_inventory jump
+    runtime_flow_done:
+        selfbalance GET(0x0380) eq iszero fail jumpi GET(0x40) jump
+    runtime_output_inventory_failure:
+        GUARD_REASON(0x72756e74696d65206f757470757420696e76656e746f72790000000000000000,0x18)
+    runtime_minimum_failure:
+        GUARD_REASON(0x72756e74696d65206d696e696d756d206f757470757400000000000000000000,0x16)
+    outer_quoted_flow:
+        pop SIZE() GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi
+        GET(0x00) dup2 SET(0x00) OUTER_CHILD(quoted_flow_start,outer_child_done)
+    quoted_flow_start:
+        WORD() dup1 iszero fail jumpi SET(0x0240)
+        BYTE() dup1 0x01 swap1 gt fail jumpi SET(0x0280)
+        BYTE() dup1 iszero fail jumpi dup1 0x06 swap1 gt fail jumpi SET(0x0260)
+    quoted_flow_leg:
+        NEED(0x2c) ADDRESS() SET(0x02e0) ADDRESS() SET(0x0300)
+        GET(0x02e0) GET(0x0300) eq fail jumpi
+        GET(0x02a0) iszero quoted_continuity_ok jumpi
+        GET(0x02e0) GET(0x02c0) eq iszero fail jumpi
+    quoted_continuity_ok:
+        BYTE() dup1 iszero fail jumpi SET(0x0640)
+        SIZE() GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi SET(0x0320)
+        // A template precedes all exact-input variants, even when unused.
+        GET(0x00) 0x03 add GET(0x0320) swap1 gt fail jumpi
+        SIZE() SET(0x0620) GET(0x00) SET(0x0600)
+        GET(0x0620) GET(0x00) add dup1 GET(0x0320) swap1 gt fail jumpi SET(0x00)
+        0x00 SET(0x0660) 0x00 SET(0x0680)
+    quoted_case:
+        GET(0x00) 0x44 add GET(0x0320) swap1 gt fail jumpi
+        WORD() SET(0x0400) WORD() SET(0x0420)
+        BYTE() dup1 0x01 swap1 gt fail jumpi SET(0x0440)
+        SIZE() dup1 SET(0x0460) iszero GET(0x0440) iszero and fail jumpi
+        GET(0x0460) GET(0x00) add GET(0x0320) swap1 gt fail jumpi
+        GET(0x0400) GET(0x0240) eq iszero quoted_case_next jumpi
+        GET(0x0680) fail jumpi 0x01 SET(0x0680)
+        GET(0x0420) SET(0x0340) GET(0x00) SET(0x0360)
+        GET(0x0460) SET(0x0380) GET(0x0440) SET(0x03a0)
+    quoted_case_next:
+        GET(0x0460) GET(0x00) add SET(0x00)
+        GET(0x0660) 0x01 add dup1 SET(0x0660) GET(0x0640) eq iszero quoted_case jumpi
+        GET(0x00) GET(0x0320) eq iszero GET(0x0680) iszero or fail jumpi
+        GET(0x03a0) quoted_template jumpi
+        GET(0x0360) GET(0x0380) quoted_action_copy jump
+    quoted_template:
+        GET(0x0600) GET(0x0620)
+    quoted_action_copy:
+        dup1 iszero fail jumpi dup1 SET(0x06c0)
+        0x1f add 0x1f not and ALLOC() SET(0x06a0)
+        GET(0x06c0) swap1 GET(0x06a0) mcopy
+        GET(0x03a0) iszero quoted_action_ready jumpi
+        GET(0x0360) SET(0x06e0) GET(0x0360) GET(0x0380) add SET(0x0700)
+    quoted_patch:
+        GET(0x06e0) GET(0x0700) eq quoted_action_ready jumpi
+        GET(0x06e0) 0x04 add GET(0x0700) swap1 gt fail jumpi
+        GET(0x06e0) mload 0xe8 shr SET(0x0720)
+        GET(0x06e0) 0x03 add mload 0xf8 shr dup1 iszero fail jumpi SET(0x0740)
+        GET(0x06e0) 0x04 add SET(0x06e0)
+        GET(0x0740) GET(0x06e0) add GET(0x0700) swap1 gt fail jumpi
+        GET(0x0740) GET(0x0720) add GET(0x06c0) swap1 gt fail jumpi
+        GET(0x0740) GET(0x06e0) GET(0x06a0) GET(0x0720) add mcopy
+        GET(0x0740) GET(0x06e0) add SET(0x06e0) quoted_patch jump
+    quoted_action_ready:
+        GET(0x0280) GET(0x0340) gt iszero fail jumpi
+        GET(0x02e0) SET(0x0400) address SET(0x0420) BALANCE_READ() SET(0x03c0)
+        GET(0x03c0) GET(0x0240) gt fail jumpi
+        GET(0x0300) SET(0x0400) BALANCE_READ() SET(0x03e0)
+        GET(0x06a0) GET(0x06c0) add GET(0x06a0) OUTER_CHILD(outer_loop,quoted_flow_resume)
+    quoted_flow_resume:
+        GET(0x60) 0x80 mstore
+        GET(0x02e0) SET(0x0400) address SET(0x0420) BALANCE_READ()
+        GET(0x0240) GET(0x03c0) CHECKED_SUB() eq iszero fail jumpi
+        GET(0x0300) SET(0x0400) BALANCE_READ()
+        GET(0x03e0) swap1 CHECKED_SUB() SET(0x0240)
+        GET(0x0280) GET(0x0340) CHECKED_SUB() GET(0x0240) lt fail jumpi
+        GET(0x0340) GET(0x0240) gt iszero quoted_flow_next jumpi
+        GET(0x0340) GET(0x0240) sub GET(0x0280) lt fail jumpi
+    quoted_flow_next:
+        GET(0x0300) SET(0x02c0)
+        GET(0x02a0) 0x01 add dup1 SET(0x02a0) GET(0x0260) eq iszero quoted_flow_leg jumpi
+        GET(0x00) GET(0x20) eq iszero fail jumpi GET(0x40) jump
+    outer_program:
+        pop WORD() SET(0x0400) SIZE() SET(0x0420)
+        GET(0x0420) GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi SET(0x0440)
+        0x0800 ALLOC() // child frame
+        GET(0x00) dup2 mstore
+        GET(0x0440) dup2 0x20 add mstore
+        outer_resumed dup2 0x40 add mstore
+        0x80 mload dup2 0x60 add mstore
+        GET(0x0400) dup2 0x0200 add mstore
+        GET(0x0440) SET(0x00)
+        0x80 mstore program_start jump
+    outer_resumed:
+        GET(0x60) 0x80 mstore outer_loop jump
+
+    program_start:
+        // A nested program returns r0; invocation registers start zeroed.
+        GET(0x80) 0x08 swap1 gt fail jumpi
+        GET(0x00) GET(0x20) sub dup1 0x01 swap1 gt iszero fail jumpi
+        0x010000 swap1 gt fail jumpi
+        BYTE() 0x01 eq iszero fail jumpi
+    program_loop:
+        GET(0x20) GET(0x00) eq program_done jumpi
+        GET(0xe0) 0x01 add dup1 0x80 swap1 gt fail jumpi SET(0xe0)
+        BYTE()
+        dup1 0x00 eq constant_op jumpi
+        dup1 0x01 eq call_op jumpi
+        dup1 0x02 eq math_op jumpi
+        dup1 0x03 eq equality_op jumpi
+        dup1 0x04 eq allowance_op jumpi
+        dup1 0x05 eq native_op jumpi
+        dup1 0x06 eq result_op jumpi
+        dup1 0x07 eq calldata_op jumpi
+        dup1 0x08 eq nested_op jumpi
+        0x09 eq diagnostic_op jumpi
+        fail jump
+    diagnostic_op:
+        BYTE() dup1 0x05 swap1 gt fail jumpi SET(0x01a0)
+        WORD() dup1 iszero fail jumpi SET(0x01c0) program_loop jump
+    constant_op:
+        pop BYTE() REGADDR() WORD() swap1 mstore program_loop jump
+    equality_op:
+        pop READREG() READREG() eq iszero fail jumpi program_loop jump
+    native_op:
+        pop selfbalance BYTE() REGADDR() mstore program_loop jump
+    result_op:
+        pop BYTE() REGADDR() SIZE()
+        dup1 0x20 add GET(0x0140) swap1 gt fail jumpi
+        GET(0x0120) add mload swap1 mstore program_loop jump
+    calldata_op:
+        pop BYTE() REGADDR() SIZE()
+        dup1 0x20 add calldatasize swap1 gt fail jumpi
+        calldataload swap1 mstore program_loop jump
+    math_op:
+        pop BYTE() SET(0x0400) BYTE() REGADDR() SET(0x0420)
+        READREG() SET(0x0440) READREG() SET(0x0460)
+        GET(0x0400)
+        dup1 0x00 eq math_add jumpi dup1 0x01 eq math_sub jumpi
+        dup1 0x02 eq math_mul jumpi dup1 0x03 eq math_div jumpi
+        dup1 0x04 eq math_shr jumpi dup1 0x05 eq math_and jumpi
+        0x06 eq math_neg jumpi fail jump
+    math_add:
+        pop GET(0x0460) GET(0x0440) add
+        dup1 GET(0x0440) gt fail jumpi math_done jump
+    math_sub:
+        pop GET(0x0460) GET(0x0440) CHECKED_SUB() math_done jump
+    math_mul:
+        pop GET(0x0460) GET(0x0440) mul
+        GET(0x0440) iszero math_done jumpi
+        dup1 GET(0x0440) swap1 div GET(0x0460) eq iszero fail jumpi math_done jump
+    math_div:
+        pop GET(0x0460) dup1 iszero fail jumpi GET(0x0440) div math_done jump
+    math_shr:
+        pop GET(0x0460) 0x0100 swap1 lt iszero fail jumpi
+        GET(0x0440) GET(0x0460) shr math_done jump
+    math_and:
+        pop GET(0x0460) GET(0x0440) and math_done jump
+    math_neg:
+        GET(0x0440) 0xff shr fail jumpi
+        GET(0x0440) 0x00 sub
+    math_done:
+        GET(0x0420) mstore program_loop jump
+
+    nested_op:
+        pop
+        READREG() SET(0x0400) BYTE() REGADDR() SET(0x0420)
+        BYTE() dup1 0x01 swap1 gt fail jumpi GET(0xa0) or SET(0x0440)
+        SIZE() GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi SET(0x0460)
+        0x0800 ALLOC()
+        GET(0x00) dup2 mstore GET(0x0460) dup2 0x20 add mstore
+        nested_resumed dup2 0x40 add mstore
+        0x80 mload dup2 0x60 add mstore
+        GET(0x80) 0x01 add dup2 0x80 add mstore
+        GET(0x0440) dup2 0xa0 add mstore
+        GET(0x0420) dup2 0xc0 add mstore
+        GET(0x0400) dup2 0x0200 add mstore
+        GET(0x0160) dup2 0x0160 add mstore GET(0x0180) dup2 0x0180 add mstore
+        GET(0x01a0) dup2 0x01a0 add mstore
+        GET(0x01c0) dup2 0x01c0 add mstore
+        GET(0x0460) SET(0x00) 0x80 mstore program_start jump
+    nested_resumed:
+        GET(0x0200) GET(0xc0) mstore
+        GET(0x0100) GET(0x60) 0x80 mstore
+        dup1 iszero nested_no_target jumpi SET(0x0100) program_loop jump
+    nested_no_target:
+        pop program_loop jump
+    program_done:
+        GET(0x40) jump
+
+    allowance_op:
+        pop GET(0xa0) fail jumpi
+        ADDRESS() dup1 iszero fail jumpi dup1 extcodesize iszero fail jumpi SET(0x0400)
+        ADDRESS() dup1 iszero fail jumpi SET(0x0420)
+        READREG() dup1 iszero fail jumpi SET(0x0440)
+        WORD() dup1 GET(0x0440) gt fail jumpi SET(0x0460)
+        program_loop SET(0x05c0) 0x01 SET(0x05e0)
+        TRANSIENT_SAVE() 0x01 [TARGET] tstore
+    allowance_check:
+        ALLOWANCE_READ() GET(0x0440) gt allowance_grant jumpi
+        allowance_done jump
+    allowance_grant:
+        GET(0x0460) APPROVE() allowance_verify jumpi
+        0x00 APPROVE() iszero fail jumpi
+        ALLOWANCE_READ() iszero iszero fail jumpi
+        GET(0x0460) APPROVE() iszero fail jumpi
+    allowance_verify:
+        ALLOWANCE_READ() GET(0x0460) eq iszero fail jumpi
+    allowance_done:
+        GET(0x05e0) iszero allowance_resume jumpi TRANSIENT_RESTORE()
+    allowance_resume:
+        GET(0x05c0) jump
+
+    call_op:
+        pop ADDRESS() dup1 extcodesize iszero fail jumpi SET(0x0400)
+        BYTE() dup1 0x01 swap1 gt fail jumpi SET(0x0420)
+        GET(0xa0) iszero writable_call jumpi
+        GET(0x0420) 0x01 eq iszero fail jumpi
+    writable_call:
+        BYTE() dup1 SET(0x05a0) dup1 0xff eq zero_value jumpi REGADDR() mload call_value_ready jump
+    zero_value:
+        pop 0x00
+    call_value_ready:
+        SET(0x0440) SIZE() SET(0x0460) SIZE() SET(0x0480)
+        // Static mode cannot carry value or a callback scope.
+        GET(0x0420) iszero call_header_ready jumpi
+        GET(0x05a0) 0xff eq iszero GET(0x0460) or fail jumpi
+    call_header_ready:
+        BYTE() 0x04 mul GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi SET(0x0540)
+        GET(0x00) SET(0x0560) GET(0x0540) SET(0x00)
+        SIZE() SET(0x04a0)
+        GET(0x04a0) GET(0x00) add dup1 GET(0x20) swap1 gt fail jumpi SET(0x0580)
+        GET(0x04a0) 0x1f add 0x1f not and ALLOC() SET(0x04c0)
+        GET(0x04a0) GET(0x00) GET(0x04c0) mcopy
+        GET(0x0560) SET(0x00)
+    patch_loop:
+        GET(0x00) GET(0x0540) eq patch_done jumpi
+        SIZE() dup1 0x04 swap1 lt fail jumpi
+        dup1 0x20 add GET(0x04a0) swap1 gt fail jumpi
+        GET(0x04c0) add READREG() swap1 mstore patch_loop jump
+    patch_done:
+        GET(0x0580) SET(0x00) TRANSIENT_SAVE()
+        GET(0x0460) iszero no_callback jumpi
+        GET(0x0460) 0x20 swap1 lt fail jumpi
+        GET(0x0480) 0x20 swap1 lt fail jumpi
+        GET(0x0480) GET(0x04a0) swap1 gt fail jumpi
+        GET(0x0480) GET(0x04c0) add dup1 0x20 swap1 sub mload
+        dup1 GET(0x0480) add GET(0x04a0) swap1 gt fail jumpi
+        swap1 sha3 [HASH] tstore
+        GET(0x0400) [TARGET] tstore GET(0x0460) 0xe0 shl [STATE] tstore call_execute jump
+    no_callback:
+        0x01 [TARGET] tstore
+    call_execute:
+        GET(0x0420) static_call jumpi
+        0x00 0x00 GET(0x04a0) GET(0x04c0) GET(0x0440) GET(0x0400) gas call call_return jump
+    static_call:
+        0x00 0x00 GET(0x04a0) GET(0x04c0) GET(0x0400) gas staticcall
+    call_return:
+        GET(0x0400) SET(0x0100)
+        iszero external_revert jumpi
+        GET(0x0460) iszero scope_done jumpi
+        [TARGET] tload 0x01 eq iszero runtime_callback_missing jumpi
+    scope_done:
+        TRANSIENT_RESTORE()
+        returndatasize dup1 SET(0x0140) 0x1f add 0x1f not and ALLOC() SET(0x0120)
+        returndatasize 0x00 GET(0x0120) returndatacopy
+        GET(0x0400) SET(0x0100) program_loop jump
+
+    external_revert:
+        returndatasize dup1 SET(0x0620) 0x1f add 0x1f not and ALLOC() SET(0x0600)
+        returndatasize 0x00 GET(0x0600) returndatacopy hop_failure jump
+    runtime_callback_missing:
+        GUARD_REASON(0x72756e74696d652063616c6c6261636b206d697373696e670000000000000000,0x18)
+    hop_failure:
+        GET(0x01c0) dup1 iszero legacy_flow_hash jumpi SET(0x0660) failure_proof jump
+    legacy_flow_hash:
+        pop
+        GET(0x0180) iszero opaque_revert jumpi
+        GET(0x0180) GET(0x0160) sha3 SET(0x0660)
+    failure_proof:
+        [DIAGNOSTIC_KEY] sload SET(0x0640)
+        0xa0 ALLOC() SET(0x0680)
+        GET(0x0640) GET(0x0680) mstore
+        GET(0x01a0) GET(0x0680) 0x20 add mstore
+        GET(0x0100) GET(0x0680) 0x40 add mstore
+        GET(0x0660) GET(0x0680) 0x60 add mstore
+        GET(0x0620) GET(0x0600) sha3 GET(0x0680) 0x80 add mstore
+        0xa0 GET(0x0680) sha3 SET(0x06a0)
+        GET(0x0620) 0x1f add 0x1f not and 0xc4 add dup1 SET(0x06e0) ALLOC() SET(0x06c0)
+        0x4189e9b0 0xe0 shl GET(0x06c0) mstore
+        GET(0x01a0) GET(0x06c0) 0x04 add mstore
+        GET(0x0100) GET(0x06c0) 0x24 add mstore
+        GET(0x0660) GET(0x06c0) 0x44 add mstore
+        0xa0 GET(0x06c0) 0x64 add mstore GET(0x06a0) GET(0x06c0) 0x84 add mstore
+        GET(0x0620) GET(0x06c0) 0xa4 add mstore
+        GET(0x0620) GET(0x0600) GET(0x06c0) 0xc4 add mcopy
+        GET(0x06e0) GET(0x06c0) revert
+    opaque_revert:
+        GET(0x0620) GET(0x0600) revert
+    fail:
+        // Generic fail-closed rejection, not pool-attribution evidence.
+        0x00 0x00 revert
+    receive_pop:
+        pop
+    receive:
+        stop
+}

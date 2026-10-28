@@ -23,6 +23,28 @@ import {
 import { initBlockScanEnumerationSolverTelemetry } from
   "../blockscan-enumeration-solver-telemetry.js";
 
+test("route-only production telemetry never reads or clones a pricing publication", async () => {
+  await withTempDir(async dir => {
+    const routePath = join(dir, "routes.jsonl"), eventsPath = join(dir, "events.jsonl");
+    await writeFile(eventsPath, '{"type":"searcher_start","run_id":"route-only"}\n');
+    const sink = await initBlockScanEnumerationSolverTelemetry({ path: routePath,
+      eventsPath, runId: "route-only", minFreeBytes: 1 });
+    assert(sink.enabled);
+    const inaccessiblePrice = new Proxy({} as any, { get() { throw new Error("must not traverse prices"); } });
+    sink.recordPricing(inaccessiblePrice);
+    sink.recordNotStarted({ sourceBlock: 10, sourceBlockHash: null, pricingMode: null,
+      passOutcome: "not_started", passReason: "scheduler_coalesced" });
+    await sink.shutdown(5_000);
+    const stats = sink.telemetry();
+    assert.equal(stats.failed, false);
+    assert.equal(stats.acknowledged, 1);
+    assert.equal(stats.midBaselines, 0);
+    assert.equal(stats.midDeltas, 0);
+    assert.equal(stats.midBytesWritten, 0);
+    assert((await readFile(routePath, "utf8")).length > 0, "route evidence is still retained");
+  });
+});
+
 test("route retention defaults to 10 GiB without changing price or disk reserves", async () => {
   for (const maxFileBytes of [undefined, 1_024]) {
     const expected = maxFileBytes ?? 10 * 1024 * 1024 * 1024;

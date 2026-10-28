@@ -37,6 +37,9 @@ const TOTAL_SUPPLY_SELECTOR: [u8; 4] = [0x18, 0x16, 0x0d, 0xdd];
 const APPROVE_SELECTOR: [u8; 4] = [0x09, 0x5e, 0xa7, 0xb3];
 const DEFAULT_GAS_LIMIT: u64 = 0x1000000;
 const RPC_ATTEMPT_DELAYS: [Duration; 3] = [Duration::ZERO, Duration::from_secs(1), Duration::from_secs(3)];
+thread_local! {
+    static READY_RPC_BATCH_LIMIT: Cell<Option<usize>> = const { Cell::new(None) };
+}
 
 // Bound server-requested waits within the existing simulation timeout. Never
 // retry earlier than Retry-After; unsupported/long values retain fatal handling.
@@ -44,6 +47,16 @@ fn rate_retry_after(value: Option<&reqwest::header::HeaderValue>) -> Option<Dura
     let Some(value) = value else { return Some(Duration::ZERO); };
     let seconds = value.to_str().ok()?.trim().parse::<u64>().ok()?;
     (seconds <= 10).then(|| Duration::from_secs(seconds))
+}
+
+fn allocation_exhausted(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    let words: Vec<_> = message.split(|c: char| !c.is_ascii_alphanumeric()).collect();
+    (words.iter().any(|w| matches!(*w, "monthly" | "daily"))
+        && words.iter().any(|w| matches!(*w, "limit" | "quota" | "capacity")))
+        || (words.iter().any(|w| matches!(*w, "quota" | "credit" | "credits"))
+            || words.windows(2).any(|p| p == ["compute", "unit"] || p == ["compute", "units"]))
+            && words.iter().any(|w| w.starts_with("exhaust") || w.starts_with("deplet"))
 }
 
 fn retryable_rpc_transport_error(error: &reqwest::Error) -> bool {
@@ -87,6 +100,11 @@ enum Command {
     /// Keeps a per-block warm chain cache so repeated quote/simulate calls in one
     /// hint reuse fetched account/code/storage instead of re-hitting the RPC.
     Serve,
+    /// Ready owns rate retries and the shared run-level downgrade budget.
+    ServeReady {
+        #[arg(long, value_parser = clap::value_parser!(u8).range(1..=8))]
+        batch_max_count: u8,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -206,6 +224,7 @@ enum ThrottleCategory {
     RpcLimitCode,
     RpcRateLimit,
     RpcQuota,
+    RpcQuotaExhausted,
 }
 
 impl fmt::Display for FatalReason {
@@ -230,6 +249,7 @@ struct RpcClient {
     round_trips: std::cell::Cell<u64>,
     fatal: FatalLatch,
     pinned: bool,
+    ready_batch_limit: Option<usize>,
 }
 
 impl RpcClient {
@@ -240,6 +260,7 @@ impl RpcClient {
             round_trips: std::cell::Cell::new(0),
             fatal,
             pinned: false,
+            ready_batch_limit: READY_RPC_BATCH_LIMIT.with(Cell::get),
         })
     }
 
@@ -316,7 +337,9 @@ impl RpcClient {
             && source_selection_diagnostic(message.trim()) {
             return Some(FatalReason::SourceFault);
         }
-        let category = if matches!(code, Some(429 | -32005)) {
+        let category = if self.ready_batch_limit.is_some() && !explicit_revert && allocation_exhausted(&message) {
+            ThrottleCategory::RpcQuotaExhausted
+        } else if matches!(code, Some(429 | -32005)) {
             ThrottleCategory::RpcLimitCode
         } else if explicit_revert {
             return None;
@@ -372,11 +395,21 @@ impl RpcClient {
             if !seen.insert(id) || item.get("jsonrpc").and_then(Value::as_str) != Some("2.0") { return false; }
             if let Some(error) = item.get("error") {
                 if item.get("result").is_some() { return false; }
-                let Some(FatalReason::RpcThrottle { .. }) = self.rpc_error_reason(item) else { return false; };
+                let Some(FatalReason::RpcThrottle { category, .. }) = self.rpc_error_reason(item) else { return false; };
                 let Some(code) = error.get("code").and_then(Value::as_i64) else { return false; };
                 let Some(message) = error.get("message").and_then(Value::as_str) else { return false; };
                 let message = message.to_ascii_lowercase();
                 let words: Vec<_> = message.split(|c: char| !c.is_ascii_alphanumeric()).collect();
+                if self.ready_batch_limit.is_some() {
+                    if category == ThrottleCategory::RpcQuotaExhausted
+                        || words.iter().any(|w| w.starts_with("revert"))
+                        || error.get("data").and_then(Value::as_str).is_some_and(|d| d.starts_with("0x") || d.starts_with("0X")) { return false; }
+                    // The primary classifier already proved a temporary rate
+                    // response. Ready validates binding/state here, not a second
+                    // narrower vocabulary inherited from live's retry policy.
+                    rate_limited = true;
+                    continue;
+                }
                 if words.iter().any(|w| matches!(*w, "quota" | "credit" | "credits" | "billing" | "monthly" | "daily")
                     || w.starts_with("exhaust") || w.starts_with("deplet") || w.starts_with("revert")) { return false; }
                 if error.get("data").and_then(Value::as_str).is_some_and(|d| d.starts_with("0x") || d.starts_with("0X")) { return false; }
@@ -388,7 +421,11 @@ impl RpcClient {
                 rate_limited = true;
             } else {
                 let Some(value) = item.get("result") else { return false; };
-                if self.pinned && validate_state_value(original["method"].as_str().unwrap_or(""), value).is_err() { return false; }
+                if self.pinned {
+                    let valid = if self.ready_batch_limit.is_some() { validate_ready_state_value(original, value) }
+                        else { validate_state_value(original["method"].as_str().unwrap_or(""), value) };
+                    if valid.is_err() { return false; }
+                }
             }
         }
         rate_limited
@@ -463,7 +500,16 @@ impl RpcClient {
                 // including wrong IDs/versions, incomplete batches and reverts.
                 has_rpc_response = value.is_array() || ["jsonrpc", "id", "result"].iter()
                     .any(|key| value.get(*key).is_some()) || value.get("error").is_some_and(Value::is_object);
-                if can_retry && retry_after.is_some() && self.retryable_rate_response(body, value)
+                let has_temporary_rate = value.as_array().map(|items| items.iter().collect::<Vec<_>>())
+                    .unwrap_or_else(|| vec![value]).iter().any(|item| matches!(self.rpc_error_reason(item),
+                        Some(FatalReason::RpcThrottle { category, .. }) if category != ThrottleCategory::RpcQuotaExhausted));
+                let binding_shaped = value.is_array() || ["jsonrpc", "id", "result"].iter().any(|key| value.get(*key).is_some());
+                if self.ready_batch_limit.is_some() && has_temporary_rate && (status.is_success() || binding_shaped)
+                    && !self.retryable_rate_response(body, value) {
+                    self.latch(FatalReason::SourceFault);
+                    self.check_fatal()?;
+                }
+                if self.ready_batch_limit.is_none() && can_retry && retry_after.is_some() && self.retryable_rate_response(body, value)
                     && (status.is_success() || transient_status || status.as_u16() == 429) {
                     rate_wait = retry_after.unwrap();
                     rate_reason = value.as_array().and_then(|items| items.iter().find_map(|item| self.rpc_error_reason(item)))
@@ -492,7 +538,12 @@ impl RpcClient {
                 }
             }
             if status.as_u16() == 429 {
-                if can_retry && retry_after.is_some() && !has_rpc_response
+                if self.ready_batch_limit.is_some() && !has_rpc_response &&
+                    allocation_exhausted(&String::from_utf8_lossy(&bytes)) {
+                    self.latch(FatalReason::RpcThrottle { category: ThrottleCategory::RpcQuotaExhausted,
+                        http_status: None, rpc_code: None });
+                }
+                if self.ready_batch_limit.is_none() && can_retry && retry_after.is_some() && !has_rpc_response
                     && (decoded.is_ok() || bytes.is_empty() || (!json_content && !json_looking)) {
                     rate_wait = retry_after.unwrap();
                     rate_reason = Some(FatalReason::RpcThrottle { category: ThrottleCategory::Http429,
@@ -589,6 +640,15 @@ impl RpcClient {
     /// same order as `calls`; a per-call error becomes an `Err` entry while a
     /// transport failure fails the whole batch.
     fn batch_call(&self, calls: &[(&str, Value)]) -> Result<Vec<Result<Value>>> {
+        self.check_fatal()?;
+        let mut results = Vec::with_capacity(calls.len());
+        for chunk in calls.chunks(self.ready_batch_limit.unwrap_or(usize::MAX)) {
+            results.extend(self.batch_chunk(chunk)?);
+        }
+        Ok(results)
+    }
+
+    fn batch_chunk(&self, calls: &[(&str, Value)]) -> Result<Vec<Result<Value>>> {
         let result = (|| {
         self.check_fatal()?;
         if calls.is_empty() {
@@ -687,6 +747,22 @@ fn validate_state_value(method: &str, value: &Value) -> Result<()> {
         _ => {}
     }
     Ok(())
+}
+
+// A mixed temporary-rate response must not conceal a malformed source header.
+// Reuse the normal pinned-header checks without changing legacy serve retries.
+fn validate_ready_state_value(request: &Value, value: &Value) -> Result<()> {
+    let method = request["method"].as_str().unwrap_or("");
+    if matches!(method, "eth_getBlockByHash" | "eth_getBlockByNumber") {
+        let number = if method == "eth_getBlockByNumber" {
+            parse_u64(strict_quantity(&request["params"][0], 16)?)?
+        } else { parse_u64(strict_quantity(&value["number"], 16)?)? };
+        let block_hash = strict_hex(if method == "eth_getBlockByHash" {
+            &request["params"][0]
+        } else { &value["hash"] }, Some(32))?.to_owned();
+        verified_header(value, number, &SourcePin { chain_id: 1, block_hash, state_root: None })?;
+        Ok(())
+    } else { validate_state_value(method, value) }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1484,6 +1560,10 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::Serve => serve(),
+        Command::ServeReady { batch_max_count } => {
+            READY_RPC_BATCH_LIMIT.with(|limit| limit.set(Some(usize::from(batch_max_count))));
+            serve()
+        }
     }
 }
 
@@ -1641,6 +1721,10 @@ enum DaemonRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct StrictRequest {
+    /// Export only the already verified root-input initialization. Never execute
+    /// the script or report this preparation as a successful simulation.
+    #[serde(default)]
+    input_state_only: bool,
     block_number: u64,
     #[serde(default, deserialize_with = "deserialize_source_pin")]
     source_pin: Option<SourcePin>,
@@ -1722,7 +1806,7 @@ impl StrictPair {
             }
             strict_hex(&json!(pin.block_hash), Some(32))?;
             if let Some(root) = &pin.state_root { strict_hex(&json!(root), Some(32))?; }
-            if !plan.inner || req.trial_prefix.is_none() || !req.pre_calls.is_empty() || !req.token_deals.is_empty()
+            if req.input_state_only || !plan.inner || req.trial_prefix.is_none() || !req.pre_calls.is_empty() || !req.token_deals.is_empty()
                 || req.native_balance_wei.is_some() || req.executor_runtime_code.is_some() || req.observe_logs
                 || !req.observe_total_supply.is_empty() || !plan.native.is_empty() || !plan.pairs.is_empty()
                 || !req.observe_accounts.as_deref().unwrap_or(&[]).is_empty() {
@@ -1849,10 +1933,10 @@ struct StrictSimulateEffects {
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind")]
 enum StrictOutcome {
+    InputPrepared { #[serde(rename = "stateOverrides")] state_overrides: Value },
     Success { output: String, #[serde(flatten)] stage: StrictStage },
     Revert { output: String, #[serde(flatten)] stage: StrictStage,
-        // null attests a completed frame walk with no exceptional descendant;
-        // omission from an older sidecar is not the same claim.
+        // Null records a completed frame walk with no exceptional descendant.
         #[serde(rename = "nestedHalt")] nested_halt: Option<String> },
     Halt { reason: String, #[serde(flatten)] stage: StrictStage },
 }
@@ -2923,6 +3007,32 @@ impl Daemon {
             apply_token_deals(&mut db, &env, token_deals, balance_slots, Some(&remote), true)
                 .map_err(|_| StrictFailure(StrictFailureKind::Observation))?;
         }
+        if req.input_state_only {
+            // Export accepted funding writes only. No code, account balances,
+            // speculative slot trials, approvals, or simulated pool effects.
+            let mut overrides = serde_json::Map::new();
+            for (address, account) in &db.cache.accounts {
+                if account.account_state == AccountState::None { continue; }
+                let mut diff = serde_json::Map::new();
+                for (slot, value) in &account.storage {
+                    if remote.storage_ref(*address, *slot)? != *value {
+                        diff.insert(format!("{slot:#066x}"), json!(format!("{value:#066x}")));
+                    }
+                }
+                if !diff.is_empty() { overrides.insert(format!("{address:#x}"), json!({"stateDiff": diff})); }
+            }
+            return Ok(DaemonResponse { ok: true, error: None, success: None, output: None,
+                profit: None, gas_used: None, revert_reason: None, latency_ms: started.elapsed().as_millis(),
+                missing_state_keys: Vec::new(), cache_stats: None, seed_stats: None,
+                strict: Some(StrictSimulateEffects {
+                    outcome: StrictOutcome::InputPrepared { state_overrides: Value::Object(overrides) },
+                    execution_gas_used: "0".into(), native_deltas: Vec::new(), token_deltas: Vec::new(),
+                    total_supply_deltas: Vec::new(), logs: Vec::new(),
+                    counterfactual_executor_code: plan.executor_code.as_ref().map(|(target, code)| CounterfactualExecutorCode {
+                        address: format!("{target:#x}"), keccak256: format!("{:#x}", code.hash_slow()),
+                    }),
+                }) });
+        }
         for call in &plan.calls[..plan.calls.len() - 1] {
             if decode_approve_spender(&call.calldata).is_some() {
                 if let Some(slot) = call.allowance_slot { allowance_slots.insert(call.to, slot); }
@@ -2977,7 +3087,7 @@ impl Daemon {
         let success = matches!(outcome, StrictOutcome::Success { .. });
         let output = match &outcome {
             StrictOutcome::Success { output, .. } | StrictOutcome::Revert { output, .. } => Some(output.clone()),
-            StrictOutcome::Halt { .. } => None,
+            StrictOutcome::Halt { .. } | StrictOutcome::InputPrepared { .. } => None,
         };
         let revert_reason = match &outcome { StrictOutcome::Revert { output, .. } => Some(output.clone()), _ => None };
         let mut effects = StrictSimulateEffects { outcome, execution_gas_used: gas_used.to_string(),
@@ -3121,6 +3231,13 @@ impl StrictPlan {
                 }
             }
         }).transpose()?;
+        if req.input_state_only && (req.trial_prefix.is_none() || req.data != "0x" ||
+            !req.pre_calls.is_empty() || req.state_read.is_some() || req.observe_logs ||
+            !pairs.is_empty() || !req.observe_total_supply.is_empty() ||
+            !req.observe_native_balances.as_deref().unwrap_or(&[]).is_empty() ||
+            actor != address(&req.trial_prefix.as_ref().unwrap().executor)? || address(&req.to)? != actor) {
+            bail!("invalid input preparation context");
+        }
         Ok(Self { executor_code, actor, origin: origin.unwrap_or(actor), inner,
             native_balance: req.native_balance_wei.as_deref().map(uint).transpose()?,
             native: addresses(req.observe_native_balances.as_deref().unwrap_or(&[]))?, pairs,
@@ -4495,6 +4612,55 @@ mod tests {
     }
 
     #[test]
+    fn standalone_input_reuses_verified_deal_without_executing_or_leaking_state() {
+        for (code, override_code, expected_ok) in [("0x60006000fd", false, true),
+            ("0x", true, true), ("0x", false, false)] {
+            let (rpc, peer) = rpc_fixture_steps(Vec::new());
+            let source = test_source();
+            let mut remote = RemoteRevmDb::new(rpc.url.clone(), 300, HashSet::new(),
+                Rc::new(RefCell::new(PersistentCache::default())), rpc.client.clone(), Rc::clone(&rpc.fatal)).unwrap();
+            remote.rpc.pinned = true;
+            remote.block_tag = json!({"blockHash":source.attestation.block_hash,"requireCanonical":true});
+            remote.source = Some(source.clone());
+            let (executor, origin, token) = (Address::repeat_byte(0xbb), Address::repeat_byte(0xdd), Address::repeat_byte(0xee));
+            for (address, body) in [(Address::ZERO, "0x"), (executor, code), (origin, "0x"),
+                (token, "0x600435600052600060205260406000205460005260206000f3")] {
+                remote.seed_account(address, U256::ZERO, 0, Some(Bytecode::new_raw(Bytes::from(parse_hex_bytes(body).unwrap()))));
+            }
+            for index in mapping_slot_candidates(None, None) {
+                remote.seed_storage(token, erc20_balance_slot(executor, index), U256::ZERO);
+            }
+            let mut wire = json!({"blockNumber":300,"inputStateOnly":true,
+                "sourcePin":{"chainId":1,"blockHash":source.attestation.block_hash},
+                "from":executor,"to":executor,"data":"0x","gasLimit":100000,
+                "callerMode":"impersonated-call-frame","transactionOrigin":origin,"executionGasLimit":200000,
+                "trialPrefix":{"executor":executor,"calldata":"0x01","inputToken":token,"inputAmount":"100"}});
+            if override_code {
+                wire["trialPrefix"]["executorRuntimeCode"] = json!({"code":"0x60006000fd",
+                    "keccak256":format!("{:#x}", keccak256(parse_hex_bytes("0x60006000fd").unwrap()))});
+            }
+            let req: StrictRequest = serde_json::from_value(wire).unwrap();
+            let plan = StrictPlan::validate(&req).unwrap();
+            let remote = Rc::new(remote);
+            let result = Daemon::strict_simulate_at(Rc::clone(&remote), source.env, &mut HashMap::new(),
+                &mut HashMap::new(), &req, &plan, Instant::now());
+            assert_eq!(result.is_ok(), expected_ok);
+            if expected_ok {
+                let response = result.unwrap();
+                assert!(response.success.is_none()); assert!(response.output.is_none()); assert!(response.gas_used.is_none());
+                let strict = response.strict.unwrap();
+                let StrictOutcome::InputPrepared { state_overrides } = strict.outcome else { panic!("input only"); };
+                let slot = erc20_balance_slot(executor, 0);
+                assert_eq!(state_overrides, json!({format!("{token:#x}"): {"stateDiff": {
+                    format!("{slot:#066x}"): format!("{:#066x}", U256::from(100)) }}}));
+                assert_eq!(remote.storage_ref(token, slot).unwrap(), U256::ZERO);
+                assert_eq!(strict.counterfactual_executor_code.is_some(), override_code);
+            }
+            assert!(peer.join().unwrap().is_empty(), "funding export introduces no trace or execution RPC");
+        }
+    }
+
+    #[test]
     fn executor_code_override_preserves_account_and_precedes_independent_probes() {
         let (mut db, mut req) = local_strict(false, "0x60006000fd");
         let target = parse_address(&req.to).unwrap();
@@ -5256,6 +5422,119 @@ mod tests {
         json!([{"jsonrpc":"2.0","id":0,"result":"0x1"},
             {"jsonrpc":"2.0","id":1,"result":pinned_header()},
             {"jsonrpc":"2.0","id":2,"result":pinned_header()}])
+    }
+
+    #[test]
+    fn ready_rpc_batch_cap_splits_warm_reads_and_preserves_order_and_ids() {
+        let (mut rpc, peer) = rpc_fixture_steps(vec![
+            (200, json!([{"jsonrpc":"2.0","id":1,"result":"0x2"},{"jsonrpc":"2.0","id":0,"result":"0x1"}])),
+            (200, json!([{"jsonrpc":"2.0","id":0,"result":"0x3"},{"jsonrpc":"2.0","id":1,"result":"0x4"}])),
+            (200, json!([{"jsonrpc":"2.0","id":0,"result":"0x5"}])),
+        ]);
+        rpc.pinned = true; rpc.ready_batch_limit = Some(2);
+        let calls: Vec<_> = (0..5).map(|_| ("eth_chainId", json!([]))).collect();
+        let results = rpc.batch_call(&calls).unwrap().into_iter().map(Result::unwrap).collect::<Vec<_>>();
+        assert_eq!(results, vec![json!("0x1"),json!("0x2"),json!("0x3"),json!("0x4"),json!("0x5")]);
+        let requests = peer.join().unwrap();
+        assert_eq!(requests.iter().map(|r| r.as_array().unwrap().len()).collect::<Vec<_>>(), vec![2,2,1]);
+        assert_eq!(rpc.round_trips(), 3);
+    }
+
+    #[test]
+    fn ready_rpc_one_temporary_wire_response_reaches_the_ready_retry_owner_once() {
+        for status in [200, 429] {
+            let (mut rpc, peer) = rpc_fixture_steps(vec![(status, json!({"jsonrpc":"2.0","id":1,
+                "error":{"code":429,"message":"compute units per second capacity exceeded"}}))]);
+            rpc.pinned = true; rpc.ready_batch_limit = Some(8);
+            assert!(rpc.call("eth_chainId", json!([])).is_err());
+            assert!(matches!(rpc.fatal.get(), Some(FatalReason::RpcThrottle { category: ThrottleCategory::RpcLimitCode, .. })));
+            assert_eq!(peer.join().unwrap().len(), 1);
+            assert_eq!(rpc.round_trips(), 1);
+        }
+    }
+
+    #[test]
+    fn ready_rpc_preserves_every_identified_temporary_rate_category() {
+        for (code, message, category) in [
+            (-32000, "quota per second exceeded", ThrottleCategory::RpcQuota),
+            (-32005, "Request rate limited", ThrottleCategory::RpcLimitCode),
+        ] {
+            let (mut rpc, peer) = rpc_fixture_steps(vec![(200, json!({"jsonrpc":"2.0","id":1,
+                "error":{"code":code,"message":message}}))]);
+            rpc.pinned = true; rpc.ready_batch_limit = Some(8);
+            assert!(rpc.call("eth_chainId", json!([])).is_err());
+            assert_eq!(rpc.fatal.get(), Some(FatalReason::RpcThrottle { category, http_status: None, rpc_code: Some(code) }));
+            assert_eq!(peer.join().unwrap().len(), 1);
+            assert_eq!(rpc.round_trips(), 1);
+        }
+    }
+
+    #[test]
+    fn ready_rpc_temporary_classification_cannot_hide_mixed_invalid_responses() {
+        for other in [
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"execution reverted","data":"0xdeadbeef"}}),
+            json!({"jsonrpc":"2.0","id":1,"result":"not-a-quantity"}),
+            json!({"jsonrpc":"2.0","id":99,"result":"0x1"}),
+        ] {
+            let (mut rpc, peer) = rpc_fixture_steps(vec![(200, json!([
+                {"jsonrpc":"2.0","id":0,"error":{"code":-32000,"message":"quota per second exceeded"}}, other]))]);
+            rpc.pinned = true; rpc.ready_batch_limit = Some(8);
+            assert!(rpc.batch_call(&[("eth_chainId", json!([])), ("eth_chainId", json!([]))]).is_err());
+            assert_eq!(rpc.fatal.get(), Some(FatalReason::SourceFault));
+            assert_eq!(peer.join().unwrap().len(), 1);
+        }
+    }
+
+    #[test]
+    fn ready_rpc_mixed_source_precheck_checks_both_header_methods_before_retry() {
+        let good = pinned_header();
+        let pin = SourcePin { chain_id: 1, block_hash: good["hash"].as_str().unwrap().to_owned(),
+            state_root: Some(good["stateRoot"].as_str().unwrap().to_owned()) };
+        for index in [1_usize, 2] {
+            let mut variants = vec![(json!("invalid-state"), false), (Value::Null, false)];
+            for (key, value) in [
+                ("parentHash", json!("0x00")), ("stateRoot", json!("0x00")),
+                ("timestamp", json!("0x1")), ("gasLimit", json!("0x0")),
+                ("miner", json!("0x00")),
+                (if index == 1 { "hash" } else { "number" }, if index == 1 {
+                    json!(format!("0x{}", "ff".repeat(32)))
+                } else { json!("0x12d") }),
+            ] {
+                let mut header = good.clone(); header[key] = value;
+                variants.push((header, false));
+            }
+            variants.push((good.clone(), true));
+            for (header, valid) in variants {
+                let mut items: Vec<_> = (0..3).map(|id| json!({"jsonrpc":"2.0","id":id,
+                    "error":{"code":-32000,"message":"quota per second exceeded"}})).collect();
+                items[index] = json!({"jsonrpc":"2.0","id":index,"result":header});
+                let (mut rpc, peer) = rpc_fixture_steps(vec![(200, json!(items))]);
+                rpc.pinned = true; rpc.ready_batch_limit = Some(8);
+                assert!(verify_source(&rpc, 300, &pin).is_err());
+                if valid {
+                    assert!(matches!(rpc.fatal.get(), Some(FatalReason::RpcThrottle { category: ThrottleCategory::RpcQuota, .. })));
+                } else { assert_eq!(rpc.fatal.get(), Some(FatalReason::SourceFault)); }
+                assert_eq!(peer.join().unwrap().len(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn ready_rpc_quota_and_bad_binding_do_not_retry_as_temporary_rate_errors() {
+        for (response, quota) in [
+            (json!({"jsonrpc":"2.0","id":1,"error":{"code":429,"message":"Monthly quota exhausted"}}), true),
+            (json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Monthly request limit exceeded"}}), true),
+            (json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Daily request limit exceeded"}}), true),
+            (json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Credits exhausted"}}), true),
+            (json!({"jsonrpc":"2.0","id":999,"error":{"code":429,"message":"rate limit"}}), false),
+        ] {
+            let (mut rpc, peer) = rpc_fixture_steps(vec![(200,response)]);
+            rpc.pinned = true; rpc.ready_batch_limit = Some(8);
+            assert!(rpc.call("eth_chainId", json!([])).is_err());
+            assert_eq!(matches!(rpc.fatal.get(), Some(FatalReason::RpcThrottle { category: ThrottleCategory::RpcQuotaExhausted, .. })), quota);
+            if !quota { assert_eq!(rpc.fatal.get(), Some(FatalReason::SourceFault)); }
+            assert_eq!(peer.join().unwrap().len(), 1);
+        }
     }
 
     #[test]

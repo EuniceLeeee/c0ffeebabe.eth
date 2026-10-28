@@ -1,11 +1,6 @@
-import { spawn } from "node:child_process";
-import type { CanonicalSource } from "../venues/adapter-request-program.js";
-import { fileURLToPath } from "node:url";
-import fs from "node:fs";
-import { syncBuiltinESMExports } from "node:module";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { appendFile, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,7 +15,6 @@ import {
   type RunOutcome,
 } from "../universe-rebuild-checkpoint.js";
 import {
-  rebuildUniverse,
   hashReadyCatalogSnapshot,
   hashReadyGraphSnapshot,
   hashReadyPublicationSet,
@@ -99,233 +93,7 @@ function terminalFor(key: string): RunOutcome {
   });
 }
 
-async function snapshotReaderChild(): Promise<void> {
-  const index = process.argv.indexOf("--snapshot-reader-child");
-  const path = process.argv[index + 1]!, marker = process.argv[index + 2]!;
-  const createReadStream = fs.createReadStream;
-  let intercepted = false;
-  fs.createReadStream = ((...args: Parameters<typeof createReadStream>) => {
-    const stream = createReadStream(...args);
-    if (!intercepted) {
-      intercepted = true;
-      const iterator = stream[Symbol.asyncIterator].bind(stream);
-      stream[Symbol.asyncIterator] = (async function* () {
-        await writeFile(marker, String(process.pid));
-        await new Promise(resolve => setTimeout(resolve, 6_000));
-        yield* iterator();
-      }) as typeof stream[typeof Symbol.asyncIterator];
-    }
-    return stream;
-  }) as typeof createReadStream;
-  syncBuiltinESMExports();
-  try {
-    const store = new UniverseRebuildCheckpointStore({ path });
-    const method = (store as unknown as { loadReadOnlySnapshot?: () => Promise<unknown> }).loadReadOnlySnapshot;
-    // Baseline-only fallback reproduces the actual former status CLI; production never falls back.
-    const result = method ? await method.call(store) : { envelope: await store.load() };
-    console.log(JSON.stringify(result));
-  } finally { fs.createReadStream = createReadStream; syncBuiltinESMExports(); }
-}
-
-async function assertReadOnlyStatusSnapshots(): Promise<void> {
-  const directory = await mkdtemp(join(tmpdir(), "ready-status-snapshot-"));
-  const path = join(directory, "ready.json");
-  const writer = new UniverseRebuildCheckpointStore({ path });
-  const readSnapshot = async (store: UniverseRebuildCheckpointStore): Promise<any> => {
-    // The old-source counterexample deliberately reproduces the former CLI's load().
-    const method = (store as unknown as { loadReadOnlySnapshot?: () => Promise<unknown> }).loadReadOnlySnapshot;
-    return method ? method.call(store) : { envelope: await store.load() };
-  };
-  let slowRead: Promise<any> | undefined;
-  try {
-    const absent = await readSnapshot(new UniverseRebuildCheckpointStore({ path: join(directory, "absent.json") }));
-    assert.equal(absent.envelope, null);
-    await writer.beginOrResumeRun({ expectedRevision: 0, runId: "snapshot-run", cutoff: SOURCE,
-      fromBlock: SOURCE.number - 14_399, universeHash: "u1", candidateSetHash: "c1", candidateCount: 2,
-      candidatesByKey: { a: { id: "a" }, b: { id: "b" } }, observedThrough: SOURCE, sourceReceipts: sourceReceipts() });
-    const initial = await writer.casMergeRunOutcomes("snapshot-run", [terminalFor("a")]);
-    // The copied prefix must exclude a legal interrupted, uncommitted append.
-    await appendFile(path + ".attestation-journal", '{"version":');
-    const journalBefore = await readFile(path + ".attestation-journal");
-    const partial = await readSnapshot(new UniverseRebuildCheckpointStore({ path, readChunkBytes: 7 }));
-    assert.equal(partial.envelope.revision, initial.revision);
-    assert.deepEqual(await readFile(path + ".attestation-journal"), journalBefore, "readonly snapshot never repairs the source tail");
-    const marker = join(directory, "reader-entered");
-    const child = spawn(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url), "--snapshot-reader-child", path, marker],
-      { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "", stderr = "";
-    child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
-    child.stdout.on("data", chunk => { stdout += chunk; }); child.stderr.on("data", chunk => { stderr += chunk; });
-    slowRead = new Promise((resolve, reject) => {
-      child.once("error", reject);
-      child.once("close", code => { if (code === 0) resolve(JSON.parse(stdout)); else reject(new Error("snapshot child failed: " + stderr)); });
-    });
-    const started = Date.now();
-    while (true) {
-      try { await readFile(marker); break; }
-      catch (error: any) { if (error.code !== "ENOENT") throw error; }
-      assert(Date.now() - started < 10_000, "snapshot child did not enter its parser");
-      await new Promise(resolve => setTimeout(resolve, 10));
-    }
-    const appended = await writer.casMergeRunOutcomes("snapshot-run", [terminalFor("b")]);
-    assert.equal(child.exitCode, null, "writer must finish while a separate-process diagnostic parse remains paused beyond its 5s lock budget");
-    // Compaction atomically replaces base and unlinks the journal while the snapshot still reads its pinned generation.
-    const compacted = await writer.casUpsertMemo(memoFor("retained"));
-    assert.equal(child.exitCode, null);
-    await assert.rejects(readFile(path + ".attestation-journal"), (error: any) => error.code === "ENOENT");
-    const captured = await slowRead;
-    assert.equal(captured.envelope.revision, initial.revision, "snapshot must not mix concurrent append/new base into the captured generation");
-    assert.equal(captured.envelope.inProgressRun.outcomesByCandidateKey.b, undefined);
-    assert(appended.revision > captured.envelope.revision && compacted.revision > appended.revision);
-    assert.equal((await writer.load())?.revision, compacted.revision);
-    assert.equal(typeof captured.capturedAt, "string");
-    // Missing journal and stale lock retain the original store rules.
-    await writeFile(path + ".lock", "2147483647\n");
-    const noJournal = await readSnapshot(new UniverseRebuildCheckpointStore({ path }));
-    assert.equal(noJournal.envelope.revision, compacted.revision);
-    assert.equal(noJournal.sourceJournalSignature, null);
-    await writer.casMergeRunOutcomes("snapshot-run", [terminalFor("b")]);
-    const validJournal = await readFile(path + ".attestation-journal", "utf8");
-    const record = JSON.parse(validJournal.trim()); record.recordFingerprint = "0".repeat(64);
-    await writeFile(path + ".attestation-journal", JSON.stringify(record) + "\n");
-    const corruptBefore = await readFile(path + ".attestation-journal");
-    await assert.rejects(readSnapshot(new UniverseRebuildCheckpointStore({ path })), /journal fingerprint mismatch/,
-      "a complete corrupt line must still fail through the original replay validator");
-    assert.deepEqual(await readFile(path + ".attestation-journal"), corruptBefore);
-    assert.equal((await readdir(directory)).some(name => name.startsWith(".readonly-snapshot-")), false,
-      "only self-owned temporary snapshots are removed on success/failure");
-  } finally {
-    await slowRead?.catch(() => undefined);
-    await rm(directory, { recursive: true, force: true });
-  }
-  console.log("readonly status snapshot PASS (slow reader/writer, append, compaction, partial tail, corrupt complete line, absent store and stale PID)");
-}
-
-async function assertRebuildProofInheritance(): Promise<void> {
-  const { candidateFingerprint, familyDefinitionHash, canReuseMemo } =
-    await import("../universe-rebuild-production.js");
-  const directory = await mkdtemp(join(tmpdir(), "rebuild-proof-inheritance-"));
-  const sourcePath = join(directory, "source.json");
-  const source = new UniverseRebuildCheckpointStore({ path: sourcePath });
-  const candidate = (id: string) => ({ id, familyId: "univ2-standard",
-    address: "0x" + (id === "a" ? "11" : "22").repeat(20) });
-  const proof = (id: string): DurableVerifiedMemo => {
-    const value = { ...memoFor(id), familyId: "univ2-standard", candidateSnapshot: candidate(id),
-      candidateFingerprint: candidateFingerprint(candidate(id)),
-      familyDefinitionHash: familyDefinitionHash("univ2-standard"),
-      staticProjection: { routes: [{ routeKey: id }], pricingInstances: [{ stateKey: id }] } };
-    return { ...value, memoFingerprint: durableVerifiedMemoFingerprint(value) };
-  };
-  const reuse = (memo: DurableVerifiedMemo, item = candidate("a"), cutoff: CanonicalSource = SOURCE) =>
-    canReuseMemo({ memo, candidate: item, cutoff, familyId: "univ2-standard", currentAuthorityFingerprint: "auth" });
-  const receipts = () => sourceReceipts(SOURCE.number).map(receipt => ({ ...receipt,
-    coverageKeys: ["univ2-standard|startup-universe"] }));
-  let reuseChecks = 0, attestations = 0, scans = 0;
-  const rebuild = (store: UniverseRebuildCheckpointStore, runId: string) => rebuildUniverse({
-    store, runId, observationRange: { fromBlock: SOURCE.number, toBlock: SOURCE.number },
-    freezeCanonicalHead: async () => SOURCE,
-    scanSwapWindow: async () => { scans++; return { observations: [candidate("a"), candidate("q")],
-      sourceReceipts: receipts() }; },
-    requiredSourceCoverageKeys: () => ["univ2-standard|startup-universe"],
-    expectedSourcePlanFingerprints: () => ({ startup: "2".repeat(64), activity: "5".repeat(64) }),
-    familyCandidateKey: value => (value as { id: string }).id,
-    dedupeFamilyCandidates: observations => [...new Map(observations.map(value => {
-      const item = value as { kind?: string; candidate?: unknown; id?: string };
-      const chosen = (item.kind === "startup-candidate" ? item.candidate : item) as { id: string };
-      return [chosen.id, chosen] as const;
-    })).values()],
-    findReusableMemo: async ({ candidate: item, checkpoint, cutoff }) => {
-      reuseChecks++;
-      const memo = checkpoint.verifiedMemos[(item as { id: string }).id];
-      return memo && reuse(memo, item as ReturnType<typeof candidate>, cutoff) ? memo : null;
-    },
-    attestFamilyInstanceOnce: async ({ candidate: item }) => {
-      attestations++;
-      return { status: "retryable" as const, stage: "identity" as const, failureCode: "rpc" as const,
-        reasonCode: "fixture-unavailable", candidateSnapshot: item };
-    },
-    sealDurableVerifiedMemo: () => { throw new Error("fixture never attests success"); },
-    rehydrateVerifiedInstance: ({ memo }) => ({ familyId: memo.familyId, instanceKey: memo.instanceKey }),
-    aggregateOnceByFamily: instances => [{ familyId: "univ2-standard", instances }],
-    buildGraphSnapshot: publications => ({ edges: publications.flatMap(item => item.instances) }),
-    buildCoverage: () => [{ familyId: "univ2-standard", sourceId: "startup-universe",
-      completeThroughBlock: SOURCE.number, completeThroughHash: SOURCE.hash }],
-    assertCanonicalHead: async () => undefined,
-  });
-  try {
-    await source.casUpsertMemo(proof("a"));
-    await rebuild(source, "completed-parent");
-    const parent = (await source.load())!;
-    assert(parent.readyGeneration !== null);
-    assert.equal(Object.keys(parent.retryableAttemptsByCandidateKey).length, 1);
-    await source.beginOrResumeRun({ expectedRevision: parent.revision, runId: "partial",
-      cutoff: SOURCE, fromBlock: SOURCE.number, universeHash: "partial", candidateSetHash: "partial",
-      candidateCount: 4, candidatesByKey: { b: candidate("b"), t: candidate("t"), r: candidate("r"), z: candidate("z") },
-      observedThrough: SOURCE, sourceReceipts: receipts() });
-    const b = proof("b");
-    const writer = new AttestationCheckpointWriter({ store: source, runId: "partial", maxIntervalMs: 60_000 });
-    writer.record({ status: "verified", familyCandidateKey: "b", familyInstanceKey: b.familyInstanceKey,
-      memoFingerprint: b.memoFingerprint }, b);
-    writer.record(terminalFor("t"));
-    writer.record({ status: "retryable", familyCandidateKey: "r", familyId: "univ2-standard",
-      candidateSnapshot: candidate("r"), stage: "identity", failureCode: "rpc", reasonCode: "fixture",
-      attemptCount: 1, lastAttemptAt: "2026-10-20T00:00:00.000Z" });
-    await writer.flush();
-    const baseBytes = await readFile(sourcePath), journalBytes = await readFile(sourcePath + ".attestation-journal");
-    const targetPath = join(directory, "imported.json");
-    const target = new UniverseRebuildCheckpointStore({ path: targetPath });
-    const inherited = await target.inheritRebuildProofsFrom(new UniverseRebuildCheckpointStore({ path: sourcePath }));
-    assert.equal(inherited.readyGeneration, null, "old completed Ready must not become new Ready");
-    assert.equal(inherited.inProgressRun, null, "no old discovery receipts, partition or outcomes migrate");
-    assert.deepEqual(Object.keys(inherited.verifiedMemos).sort(), ["a", "b"]);
-    assert.deepEqual(inherited.retryableAttemptsByCandidateKey, parent.retryableAttemptsByCandidateKey);
-    assert.deepEqual(await readFile(sourcePath), baseBytes);
-    assert.deepEqual(await readFile(sourcePath + ".attestation-journal"), journalBytes);
-    assert.deepEqual((await new UniverseRebuildCheckpointStore({ path: targetPath }).load()), inherited);
-    const justInheritedBytes = await readFile(targetPath);
-    await assert.rejects(target.inheritRebuildProofsFrom(source), /destination already exists|CAS conflict/,
-      "an inherited destination is occupied even before its first rebuild");
-    assert.deepEqual(await readFile(targetPath), justInheritedBytes);
-    assert.equal(reuse(inherited.verifiedMemos.a!), true);
-    assert.equal(reuse({ ...inherited.verifiedMemos.a!, familyDefinitionHash: "changed" }), false);
-    assert.equal(reuse(inherited.verifiedMemos.a!, candidate("b")), false);
-    assert.equal(reuse(inherited.verifiedMemos.a!, candidate("a"), { ...SOURCE, hash: "0x" + "bb".repeat(32) }), false);
-    assert.equal(reuse(inherited.verifiedMemos.a!, candidate("a"), { ...SOURCE, number: SOURCE.number - 1 }), false);
-    const before = { reuseChecks, attestations, scans };
-    const ready = await rebuild(target, "sql-new-input");
-    assert.equal(scans, before.scans + 1, "inheritance never bypasses new discovery");
-    assert.equal(reuseChecks - before.reuseChecks, 2, "normal production runner rechecks both imported proofs");
-    assert.equal(attestations - before.attestations, 1, "durable retry is retried, not admitted");
-    assert.equal(ready.candidateAccounting.verified, 2);
-    assert.equal(ready.candidateAccounting.retryable, 1);
-    assert.deepEqual(ready.universeRange, { fromBlock: SOURCE.number, toBlock: SOURCE.number });
-    const targetBytes = await readFile(targetPath);
-    await assert.rejects(target.inheritRebuildProofsFrom(source), /CAS conflict/);
-    assert.deepEqual(await readFile(targetPath), targetBytes);
-    await assert.rejects(source.inheritRebuildProofsFrom(source), /different destination/);
-    await assert.rejects(new UniverseRebuildCheckpointStore({ path: join(directory, "absent-target.json") })
-      .inheritRebuildProofsFrom(new UniverseRebuildCheckpointStore({ path: join(directory, "missing.json") })), /source checkpoint is absent/);
-    const corruptPath = join(directory, "corrupt-source.json");
-    await writeFile(corruptPath, baseBytes);
-    await writeFile(corruptPath + ".attestation-journal", journalBytes.toString().replace(/"recordFingerprint":"[a-f0-9]+"/,
-      '"recordFingerprint":"' + "0".repeat(64) + '"'));
-    const corruptBytes = await readFile(corruptPath + ".attestation-journal");
-    const failedPath = join(directory, "failed-target.json");
-    await assert.rejects(new UniverseRebuildCheckpointStore({ path: failedPath }).inheritRebuildProofsFrom(
-      new UniverseRebuildCheckpointStore({ path: corruptPath })), /journal fingerprint mismatch/);
-    await assert.rejects(readFile(failedPath), (error: any) => error.code === "ENOENT");
-    assert.deepEqual(await readFile(corruptPath + ".attestation-journal"), corruptBytes);
-    assert.deepEqual(await readFile(sourcePath), baseBytes);
-    assert.deepEqual(await readFile(sourcePath + ".attestation-journal"), journalBytes);
-  } finally { await rm(directory, { recursive: true, force: true }); }
-  console.log("rebuild proof inheritance PASS (partial journal, old Ready stripped, source unchanged, production revalidation, corrupt journal and existing destination)");
-}
-
 async function main(): Promise<void> {
-  await assertRebuildProofInheritance();
-  if (process.argv.includes("--proof-inheritance-only")) return;
-  await assertReadOnlyStatusSnapshots();
-  if (process.argv.includes("--readonly-snapshot-only")) return;
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-ckpt-"));
   const path = join(dir, "checkpoint.json");
   try {
@@ -1213,7 +981,7 @@ async function main(): Promise<void> {
   console.log("universe rebuild checkpoint PASS");
 }
 
-(process.argv.includes("--snapshot-reader-child") ? snapshotReaderChild() : main()).catch((error) => {
+main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

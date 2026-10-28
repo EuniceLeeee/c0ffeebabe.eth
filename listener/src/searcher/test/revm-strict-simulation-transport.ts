@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { keccak256 } from "ethers";
+import { createServer } from "node:http";
+import { keccak256, toUtf8Bytes } from "ethers";
 import { createRevmStrictSimulationTransport } from "../revm-strict-simulation-transport.js";
 import { RevmFatalError, RevmStrictError, type DaemonResponse, type RevmFatalReason,
   type RevmRequestControl, type StrictSimulateRequest } from "../revm-sim-client.js";
 import { createStrictCentralAdapterRuntime, type StrictSimulationTransport } from "../strict-central-adapter-runtime.js";
 import { executeAdapterWork } from "../adapter-work-intent.js";
 import { RevmStrictSourceOwner, type RevmStrictSourceLease } from "../revm-strict-source-owner.js";
-import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
-import { ADDR } from "../../shared/constants/addresses.js";
-import { materializeAdapterRequests } from "../reth-adapter-work-runtime.js";
 
 type Invocation = Parameters<StrictSimulationTransport["simulate"]>[0];
 type MutableInvocation = { -readonly [K in keyof Invocation]: Invocation[K] };
@@ -19,6 +17,69 @@ const EXECUTOR = addr("a"), ACTOR = addr("b"), ORIGIN = addr("c"), OBSERVED = ad
 const SOURCE = Object.freeze({ number: 25_700_444, hash: hash("1"), generation: 44 });
 const PIN = Object.freeze({ chainId: 1, blockHash: SOURCE.hash, stateRoot: hash("2") });
 const RPC_URL = "http://user:secret@localhost:8545/private-key", GAS = 1_000_000;
+
+test("standalone reuses only source-bound input preparation and executes each script through production sim", async () => {
+  const methods: string[] = [], amounts: string[] = [];
+  let reverted = false, corrupt = false;
+  const f = fixture(async req => {
+    assert.equal(req.inputStateOnly, true); assert.equal(req.from, EXECUTOR); assert.equal(req.to, EXECUTOR);
+    assert.equal(req.data, "0x"); assert.equal(req.stateRead, undefined);
+    amounts.push(req.trialPrefix!.inputAmount);
+    const r = response(req);
+    delete r.success; delete r.output; delete r.gasUsed;
+    r.strict!.outcome = { kind: "InputPrepared", stateOverrides: { [TOKEN]: { stateDiff: { [hash("0")]: hash("1") } } } };
+    r.strict!.executionGasUsed = "0";
+    if (corrupt) r.sourceAttestation = { ...r.sourceAttestation!, blockHash: hash("f") };
+    return r;
+  });
+  const server = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on("data", chunk => chunks.push(chunk));
+    req.on("end", () => {
+      const wire = JSON.parse(Buffer.concat(chunks).toString()); methods.push(wire.method);
+      let result;
+      if (wire.method === "eth_getBlockByNumber") result = { number: `0x${SOURCE.number.toString(16)}`,
+        hash: SOURCE.hash, parentHash: hash("3"), timestamp: "0x6b49d200", gasLimit: "0x3938700",
+        gasUsed: "0x0", baseFeePerGas: "0x3b9aca00", transactions: [] };
+      else {
+        assert.equal(wire.method, "eth_simulateV1");
+        const b = wire.params[0].blockStateCalls[0];
+        assert.equal(b.calls.length, 2); assert.equal(b.calls[1].from, ORIGIN); assert.equal(b.calls[1].to, EXECUTOR);
+        assert.deepEqual(wire.params[1], { blockHash: SOURCE.hash, requireCanonical: true });
+        assert.deepEqual(b.stateOverrides[TOKEN], { stateDiff: { [hash("0")]: hash("1") } });
+        result = [{ number: b.blockOverrides.number, timestamp: b.blockOverrides.time,
+          baseFeePerGas: b.blockOverrides.baseFeePerGas, gasLimit: b.blockOverrides.gasLimit, parentHash: SOURCE.hash,
+          calls: [{ status: "0x1", gasUsed: "0x100", returnData: keccak256(toUtf8Bytes("mev.static-balance-observer.result.v3")) + hash("1").slice(2) },
+            { status: reverted ? "0x0" : "0x1", gasUsed: "0x100", returnData: "0x1234",
+              ...(reverted ? { error: { code: 3, message: "execution reverted" } } : {}) }] }];
+      }
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: wire.id, result }));
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const bound = server.address(); assert(bound && typeof bound === "object");
+  const transport = createRevmStrictSimulationTransport({ ...f.options, rpcUrl: `http://127.0.0.1:${bound.port}` });
+  const controller = new AbortController();
+  const input = { source: SOURCE, callerAuthority: { executor: EXECUTOR, transactionOrigin: ORIGIN },
+    inputToken: TOKEN, inputAmount: 100n, scriptHex: "0x01",
+    control: { signal: controller.signal, deadlineAtMs: Date.now() + 10000 } };
+  try {
+    assert.equal((await transport.simulateStandalone!(input)).kind, "success");
+    reverted = true;
+    const second = await transport.simulateStandalone!({ ...input, scriptHex: "0x02" });
+    assert.equal(second.kind, "revert"); assert.equal(second.returnData, "0x1234");
+    assert(second.reusedInputFunding);
+    assert.deepEqual(amounts, ["100"]);
+    assert.deepEqual(methods, ["eth_getBlockByNumber", "eth_simulateV1", "eth_simulateV1"]);
+    corrupt = true;
+    await assert.rejects(transport.simulateStandalone!({ ...input, inputAmount: 200n }), RevmFatalError);
+    assert.equal(methods.length, 3, "bad source cannot dispatch execution");
+    await assert.rejects(transport.simulateStandalone!(input), RevmFatalError);
+    assert.equal(methods.length, 3, "cached funding cannot bypass a fatal source latch");
+  } finally {
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
 function invocation(): MutableInvocation {
   return { source: { ...SOURCE }, callerAuthority: { executor: EXECUTOR, transactionOrigin: ORIGIN,
     observedSender: OBSERVED, verifiedActors: { probe: ACTOR } }, request: { id: "sim", kind: "effect-delta-simulation",
@@ -37,7 +98,7 @@ function response(req: StrictSimulateRequest): DaemonResponse {
 }
 function failure(req: StrictSimulateRequest, kind: "Revert" | "Halt", phase: "main" | "preCall" = "main"): DaemonResponse {
   const r = response(req), where = phase === "main" ? { phase } : { phase, preCallIndex: 0 };
-  r.success = false; r.strict!.outcome = kind === "Revert" ? { kind, ...where, output: "0xdeadbeef", nestedHalt: null } : { kind, ...where, reason: "OutOfGas" };
+  r.success = false; r.strict!.outcome = kind === "Revert" ? { kind, ...where, output: "0xdeadbeef" } : { kind, ...where, reason: "OutOfGas" };
   r.output = kind === "Revert" ? "0xdeadbeef" : undefined; r.revertReason = kind === "Revert" ? r.output : undefined;
   r.strict!.tokenDeltas = []; r.strict!.nativeDeltas = []; r.strict!.totalSupplyDeltas = []; r.strict!.logs = []; return r;
 }
@@ -63,239 +124,6 @@ function prefixInvocation(request: PrefixInvocation["request"] = {
 }): PrefixInvocation {
   return { ...invocation(), request, prefix: { executor: EXECUTOR, calldata: "0x12345678", inputToken: TOKEN, inputAmount: 123n } };
 }
-const PROGRAM_CODE = { code: "0x60006000f3", keccak256: keccak256("0x60006000f3") };
-
-test("wrapped child Halt stays incomplete, not deterministic main revert evidence", async () => {
-  const f = fixture(async req => {
-    const r = failure(req, "Revert");
-    (r.strict!.outcome as any).nestedHalt = "OutOfGas";
-    return r;
-  });
-  await assert.rejects(f.transport.simulate(invocation()), error => {
-    assert(error instanceof RevmStrictError); assert.equal(error.kind, "execution"); return notEvidence(error);
-  });
-  assert.deepEqual(f.fatals, [], "a bounded execution failure must not retire the source");
-});
-
-test("nested Halt keeps exact-prefix completion unresolved with diagnostic provenance", async () => {
-  const f = fixture(async req => {
-    const r = failure(req, "Revert");
-    (r.strict!.outcome as any).nestedHalt = "InvalidFEOpcode";
-    return r;
-  });
-  await assert.rejects(f.transport.simulatePrefix!(prefixInvocation()), error => {
-    assert(error instanceof RevmStrictError); assert.equal(error.kind, "execution");
-    assert.deepEqual((error as any).exactPrefixFailure,
-      { kind: "Revert", phase: "main", output: "0xdeadbeef", nestedHalt: "InvalidFEOpcode" });
-    return notEvidence(error);
-  });
-  assert.deepEqual(f.fatals, []);
-});
-
-for (const metadata of ["", 1, {}, "x".repeat(257)]) test(`invalid nested Halt metadata ${typeof metadata} is a protocol fault`, async () => {
-  const f = fixture(async req => {
-    const r = failure(req, "Revert"); (r.strict!.outcome as any).nestedHalt = metadata; return r;
-  });
-  await assert.rejects(f.transport.simulate(invocation()), RevmFatalError);
-  assert.deepEqual(f.fatals, [{ kind: "protocol-fault" }]);
-});
-
-for (const kind of ["Success", "Halt"] as const) test(`nested Halt metadata cannot be attached to ${kind}`, async () => {
-  const f = fixture(async req => {
-    const r = kind === "Success" ? response(req) : failure(req, kind);
-    (r.strict!.outcome as any).nestedHalt = null; return r;
-  });
-  await assert.rejects(f.transport.simulate(invocation()), RevmFatalError);
-});
-
-test("executor-program Revert requires explicit complete nested-outcome provenance", async () => {
-  for (const provenance of [undefined, null, "OutOfGas"] as const) {
-    const f = fixture(async req => {
-      const r = failure(req, "Revert");
-      r.strict!.counterfactualExecutorCode = { address: EXECUTOR, keccak256: PROGRAM_CODE.keccak256 };
-      if (provenance !== undefined) (r.strict!.outcome as any).nestedHalt = provenance;
-      else delete (r.strict!.outcome as any).nestedHalt;
-      return r;
-    });
-    const transport = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
-    await assert.rejects(transport.simulate(programInvocation()), error => {
-      if (provenance === null) { assert.equal((error as any).code, "CALL_EXCEPTION"); return true; }
-      assert(error instanceof RevmStrictError); assert.equal(error.kind, "execution"); return notEvidence(error);
-    });
-    assert.deepEqual(f.fatals, []);
-  }
-});
-
-for (const provenance of [undefined, null, "OutOfGas"] as const)
-test(`executor-program after prefix checks nested-outcome provenance ${String(provenance)}`, async () => {
-  const f = fixture(async req => {
-    assert.equal(req.executorRuntimeCode, undefined);
-    assert.deepEqual(req.trialPrefix!.executorRuntimeCode, PROGRAM_CODE);
-    assert.equal(req.to, EXECUTOR);
-    const r = failure(req, "Revert");
-    r.strict!.counterfactualExecutorCode = { address: EXECUTOR, keccak256: PROGRAM_CODE.keccak256 };
-    if (provenance !== undefined) (r.strict!.outcome as any).nestedHalt = provenance;
-    else delete (r.strict!.outcome as any).nestedHalt;
-    return r;
-  });
-  const transport = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
-  const result = transport.simulatePrefix!(prefixInvocation(programInvocation().request));
-  if (provenance === null) {
-    assert.equal((await result).completion, "reverted-as-declared");
-  } else {
-    await assert.rejects(result, error => {
-      assert(error instanceof RevmStrictError); assert.equal(error.kind, "execution");
-      assert.deepEqual((error as any).exactPrefixFailure, {
-        kind: "Revert", phase: "main", output: "0xdeadbeef",
-        ...(typeof provenance === "string" ? { nestedHalt: provenance } : {}),
-      });
-      return notEvidence(error);
-    });
-  }
-  assert.deepEqual(f.fatals, []);
-});
-
-function programInvocation(): MutableInvocation {
-  const v = invocation();
-  v.request = { ...v.request,
-    call: { caller: { kind: "executor" }, executionMode: "executor-program", to: EXECUTOR,
-      data: buildSubscriptCalldata(new Uint8Array([0])) },
-    overrideIntent: { caller: { kind: "executor" }, tokenBalances: [{ token: TOKEN, amount: 137n }] },
-    observeTokenBalances: [{ token: TOKEN, account: { kind: "executor" } }],
-    observe: ["return-data", "revert-data", "token-delta", "native-delta", "logs"],
-  };
-  return v;
-}
-function programResponse(req: StrictSimulateRequest): DaemonResponse {
-  const r = response(req);
-  const code = req.executorRuntimeCode ?? req.trialPrefix?.executorRuntimeCode;
-  r.strict!.counterfactualExecutorCode = { address: req.trialPrefix?.executor ?? req.to, keccak256: code!.keccak256 };
-  return r;
-}
-function nativeProgramInvocation(nativeInput = true): MutableInvocation {
-  const v = programInvocation(), weth = ADDR.WETH.toLowerCase();
-  const tokenIn = nativeInput ? weth : TOKEN, tokenOut = nativeInput ? TOKEN : weth;
-  v.request = { ...v.request, executionAssetBoundary: { tokenIn, tokenOut, amountIn: 137n, minimum: 1n,
-    executionAssets: { input: nativeInput ? "native" : "erc20", output: nativeInput ? "erc20" : "native" } },
-    overrideIntent: { caller: { kind: "executor" }, tokenBalances: [{ token: tokenIn, amount: 137n }] },
-    observeTokenBalances: [tokenIn, tokenOut].map(token => ({ token, account: { kind: "executor" } })),
-  };
-  return v;
-}
-test("Ready strict issuer automatically applies the same native envelope as the work runtime", async () => {
-  for (const nativeInput of [true, false]) {
-    const f = fixture(async req => programResponse(req));
-    const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
-    const v = nativeProgramInvocation(nativeInput);
-    const runtime = createStrictCentralAdapterRuntime({ simulator: t, executor: EXECUTOR, transactionOrigin: ORIGIN,
-      generationFence: { assertCurrent() {} }, provider: { call: async () => assert.fail("raw RPC"),
-        getCode: async () => assert.fail(), getStorage: async () => assert.fail() } });
-    const outcome = await executeAdapterWork({ runtime, intent: { stage: "identity", familyId: "test:native-strict" as never,
-      source: SOURCE, generation: SOURCE.generation, programInput: undefined, program: {
-        requirements: () => ({ transports: ["effect-delta-simulation"], caller: "executor", effects: v.request.observe }),
-        buildRequests: () => [v.request], decode: ({ results }) => results,
-      } } });
-    assert.equal(outcome.status, "resolved");
-    assert.equal(f.calls.length, 1);
-    const materialized = materializeAdapterRequests([v.request], v.callerAuthority)[0];
-    assert(materialized.kind === "effect-delta-simulation");
-    assert.equal(f.calls[0].data, materialized.call.data);
-    assert.notEqual(f.calls[0].data, v.request.call.data);
-    assert.deepEqual(f.calls[0].sourcePin, PIN);
-    assert.deepEqual(f.calls[0].executorRuntimeCode, PROGRAM_CODE);
-    assert.equal(f.calls[0].transactionOrigin, ORIGIN);
-  }
-});
-for (const [name, mutate] of [
-  ["wrong mode", v => v.request.call.executionMode = "impersonated-call-frame"],
-  ["missing native observation", v => v.request.observe = ["token-delta"]],
-  ["missing token observation", v => v.request.observe = ["native-delta"]],
-  ["missing input/output scope", v => v.request.observeTokenBalances = []],
-  ["foreign input/output account", v => v.request.observeTokenBalances[0].account = ACTOR],
-  ["wrong native graph token", v => v.request.executionAssetBoundary.tokenIn = TOKEN],
-  ["negative amount", v => v.request.executionAssetBoundary.amountIn = -1n],
-  ["extra declaration", v => v.request.executionAssetBoundary.executorRuntimeCode = PROGRAM_CODE],
-] as readonly [string, (v: any) => void][]) test(`native strict boundary rejects ${name} before a lease`, async () => {
-  const f = fixture(), v = nativeProgramInvocation(); mutate(v);
-  const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
-  await assert.rejects(t.simulate(v), notEvidence);
-  assert.equal(f.sources.length, 0); assert.equal(f.calls.length, 0);
-});
-test("executor program binds trusted code, actor/origin, source and canonical self entry", async () => {
-  const f = fixture(async req => programResponse(req));
-  const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
-  const v = programInvocation(); await t.simulate(v);
-  const w = f.calls[0]!;
-  assert.equal(t.executorProgramCodeHash, PROGRAM_CODE.keccak256);
-  assert.equal(w.from, EXECUTOR); assert.equal(w.to, EXECUTOR); assert.equal(w.transactionOrigin, ORIGIN);
-  assert.equal(w.callerMode, "impersonated-call-frame"); assert.equal(w.data, v.request.call.data);
-  assert.deepEqual(w.executorRuntimeCode, PROGRAM_CODE); assert.deepEqual(w.preCalls, []);
-  assert.deepEqual(w.sourcePin, PIN); assert.deepEqual(w.tokenDeals, [{ token: TOKEN, to: EXECUTOR, amount: "137" }]);
-});
-for (const [name, mutate] of [
-  ["missing origin", v => delete v.callerAuthority.transactionOrigin],
-  ["zero origin", v => v.callerAuthority.transactionOrigin = addr("0")],
-  ["aliased origin", v => v.callerAuthority.transactionOrigin = EXECUTOR],
-  ["wrong target", v => v.request.call.to = TARGET],
-  ["non-executor role", v => v.request.call.caller = { kind: "verified-actor", evidenceId: "probe" }],
-  ["setup outside program", v => v.request.preCalls = [{ caller: { kind: "executor" }, to: TOKEN, data: "0x" }]],
-  ["family-supplied code", v => v.request.executorRuntimeCode = PROGRAM_CODE],
-  ["wrong selector", v => v.request.call.data = "0x09c5eabe" + v.request.call.data.slice(10)],
-  ["trailing bytes", v => v.request.call.data += "00"],
-  ["truncated bytes", v => v.request.call.data = v.request.call.data.slice(0, -2)],
-] as readonly [string, (v: any) => void][]) test(`executor program rejects ${name} before acquiring a lease`, async () => {
-  const f = fixture(), v = programInvocation(); mutate(v);
-  const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
-  await assert.rejects(t.simulate(v), notEvidence);
-  assert.equal(f.sources.length, 0); assert.equal(f.calls.length, 0);
-});
-test("executor program has no untrusted-code or raw-call fallback", async () => {
-  const f = fixture(); await assert.rejects(f.transport.simulate(programInvocation()), notEvidence);
-  assert.equal(f.sources.length, 0);
-});
-test("executor program following a prefix reuses its code and does not refill the current input", async () => {
-  const f = fixture(async req => programResponse(req));
-  const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
-  await t.simulatePrefix!(prefixInvocation(programInvocation().request));
-  const w = f.calls[0]!;
-  assert.equal(w.executorRuntimeCode, undefined); assert.equal(w.tokenDeals, undefined);
-  assert.equal(w.nativeBalanceWei, undefined); assert.deepEqual(w.trialPrefix!.executorRuntimeCode, PROGRAM_CODE);
-  assert.equal(w.trialPrefix!.inputAmount, "123"); assert.equal(w.to, EXECUTOR);
-});
-for (const proof of [undefined, { address: TARGET, keccak256: PROGRAM_CODE.keccak256 },
-  { address: EXECUTOR, keccak256: hash("5") }]) test("executor program requires matching code evidence even on revert", async () => {
-  for (const reverted of [false, true]) {
-    const f = fixture(async req => { const r = reverted ? failure(req, "Revert") : programResponse(req);
-      r.strict!.counterfactualExecutorCode = proof; return r; });
-    const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: PROGRAM_CODE });
-    await assert.rejects(t.simulate(programInvocation()), RevmFatalError);
-    assert.equal(f.fatals.length, 1);
-  }
-});
-test("production issuer accepts executor-program and binds code, origin and source in evidence", async () => {
-  const fingerprints = new Set<string>();
-  for (const [code, origin, prefix] of [[PROGRAM_CODE, ORIGIN, false],
-    [{ code: "0x00", keccak256: keccak256("0x00") }, ORIGIN, false],
-    [PROGRAM_CODE, OBSERVED, false], [PROGRAM_CODE, ORIGIN, true]] as const) {
-    const f = fixture(async req => programResponse(req));
-    const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: code });
-    const base = createStrictCentralAdapterRuntime({ simulator: t, executor: EXECUTOR, transactionOrigin: origin,
-      generationFence: { assertCurrent() {} }, provider: {
-        call: async () => assert.fail("must not call raw RPC"), getCode: async () => assert.fail(), getStorage: async () => assert.fail(),
-      } });
-    const runtime = prefix ? base.withExactPrefix!(prefixInvocation().prefix, SOURCE) : base;
-    const request = programInvocation().request;
-    const outcome = await executeAdapterWork({ runtime, intent: {
-      stage: "exact-refine", familyId: "test:executor-program" as never, source: SOURCE, generation: SOURCE.generation,
-      programInput: undefined, program: { requirements: () => ({ transports: ["effect-delta-simulation"],
-        caller: "executor", effects: request.observe }), buildRequests: () => [request], decode: ({ results }) => results },
-    } });
-    assert.equal(outcome.status, "resolved"); if (outcome.status !== "resolved") throw new Error("unresolved program");
-    const result = outcome.executed.evidence[0]!; assert(result.ok); fingerprints.add(result.provenance.fingerprint);
-    assert.equal(f.calls.length, 1);
-  }
-  assert.equal(fingerprints.size, 4);
-});
 test("prefix eth-call keeps caller/source/origin and dispatches isolated requests without a baseline cache", async () => {
   const f = fixture(), input = prefixInvocation(), controller = new AbortController();
   const control = { signal: controller.signal, deadlineAtMs: Date.now() + 30_000 };
@@ -491,43 +319,6 @@ test("sparse exact pairs never probe poisonous Cartesian cross-pairs", async () 
   const f = fixture(async req => { assert.deepEqual(req.observeTokenBalances, pairs); assert.equal(req.observeTokens, undefined); assert.equal(req.observeAccounts, undefined); return response(req); });
   const input = invocation(); input.request = { ...input.request, observeTokenBalances: pairs };
   assert.equal((await f.transport.simulate(input)).effects?.tokenDeltas?.length, 2);
-});
-test("independent supply targets preserve default, explicit empty, and detached source-bound scope", async () => {
-  for (const scope of [undefined, [], [TOKEN], [TOKEN, TARGET]]) {
-    const f = fixture(), input = invocation(); input.request = { ...input.request, observeTotalSupplies: scope };
-    const materialized = materializeAdapterRequests([input.request], input.callerAuthority)[0];
-    assert.deepEqual((materialized as any).observeTotalSupplies, scope);
-    if (scope) assert(Object.isFrozen((materialized as any).observeTotalSupplies));
-    const result = await f.transport.simulate(input), expected = scope ?? [TARGET];
-    assert.deepEqual(f.calls[0]?.observeTotalSupply, expected);
-    assert.deepEqual(result.effects?.totalSupplyDeltas?.map(d => d.token), expected);
-  }
-  const wait = deferred<RevmStrictSourceLease>(), f = fixture(), input = invocation(), scope = [TOKEN];
-  const t = createRevmStrictSimulationTransport({ ...f.options, leaseFor: () => wait.promise });
-  input.request = { ...input.request, observeTotalSupplies: scope }; const pending = t.simulate(input);
-  scope[0] = TARGET; wait.resolve(f.lease); await pending;
-  assert.deepEqual(f.calls[0]?.observeTotalSupply, [TOKEN]); assert(Object.isFrozen(f.calls[0]?.observeTotalSupply));
-});
-test("wrong or missing independent supply response fails closed", async () => {
-  for (const fault of ["wrong", "missing", "extra"]) {
-    const f = fixture(async req => { const r = response(req);
-      if (fault === "wrong") r.strict!.totalSupplyDeltas![0]!.token = TARGET;
-      if (fault === "missing") r.strict!.totalSupplyDeltas = [];
-      if (fault === "extra") r.strict!.totalSupplyDeltas!.push({ token: TARGET, delta: "0" });
-      return r;
-    });
-    const input = invocation(); input.request = { ...input.request, observeTotalSupplies: [TOKEN] };
-    await assert.rejects(f.transport.simulate(input), RevmFatalError); assert.equal(f.fatals.length, 1);
-  }
-});
-test("malformed or undeclared supply targets cannot reach a source lease", async () => {
-  for (const scope of [null, "bad", {}, [null], ["0x"], [addr("0")], [TOKEN, TOKEN],
-    [TOKEN, TOKEN.toUpperCase().replace("0X", "0x")], new Array(1), Object.assign([TOKEN], { extra: true })]) {
-    const f = fixture(), input = invocation(); input.request = { ...input.request, observeTotalSupplies: scope } as never;
-    await assert.rejects(f.transport.simulate(input), notEvidence); assert.equal(f.sources.length, 0);
-  }
-  const f = fixture(), input = invocation(); input.request = { ...input.request, observe: [], observeTotalSupplies: [] };
-  await assert.rejects(f.transport.simulate(input), notEvidence); assert.equal(f.sources.length, 0);
 });
 test("explicit empty overrides defaults; undeclared effects perform no probes", async () => {
   const f = fixture(), input = invocation(); input.request = { ...input.request, observeTokenBalances: [] };

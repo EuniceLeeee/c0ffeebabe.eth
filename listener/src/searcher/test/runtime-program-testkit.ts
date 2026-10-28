@@ -93,6 +93,26 @@ export function inspectRuntime(program: string, amount: bigint, input: {
         const result = inspectRuntime(child, r[from], input, { output: true, readOnly: !!mode.readOnly || readOnly === 1, depth: depth + 1 });
         set(to, result.registers[0]); calls.push(...result.calls); allowances.push(...result.allowances); break;
       }
+      case 9: {
+        const hop = byte(), hash = ethers.hexlify(take(32));
+        assert(hop < 6 && hash !== ethers.ZeroHash, "runtime diagnostic context"); break;
+      }
+      case 10: {
+        assert(!mode.readOnly, "runtime readonly call");
+        const target = ethers.getAddress(ethers.hexlify(take(20)));
+        const data = ethers.hexlify(take(Number(uint(3))));
+        const call = { target, data, template: data, static: false, value: 0n,
+          incoming: 0, outgoing: 0, patches: [] };
+        calls.push(call); returned = ethers.getBytes(input.call?.(call) ?? "0x"); break;
+      }
+      case 11: {
+        const negative = byte(), offset = Number(uint(3)), minimum = uint(32);
+        assert(negative <= 1 && offset + 32 <= returned.length, "runtime return floor bounds");
+        const value = BigInt(ethers.hexlify(returned.slice(offset, offset + 32)));
+        if (negative) assert(value >= 1n << 255n, "runtime return floor sign");
+        const magnitude = negative ? (1n << 256n) - value : value;
+        assert(magnitude >= minimum, "runtime return floor"); break;
+      }
       default: assert.fail("opcode");
     }
   }

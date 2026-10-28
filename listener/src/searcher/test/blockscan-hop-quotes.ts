@@ -7,6 +7,55 @@ const q = (id: string, num: bigint, den = 1n, overrides: Partial<DfsQuote> = {})
   ({ id, instance: id, tokenIn: "a", tokenOut: "b", num, den, value: { num: 1n, den: 1n }, ...overrides });
 const ids = (quotes: readonly DfsQuote[]) => quotes.map(quote => quote.id);
 
+test("bounded top-K is identical to full sorting over dense pairs and neighbors", () => {
+  let seed = 271828;
+  const next = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0);
+  const quotes = Array.from({ length: 2400 }, (_, i) => q(`q-${i}`, BigInt(1 + next() % 101),
+    BigInt(1 + next() % 101), { instance: `pool-${i % 800}`, tokenIn: i % 2 ? "root" : `t-${i % 101}`,
+      tokenOut: i % 2 ? `t-${i % 101}` : "root",
+      value: i % 17 === 0 ? null : { num: BigInt(1 + next() % 7), den: BigInt(1 + next() % 7) } }));
+  const rateOrder = (a: { num: bigint; den: bigint }, b: { num: bigint; den: bigint }) =>
+    a.num * b.den > b.num * a.den ? -1 : a.num * b.den < b.num * a.den ? 1 : 0;
+  const lexical = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+  for (const input of [quotes, [...quotes].reverse()]) {
+    for (const limit of [1, 2, 3, 7, 64, 3000]) {
+      const pairs = new Map<string, Map<string, DfsQuote>>();
+      for (const quote of input) {
+        if (!quote.value) continue;
+        const key = `${quote.tokenIn}|${quote.tokenOut}`;
+        const group = pairs.get(key) ?? new Map<string, DfsQuote>();
+        pairs.set(key, group);
+        const old = group.get(quote.instance);
+        if (!old || rateOrder(quote, old) < 0 ||
+          rateOrder(quote, old) === 0 && lexical(quote.id, old.id) < 0) group.set(quote.instance, quote);
+      }
+      const winners = new Set([...pairs.values()].flatMap(group => [...group.values()]
+        .sort((a, b) => rateOrder(a, b) || lexical(a.id, b.id)).slice(0, limit).map(q => q.id)));
+      assert.deepEqual(selectTopHopQuotes(input, limit), input.filter(q => winners.has(q.id)));
+      const actual = selectTopHopTokens(input, limit);
+      for (const reverse of [false, true]) {
+        const roots = new Map<string, Map<string, DfsQuote[]>>();
+        for (const quote of input) {
+          if (!quote.value) continue;
+          const root = reverse ? quote.tokenOut : quote.tokenIn, neighbor = reverse ? quote.tokenIn : quote.tokenOut;
+          const neighbors = roots.get(root) ?? new Map<string, DfsQuote[]>();
+          roots.set(root, neighbors);
+          const group = neighbors.get(neighbor) ?? [];
+          neighbors.set(neighbor, group); group.push(quote);
+        }
+        const expected: string[] = [];
+        for (const neighbors of roots.values()) {
+          const ranked = [...neighbors].map(([key, group]) => ({ key, group,
+            best: [...group].sort((a, b) => rateOrder(a.value!, b.value!))[0]!.value! }))
+            .sort((a, b) => rateOrder(a.best, b.best) || lexical(a.key, b.key));
+          for (const neighbor of ranked.slice(0, limit)) expected.push(...neighbor.group.map(q => q.id));
+        }
+        assert.deepEqual([...actual[reverse ? "reverse" : "forward"]], expected);
+      }
+    }
+  }
+});
+
 test("1/2/0 modes select top instances and preserve input traversal order", () => {
   const quotes = [q("second", 2n), q("third", 1n), q("first", 3n)];
   assert.deepEqual(ids(selectTopHopQuotes(quotes, 1)), ["first"]);

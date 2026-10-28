@@ -12,4 +12,4 @@ import { pricing } from "../swaps/precision-pool-family/pricing.js";
 import { routes } from "../swaps/precision-pool-family/routes.js";
 import { swap } from "../swaps/precision-pool-family/swap.js";
 export const plugin = defineSwapFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, swap, capture, actionAdapters: [action] });
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_PRECISION_POOL_ENABLED" });
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_PRECISION_POOL_ENABLED" });

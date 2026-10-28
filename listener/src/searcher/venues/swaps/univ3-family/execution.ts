@@ -17,7 +17,6 @@ export const univ3Execution = {
   buildFragment(input) {
     assertExecutionEvidence(input);
     const leg = buildUniV3RuntimeLeg(input);
-    if (!leg) throw new Error("quoted runtime leg unavailable");
     return Object.freeze({
       requirements: Object.freeze([]),
       nodes: Object.freeze([Object.freeze({

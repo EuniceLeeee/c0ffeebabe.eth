@@ -91,8 +91,7 @@ for (const method of ["trace_block", "debug_traceBlockByNumber"] as const) {
     assert.equal(cold.sourceReceipts[1].observationSetHash, expectedActivityHash("catalog-activity-observations-v1:"));
     assert.equal(cold.sourceReceipts[1].completedChunks[0].resultHash, expectedActivityHash("catalog-activity-chunk-v1:"));
     assert.equal(cold.sourceReceipts[1].completedChunks[0].resultCount, 1 + 2 * blockCount);
-    assert.deepEqual(cold.observations, [{ kind: "startup-candidate", candidate: candidatesFromLog(log)[0]! },
-      { ...baseCall, blockNumber: toBlock }]);
+    assert.deepEqual(cold.observations, [log, { ...baseCall, blockNumber: toBlock }]);
     const logRead = mock.method(ReadyActivityArchive.prototype, "readLogs", async () => { assert.fail("warm cache must skip raw log decode"); });
     const originalRead = ReadyActivityArchive.prototype.readTrace;
     const traceRead = mock.method(ReadyActivityArchive.prototype, "readTrace", async function (this: ReadyActivityArchive, key: Parameters<ReadyActivityArchive["readTrace"]>[0]) {

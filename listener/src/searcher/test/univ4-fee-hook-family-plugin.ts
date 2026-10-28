@@ -118,9 +118,6 @@ const descriptor = univ4FeeHookStrictFamilyPlugin.instance.finalizeDescriptor({
 const route = univ4FeeHookStrictFamilyPlugin.routes.project({ descriptor })[0];
 const amountIn = 1_000_000n;
 const amountOut = 1_001_000n;
-const executor = "0x3000000000000000000000000000000000000003";
-const transactionOrigin = "0x3000000000000000000000000000000000000004";
-// Synthetic evidence exercises fragment construction only, not real quote correctness.
 const fragment = univ4FeeHookStrictFamilyPlugin.execution.buildFragment({
   descriptor,
   route,
@@ -128,9 +125,7 @@ const fragment = univ4FeeHookStrictFamilyPlugin.execution.buildFragment({
   quotedAmountOut: amountOut,
   minAmountOut: amountOut,
   exactEvidence: Object.freeze({
-    kind: "tiered-executor-receipt" as const,
-    executor,
-    transactionOrigin,
+    kind: "univ4-fee-hook-quoter" as const,
     source: SOURCE,
     poolId: descriptor.poolId,
     poolKeyFingerprint: poolKeyFingerprint(descriptor.poolKey),
@@ -142,8 +137,7 @@ const fragment = univ4FeeHookStrictFamilyPlugin.execution.buildFragment({
     gasEstimate: 80_000n,
     hookData: "0x" as const,
   }),
-  executor,
-  transactionOrigin,
+  executor: "0x3000000000000000000000000000000000000003",
   runtimeEvidence: [],
 });
 assertPlanTokensAreCanonical(fragment.nodes);

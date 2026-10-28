@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { writeEffectiveMidProgress } from "../effective-mid-progress-file.js";
 import {
   buildEffectiveMids,
   DEFAULT_EFFECTIVE_WETH_INPUT,
@@ -7,11 +11,15 @@ import {
   effectiveMidRowCarried,
   effectiveAmountReferences,
   effectiveRowAmountReference,
+  exportEffectiveMidReplayState,
+  restoreEffectiveMidReplayState,
   resolveEffectiveAmountCascade,
   type EffectiveMidRow,
   type EffectiveMidSnapshot,
   type EffectivePricingInput,
+  type EffectiveMidProgress,
 } from "../blockscan-effective-mid.js";
+import { recordAdapterRequestCompletion } from "../adapter-request-observation.js";
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import { blockScanEdgeKey, createVerifiedGraphView } from "../venues/blockscan-state-capability.js";
@@ -19,6 +27,7 @@ import type { RouteVenueMid } from "../venues/mid-readers.js";
 import type { StrictProductionRuntimeSession } from "../strict-production-runtime-session.js";
 import { BlockScanAmountReference } from "../blockscan-amount-reference.js";
 import { scannerConsumesEdge } from "../blockscan-pricing-delta.js";
+import { createRouteImmutableBinding } from "../venues/route-immutable-binding.js";
 import type { BlockScanOpportunity } from "../detector/detector.js";
 
 // Offline behavior tests only: callbacks are fixtures, not chain-quote evidence
@@ -92,6 +101,51 @@ function noQuote(r: EffectiveMidRow, status: EffectiveMidRow["status"]) {
 
 const tests: [string, () => void | Promise<void>][] = [];
 const test = (name: string, run: () => void | Promise<void>) => { tests.push([name, run]); };
+test("historical baseline restores original forward lineage and cannot reuse a later trial", async () => {
+  const a = edge(W, U, "a"), b = edge(U, "third", "b"), c = edge("third", W, "c");
+  const prices = pricing([[a, 1], [b, 1], [c, 1]]);
+  const first = await build(prices);
+  const cold = structuredClone({ snapshot: { ...first, rows: new Map(first.rows) }, lineage: exportEffectiveMidReplayState(first) });
+  const secondSource = { number: SOURCE.number + 1, hash: hash(80), generation: SOURCE.generation + 1 };
+  let calls = 0;
+  const step = (previous: EffectiveMidSnapshot) => build({ ...prices, sourceBlock: secondSource.number,
+    sourceBlockHash: secondSource.hash, generation: secondSource.generation }, { previous,
+    touchedStateKeys: new Set(["a"]), quote: async ({ amountIn }) => { calls++; return { source: secondSource, amountIn, amountOut: amountIn * 3n }; } });
+  const uninterrupted = await step(first); assert.equal(calls, 1);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const restored = structuredClone(cold);
+    restoreEffectiveMidReplayState(restored.snapshot, restored.lineage, prices.graph.edges, W);
+    calls = 0;
+    const resumed = await step(restored.snapshot);
+    assert.equal(calls, 1, "dirty row must be quoted on EACH independent trial");
+    assert.deepEqual([...resumed.rows], [...uninterrupted.rows]);
+    assert.deepEqual(effectiveAmountReferences(resumed), effectiveAmountReferences(uninterrupted));
+    assert.deepEqual(effectiveRowAmountReference(row(resumed, b)), effectiveRowAmountReference(row(uninterrupted, b)),
+      "clean B keeps its original A quote path, not the new differently sized A output");
+  }
+  const bad = structuredClone(cold);
+  assert.throws(() => restoreEffectiveMidReplayState(bad.snapshot, { ...bad.lineage,
+    references: [{ amountIn: 1n, path: [] }, ...bad.lineage.references.slice(1)] }, prices.graph.edges, W));
+  assert.throws(() => restoreEffectiveMidReplayState(cold.snapshot, cold.lineage, prices.graph.edges, "wrong-token"));
+});
+test("historical baseline retains zero-output and failed rows without inventing prices", async () => {
+  const edges = [edge(W, U, "zero"), edge(W, U, "failed"), edge(W, U, "unsupported")];
+  const prices = pricing(edges.map(e => [e, 1]));
+  const first = await build(prices, { quote: async ({ edge: current, amountIn }) => {
+    if (current.target === "zero") return { source: SOURCE, amountIn, amountOut: 0n };
+    throw Object.assign(new Error("fixture"), current.target === "unsupported" ? { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" } : {});
+  } });
+  const saved = structuredClone({ snapshot: { ...first, rows: new Map(first.rows) }, lineage: exportEffectiveMidReplayState(first) });
+  restoreEffectiveMidReplayState(saved.snapshot, saved.lineage, edges, W);
+  const next = await build(prices, { previous: saved.snapshot, touchedStateKeys: new Set(),
+    quote: async () => { throw new Error("clean failed rows must carry"); } });
+  assert.deepEqual([...next.rows], [...first.rows]);
+  assert.equal(row(next, edges[0]!).amountOut, 0n);
+  const invalid = structuredClone(saved);
+  invalid.snapshot.rows.set("zero", { ...invalid.snapshot.rows.get("zero")!, status: "quoted" });
+  assert.throws(() => restoreEffectiveMidReplayState(invalid.snapshot, invalid.lineage, edges, W));
+});
+
 test("explicit fixed P re-quotes amounts and cannot carry rows from another P", async () => {
   const e = edge(W, U, "fixed"), prices = pricing([[e, 2]]);
   const previous = await build(prices);
@@ -1267,7 +1321,7 @@ test("legacy and persisted snapshots cannot carry unproven amount sources into t
   assert.equal(calls, 2, "even quotedAt cannot substitute for the new in-memory policy identity");
 });
 
-test("quote session is prepared once for actual work, excluding carried and missing-price rows", async () => {
+test("same-layer quote work is prepared in one batch, excluding carried and missing-price rows", async () => {
   const clean = Array.from({ length: 512 }, (_, i) => edge(W, U, `clean-${i}`));
   const dirty = edge(W, U, "dirty"), retry = edge(W, U, "unavailable"), missing = edge("unknown", U, "missing");
   const prices = pricing([...clean, dirty, retry, missing].map(e => [e, 1]));
@@ -1434,13 +1488,12 @@ test("four-hop references prepare and quote depth-four outgoing directions but n
   const result = await build(pricing([...edges].reverse().map(e => [e, NaN])), {
     prepareQuote: async required => { prepared.push([...required]); },
     quote: async ({edge, amountIn}) => {
-      assert.equal(prepared.length, 1, "one source-bound session is prepared before any layer");
-      assert(prepared[0]!.includes(blockScanEdgeKey(edge)), "every issued quote was prepared");
+      assert(prepared.at(-1)!.includes(blockScanEdgeKey(edge)), "every issued quote belongs to the current layer's session");
       calls.push(edge); return {source: SOURCE, amountIn, amountOut: amountIn + 1n};
     },
   });
   assert.deepEqual(calls, edges.slice(0, 5));
-  assert.deepEqual(new Set(prepared[0]), new Set(edges.slice(0, 5).map(blockScanEdgeKey)));
+  assert.deepEqual(prepared, edges.slice(0, 5).map(e => [blockScanEdgeKey(e)]));
   assert.equal(row(result, edges[4]!).amountIn, DEFAULT_RAW + 4n);
   assert.equal(row(result, edges[4]!).amountOut, DEFAULT_RAW + 5n);
   noQuote(row(result, edges[5]!), "missing-valuation");
@@ -1453,8 +1506,9 @@ test("four-hop references prepare and quote depth-four outgoing directions but n
 test("failed shortest sources do not poison amounts and successful longer sources may recover reachability", async () => {
   const edges = [edge(W, "x", "failed-direct"), edge(W, "a", "root"), edge("a", "x", "valid-longer"),
     edge("x", W, "back"), edge(W, "dead", "failed-only"), edge("dead", W, "unreachable")];
-  const calls: string[] = [];
+  const calls: string[] = [], prepared: string[][] = [];
   const result = await build(pricing(edges.map(e => [e, e.target.startsWith("failed") ? 1e300 : 1e-300])), {
+    prepareQuote: async ids => { prepared.push([...ids]); },
     quote: async ({edge, amountIn}) => {
       calls.push(edge.target);
       if (edge.target.startsWith("failed")) throw new Error("fixture unavailable");
@@ -1464,7 +1518,93 @@ test("failed shortest sources do not poison amounts and successful longer source
   assert.equal(row(result, edges[3]!).amountIn, DEFAULT_RAW * 4n);
   assert.deepEqual(effectiveAmountReferences(result)!.get("x")!.path.map(r => r.edgeId), ["root", "valid-longer"]);
   assert.equal(calls.includes("unreachable"), false);
+  assert.deepEqual(prepared, [["failed-direct", "root", "failed-only"], ["valid-longer"], ["back"]],
+    "failed-only downstream must never be bound; successful longer paths still prepare later");
   noQuote(row(result, edges[5]!), "missing-valuation");
+});
+
+test("demand batches exclude wide failed frontiers and reopen clean null-input rows after recovery", async () => {
+  const root = edge(W, "a", "root");
+  const tails = Array.from({length: 8192}, (_, index) => edge("a", W, `tail-${index}`));
+  const prices = pricing([root, ...tails].map(e => [e, NaN]));
+  const prepared: string[][] = [], issued: string[] = [];
+  let active = new Set<string>();
+  const prepareQuote = async (ids: ReadonlySet<string>) => {
+    prepared.push([...ids]); active = new Set(ids);
+  };
+  const previous = await build(prices, {prepareQuote, quote: async ({edge, amountIn}) => {
+    assert(active.has(blockScanEdgeKey(edge))); issued.push(blockScanEdgeKey(edge));
+    return {source: SOURCE, amountIn, amountOut: 0n};
+  }});
+  assert.deepEqual(prepared, [["root"]]);
+  assert.deepEqual(issued, ["root"]);
+  assert(tails.every(e => row(previous, e).amountIn === null));
+  for (const cascadeAmountChanges of [false, true]) {
+    prepared.length = 0; issued.length = 0;
+    const quiet = await build(prices, {previous, cascadeAmountChanges, touchedStateKeys: new Set(),
+      prepareQuote, quote: async () => { assert.fail("no usable amounts in a quiet failed frontier"); }});
+    assert.deepEqual(prepared, [], "neither clean failure nor null-input tails need binding");
+    assert.deepEqual([...quiet.rows], [...previous.rows]);
+    const current = {...SOURCE, number: SOURCE.number + 1, hash: hash(1550), generation: SOURCE.generation + 1};
+    const quote: Quote = async ({edge, amountIn}) => {
+      assert(active.has(blockScanEdgeKey(edge))); issued.push(blockScanEdgeKey(edge));
+      return {source: current, amountIn, amountOut: amountIn + 1n};
+    };
+    const result = await build(atSource(prices, current), {previous, cascadeAmountChanges,
+      touchedStateKeys: new Set([root.instanceKey!]), prepareQuote, quote});
+    assert.deepEqual(prepared, [["root"], tails.map(blockScanEdgeKey)], "one batch per layer, never per edge");
+    assert.deepEqual(issued, prepared.flat(), "all recovered rows, not a fixed candidate cap");
+    const reference = await build(atSource(prices, current), {previous, cascadeAmountChanges,
+      touchedStateKeys: new Set([root.instanceKey!]),
+      quote: async ({amountIn}) => ({source: current, amountIn, amountOut: amountIn + 1n})});
+    assert.deepEqual([...result.rows], [...reference.rows]);
+    assert.deepEqual(effectiveAmountReferences(result), effectiveAmountReferences(reference));
+    for (const [id, value] of result.rows) {
+      assert.deepEqual(effectiveRowAmountReference(value), effectiveRowAmountReference(reference.rows.get(id)!));
+    }
+  }
+});
+
+test("a layer settles fully before replacing bindings, and later preparation stops fail closed", async () => {
+  const a = edge(W, "a", "a"), b = edge(W, "b", "b"), tail = edge("a", W, "tail");
+  const prices = pricing([a, b, tail].map(e => [e, 1]));
+  for (const stop of ["none", "abort", "deadline", "failure"] as const) {
+    const controller = new AbortController();
+    const now = Date.now;
+    const control = {signal: controller.signal, deadlineAtMs: now() + 60_000};
+    let inFlight = 0, batches = 0;
+    let active = new Set<string>();
+    const issued: string[] = [];
+    const failure = new Error("second layer preparation failed");
+    try {
+      const pending = build(prices, {control,
+        prepareQuote: async ids => {
+          assert.equal(inFlight, 0, "old source-bound session must have no pending quotes");
+          active = new Set(ids); batches++;
+          if (batches === 2) {
+            assert.deepEqual([...ids], ["tail"]);
+            if (stop === "abort") controller.abort();
+            if (stop === "deadline") Date.now = () => control.deadlineAtMs + 1;
+            if (stop === "failure") throw failure;
+          }
+        },
+        quote: async ({edge, amountIn}) => {
+          const id = blockScanEdgeKey(edge), binding = active;
+          assert(binding.has(id)); inFlight++; issued.push(id);
+          await new Promise(resolve => setTimeout(resolve, id === "a" ? 1 : 5));
+          assert.equal(active, binding, "bindings cannot change during a pending quote");
+          inFlight--; return {source: SOURCE, amountIn, amountOut: amountIn + 1n};
+        },
+      });
+      if (stop === "failure") await assert.rejects(pending, error => error === failure);
+      else {
+        const result = await pending;
+        assert.equal(result.complete, stop === "none");
+        assert.equal(row(result, tail).status, stop === "none" ? "quoted" : "cancelled");
+      }
+      assert.deepEqual(issued, stop === "none" ? ["a", "b", "tail"] : ["a", "b"]);
+    } finally { Date.now = now; }
+  }
 });
 
 test("default-off cascade preserves downstream tuples and their original in-memory input provenance", async () => {
@@ -1560,69 +1700,208 @@ test("enabled cascade invalidates unreachable dependents without issuing quotes 
   assert.equal(row(recovered, tail).status, "quoted");
 });
 
-
-test("startup partial continuation retains successful lineage and retries all unsuccessful statuses", async () => {
-  const names = ["kept", "failed", "unsupported", "zero", "cancelled"];
-  const all = names.map(id => edge(W, U, id));
-  const prices = pricing(all.map(e => [e, 2]));
-  const controller = new AbortController();
-  const previous = await build(prices, { concurrency: 1, control: { signal: controller.signal },
-    quote: async ({ edge, amountIn }) => {
-      if (edge.target === "failed") throw new Error("temporary");
-      if (edge.target === "unsupported") throw { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" };
-      if (edge.target === "cancelled") controller.abort();
-      return { source: SOURCE, amountIn, amountOut: edge.target === "zero" ? 0n : amountIn * 2n };
-    } });
-  assert.equal(previous.complete, false);
-  const current = { ...SOURCE, generation: SOURCE.generation + 1 };
-  const calls: TokenEdge[] = [];
-  const next = await build(atSource(prices, current), { previous, resumeSameSource: true,
-    touchedStateKeys: new Set(), quote: async ({ edge, amountIn }) => {
-      calls.push(edge); return { source: current, amountIn, amountOut: amountIn * 2n };
-    } });
-  assert.deepEqual(calls, all.slice(1));
-  assert.equal(next.complete, true);
-  assert.equal(row(next, all[0]!), row(previous, all[0]!));
-  assert.equal(effectiveRowAmountReference(row(next, all[0]!)), effectiveRowAmountReference(row(previous, all[0]!)));
-  assert.equal(effectiveMidRowCarried(next, row(next, all[0]!)), true);
-  assert.deepEqual(row(next, all[0]!).quotedAt, SOURCE);
+test("progress partitions directions and distinguishes observed reverts from ordinary failures", async () => {
+  const edges = ["ok", "revert", "unknown", "zero", "disabled", "cancel", "encoded"]
+    .map(id => edge(W, U, id));
+  edges.push(edge("unreachable", U, "missing"));
+  const progress: EffectiveMidProgress[] = [];
+  const snapshot = await build(pricing(edges.map(e => [e, 1])), {
+    concurrency: 3, disabledEdgeIds: new Set(["disabled"]), onProgress: p => progress.push(p),
+    quote: async ({ edge: e, amountIn }) => {
+      if (e.target === "revert") {
+        recordAdapterRequestCompletion("reverted-as-declared");
+        await Promise.resolve();
+        throw new Error("decode rejected");
+      }
+      if (e.target === "unknown") throw new Error("revert words do not prove an EVM revert");
+      if (e.target === "cancel") throw Object.assign(new Error("unsupported"), { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" });
+      if (e.target === "encoded") recordAdapterRequestCompletion("reverted-as-declared");
+      return { source: SOURCE, amountIn, amountOut: e.target === "zero" ? 0n : amountIn };
+    },
+  });
+  assert.equal(snapshot.complete, true);
+  assert.deepEqual(progress.map(p => p.phase), ["preparing", "quoting", "completed"]);
+  const end = progress.at(-1)!;
+  assert.equal(end.totalDirections, 8);
+  assert.equal(end.processedDirections, 8);
+  assert.equal(end.successfulDirections, 2, "revert-encoded return remains a successful quote");
+  assert.equal(end.failedWithRevertEvidence, 1);
+  assert.equal(end.otherQuoteFailures, 1, "concurrent quotes do not inherit another quote's revert");
+  assert.equal(end.byStatus["no-output"], 1);
+  assert.equal(end.byStatus["missing-valuation"], 1);
+  assert.equal(end.byStatus.unsupported, 1);
+  assert.equal(end.byStatus["disabled-for-run"], 1);
+  assert.equal(end.quoteCallsStarted, 6);
+  assert.equal(end.quoteCallsSettled, 6);
+  assert.equal(end.inFlight, 0);
+  assert.equal(end.pendingDirections, 0);
+  assert.equal(end.cancelledDirections, 0);
+  for (const p of progress) {
+    assert.equal(p.totalDirections, p.processedDirections + p.pendingDirections + p.cancelledDirections);
+    assert.equal(p.inFlight, p.quoteCallsStarted - p.quoteCallsSettled);
+    assert(Object.isFrozen(p) && Object.isFrozen(p.byStatus));
+    assert.equal(p.sourceBlock, SOURCE.number);
+    assert.equal(p.sourceBlockHash, SOURCE.hash);
+  }
+  const reused: EffectiveMidProgress[] = [];
+  await build(pricing(edges.map(e => [e, 1])), { previous: snapshot, touchedStateKeys: new Set(),
+    disabledEdgeIds: new Set(["disabled"]), onProgress: p => reused.push(p),
+    quote: async () => { throw new Error("unchanged completed rows must not be requoted"); },
+  });
+  assert.equal(reused.at(-1)!.quoteCallsStarted, 0);
+  assert.equal(reused.at(-1)!.successfulDirections, 2);
+  assert.equal(reused.at(-1)!.failedWithRevertEvidence, 1);
+  assert.equal(reused.at(-1)!.processedDirections, 8);
+  assert.equal(reused.at(-1)!.reusedDirections, 7);
 });
 
-for (const change of ["none", "amount", "gas-amount", "mode", "spread", "cascade", "weth", "hash", "height", "generation", "complete"] as const) {
-  test(`startup continuation policy fence: ${change}`, async () => {
-    const all = [edge(W, U, "first"), edge(W, U, "last")];
-    const prices = pricing(all.map(e => [e, 2]));
-    const controller = new AbortController();
-    const previous = await build(prices, { concurrency: 1, control: { signal: controller.signal },
-      ...(change === "gas-amount" ? { gasCostWei: 1n } : {}),
-      quote: async ({ edge, amountIn }) => {
-        if (change !== "complete" && edge.target === "last") controller.abort();
-        return { source: SOURCE, amountIn, amountOut: amountIn * 2n };
-      } });
-    const current = { number: SOURCE.number + (change === "height" ? 1 : 0),
-      hash: change === "hash" ? hash(123) : SOURCE.hash,
-      generation: SOURCE.generation + (change === "generation" ? 0 : 1) };
-    const overrides: Partial<BuildInput> = change === "amount" ? { fixedWethInput: 10n }
-      : change === "gas-amount" ? { gasCostWei: 2n }
-      : change === "mode" ? { fixedWethInput: DEFAULT_RAW }
-      : change === "spread" ? { enumerationSpreadBps: 201 }
-      : change === "cascade" ? { cascadeAmountChanges: true }
-      : change === "weth" ? { weth: U } : {};
-    const calls: TokenEdge[] = [];
-    const next = await build(atSource(prices, current), { previous, resumeSameSource: true,
-      touchedStateKeys: new Set(), ...overrides, quote: async ({ edge, amountIn }) => {
-        calls.push(edge); return { source: current, amountIn, amountOut: amountIn * 2n };
-      } });
-    assert.equal(next.complete, true);
-    if (change === "none") {
-      assert.deepEqual(calls, [all[1]]);
-      assert.equal(row(next, all[0]!), row(previous, all[0]!));
-    } else {
-      assert.notEqual(row(next, all[0]!), row(previous, all[0]!), "policy/source change must discard old success");
-      if (change !== "weth") assert.deepEqual(calls, all);
-    }
+test("cached quote microtasks publish intermediate counts without waiting for a timer", async () => {
+  const now = Date.now;
+  let clock = now();
+  const progress: EffectiveMidProgress[] = [];
+  let timerRan = false;
+  const timer = setTimeout(() => { timerRan = true; }, 0);
+  Date.now = () => clock;
+  try {
+    await build(pricing(Array.from({ length: 20 }, (_, i) => [edge(W, U, `cached-${i}`), 1] as PriceRow)), {
+      concurrency: 1, onProgress: p => progress.push(p),
+      quote: async ({ amountIn }) => {
+        clock += 1000;
+        return { source: SOURCE, amountIn, amountOut: amountIn };
+      },
+    });
+    assert.equal(timerRan, false, "the timer queue has not run during the cached quote chain");
+    assert(progress.some(p => p.phase === "quoting" && p.successfulDirections > 0 && p.pendingDirections > 0),
+      "worker completions must publish counts before the entire layer finishes");
+    assert.equal(progress.at(-1)!.successfulDirections, 20);
+  } finally { Date.now = now; clearTimeout(timer); }
+});
+
+test("progress snapshot is atomically readable without consuming stdout", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "effective-progress-"));
+  const events = join(directory, "events.jsonl"), target = join(directory, "effective-mid-progress.json");
+  try {
+    await build(pricing([[edge(W, U, "file"), 1]]), {
+      onProgress: p => {
+        writeEffectiveMidProgress(events, p);
+        assert.deepEqual(JSON.parse(readFileSync(target, "utf8")), p);
+      },
+    });
+    assert.equal(JSON.parse(readFileSync(target, "utf8")).successfulDirections, 1);
+    assert.equal(statSync(target).mode & 0o777, 0o600);
+    assert.deepEqual(readdirSync(directory), ["effective-mid-progress.json"]);
+    await build(pricing([[edge(W, U, "unwritable"), 1]]), {
+      onProgress: p => writeEffectiveMidProgress(join(directory, "missing", "events.jsonl"), p),
+    });
+  } finally { rmSync(directory, { recursive: true }); }
+});
+
+test("progress reports pending work while waiting and drains on preparation failure", async () => {
+  const progress: EffectiveMidProgress[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const pending = build(pricing([[edge(W, U, "waiting"), 1]]), {
+    onProgress: p => progress.push(p), prepareQuote: () => gate,
   });
-}
+  await new Promise(resolve => setTimeout(resolve, 5100));
+  assert(progress.length >= 2, "periodic telemetry must appear without quote completions");
+  assert.equal(progress.at(-1)!.phase, "preparing");
+  assert.equal(progress.at(-1)!.pendingDirections, 1);
+  assert.equal(progress.at(-1)!.quoteCallsStarted, 0);
+  release(); await pending;
+  assert.equal(progress.at(-1)!.phase, "completed");
+  const failedProgress: EffectiveMidProgress[] = [];
+  const failure = new Error("source unavailable");
+  await assert.rejects(build(pricing([[edge(W, U, "preparation-failed"), 1]]), {
+    prepareQuote: async () => { throw failure; }, onProgress: p => failedProgress.push(p),
+  }), error => error === failure);
+  assert.equal(failedProgress.at(-1)!.phase, "interrupted");
+  assert.equal(failedProgress.at(-1)!.pendingDirections, 1);
+  assert.equal(failedProgress.at(-1)!.failedWithRevertEvidence, 0);
+});
+
+test("cancelled quotes are not completed or revert failures and observer errors are harmless", async () => {
+  const controller = new AbortController();
+  const progress: EffectiveMidProgress[] = [];
+  const e = edge(W, U, "cancelled-progress");
+  const result = await build(pricing([[e, 1]]), {
+    control: { signal: controller.signal }, onProgress: p => progress.push(p),
+    quote: async () => {
+      recordAdapterRequestCompletion("reverted-as-declared");
+      controller.abort(); throw new Error("aborted");
+    },
+  });
+  assert.equal(result.complete, false);
+  const end = progress.at(-1)!;
+  assert.equal(end.phase, "interrupted");
+  assert.equal(end.cancelledDirections, 1);
+  assert.equal(end.processedDirections, 0);
+  assert.equal(end.failedWithRevertEvidence, 0);
+  const normal = await build(pricing([[e, 1]]));
+  const observed = await build(pricing([[e, 1]]), { onProgress: () => { throw new Error("log write failed"); } });
+  assert.deepEqual([...observed.rows], [...normal.rows]);
+});
+
+test("immutable Ready graph retains the full table while only dirty rows visit quote frontiers", async () => {
+  const all = Array.from({ length: 2048 }, (_, i) => Object.freeze(edge(W, U, `indexed-${i}`)));
+  const base = pricing(all.map(e => [e, 1]));
+  const prices = { ...base, graph: { edges: Object.freeze(all) } };
+  const previous = await build(prices);
+  const progress: EffectiveMidProgress[] = [];
+  const quiet = await build(prices, { previous, touchedStateKeys: new Set(), onProgress: p => progress.push(p),
+    quote: async () => { assert.fail("clean row requoted"); } });
+  assert.strictEqual(quiet.rows, previous.rows);
+  assert.equal(progress.at(-1)!.frontierDirections, 0);
+  assert.equal(progress.at(-1)!.processedDirections, all.length);
+  const issued: TokenEdge[] = [];
+  const next = await build(prices, { previous: quiet, touchedStateKeys: new Set(["indexed-7", "indexed-91"]),
+    onProgress: p => progress.push(p), quote: async ({ edge, amountIn }) => {
+      issued.push(edge); return { source: SOURCE, amountIn, amountOut: amountIn + 1n };
+    } });
+  assert.deepEqual(issued, [all[7], all[91]]);
+  assert.equal(progress.at(-1)!.frontierDirections, 2);
+  assert.equal(next.rows.size, all.length);
+  for (let i = 0; i < all.length; i++) if (i !== 7 && i !== 91) {
+    assert.strictEqual(row(next, all[i]!), row(previous, all[i]!));
+  }
+});
+
+test("a frozen array with mutable edges must not cache stale identity or token membership", async () => {
+  const e = edge(W, U, "before"), base = pricing([[e, 1]]);
+  const prices = { ...base, graph: { edges: Object.freeze([e]) } };
+  const previous = await build(prices);
+  Object.assign(e, { canonicalEdgeId: "after", instanceKey: "after", tokenOut: "other" });
+  const next = await build(prices, { previous, touchedStateKeys: new Set() });
+  assert.equal(next.rows.has("before"), false);
+  assert.equal(next.rows.get("after")!.tokenOut, "other");
+});
+
+test("cached graph does not freeze pricing membership or run exclusions", async () => {
+  const credit = Object.freeze({ ...edge(W, U, "index-credit"), slotKind: "lend" as const,
+    edgeKind: "credit" as const, leavesStandingPosition: true });
+  const base = pricing([[credit, 1]]);
+  const prices = { ...base, graph: { edges: Object.freeze([credit]) } };
+  const absent = await build(prices);
+  assert.equal(absent.rows.size, 0);
+  const declared = { ...prices, pricingStateKeyByEdgeKey: new Map([["index-credit", "credit-state"]]) };
+  const enabled = await build(declared, { previous: absent, touchedStateKeys: new Set() });
+  assert.equal(row(enabled, credit).status, "quoted");
+  const disabled = await build(declared, { previous: enabled, touchedStateKeys: new Set(),
+    disabledEdgeIds: new Set(["index-credit"]) });
+  assert.equal(row(disabled, credit).status, "disabled-for-run");
+  const removed = await build(prices, { previous: enabled, touchedStateKeys: new Set() });
+  assert.equal(removed.rows.size, 0);
+});
+
+test("a shallow-frozen edge cannot cache a mutable execution binding", async () => {
+  const binding = { ...createRouteImmutableBinding("test/index", "0x01") };
+  const e = Object.freeze({ ...edge(W, U, "mutable-binding"), routeBinding: binding });
+  const base = pricing([[e, 1]]);
+  const prices = { ...base, graph: { edges: Object.freeze([e]) } };
+  const previous = await build(prices);
+  binding.payload = "0x02";
+  await assert.rejects(build(prices, { previous, touchedStateKeys: new Set() }), /binding hash mismatch/);
+});
 
 let failed = 0;
 for (const [name, run] of tests) {

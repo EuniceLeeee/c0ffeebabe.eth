@@ -113,6 +113,133 @@ export function tokenToWethReferencesFromRates(
   return marks;
 }
 
+/** Consumer-owned index of validated amount ratios. No raw mids, fees or RPC.
+ * Topology is fixed for this index; callers rebuild it when topology changes. */
+export class DirectedRateReferenceIndex {
+  private readonly pairs = new Map<string, {
+    from: string; to: string; keys: { key: string; instance: string; order: number }[];
+    rate?: RawTokenRate; order: number;
+  }>();
+  private readonly pairByEdge = new Map<string, string>();
+  private readonly outgoing = new Map<string, string[]>();
+  private readonly incoming = new Map<string, Set<string>>();
+  private readonly rates = new Map<string, RawTokenRate>();
+  private readonly layers: Map<string, RawTokenRate>[];
+  private view: ReadonlyMap<string, RawTokenRate>;
+  private readonly weth: string;
+
+  constructor(edges: readonly TokenEdge[], rateFor: (key: string) => RawTokenRate | undefined, weth: string) {
+    this.weth = weth.toLowerCase();
+    this.layers = Array.from({ length: 4 }, () => new Map([[this.weth, { num: 1n, den: 1n }]]));
+    for (const [order, edge] of edges.entries()) {
+      const from = edge.tokenIn.toLowerCase(), to = edge.tokenOut.toLowerCase(), key = blockScanEdgeKey(edge);
+      if (edge.leavesStandingPosition || from === to || this.pairByEdge.has(key)) continue;
+      const id = `${from}|${to}`;
+      let pair = this.pairs.get(id);
+      if (!pair) {
+        pair = { from, to, keys: [], order };
+        this.pairs.set(id, pair);
+        const outgoing = this.outgoing.get(from) ?? [];
+        outgoing.push(id); this.outgoing.set(from, outgoing);
+        const incoming = this.incoming.get(to) ?? new Set<string>();
+        incoming.add(from); this.incoming.set(to, incoming);
+      }
+      pair.keys.push({ key, instance: edgeInstanceKey(edge), order });
+      this.pairByEdge.set(key, id);
+      const rate = rateFor(key);
+      if (rate) this.rates.set(key, rate);
+    }
+    for (const id of this.pairs.keys()) this.reprice(id);
+    for (let hop = 1; hop <= 3; hop++) for (const token of this.outgoing.keys()) {
+      const value = this.mark(token, hop);
+      if (value) this.layers[hop]!.set(token, value);
+    }
+    this.view = new Map(this.layers[3]);
+  }
+
+  get marks(): ReadonlyMap<string, RawTokenRate> { return this.view; }
+
+  update(changes: ReadonlyMap<string, RawTokenRate | undefined>, mode: "direct" | "dependencies") {
+    const pairs = new Set<string>(), removedSources = new Set<string>();
+    for (const [key, rate] of changes) {
+      const id = this.pairByEdge.get(key);
+      if (!id) continue;
+      if (!rate && this.rates.has(key)) removedSources.add(this.pairs.get(id)!.from);
+      if (rate) this.rates.set(key, rate); else this.rates.delete(key);
+      pairs.add(id);
+    }
+    const sources = new Set<string>();
+    for (const id of pairs) {
+      const pair = this.pairs.get(id)!;
+      const prior = pair.rate, order = pair.order;
+      this.reprice(id);
+      if (!sameExactRate(prior, pair.rate) || order !== pair.order) sources.add(pair.from);
+    }
+    // Even direct mode propagates loss of a usable edge. A cached conversion
+    // path must not survive a run exclusion / failed quote / removal.
+    const forced = new Set(removedSources);
+    let frontier = removedSources;
+    for (let hop = 1; hop < 3; hop++) {
+      const next = new Set<string>();
+      for (const token of frontier) for (const parent of this.incoming.get(token) ?? []) {
+        forced.add(parent); next.add(parent);
+      }
+      frontier = next;
+    }
+    let changed = new Set<string>(), recomputedTokens = 0;
+    for (let hop = 1; hop <= 3; hop++) {
+      const affected = new Set([...sources, ...forced]);
+      if (mode === "dependencies") for (const token of changed) {
+        affected.add(token);
+        for (const parent of this.incoming.get(token) ?? []) affected.add(parent);
+      }
+      const nextChanged = new Set<string>();
+      for (const token of affected) {
+        recomputedTokens++;
+        const layer = this.layers[hop]!, value = this.mark(token, hop);
+        if (sameExactRate(layer.get(token), value)) continue;
+        if (value) layer.set(token, value); else layer.delete(token);
+        nextChanged.add(token);
+      }
+      changed = nextChanged;
+    }
+    if (changed.size) this.view = new Map(this.layers[3]);
+    return { marks: this.view, changedTokens: changed, recomputedPairs: pairs.size, recomputedTokens };
+  }
+
+  private reprice(id: string): void {
+    const pair = this.pairs.get(id)!, instances = new Map<string, RawTokenRate>();
+    pair.order = Infinity;
+    for (const { key, instance, order } of pair.keys) {
+      const rate = this.rates.get(key);
+      if (!rate) continue;
+      pair.order = Math.min(pair.order, order);
+      const prior = instances.get(instance);
+      if (!prior || compareRates(rate, prior) > 0) instances.set(instance, rate);
+    }
+    pair.rate = instances.size ? bestRate([...instances.values()]) : undefined;
+  }
+
+  private mark(token: string, hop: number): RawTokenRate | undefined {
+    const previous = this.layers[hop - 1]!, shorter = previous.get(token);
+    if (shorter) return shorter;
+    let best: RawTokenRate | undefined;
+    // Graph-order ties match the full builder, including newly available pairs.
+    const pairs = (this.outgoing.get(token) ?? []).map(id => this.pairs.get(id)!)
+      .sort((a, b) => a.order - b.order);
+    for (const pair of pairs) {
+      const tail = previous.get(pair.to);
+      if (!pair.rate || !tail) continue;
+      const value = multiply(pair.rate, tail);
+      if (!best || compareRates(value, best) > 0) best = value;
+    }
+    return best;
+  }
+}
+
+const sameExactRate = (a: RawTokenRate | undefined, b: RawTokenRate | undefined) =>
+  a === b || (a !== undefined && b !== undefined && a.num === b.num && a.den === b.den);
+
 interface ValuationPair {
   readonly from: string;
   readonly to: string;
@@ -327,9 +454,43 @@ export function gasReferenceInput(
 export class BlockScanAmountReference {
   private readonly headers = new Map<number, ReferenceHeader>();
   private readonly samples = new Map<number, { source: BlockSource; gasUsed: bigint }>();
+  private trackingContinuation = false;
+  private changes = this.emptyChanges();
+  private emptyChanges() {
+    return { reset: false, headers: new Map<number, ReferenceHeader>(),
+      samples: new Map<number, { source: BlockSource; gasUsed: bigint }>(),
+      removedHeaders: new Set<number>(), removedSamples: new Set<number>() };
+  }
+  startContinuationTracking() { this.trackingContinuation = true; }
+  takeContinuationDelta() {
+    this.startContinuationTracking();
+    const value = this.changes;
+    this.changes = this.emptyChanges();
+    return { reset: value.reset, headers: [...value.headers.values()], samples: [...value.samples.values()],
+      removedHeaders: [...value.removedHeaders], removedSamples: [...value.removedSamples] };
+  }
+  stopContinuationTracking() { this.trackingContinuation = false; this.changes = this.emptyChanges(); }
 
   constructor(private readonly capacity = 2048) {
     if (!Number.isSafeInteger(capacity) || capacity <= 0) throw new Error("invalid amount reference capacity");
+  }
+
+  exportHistoricalBaseline() {
+    return { version: 1 as const, headers: [...this.headers.values()], samples: [...this.samples.values()] };
+  }
+
+  restoreHistoricalBaseline(input: ReturnType<BlockScanAmountReference["exportHistoricalBaseline"]>): void {
+    if (input.version !== 1 || this.headers.size || this.samples.size ||
+        input.headers.length > this.capacity || input.samples.length > this.capacity) {
+      throw new Error("invalid historical amount-reference baseline");
+    }
+    for (const header of input.headers) this.observeHeader(header);
+    for (const sample of input.samples) {
+      if (this.headers.get(sample.source.number)?.hash !== sample.source.hash.toLowerCase() ||
+          typeof sample.gasUsed !== "bigint" || sample.gasUsed <= 0n) throw new Error("invalid historical gas observation");
+      this.samples.set(sample.source.number, { source: Object.freeze({ ...sample.source }), gasUsed: sample.gasUsed });
+    }
+    this.changes = this.emptyChanges(); // Restored baseline entries are not new writes.
   }
 
   private ancestorHashes(number: number): ReadonlyMap<number, string> {
@@ -352,13 +513,23 @@ export class BlockScanAmountReference {
         (parent && parent.hash !== header.parentHash.toLowerCase())) {
       this.samples.clear();
       this.headers.clear();
+      this.changes = this.emptyChanges(); this.changes.reset = this.trackingContinuation;
     }
     this.headers.delete(header.number);
     this.headers.set(header.number, Object.freeze({
       number: header.number, hash: header.hash.toLowerCase(), parentHash: header.parentHash.toLowerCase(),
       baseFeePerGas: header.baseFeePerGas, gasUsed: header.gasUsed, gasLimit: header.gasLimit,
     }));
-    while (this.headers.size > this.capacity) this.headers.delete(this.headers.keys().next().value!);
+    if (this.trackingContinuation) {
+      this.changes.headers.delete(header.number);
+      this.changes.headers.set(header.number, this.headers.get(header.number)!);
+      this.changes.removedHeaders.delete(header.number);
+    }
+    while (this.headers.size > this.capacity) {
+      const key = this.headers.keys().next().value!;
+      this.headers.delete(key);
+      if (this.trackingContinuation) { this.changes.headers.delete(key); this.changes.removedHeaders.add(key); }
+    }
   }
 
   /** Caller supplies only successful final sims after its existing source/hash check. */
@@ -376,7 +547,15 @@ export class BlockScanAmountReference {
         previous.source.hash.toLowerCase() === input.source.hash.toLowerCase()) return;
     this.samples.delete(key);
     this.samples.set(key, { source: { ...input.source }, gasUsed: input.gasUsed });
-    while (this.samples.size > this.capacity) this.samples.delete(this.samples.keys().next().value!);
+    if (this.trackingContinuation) {
+      this.changes.samples.delete(key);
+      this.changes.samples.set(key, this.samples.get(key)!); this.changes.removedSamples.delete(key);
+    }
+    while (this.samples.size > this.capacity) {
+      const removed = this.samples.keys().next().value!;
+      this.samples.delete(removed);
+      if (this.trackingContinuation) { this.changes.samples.delete(removed); this.changes.removedSamples.add(removed); }
+    }
   }
 
   /** Freeze the latest ancestral gas-units sample at the current header price. */

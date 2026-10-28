@@ -20,7 +20,7 @@ test("live stage defaults include the original budgets, worker counts and 4+16 t
     exactProbeTimeoutMs: 4000, exactRpcBatchSize: 64, exactRpcBatchConcurrency: 16,
     stateRpcBatchConcurrency: 4, transport: { capacity: 20, producerReserved: 4 },
     solverSearch: { amountGrid: "multiples", gridHalfWidth: 2, gssMaxTries: 8,
-      quoteConcurrency: 16, quoteToleranceRawUnits: 1n },
+      quoteConcurrency: 16, quoteToleranceRawUnits: 0n },
   });
 });
 

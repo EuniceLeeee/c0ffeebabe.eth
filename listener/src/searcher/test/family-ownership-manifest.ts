@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
-import type { ActionAdapter } from "../../types.js";
-import type { LoadedDefinedFamilyPluginModule } from
-  "../venues/production-families/loader.js";
+import "../../adapters/index.js";
+import { listAll } from "../../adapters/registry.js";
+import {
+  STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
+  STRICT_PROJECTED_FAMILY_TEST_MODULES,
+} from "./strict-family-test-compat.js";
 
 export interface FamilyOwnedActionBinding {
   readonly id: string;
@@ -57,11 +60,7 @@ interface ActiveActionSource {
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const IS_MAIN = process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-const OPTIONS: { readonly json?: boolean; readonly sourceRoot?: string } = IS_MAIN ? parseManifestArguments(process.argv.slice(2)) : {};
-const LISTENER_ROOT = OPTIONS.sourceRoot
-  ? resolve(OPTIONS.sourceRoot, "listener") : resolve(HERE, "../../..");
+const LISTENER_ROOT = resolve(HERE, "../../..");
 const TSCONFIG = resolve(LISTENER_ROOT, "tsconfig.json");
 const PRODUCTION_REGISTRY = resolve(
   LISTENER_ROOT,
@@ -69,99 +68,139 @@ const PRODUCTION_REGISTRY = resolve(
 );
 const ACTION_INDEX = resolve(LISTENER_ROOT, "src/adapters/index.ts");
 
-const PRODUCTION_ENTRIES = resolve(
-  LISTENER_ROOT, "src/searcher/generated/production-family-entries.generated.ts",
-);
-const PRODUCTION_COMPOSITION = resolve(
-  LISTENER_ROOT, "src/searcher/venues/production-family-composition.ts",
-);
-const INFRA_ACTIONS = resolve(
-  LISTENER_ROOT, "src/searcher/venues/production-infra-actions.ts",
-);
-
-/** The worker loads each source tree's real composition, including disabled definitions. */
-export async function createFamilyOwnershipManifest(): Promise<FamilyOwnershipManifest> {
-  const { program } = loadProgram();
-  const composition = await import(pathToFileURL(PRODUCTION_COMPOSITION).href) as
-    typeof import("../venues/production-family-composition.js");
-  const infra = await import(pathToFileURL(INFRA_ACTIONS).href) as
-    typeof import("../venues/production-infra-actions.js");
-  const load = composition.PRODUCTION_STRICT_SHADOW_FAMILY_LOAD;
-  if (load.issues.length !== 0 || load.modules.length !== 0) {
-    throw new Error("family ownership requires a complete strict production load");
-  }
-  const modules = [...load.plugins, ...load.disabledPlugins]
-    .sort((left, right) => left.sourceFile.localeCompare(right.sourceFile));
-  const roots = productionFamilyRoots(program, modules);
-  const byId = new Map(modules.map(module => [module.familyId as string, module]));
-  const actionSources = await activeActionSources(
-    program, modules, infra.PRODUCTION_INFRA_ACTION_ADAPTERS,
+export function createFamilyOwnershipManifest(): FamilyOwnershipManifest {
+  const { program, checker } = loadProgram();
+  const runtimeFamilies = STRICT_PROJECTED_FAMILY_TEST_REGISTRY.list();
+  const roots = productionFamilyRoots(
+    program,
+    checker,
+    runtimeFamilies.map((family) => family.id),
   );
-  const actionIds = composition.PRODUCTION_STRICT_SHADOW_ACTION_ADAPTERS.map(action => action.id);
-  const declaredActiveIds = [
-    ...load.plugins.flatMap(module => module.actionAdapters.map(action => action.id)),
-    ...infra.PRODUCTION_INFRA_ACTION_ADAPTERS.map(action => action.id),
-  ];
-  if (canonicalJson(actionIds) !== canonicalJson(declaredActiveIds)) {
-    throw new Error("family ownership active action catalog/composition mismatch");
+  if (roots.length !== runtimeFamilies.length) {
+    throw new Error(
+      "family ownership registry AST/runtime cardinality mismatch",
+    );
   }
-  const families = roots.map(root => {
-    const module = byId.get(root.id)!;
-    const plugin = module.plugin;
-    const manifest = plugin.manifest;
+  const runtimeById = new Map<string, (typeof runtimeFamilies)[number]>(
+    runtimeFamilies.map((family) => [
+      family.id,
+      family,
+    ]),
+  );
+  const actionSources = activeActionSources(program, checker);
+  const registeredActionIds = listAll().map((adapter) => adapter.id).sort();
+  const derivedActionIds = [...actionSources.keys()].sort();
+  if (canonicalJson(registeredActionIds) !== canonicalJson(derivedActionIds)) {
+    throw new Error(
+      "family ownership action catalog AST/runtime registration mismatch",
+    );
+  }
+  const families = roots.map((root) => {
+    const family = runtimeById.get(root.id);
+    if (!family) {
+      throw new Error(
+        `family ownership root ${root.binding} has unregistered id ${root.id}`,
+      );
+    }
+    const poolAdapterIds = "poolAdapters" in family
+      ? [...family.poolAdapters].sort()
+      : [];
+    const edgeAdapterIds = "edgeAdapterIds" in family
+      ? [...family.edgeAdapterIds].sort()
+      : [];
     const files = relativeFamilyImportClosure(program, root.path);
-    const bindings = (ids: readonly string[]): FamilyOwnedActionBinding[] =>
-      [...ids].sort().map(id => {
-        const source = actionSources.get(id);
-        if (!source) throw new Error("family ownership cannot resolve ActionAdapter " + id);
-        for (const path of source.paths) {
-          for (const imported of relativeActionImportClosure(program, path)) files.add(imported);
+    const actionBindings = [...family.ownedActionAdapterIds]
+      .sort()
+      .map((actionId) => {
+        const source = actionSources.get(actionId);
+        if (!source) {
+          throw new Error(
+            `family ownership cannot resolve active ActionAdapter ${actionId}`,
+          );
         }
-        return { id, binding: source.binding };
+        for (const actionPath of source.paths) {
+          for (const imported of relativeActionImportClosure(program, actionPath)) {
+            files.add(imported);
+          }
+        }
+        return { id: actionId, binding: source.binding };
       });
-    const ownedBindings = bindings(manifest.ownedActionAdapterIds);
-    const requiredBindings = bindings(manifest.requiredInfraActionAdapterIds);
-    const candidateSources = [...(plugin.discovery.candidateSources ?? [])].sort();
+    const requiredActionBindings = [...family.requiredInfraActionAdapterIds]
+      .sort()
+      .map((actionId) => {
+        const source = actionSources.get(actionId);
+        if (!source) {
+          throw new Error(
+            `family ownership cannot resolve required ActionAdapter ${actionId}`,
+          );
+        }
+        for (const actionPath of source.paths) {
+          for (const imported of relativeActionImportClosure(program, actionPath)) {
+            files.add(imported);
+          }
+        }
+        return { id: actionId, binding: source.binding };
+      });
+    const candidateSourceIds =
+      "discovery" in family && family.discovery
+        ? [...family.discovery.candidateSources].sort()
+        : [];
     return {
-      id: root.id,
-      kind: manifest.domain,
+      id: family.id,
+      kind: family.kind,
       root_source: repoRelative(root.path),
       root_export: root.imported,
       source_files: [...files].map(repoRelative).sort(),
-      pool_adapter_ids: [...(manifest.poolAdapterIds ?? [])].sort(),
-      edge_adapter_ids: [...(manifest.edgeAdapterIds ?? [])].sort(),
-      owned_action_adapter_ids: [...manifest.ownedActionAdapterIds].sort(),
-      owned_action_bindings: ownedBindings,
-      required_action_adapter_ids: [...manifest.requiredInfraActionAdapterIds].sort(),
-      required_action_bindings: requiredBindings,
-      candidate_source_ids: candidateSources,
-      // The strict definition has no legacy pendingTransactionEvidence surface.
-      requires_current_head_execution_evidence: false,
+      pool_adapter_ids: poolAdapterIds,
+      edge_adapter_ids: edgeAdapterIds,
+      owned_action_adapter_ids: [...family.ownedActionAdapterIds].sort(),
+      owned_action_bindings: actionBindings,
+      required_action_adapter_ids:
+        [...family.requiredInfraActionAdapterIds].sort(),
+      required_action_bindings: requiredActionBindings,
+      candidate_source_ids: candidateSourceIds,
+      requires_current_head_execution_evidence:
+        "pendingTransactionEvidence" in family &&
+        family.pendingTransactionEvidence?.routeActivation ===
+          "current-head-block-scan",
       activation_sha256: sha256(canonicalJson({
-        manifest,
-        activation: module.activation,
-        definitionBoundaryHash: module.definitionBoundaryHash,
-        rootSource: repoRelative(root.path),
-        rootExport: root.imported,
-        ownedBindings,
-        requiredBindings,
-        candidateSources,
+        id: family.id,
+        kind: family.kind,
+        root_source: repoRelative(root.path),
+        root_export: root.imported,
+        pool_adapter_ids: poolAdapterIds,
+        edge_adapter_ids: edgeAdapterIds,
+        owned_action_bindings: actionBindings,
+        owned_action_adapter_ids: [...family.ownedActionAdapterIds].sort(),
+        required_action_bindings: requiredActionBindings,
+        required_infra_action_adapter_ids:
+          [...family.requiredInfraActionAdapterIds].sort(),
+        candidate_source_ids: candidateSourceIds,
+        requires_current_head_execution_evidence:
+          "pendingTransactionEvidence" in family &&
+          family.pendingTransactionEvidence?.routeActivation ===
+            "current-head-block-scan",
+        ...("funding" in family
+          ? {
+              funding_action_adapter_id: family.funding.actionAdapterId,
+              funding_lineage: family.funding.lineage,
+            }
+          : {}),
       })),
     };
   });
   return {
     schema_version: 1,
-    registry_order: roots.map(root => root.id),
-    action_catalog_ids: actionIds,
-    // These are complete central source fingerprints, never caller-supplied hashes.
-    registry_skeleton_sha256: sha256(canonicalJson([
-      sourceFile(program, PRODUCTION_ENTRIES).getFullText(),
-      sourceFile(program, PRODUCTION_COMPOSITION).getFullText(),
-    ])),
-    action_index_skeleton_sha256: sha256(canonicalJson([
+    registry_order: roots.map((root) => root.id),
+    action_catalog_ids: listAll().map((adapter) => adapter.id),
+    registry_skeleton_sha256: familyOwnershipSourceSkeletonSha256(
+      "production-registry",
+      sourceFile(program, PRODUCTION_REGISTRY).getFullText(),
+    ),
+    action_index_skeleton_sha256: familyOwnershipSourceSkeletonSha256(
+      "action-index",
       sourceFile(program, ACTION_INDEX).getFullText(),
-      sourceFile(program, INFRA_ACTIONS).getFullText(),
-    ])),
+    ),
     families,
   };
 }
@@ -204,90 +243,176 @@ function sourceFile(program: ts.Program, path: string): ts.SourceFile {
 
 function productionFamilyRoots(
   program: ts.Program,
-  modules: readonly LoadedDefinedFamilyPluginModule[],
+  checker: ts.TypeChecker,
+  runtimeIds: readonly string[],
 ): readonly FamilyRoot[] {
-  const source = sourceFile(program, PRODUCTION_ENTRIES);
-  const imports = new Map<string, string>();
-  for (const statement of source.statements) {
-    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier) &&
-        statement.importClause?.namedBindings &&
-        ts.isNamespaceImport(statement.importClause.namedBindings)) {
-      const path = resolveTsImport(source.fileName, statement.moduleSpecifier.text);
-      if (path) imports.set(statement.importClause.namedBindings.name.text, path);
-    }
+  const registry = sourceFile(program, PRODUCTION_REGISTRY);
+  const imports = directNamedImports(registry);
+  const registered = familyRegistrationArray(registry);
+  if (!registered) {
+    throw new Error("family ownership cannot derive production registry");
   }
-  const declaration = findVariable(source, "GENERATED_PRODUCTION_FAMILY_ENTRIES");
-  const array = declaration?.initializer ? firstArrayLiteral(declaration.initializer) : null;
-  if (!array) throw new Error("family ownership cannot derive generated production entries");
-  const bySource = new Map(modules.map(module => [module.sourceFile, module]));
-  const roots = array.elements.map(element => {
-    const object = unwrapObjectLiteral(element);
-    const fields = new Map(object?.properties.filter(ts.isPropertyAssignment)
-      .map(property => [propertyName(property.name), property.initializer]));
-    const file = fields.get("sourceFile");
-    const binding = fields.get("module");
-    if (!file || !ts.isStringLiteral(file) || !binding || !ts.isIdentifier(binding) ||
-        !/^[a-z0-9][a-z0-9-]*\.production\.ts$/.test(file.text)) {
-      throw new Error("family ownership requires static generated entry bindings");
+  const roots: FamilyRoot[] = registered.elements
+    .filter(ts.isIdentifier)
+    .map((element) => {
+    const imported = imports.get(element.text);
+    if (!imported) {
+      throw new Error(`family registration ${element.text} is not imported`);
     }
-    const path = imports.get(binding.text);
-    const module = bySource.get(file.text);
-    if (!module || path !== resolve(LISTENER_ROOT, "src/searcher/venues/production-families", file.text)) {
-      throw new Error("family ownership generated entry/installed source mismatch: " + file.text);
+    const id = readObjectId(
+      sourceFile(program, imported.path),
+      imported.imported,
+      checker,
+    );
+    if (id === null) {
+      throw new Error(
+        `family registration ${element.text} has no static id`,
+      );
     }
-    return { binding: binding.text, imported: "plugin", id: module.familyId as string, path };
+    return {
+      binding: element.text,
+      imported: imported.imported,
+      id,
+      path: imported.path,
+    };
   });
-  if (canonicalJson(roots.map(root => root.id)) !==
-      canonicalJson(modules.map(module => module.familyId))) {
-    throw new Error("family ownership generated/runtime order or cardinality mismatch");
+  for (const module of STRICT_PROJECTED_FAMILY_TEST_MODULES) {
+    roots.push({
+      binding: "productionFamilyModule",
+      imported: "productionFamilyModule.family",
+      id: module.family.id,
+      path: resolve(
+        LISTENER_ROOT,
+        "src/searcher/venues/production-families",
+        module.sourceFile,
+      ),
+    });
+  }
+  if (canonicalJson(roots.map((root) => root.id)) !== canonicalJson(runtimeIds)) {
+    throw new Error("family ownership registry AST/runtime order mismatch");
   }
   return roots;
 }
 
-async function activeActionSources(
+function activeActionSources(
   program: ts.Program,
-  modules: readonly LoadedDefinedFamilyPluginModule[],
-  infrastructure: readonly ActionAdapter[],
-): Promise<ReadonlyMap<string, ActiveActionSource>> {
-  const source = sourceFile(program, INFRA_ACTIONS);
-  const imports = directNamedImports(source);
-  const declaration = findVariable(source, "PRODUCTION_INFRA_ACTION_ADAPTERS");
-  const array = declaration?.initializer ? firstArrayLiteral(declaration.initializer) : null;
-  if (!array) throw new Error("family ownership cannot derive infrastructure actions");
+  checker: ts.TypeChecker,
+): ReadonlyMap<string, ActiveActionSource> {
+  const index = sourceFile(program, ACTION_INDEX);
+  const imports = directNamedImports(index);
+  const declaration = findVariable(index, "PRODUCTION_ACTION_CATALOG");
+  const catalog = declaration?.initializer
+    ? firstArrayLiteral(declaration.initializer)
+    : null;
+  if (!catalog) throw new Error("family ownership cannot derive action catalog");
   const sources = new Map<string, ActiveActionSource>();
-  const runtimeById = new Map(infrastructure.map(action => [action.id, action]));
-  const bind = (id: string, entry: ActiveActionSource): void => {
-    if (sources.has(id)) throw new Error("ActionAdapter has multiple active sources: " + id);
-    sources.set(id, entry);
-  };
-  for (const element of array.elements) {
-    const imported = ts.isIdentifier(element) ? imports.get(element.text) : undefined;
-    if (!imported) throw new Error("infrastructure action is not a direct named import");
-    const importedModule = await import(pathToFileURL(imported.path).href);
-    const action = importedModule[imported.imported] as ActionAdapter | undefined;
-    if (!action || runtimeById.get(action.id) !== action) {
-      throw new Error("family ownership infrastructure AST/runtime binding mismatch");
+  const bind = (id: string, source: ActiveActionSource): void => {
+    const prior = sources.get(id);
+    if (prior && canonicalJson(prior) !== canonicalJson(source)) {
+      throw new Error(`ActionAdapter ${id} has multiple active sources`);
     }
-    bind(action.id, {
-      paths: [imported.path],
-      binding: repoRelative(imported.path) + "#" + imported.imported,
-    });
-  }
-  if (canonicalJson([...sources.keys()]) !== canonicalJson(infrastructure.map(action => action.id))) {
-    throw new Error("family ownership infrastructure AST/runtime order mismatch");
-  }
-  for (const module of modules) {
-    const entryPath = resolve(
-      LISTENER_ROOT, "src/searcher/venues/production-families", module.sourceFile,
+    sources.set(id, source);
+  };
+  for (const element of catalog.elements) {
+    if (ts.isIdentifier(element)) {
+      const imported = imports.get(element.text);
+      if (!imported) {
+        throw new Error(
+          `active ActionAdapter ${element.text} is not a direct import`,
+        );
+      }
+      const id = readObjectId(
+        sourceFile(program, imported.path),
+        imported.imported,
+        checker,
+      );
+      if (!id) {
+        throw new Error(
+          `active ActionAdapter ${element.text} has no static id`,
+        );
+      }
+      bind(id, {
+        paths: [imported.path],
+        binding: `${repoRelative(imported.path)}#${imported.imported}`,
+      });
+      continue;
+    }
+    if (ts.isSpreadElement(element)) {
+      const spread = resolveMappedActionSpread(element.expression, imports);
+      if (!spread) {
+        throw new Error(
+          `family ownership cannot resolve action catalog spread ${element.getText(index)}`,
+        );
+      }
+      const descriptorIds = staticArrayObjectPropertyValues(
+        sourceFile(program, spread.descriptor.path),
+        spread.descriptor.imported,
+        "id",
+        checker,
+      );
+      if (descriptorIds.length === 0) {
+        throw new Error(
+          `action descriptor ${spread.descriptor.imported} has no static ids`,
+        );
+      }
+      const binding = `${repoRelative(spread.descriptor.path)}#` +
+        `${spread.descriptor.imported}.map(` +
+        `${repoRelative(spread.factory.path)}#${spread.factory.imported})`;
+      for (const id of descriptorIds) {
+        bind(id, {
+          paths: [...new Set([
+            spread.descriptor.path,
+            spread.factory.path,
+          ])].sort(),
+          binding,
+        });
+      }
+      continue;
+    }
+    throw new Error(
+      `family ownership cannot resolve action catalog entry ${element.getText(index)}`,
     );
-    for (const action of module.actionAdapters) {
-      bind(action.id, {
+  }
+  for (const module of STRICT_PROJECTED_FAMILY_TEST_MODULES) {
+    const entryPath = resolve(
+      LISTENER_ROOT,
+      "src/searcher/venues/production-families",
+      module.sourceFile,
+    );
+    for (const adapter of module.actionAdapters) {
+      bind(adapter.id, {
         paths: [entryPath],
-        binding: repoRelative(entryPath) + "#plugin.actionAdapters[" + action.id + "]",
+        binding:
+          `${repoRelative(entryPath)}#productionFamilyModule.actionAdapters[${adapter.id}]`,
       });
     }
   }
   return sources;
+}
+
+function resolveMappedActionSpread(
+  expression: ts.Expression,
+  imports: ReadonlyMap<
+    string,
+    { readonly imported: string; readonly path: string }
+  >,
+): {
+  readonly descriptor: { readonly imported: string; readonly path: string };
+  readonly factory: { readonly imported: string; readonly path: string };
+} | null {
+  if (
+    !ts.isCallExpression(expression) ||
+    !ts.isPropertyAccessExpression(expression.expression) ||
+    expression.expression.name.text !== "map" ||
+    !ts.isIdentifier(expression.expression.expression) ||
+    expression.arguments.length !== 1 ||
+    !ts.isIdentifier(expression.arguments[0])
+  ) {
+    return null;
+  }
+  const descriptor = imports.get(expression.expression.expression.text);
+  const factory = imports.get(expression.arguments[0].text);
+  return descriptor && factory ? { descriptor, factory } : null;
 }
 
 function directNamedImports(
@@ -338,8 +463,7 @@ function relativeFamilyImportClosure(
       if (!specifier || !ts.isStringLiteral(specifier)) continue;
       const resolved = resolveTsImport(source.fileName, specifier.text);
       if (resolved) assertFamilyRuntimeImportBoundary(source.fileName, resolved);
-      if (resolved && (isFamilyModule(resolved) ||
-          repoRelative(resolved).startsWith("src/adapters/")) && !closure.has(resolved)) {
+      if (resolved && isFamilyModule(resolved) && !closure.has(resolved)) {
         pending.push(resolved);
       }
     }
@@ -385,13 +509,9 @@ function assertFamilyRuntimeImportBoundary(
 ): void {
   const importedPath = repoRelative(imported);
   if (
-    importedPath.includes("/test/") ||
+    importedPath.startsWith("src/searcher/test/") ||
     [
       "src/searcher/venues/production-registry.ts",
-      "src/searcher/venues/production-family-composition.ts",
-      "src/searcher/venues/production-families/loader.ts",
-      "src/searcher/generated/production-family-entries.generated.ts",
-      "src/searcher/generated/family-capability-shadow.generated.json",
       "src/adapters/index.ts",
       "src/adapters/registry.ts",
       "src/shared/adapters/index.ts",
@@ -438,12 +558,12 @@ function registryAllowedRanges(source: ts.SourceFile): readonly ts.TextRange[] {
 function familyRegistrationArray(
   source: ts.SourceFile,
 ): ts.ArrayLiteralExpression | null {
-  const legacy = findVariable(source, "LEGACY_PRODUCTION_ADAPTER_FAMILIES");
+  const legacy = findVariable(source, "LEGACY_STRICT_PROJECTED_FAMILY_TEST_REGISTRY");
   if (legacy?.initializer) {
     const found = firstArrayLiteral(legacy.initializer);
     if (found) return found;
   }
-  const declaration = findVariable(source, "PRODUCTION_ADAPTER_FAMILIES");
+  const declaration = findVariable(source, "STRICT_PROJECTED_FAMILY_TEST_REGISTRY");
   return declaration?.initializer &&
       ts.isNewExpression(declaration.initializer) &&
       declaration.initializer.arguments?.[0] &&
@@ -580,6 +700,66 @@ function collectIdentifiers(node: ts.Node, output: Set<string>): void {
   ts.forEachChild(node, (child) => collectIdentifiers(child, output));
 }
 
+function readObjectId(
+  source: ts.SourceFile,
+  binding: string,
+  checker: ts.TypeChecker,
+): string | null {
+  let result: string | null = null;
+  const visit = (node: ts.Node): void => {
+    if (
+      result === null &&
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === binding &&
+      node.initializer
+    ) {
+      const object = unwrapObjectLiteral(node.initializer);
+      if (!object) return;
+      for (const property of object.properties) {
+        if (
+          ts.isPropertyAssignment(property) &&
+          propertyName(property.name) === "id"
+        ) {
+          result = staticString(property.initializer, checker);
+          return;
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return result;
+}
+
+function staticArrayObjectPropertyValues(
+  source: ts.SourceFile,
+  binding: string,
+  name: string,
+  checker: ts.TypeChecker,
+): string[] {
+  const values = new Set<string>();
+  const declaration = findVariable(source, binding);
+  const array = declaration?.initializer
+    ? firstArrayLiteral(declaration.initializer)
+    : null;
+  if (!array) return [];
+  for (const element of array.elements) {
+    const object = unwrapObjectLiteral(element);
+    if (!object) continue;
+    for (const property of object.properties) {
+      if (
+        ts.isPropertyAssignment(property) &&
+        propertyName(property.name) === name
+      ) {
+        const value = staticString(property.initializer, checker);
+        if (value !== null) values.add(value);
+      }
+    }
+  }
+  return [...values].sort();
+}
+
 function unwrapObjectLiteral(
   expression: ts.Expression,
 ): ts.ObjectLiteralExpression | null {
@@ -602,6 +782,98 @@ function unwrapObjectLiteral(
     return unwrapObjectLiteral(current.arguments[0]);
   }
   return ts.isObjectLiteralExpression(current) ? current : null;
+}
+
+function staticString(
+  expression: ts.Expression,
+  checker: ts.TypeChecker,
+  seen = new Set<ts.Symbol>(),
+): string | null {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isTypeAssertionExpression(current)
+  ) {
+    current = current.expression;
+  }
+  if (
+    ts.isStringLiteral(current) ||
+    ts.isNoSubstitutionTemplateLiteral(current)
+  ) {
+    return current.text;
+  }
+  if (ts.isCallExpression(current) && current.arguments.length === 1) {
+    const argument = identityValidatorArgument(current, checker);
+    if (argument) return staticString(argument, checker, seen);
+  }
+  if (!ts.isIdentifier(current) && !ts.isPropertyAccessExpression(current)) {
+    return null;
+  }
+  let symbol = checker.getSymbolAtLocation(
+    ts.isPropertyAccessExpression(current) ? current.name : current,
+  );
+  if (!symbol) return null;
+  if (symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
+  if (seen.has(symbol)) return null;
+  seen.add(symbol);
+  for (const declaration of symbol.declarations ?? []) {
+    if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+      const value = staticString(declaration.initializer, checker, seen);
+      if (value !== null) return value;
+    }
+    if (ts.isPropertyAssignment(declaration)) {
+      const value = staticString(declaration.initializer, checker, seen);
+      if (value !== null) return value;
+    }
+  }
+  return null;
+}
+
+function identityValidatorArgument(
+  call: ts.CallExpression,
+  checker: ts.TypeChecker,
+): ts.Expression | null {
+  const callee = ts.isPropertyAccessExpression(call.expression)
+    ? call.expression.name
+    : call.expression;
+  let symbol = checker.getSymbolAtLocation(callee);
+  if (!symbol) return null;
+  if (symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol);
+  for (const declaration of symbol.declarations ?? []) {
+    if (
+      !ts.isFunctionDeclaration(declaration) ||
+      declaration.parameters.length !== 1 ||
+      !declaration.body ||
+      !ts.isIdentifier(declaration.parameters[0].name)
+    ) {
+      continue;
+    }
+    const parameter = declaration.parameters[0].name.text;
+    let returnsParameter = false;
+    const visit = (node: ts.Node): void => {
+      if (!ts.isReturnStatement(node) || !node.expression) {
+        ts.forEachChild(node, visit);
+        return;
+      }
+      let returned = node.expression;
+      while (
+        ts.isParenthesizedExpression(returned) ||
+        ts.isAsExpression(returned) ||
+        ts.isSatisfiesExpression(returned) ||
+        ts.isTypeAssertionExpression(returned)
+      ) {
+        returned = returned.expression;
+      }
+      if (ts.isIdentifier(returned) && returned.text === parameter) {
+        returnsParameter = true;
+      }
+    };
+    visit(declaration.body);
+    if (returnsParameter) return call.arguments[0];
+  }
+  return null;
 }
 
 function propertyName(name: ts.PropertyName): string | null {
@@ -655,22 +927,6 @@ function sha256(value: string): string {
 }
 
 function runOwnershipManifestSelfTests(): void {
-  for (const path of [
-    "src/searcher/venues/swaps/example-family/test/runtime-shortcut.ts",
-    "src/searcher/venues/production-family-composition.ts",
-    "src/searcher/venues/production-families/loader.ts",
-    "src/searcher/generated/production-family-entries.generated.ts",
-    "src/searcher/generated/family-capability-shadow.generated.json",
-  ]) {
-    assert.throws(() => assertFamilyRuntimeImportBoundary(
-      resolve(LISTENER_ROOT, "src/searcher/venues/swaps/example.ts"),
-      resolve(LISTENER_ROOT, path),
-    ), /family runtime import boundary/, "strict bootstrap cannot become family-owned: " + path);
-  }
-  assert.throws(() => parseManifestArguments(["--source-root"]), /usage:/);
-  assert.throws(() => parseManifestArguments(["--json", "--json"]), /usage:/);
-  assert.throws(() => parseManifestArguments(["--source-root", ".", "--source-root", "."]), /usage:/);
-
   const syntheticSource = (text: string): ts.SourceFile =>
     ts.createSourceFile(
       "synthetic.ts",
@@ -722,7 +978,7 @@ function runOwnershipManifestSelfTests(): void {
   const registrySource = (families: readonly string[]): string =>
     `${families.map((name) =>
       `import { ${name} } from "./swaps/${name}.js";`).join("\n")}\n` +
-    `export const PRODUCTION_ADAPTER_FAMILIES = ` +
+    `export const STRICT_PROJECTED_FAMILY_TEST_REGISTRY = ` +
     `new Registry([${families.join(",")}]);\n` +
     "const centralLogic = true;\n";
   assert.equal(
@@ -807,32 +1063,24 @@ function runOwnershipManifestSelfTests(): void {
   );
 }
 
-function parseManifestArguments(args: readonly string[]): {
-  readonly json?: boolean;
-  readonly sourceRoot?: string;
-} {
-  let json = false;
-  let sourceRoot: string | undefined;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json" && !json) json = true;
-    else if (arg === "--source-root" && sourceRoot === undefined &&
-             args[index + 1] && !args[index + 1].startsWith("--")) {
-      sourceRoot = resolve(args[++index]);
-    } else {
-      throw new Error("usage: family-ownership-manifest.ts [--json] [--source-root <repo>]");
-    }
+function main(): void {
+  const args = process.argv.slice(2);
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--json")) {
+    throw new Error("usage: family-ownership-manifest.ts [--json]");
   }
-  return { json, sourceRoot };
-}
-
-async function main(): Promise<void> {
   runOwnershipManifestSelfTests();
-  const manifest = await createFamilyOwnershipManifest();
-  console.log("ADAPTER_FAMILY_OWNERSHIP_MANIFEST=" + JSON.stringify(manifest));
-  if (!OPTIONS.json) {
-    console.log("adapter-family-ownership-manifest PASS (" + manifest.families.length + " families)");
+  const manifest = createFamilyOwnershipManifest();
+  console.log(`ADAPTER_FAMILY_OWNERSHIP_MANIFEST=${JSON.stringify(manifest)}`);
+  if (args.length === 0) {
+    console.log(
+      `adapter-family-ownership-manifest PASS (${manifest.families.length} families)`,
+    );
   }
 }
 
-if (IS_MAIN) await main();
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  main();
+}

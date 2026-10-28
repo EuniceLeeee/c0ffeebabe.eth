@@ -257,6 +257,21 @@ try {
   await assert.rejects(codeSimulator.simulateExecutionInput(prepared, context()), /executor code mismatch/);
   await assert.rejects(new EthSimulateV1Simulator(url, executor, owner, runtimeCode)
     .simulateExecutionInput(codePrepared, context()), /executor code mismatch/);
+  const chainSimulator = new EthSimulateV1Simulator(url, executor, owner, undefined, false, loadedRuntime);
+  const chainStart = requests.length;
+  const chainResult = await chainSimulator.simulate(plan, context());
+  assert.equal(requests.length, chainStart + 1, "chain hop diagnostics use only the original sim request");
+  assert.deepEqual(chainResult, { success: true, profitToken: token, grossProfit: 25n,
+    gasUsed: 0x12345n, netProfit: 25n, calldata, scriptHex });
+  const chainOverrides = (requests.at(-1)!.params[0] as any).blockStateCalls[0].stateOverrides[executor];
+  assert.deepEqual(Object.keys(chainOverrides), ["stateDiff"], "never substitute production executor code");
+  const chainSnapshot = buildEthSimulateV1ExecutionInput({ source, header, executor, owner,
+    profitToken: token, scriptHex, chainExecutorRuntimeCode: loadedRuntime,
+    diagnosticKey: chainOverrides.stateDiff[HOP_DIAGNOSTIC_SLOT] });
+  assert.equal(chainSnapshot.schemaVersion, 7);
+  assert.deepEqual(validateEthSimulateV1ExecutionInput(chainSnapshot), chainSnapshot);
+  await assert.rejects(simulator.simulateExecutionInput(chainSnapshot, context()), /chain executor code mismatch/);
+  assert.throws(() => new EthSimulateV1Simulator(url, executor, owner, loadedRuntime, false, loadedRuntime));
   for (const invalid of [null, {}, { ...loadedRuntime, code: "0x" }, { ...loadedRuntime, code: "0x1" },
     { ...loadedRuntime, keccak256: hash("0") }, ...["address", "balance", "nonce", "state", "stateDiff"]
       .map(field => ({ ...loadedRuntime, [field]: "0x1" }))]) {
@@ -286,7 +301,7 @@ try {
     assert.throws(() => validateEthSimulateV1ExecutionInput(changed), sanitized);
     await assert.rejects(codeSimulator.simulateExecutionInput(changed, context()), sanitized);
   }
-  assert.equal(requests.length, noCodeRequests, "code policy/tampering rejected before any RPC");
+  assert.equal(requests.length, noCodeRequests + 1, "only the valid chain simulation made an RPC; tampering was rejected before RPC");
   reset(legacyResult());
   const legacyCodeStart = requests.length;
   assert.deepEqual(validateEthSimulateV1ExecutionInput(legacyCodePrepared), legacyCodePrepared);
@@ -499,11 +514,6 @@ try {
     reply = (request, response) => response.end(JSON.stringify(envelope(request, { ...trace, ...mismatch })));
     assert.equal(await tracedFailure.traceRevert(context()), null);
   }
-  for (const patch of [{ jsonrpc: "1.0" }, { jsonrpc: undefined }, { id: 2 }, { id: "1" },
-    { id: undefined }, { error: null }, { error: { code: -32000, message: "ambiguous" } }, { result: undefined }]) {
-    reply = (request, response) => response.end(JSON.stringify({ ...envelope(request, trace), ...patch }));
-    assert.equal(await tracedFailure.traceRevert(context()), null, "invalid trace envelope cannot create pool policy");
-  }
   reply = (request, response) => response.end(JSON.stringify(rpcError(request, -32601)));
   assert.equal(await tracedFailure.traceRevert(context()), null, "unsupported trace keeps the route verdict");
   const stoppedRequests = requests.length;
@@ -525,7 +535,6 @@ try {
       { gasUsed: undefined }, { gasUsed: "0x00" }, { gasUsed: "0x0" }, { gasUsed: "0x100000000" },
       { returnData: "0xz" }, { returnData: "0x1" }, { error: null },
       { status: "0x0", error: undefined }, { status: "0x0", error: { code: "3", message: secret } },
-      { status: "0x0", error: { code: -3200, message: secret } },
       { status: "0x0", error: { code: -32000, message: secret } },
       { status: "0x0", error: { code: -32005, message: `rate limit ${secret}` } }]) {
       const raw = result(); Object.assign(raw[0]!.calls[index]!, patch); malformed.push(raw);
@@ -646,6 +655,44 @@ try {
         JSON.parse(JSON.stringify(capturedBeforeDeadline)), context()), liveResult);
     }
   }
+  // The standalone adapter runs the identical owner -> executor transaction,
+  // but returns execution status (not profit) and performs no output probe.
+  const funding = { [token]: { stateDiff: { [word(1n)]: word(500n) } } };
+  const standalone = { source, header, scriptHex, inputToken: token, inputAmount: 100n, funding };
+  const legReply = () => result().map(b => ({ ...b, calls: b.calls.slice(0, 2) }));
+  let beforeLeg = requests.length;
+  reset(legReply());
+  const leg = await simulator.simulateStandalone(standalone, context());
+  assert.equal(leg.kind, "success"); assert.equal(leg.targetBlock, source.number + 1);
+  assert.equal(leg.calldata, prepared.calldata); assert.equal(leg.gasUsed, 0x12345n);
+  assert.equal(requests.length, beforeLeg + 1, "one node request, no read/trace fallback");
+  const payload = requests.at(-1)!.params[0] as any;
+  assert.equal(payload.blockStateCalls[0].calls.length, 2);
+  assert.deepEqual(payload.blockStateCalls[0].calls[1], prepared.simulateParams[0].blockStateCalls[0].calls[1]);
+  assert.deepEqual(payload.blockStateCalls[0].stateOverrides[token], funding[token]);
+  assert.deepEqual(requests.at(-1)!.params[1], { blockHash: source.hash, requireCanonical: true });
+  const legFailure = legReply();
+  Object.assign(legFailure[0]!.calls[1]!, { status: "0x0", returnData: "0x1234", error: { code: 3, message: "execution reverted" } });
+  reset(legFailure);
+  assert.equal((await simulator.simulateStandalone(standalone, context())).kind, "revert");
+  const lackingFunds = legReply(); lackingFunds[0]!.calls[0]!.returnData = tagged(99n);
+  reset(lackingFunds);
+  await assert.rejects(simulator.simulateStandalone(standalone, context()), /funding insufficient/);
+  const wrongSource = legReply(); wrongSource[0]!.parentHash = hash("e"); reset(wrongSource);
+  await assert.rejects(simulator.simulateStandalone(standalone, context()), /header mismatch/);
+  const wrongTarget = legReply(); wrongTarget[0]!.timestamp = hex(header.timestamp); reset(wrongTarget);
+  await assert.rejects(simulator.simulateStandalone(standalone, context()), /header mismatch/);
+  for (const patch of [{ [token]: { code: "0x00" } }, { [executor]: { stateDiff: { [word(1n)]: word(2n) } } }]) {
+    await assert.rejects(simulator.simulateStandalone({ ...standalone, funding: patch as any }, context()));
+  }
+  beforeLeg = requests.length;
+  const cancelled = new AbortController(); cancelled.abort();
+  await assert.rejects(simulator.simulateStandalone(standalone, { signal: cancelled.signal, deadlineAtMs: Date.now() + 1000 }));
+  assert.equal(requests.length, beforeLeg);
+  reset(legReply());
+  await new EthSimulateV1Simulator(url, executor, owner, loadedRuntime).simulateStandalone(standalone, context());
+  assert.equal((requests.at(-1)!.params[0] as any).blockStateCalls[0].stateOverrides[executor].code, loadedRuntime.code);
+
   const count = requests.length;
   await delay(100);
   assert.equal(requests.length, count, "no delayed retry or fallback");
@@ -819,55 +866,45 @@ async function localEvmRegression(): Promise<void> {
     const mainFailure = await rpc("eth_simulateV1", [...snapshot.simulateParams]);
     assert.equal(mainFailure[0].calls[1].status, "0x0");
     assert.equal(delta(mainFailure[0].calls), 0n);
-
-    // End-to-end: real compiled VM envelope -> original RPC bytes -> production
-    // decoder. This must not pass only because a TS fixture copied the formula.
+    // Real EVM chain-mode diagnosis: old input yields no usable proof, the
+    // same plan plus the reserved slot yields the failed hop, without a trace.
+    await rpc("anvil_setCode", [executor, loadedRuntime.code]);
+    assert.equal(keccak256(await rpc("eth_getCode", [executor, "latest"])), loadedRuntime.keccak256);
     register(runtimeAmountFlowAdapter);
-    const otherToken = addr("8"), failedTarget = addr("9");
-    await rpc("anvil_setCode", [otherToken, "0x600160005260206000f3"]);
-    await rpc("anvil_setCode", [failedTarget, "0x63deadbeef6000526004601cfd"]);
-    const failedProgram = bytesToHex(new RuntimeAmountProgram().call(failedTarget, "0x").bytes());
-    const hopEdges: TokenEdge[] = [
-      { adapterId: "fixture", target: failedTarget, tokenIn: token, tokenOut: otherToken,
-        slotKind: "swap", edgeKind: "swap", leavesStandingPosition: false },
-      { adapterId: "fixture", target: addr("7"), tokenIn: otherToken, tokenOut: token,
-        slotKind: "swap", edgeKind: "swap", leavesStandingPosition: false },
-    ];
-    const hopPlan: ResolvedPlan = { ...plan, root: { adapterId: "runtime-amount-flow", target: executor,
-      tokenIn: token, tokenOut: token, amount: plan.flashAmount, children: [], params: { minimumReturn: 18n,
-        legs: JSON.stringify(hopEdges.map(e => ({ tokenIn: e.tokenIn, tokenOut: e.tokenOut, program: failedProgram }))) } } };
-    const hopInput = buildEthSimulateV1ExecutionInput({ source: localSource, header: localHeader,
-      executor, owner, profitToken: token, scriptHex: bytesToHex(compilePlan(hopPlan.root, executor)),
-      executorRuntimeCode: loadedRuntime, diagnosticKey: hash("4") });
-    const failedHopBlock = await rpc("eth_simulateV1", [...hopInput.simulateParams]);
-    const failedHop = failedHopBlock[0].calls[1];
-    assert.equal(failedHop.status, "0x0");
-    // Anvil 1.4.4 reports real EVM reverts as -3200. This section checks the
-    // authenticated VM bytes only; the production transport still requires 3.
-    assert([3, -3200].includes(failedHop.error.code), JSON.stringify(failedHop));
-    assert.equal(delta(failedHopBlock[0].calls), 0n, "failure remains atomic");
-    assert.deepEqual(directRevertedRuntimeHop(hopPlan, hopEdges, {
-      executionInput: hopInput, returnData: failedHop.returnData, errorData: failedHop.error.data,
-      gasUsed: BigInt(failedHop.gasUsed).toString(),
-    }), { hopIndex: 0, callTarget: failedTarget, rawReason: "0xdeadbeef" });
-    for (const [kind, code] of [["empty revert", "0x60006000fd"], ["invalid", "0xfe"],
-      ["out of gas", "0x5b600056"]] as const) {
-      await rpc("anvil_setCode", [failedTarget, code]);
-      const exceptionalBlock = await rpc("eth_simulateV1", [...hopInput.simulateParams]);
-      const exceptional = exceptionalBlock[0].calls[1];
-      assert.equal(exceptional.status, "0x0", kind);
-      assert.equal(delta(exceptionalBlock[0].calls), 0n, `${kind} keeps atomic rollback`);
-      // Each cause yields the same authentic envelope with empty child bytes.
-      // Pool policy excludes the failed hop without claiming to know the cause.
-      assert.equal(exceptional.returnData.slice(0, 10), failedHop.returnData.slice(0, 10), kind);
-      assert.deepEqual(directRevertedRuntimeHop(hopPlan, hopEdges, {
-        executionInput: hopInput, returnData: exceptional.returnData, errorData: exceptional.error.data,
-        gasUsed: BigInt(exceptional.gasUsed).toString(),
-      }), { hopIndex: 0, callTarget: failedTarget, rawReason: "0x" },
-      `${kind} remains eligible under the process-local failed-hop policy`);
+    const failingPool = addr("7");
+    const otherToken = addr("8");
+    await rpc("anvil_setCode", [failingPool, "0x60006000fd"]);
+    await rpc("anvil_setCode", [otherToken, tokenCode()]);
+    const failedEdge: TokenEdge = { target: failingPool, tokenIn: token, tokenOut: otherToken,
+      adapterId: "univ2-swap", slotKind: "swap", edgeKind: "swap", leavesStandingPosition: false };
+    const failedEdges = [failedEdge, { ...failedEdge, tokenIn: otherToken, tokenOut: token }];
+    const failedPlan: ResolvedPlan = { ...plan, flashAmount: 100n, root: {
+      adapterId: "runtime-amount-flow", target: executor, tokenIn: token, tokenOut: token,
+      amount: 100n, params: { minimumReturn: 100n, legs: JSON.stringify(failedEdges.map(edge => ({
+        tokenIn: edge.tokenIn, tokenOut: edge.tokenOut,
+        program: bytesToHex(new RuntimeAmountProgram().call(failingPool, "0x12345678").bytes()) }))) }, children: [] } };
+    const failedScript = bytesToHex(compilePlan(failedPlan.root, executor));
+    for (const diagnose of [false, true]) {
+      const input = buildEthSimulateV1ExecutionInput({ source: localSource, header: localHeader,
+        executor, owner, profitToken: token, scriptHex: failedScript,
+        ...(diagnose ? { chainExecutorRuntimeCode: loadedRuntime, diagnosticKey: hash("a") } : {}) });
+      const response = await rpc("eth_simulateV1", [...input.simulateParams]);
+      const main = response[0].calls[1]; assert.equal(main.status, "0x0");
+      const hop = directRevertedRuntimeHop(failedPlan, failedEdges, { executionInput: input,
+        returnData: main.returnData, errorData: main.error?.data, gasUsed: String(BigInt(main.gasUsed)) });
+      assert.equal(hop?.hopIndex ?? null, diagnose ? 0 : null, "same failing EVM case gains direct hop attribution");
     }
-    assert.equal(await rpc("eth_getStorageAt", [executor, HOP_DIAGNOSTIC_SLOT, "latest"]), word(0n),
-      "diagnostic key is simulation-only");
+    // Successful execution must retain profit, calldata and exact main gas.
+    await rpc("anvil_setCode", [token, tokenCode()]);
+    const successInputs = [false, true].map(diagnose => buildEthSimulateV1ExecutionInput({ source: localSource,
+      header: localHeader, executor, owner, profitToken: token, scriptHex,
+      ...(diagnose ? { chainExecutorRuntimeCode: loadedRuntime, diagnosticKey: hash("a") } : {}) }));
+    const beforeDiagnosis = await rpc("eth_simulateV1", [...successInputs[0]!.simulateParams]);
+    const afterDiagnosis = await rpc("eth_simulateV1", [...successInputs[1]!.simulateParams]);
+    assert.equal(delta(beforeDiagnosis[0].calls), delta(afterDiagnosis[0].calls));
+    assert.deepEqual(beforeDiagnosis[0].calls[1], afterDiagnosis[0].calls[1]);
+    assert.equal(await rpc("eth_getStorageAt", [executor, HOP_DIAGNOSTIC_SLOT, "latest"]), word(0n));
+    assert(!localRequests.includes("debug_traceCall"));
     assert.equal(await rpc("eth_getCode", [observerAddress, "latest"]), "0x", "helper overlay is simulation-only");
     assert.equal(await rpc("eth_getStorageAt", [observerAddress, word(0n), "latest"]), word(77n));
     assert.equal(await rpc("eth_getStorageAt", [token, word(0n), "latest"]), word(100n));

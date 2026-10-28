@@ -56,10 +56,7 @@ test("ordinary Blockscan live installs sim selection; compatibility callers and 
   const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   assert.match(loop, /this\.deps\.amountSelectorFactory\(\{ source: exactSource, workerIndex,/);
   assert.match(main, /amountSelectorFactory: createBlockScanLiveAmountSelectorFactory\(/);
-  // The factory wraps a per-search selector to retain typed P failures. Its
-  // return expression is no longer the selector construction itself.
-  assert.match(main, /const selector = createBlockScanSimAmountSelector\(/);
-  assert.match(main, /return await selector\.solve\(plan, state, probe, opts\)/);
+  assert.match(main, /return \(\{ source, workerIndex, simulate \}\) => createBlockScanSimAmountSelector\(/);
   assert.match(main, /const solver = new AnvilSolver\(\)/);
   assert.match(main, /block-scan amount selection=sim/);
   assert.match(main, /main\(\)\.catch/);

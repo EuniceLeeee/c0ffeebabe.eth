@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JsonRpcProvider } from "ethers";
+import { observeAdapterRequests } from "../adapter-request-observation.js";
 import {
   createStrictCentralAdapterRuntime,
   type StrictSimulationTransport,
@@ -111,7 +112,10 @@ test("ethers RPC wrappers do not turn transport failures into admission reverts"
         generationFence: Object.freeze({ assertCurrent() {} }),
       });
       const issued = runtime.scheduler.issueExecutor({} as never);
-      const [result] = await issued.executor.execute({ requests: [request], source: SOURCE } as never);
+      const observation = { revertedResults: 0 };
+      const [result] = await observeAdapterRequests(observation,
+        () => issued.executor.execute({ requests: [request], source: SOURCE } as never));
+      assert.equal(observation.revertedResults, 0, "transport errors are not revert evidence");
       assert.equal(calls, 2, "transport failures use the existing bounded retry");
       assert.equal(result!.ok, recovers);
       if (result!.ok) { assert.equal(result.completion, "returned"); assert.equal(result.data, "0x1234"); }
@@ -129,7 +133,10 @@ test("ethers RPC wrappers do not turn transport failures into admission reverts"
         generationFence: Object.freeze({ assertCurrent() {} }),
       });
       const issued = runtime.scheduler.issueExecutor({} as never);
-      const [result] = await issued.executor.execute({ requests: [request], source: SOURCE } as never);
+      const observation = { revertedResults: 0 };
+      const [result] = await observeAdapterRequests(observation,
+        () => issued.executor.execute({ requests: [request], source: SOURCE } as never));
+      assert.equal(observation.revertedResults, 1, "fenced EVM revert is observed once");
       assert.equal(calls, 1, "deterministic empty/data reverts never retry");
       assert(result!.ok);
       assert.equal(result.completion, "reverted-as-declared");
@@ -711,79 +718,6 @@ function runSchedulingProgram(runtime: CentralAdapterRuntime,
 }
 
 const schedulingTurn = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
-
-test("zero-read programs keep central admission and decode without physical I/O", async () => {
-  let fences = 0, admitted = 0, issued = 0, decoded = 0;
-  const noIO = async () => assert.fail("zero-read program attempted physical I/O");
-  const base = createStrictCentralAdapterRuntime({
-    provider: { call: noIO, getCode: noIO, getStorage: noIO },
-    simulator: { simulate: noIO },
-    transportScheduler: { run: noIO },
-    maxRequestsPerBatch: 0,
-    generationFence: { assertCurrent(generation, source) {
-      fences++;
-      assert.equal(generation, SOURCE.generation);
-      assert.deepEqual(source, SOURCE);
-    } },
-  });
-  const runtime: CentralAdapterRuntime = { ...base,
-    budgets: { assertAdmitted(schedule, requests) {
-      admitted++;
-      base.budgets.assertAdmitted(schedule, requests);
-    } },
-    scheduler: { issueExecutor(input) {
-      issued++;
-      return base.scheduler.issueExecutor(input);
-    } },
-  };
-  const result = await runSchedulingProgram(runtime, undefined, results => {
-    decoded++;
-    assert.deepEqual(results, []);
-    assert(Object.isFrozen(results));
-  }, []);
-  assert.equal(result.status, "resolved");
-  assert(result.status === "resolved");
-  assert.deepEqual(result.executed.trustedResults, []);
-  assert.equal(admitted, 1);
-  assert.equal(issued, 1);
-  assert.equal(decoded, 1);
-  assert(fences >= 4, "empty work must retain source checks around execution/decode");
-
-  const overBudget = await runSchedulingProgram(runtime, undefined,
-    () => assert.fail("nonempty work bypassed zero batch cap"), [schedulingRequests[0]!]);
-  assert.equal(overBudget.status, "unresolved");
-  assert.equal(issued, 1, "nonempty batch must still be rejected before issuance");
-});
-
-for (const failure of ["aborted", "expired", "stale", "abort-after-issue", "stale-after-issue", "stale-in-decode"] as const) {
-  test(`zero-read programs fail closed on ${failure}`, async () => {
-    const controller = new AbortController();
-    let current = failure !== "stale", decoded = 0;
-    if (failure === "aborted") controller.abort();
-    const noIO = async () => assert.fail("zero-read failure attempted physical I/O");
-    const base = createStrictCentralAdapterRuntime({
-      provider: { call: noIO, getCode: noIO, getStorage: noIO },
-      generationFence: { assertCurrent() { if (!current) throw new Error("source retired"); } },
-    });
-    const runtime: CentralAdapterRuntime = { ...base,
-      scheduler: { issueExecutor(input) {
-        const executor = base.scheduler.issueExecutor(input);
-        if (failure === "abort-after-issue") controller.abort();
-        if (failure === "stale-after-issue") current = false;
-        return executor;
-      } },
-    };
-    const outcome = await runSchedulingProgram(runtime, {
-      signal: controller.signal,
-      deadlineAtMs: Date.now() + (failure === "expired" ? -1 : 60_000),
-    }, () => {
-      decoded++;
-      if (failure === "stale-in-decode") current = false;
-    }, []);
-    assert.equal(outcome.status, "unresolved");
-    assert.equal(decoded, failure === "stale-in-decode" ? 1 : 0);
-  });
-}
 
 for (const blockedAt of ["permit", "provider"] as const) {
   test(`mixed reads: batch dispatch while direct ${blockedAt} is blocked`, async () => {

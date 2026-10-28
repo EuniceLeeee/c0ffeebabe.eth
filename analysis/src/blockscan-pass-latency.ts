@@ -113,7 +113,6 @@ export interface PassLatencyReport {
   readonly continuityBreaks: Record<string, number>;
   readonly longestRun: PassLatencyRunStats | null;
   readonly qualifyingRuns: readonly PassLatencyRunStats[];
-  readonly productionBoundaries: ReturnType<typeof productionBoundaries>;
 }
 
 interface PassLatencyOptions {
@@ -150,9 +149,6 @@ export function createPassLatencyAnalyzer(options: PassLatencyOptions): {
   let processSegment = -1;
   let recordsBeforeRuntimeCommit = 0;
   const records: PassLatencyRecord[] = [];
-  const boundaryPasses: { record: PassLatencyRecord; timing: JsonObject }[] = [];
-  const boundaryEvents: BoundaryEvent[] = [];
-  const simByIdentity = new Map<string, BoundaryEvent>();
   const invalidByReason = new Map<string, number>();
   let missingTotalMs = 0;
   let overThreshold = 0;
@@ -188,48 +184,6 @@ export function createPassLatencyAnalyzer(options: PassLatencyOptions): {
       if (line.includes(TIMING_MARKER)) recordsBeforeRuntimeCommit++;
       return;
     }
-    for (const [kind, marker] of [
-      ["head", "[searcher/live-head-window] "], ["publication", "[searcher/pricing-publication] "],
-      ["producer-drain", "[searcher/pricing-drain] "], ["source-n-drain", "[searcher/blockscan-source-n-call-stats-final] "],
-      ["effective", "[searcher/effective-mid] "], ["sim", "[searcher/sim-amount] "],
-    ]) {
-      const payload = markerPayload(line, marker!);
-      if (payload !== null) {
-        const value = parseObject(payload);
-        if (value !== null && kind === "sim") {
-          // Keep counts per source, never retain every amount trial or its payload.
-          const subject = { pid: value.pid, timeOrigin: value.timeOrigin, sourceBlock: value.sourceBlock,
-            sourceBlockHash: typeof value.sourceBlockHash === "string" ? value.sourceBlockHash.toLowerCase() : null, generation: value.generation };
-          const key = JSON.stringify([processSegment, subject]);
-          let aggregate = simByIdentity.get(key);
-          if (aggregate === undefined) {
-            aggregate = { segment: processSegment, kind, value: { ...subject,
-              constructions: 0, runtimeConstructions: 0, quotedConstructions: 0, quotedAttempts: 0, executions: 0, failures: 0, runtimeExecutions: 0, quotedExecutions: 0, minExecutionAt: null, maxExecutionAt: null, invalidExecutionClock: false } };
-            simByIdentity.set(key, aggregate); boundaryEvents.push(aggregate);
-          }
-          const target = aggregate.value;
-          if (value.mode === "quoted") target.quotedAttempts = Number(target.quotedAttempts) + 1;
-          if (value.type === "sim_amount_construction") {
-            target.constructions = Number(target.constructions) + 1;
-            if (value.mode === "runtime-actual") target.runtimeConstructions = Number(target.runtimeConstructions) + 1;
-            if (value.mode === "quoted") target.quotedConstructions = Number(target.quotedConstructions) + 1;
-          }
-          if (value.type === "sim_amount_failure") target.failures = Number(target.failures) + 1;
-          if (value.type === "sim_amount_execution") {
-            target.executions = Number(target.executions) + 1;
-            if (value.mode === "runtime-actual") target.runtimeExecutions = Number(target.runtimeExecutions) + 1;
-            if (value.mode === "quoted") target.quotedExecutions = Number(target.quotedExecutions) + 1;
-            const at = numberOrNull(value.atMonotonicMs);
-            if (at === null || at < 0) target.invalidExecutionClock = true;
-            else {
-              target.minExecutionAt = target.minExecutionAt === null ? at : Math.min(Number(target.minExecutionAt), at);
-              target.maxExecutionAt = target.maxExecutionAt === null ? at : Math.max(Number(target.maxExecutionAt), at);
-            }
-          }
-        } else if (value !== null) boundaryEvents.push({ segment: processSegment, kind: kind!, value });
-        return;
-      }
-    }
     const timingPayload = markerPayload(line, TIMING_MARKER);
     if (timingPayload === null || !timingPayload.startsWith("{")) return;
     const timing = parseObject(timingPayload);
@@ -253,7 +207,7 @@ export function createPassLatencyAnalyzer(options: PassLatencyOptions): {
         (invalidByReason.get(invalidReason) ?? 0) + 1,
       );
     }
-    const record: PassLatencyRecord = {
+    records.push({
       line: oneBasedLine,
       processSegment,
       runtimeCommit: currentRuntimeCommit,
@@ -294,9 +248,7 @@ export function createPassLatencyAnalyzer(options: PassLatencyOptions): {
       sourceHeadSeenAtMs: nonNegativeInteger(timing.source_head_seen_at_ms),
       fast: invalidReason === null,
       invalidReason,
-    };
-    records.push(record);
-    boundaryPasses.push({ record, timing });
+    });
   };
 
   const finish = (): PassLatencyReport => {
@@ -365,7 +317,6 @@ export function createPassLatencyAnalyzer(options: PassLatencyOptions): {
         overThreshold,
       },
       metrics: summarizeMetrics(records),
-      productionBoundaries: productionBoundaries(boundaryPasses, boundaryEvents),
       invalidByReason: Object.fromEntries(invalidByReason),
       continuityBreaks: runAnalysis.continuityBreaks,
       longestRun:
@@ -568,157 +519,4 @@ function nestedNumber(
   const one = value[first];
   if (!one || typeof one !== "object" || Array.isArray(one)) return null;
   return numberOrNull((one as JsonObject)[second]);
-}
-
-type BoundaryEvent = { segment: number; kind: string; value: JsonObject };
-
-/** Same-process, exact-source joins only. These clocks supplement timing-only fast statistics. */
-function productionBoundaries(
-  passes: readonly { record: PassLatencyRecord; timing: JsonObject }[],
-  events: readonly BoundaryEvent[],
-) {
-  const domain = (value: JsonObject): string | null => {
-    const pid = nonNegativeInteger(value.pid), origin = numberOrNull(value.timeOrigin ?? value.time_origin);
-    return pid && origin !== null && origin >= 0 ? `${pid}:${origin}` : null;
-  };
-  const hash = (value: unknown): string | null => typeof value === "string" && /^0x[0-9a-f]{64}$/i.test(value) ? value.toLowerCase() : null;
-  const identity = (value: JsonObject): string | null => {
-    const block = nonNegativeInteger(value.sourceBlock), generation = nonNegativeInteger(value.generation), sourceHash = hash(value.sourceBlockHash);
-    return block !== null && generation !== null && sourceHash ? `${block}:${sourceHash}:${generation}` : null;
-  };
-  const mono = (value: unknown): number | null => {
-    const at = numberOrNull(value); return at !== null && at >= 0 ? at : null;
-  };
-  const rows = passes.map(({ record, timing }) => {
-    const clock = domain(timing), sourceHash = hash(timing.source_block_hash);
-    const sourceGeneration = nonNegativeInteger(timing.source_generation);
-    const pricingSource = { sourceBlock: nonNegativeInteger(timing.pricing_source_block), sourceBlockHash: hash(timing.pricing_source_block_hash),
-      generation: nonNegativeInteger(timing.pricing_source_generation) };
-    const priceKey = identity(pricingSource);
-    const sameClock = (event: BoundaryEvent) => event.segment === record.processSegment && clock !== null && domain(event.value) === clock;
-    const matching = (kind: string) => events.filter(event => sameClock(event) && event.kind === kind && priceKey !== null && identity(event.value) === priceKey);
-    const heads = events.filter(event => sameClock(event) && event.kind === "head" && event.value.event === "head" && event.value.number === record.sourceBlock);
-    const head = heads.length === 1 ? heads[0]!.value : null;
-    const headAt = head === null ? null : mono(head.observedAtMonotonicMs);
-    const declaredHeadAt = mono(timing.source_head_seen_at_monotonic_ms);
-    const observedHeadHashes = events.filter(event => sameClock(event) && event.kind === "head" && event.value.number === record.sourceBlock)
-      .map(event => hash(event.value.hash)).filter((value): value is string => value !== null);
-    const headValid = headAt !== null && headAt === declaredHeadAt && sourceHash !== null &&
-      sourceGeneration !== null && observedHeadHashes.every(value => value === sourceHash);
-    const reorg = events.some(event => sameClock(event) && event.kind === "head" && event.value.event === "reorg" && event.value.number === record.sourceBlock);
-    const pricingHeads = events.filter(event => sameClock(event) && event.kind === "head" && event.value.event === "head" && event.value.number === pricingSource.sourceBlock);
-    const pricingHead = pricingHeads.length === 1 ? pricingHeads[0]!.value : null;
-    const pricingHeadAt = pricingHead === null ? null : mono(pricingHead.observedAtMonotonicMs);
-    const pricingHeadHashes = events.filter(event => sameClock(event) && event.kind === "head" && event.value.number === pricingSource.sourceBlock)
-      .map(event => hash(event.value.hash)).filter((value): value is string => value !== null);
-    const pricingHeadValid = priceKey !== null && pricingHeadAt !== null && pricingHeadHashes.every(value => value === pricingSource.sourceBlockHash);
-    const pricingReorg = events.some(event => sameClock(event) && event.kind === "head" && event.value.event === "reorg" && event.value.number === pricingSource.sourceBlock);
-    const publications = matching("publication"), drains = matching("producer-drain");
-    const sourceNDrains = matching("source-n-drain"), effective = matching("effective");
-    const publication = publications.length === 1 ? publications[0]!.value : null;
-    const publishedAt = publication?.effectiveComplete === true ? mono(publication.atMonotonicMs) : null;
-    const passDrainedAt = mono(timing.pass_drained_at_monotonic_ms);
-    let pricingDrainedAt: number | null = null;
-    let pricingDrainScope: string | null = null;
-    if (drains.length === 1 && sourceNDrains.length === 0 && drains[0]!.value.backendDrained === true && drains[0]!.value.simulationDrained === true) {
-      pricingDrainedAt = mono(drains[0]!.value.atMonotonicMs);
-      pricingDrainScope = "producer-backend-and-simulation";
-    } else if (drains.length === 0 && sourceNDrains.length === 1 && passDrainedAt !== null) {
-      const backendAt = mono(sourceNDrains[0]!.value.atMonotonicMs);
-      if (backendAt !== null) pricingDrainedAt = Math.max(backendAt, passDrainedAt);
-      pricingDrainScope = "source-n-backend-and-shared-pass-simulation";
-    }
-    const missing: string[] = [];
-    if (clock === null || sourceHash === null || sourceGeneration === null) missing.push("pass_identity_or_clock");
-    if (!headValid) missing.push("matching_head_receipt");
-    if (!pricingHeadValid) missing.push("matching_pricing_head_receipt");
-    if (pricingReorg) missing.push("pricing_head_reorg");
-    if (reorg) missing.push("head_reorg");
-    if (priceKey === null) missing.push("pricing_source_identity");
-    if (publishedAt === null) missing.push(publications.length > 1 ? "ambiguous_publication" : "complete_publication");
-    if (pricingDrainedAt === null) missing.push("complete_pricing_drain");
-    if (pricingHeadAt !== null && publishedAt !== null && publishedAt < pricingHeadAt) missing.push("publication_precedes_observed_head");
-    if (publishedAt !== null && pricingDrainedAt !== null && pricingDrainedAt < publishedAt) missing.push("pricing_drain_precedes_publication");
-    const delta = (end: number | null, start: number | null) => end !== null && start !== null && end >= start ? end - start : null;
-    const headToPublicationMs = pricingHeadValid && !pricingReorg ? delta(publishedAt, pricingHeadAt) : null;
-    const headToPricingDrainMs = pricingHeadValid && !pricingReorg && publishedAt !== null && pricingDrainedAt !== null && pricingDrainedAt >= publishedAt
-      ? delta(pricingDrainedAt, pricingHeadAt) : null;
-    const sizingAt = mono(timing.sizing_started_at_monotonic_ms);
-    const exactKey = identity({ sourceBlock: record.sourceBlock, sourceBlockHash: sourceHash, generation: sourceGeneration });
-    const simEvents = events.filter(event => sameClock(event) && event.kind === "sim" && exactKey !== null && identity(event.value) === exactKey);
-    const sim = simEvents.length === 1 ? simEvents[0]!.value : null;
-    const constructions = sim === null ? 0 : nonNegativeInteger(sim.constructions) ?? 0;
-    const runtimeConstructions = sim === null ? 0 : nonNegativeInteger(sim.runtimeConstructions) ?? 0;
-    const quotedConstructions = sim === null ? 0 : nonNegativeInteger(sim.quotedConstructions) ?? 0;
-    const quotedAttempts = sim === null ? 0 : nonNegativeInteger(sim.quotedAttempts) ?? 0;
-    const failures = sim === null ? 0 : nonNegativeInteger(sim.failures) ?? 0;
-    const totalExecutions = sim === null ? 0 : nonNegativeInteger(sim.executions) ?? 0;
-    const minExecutionAt = sim === null ? null : mono(sim.minExecutionAt), maxExecutionAt = sim === null ? null : mono(sim.maxExecutionAt);
-    const executionClockValid = sim?.invalidExecutionClock !== true && sizingAt !== null && passDrainedAt !== null &&
-      minExecutionAt !== null && maxExecutionAt !== null && minExecutionAt >= sizingAt && maxExecutionAt <= passDrainedAt;
-    const runtimeExecutions = sim === null ? 0 : nonNegativeInteger(sim.runtimeExecutions) ?? 0;
-    const quotedExecutions = sim === null ? 0 : nonNegativeInteger(sim.quotedExecutions) ?? 0;
-    const simWork = totalExecutions > 0 && executionClockValid;
-    const constructionModesKnown = constructions > 0 && runtimeConstructions + quotedConstructions === constructions;
-    const executionModesKnown = totalExecutions > 0 && runtimeExecutions + quotedExecutions === totalExecutions;
-    const runtimeViolation = quotedAttempts > 0 || (record.solverHopExactCalls !== null && record.solverHopExactCalls > 0);
-    const runtimeNoQuotedFallback = runtimeViolation ? false : !simWork || !constructionModesKnown || !executionModesKnown || record.solverHopExactCalls === null
-      ? null : runtimeConstructions === constructions && runtimeExecutions === totalExecutions && record.solverHopExactCalls === 0;
-    const sizingToPassDrainMs = headValid && !reorg && simWork ? delta(passDrainedAt, sizingAt) : null;
-    const nextHeads = events.filter(event => sameClock(event) && event.kind === "head" &&
-      (event.value.event === "head" || event.value.event === "next_head") &&
-      typeof event.value.number === "number" && event.value.number > record.sourceBlock &&
-      headAt !== null && (mono(event.value.observedAtMonotonicMs) ?? -1) > headAt);
-    const next = nextHeads.sort((a, b) => Number(a.value.observedAtMonotonicMs) - Number(b.value.observedAtMonotonicMs))[0]?.value;
-    const nextAt = next === undefined ? null : mono(next.observedAtMonotonicMs);
-    const effectiveSummary = effective.length === 1 ? effective[0]!.value : null;
-    const quoted = effectiveSummary === null ? null : nonNegativeInteger(effectiveSummary.quoted);
-    const carried = effectiveSummary === null ? null : nonNegativeInteger(effectiveSummary.carried);
-    const fresh = quoted !== null && carried !== null && carried <= quoted ? quoted - carried : null;
-    return {
-      sourceBlock: record.sourceBlock, sourceHash, sourceGeneration, pricingSource, clockDomain: clock,
-      headHashSource: observedHeadHashes.length > 0 ? "observed-feed-and-validated-pass" : "validated-pass-header",
-      headObservedAtMs: head === null ? null : numberOrNull(head.observedAtMs),
-      pricingHeadBlock: pricingSource.sourceBlock, pricingHeadObservedAtMs: pricingHead === null ? null : numberOrNull(pricingHead.observedAtMs),
-      pricingHeadObservedAtMonotonicMs: pricingHeadAt,
-      publicationAtMs: publication === null ? null : numberOrNull(publication.atMs),
-      pricingDrainAtMonotonicMs: pricingDrainedAt, passDrainedAtMs: numberOrNull(timing.pass_drained_at_ms),
-      sizingStartedAtMs: numberOrNull(timing.sizing_started_at_ms),
-      startupWarm: timing.startup_warm === true || record.outcome === "startup_warm", outcome: record.outcome,
-      failed: record.outcome !== "ran" && record.outcome !== "complete" && record.outcome !== "startup_warm",
-      noSimWork: !simWork, solverPlans: record.solverPlans, solverAmountPoints: record.solverAmountPoints,
-      simConstructions: constructions, simExecutions: totalExecutions, simFailures: failures,
-      simExecutionClockValid: executionClockValid,
-      runtimeConstructions, quotedConstructions, quotedAttempts, runtimeExecutions, quotedExecutions, simHopExactCalls: record.solverHopExactCalls,
-      runtimeNoQuotedFallback, runtimeConstructionStatus: runtimeNoQuotedFallback === null ? "unverified" : runtimeNoQuotedFallback ? "verified-observation" : "violated",
-      pricingStatus: headToPublicationMs !== null && headToPricingDrainMs !== null ? "verified-boundaries" : "unverified",
-      simStatus: !simWork ? constructions || failures || totalExecutions ? "unverified" : "not-run" : sizingToPassDrainMs === null ? "unverified" : "verified-boundaries",
-      headToPublicationMs, headToPricingDrainMs, pricingDrainScope, sizingToPassDrainMs,
-      nextObservedHead: next?.number ?? null, nextObservedHeadAtMonotonicMs: nextAt,
-      completedBeforeNextHead: passDrainedAt !== null && nextAt !== null ? passDrainedAt < nextAt : null,
-      nextHeadContiguous: next === undefined ? null : next.number === record.sourceBlock + 1,
-      effectiveFreshQuoted: fresh, effectiveCarriedQuoted: carried,
-      effectiveByStatus: effectiveSummary?.byStatus ?? null,
-      missing,
-    };
-  });
-  const ordinary = rows.filter(row => !row.startupWarm);
-  const headEvents = events.filter(event => event.kind === "head" && event.value.event === "head");
-  return {
-    scope: "supplemental same-process boundary evidence; not Family coverage or acceptance; startup and failures retained",
-    rows, observedHeads: headEvents.length,
-    unboundSimEvents: events.filter(event => event.kind === "sim" && (domain(event.value) === null || identity(event.value) === null))
-      .reduce((sum, event) => sum + Number(event.value.constructions) + Number(event.value.executions) + Number(event.value.failures), 0),
-    inputClosures: events.filter(event => event.kind === "head" && event.value.event === "input_closed").map(event => event.value),
-    nextHeadObservations: events.filter(event => event.kind === "head" && event.value.event === "next_head").map(event => event.value),
-    headIssues: events.filter(event => event.kind === "head" && ["gap", "reorg", "out_of_order"].includes(String(event.value.event))).map(event => event.value),
-    headsWithoutPass: headEvents.filter(event => !passes.some(({ record, timing }) => event.segment === record.processSegment &&
-      domain(event.value) !== null && domain(event.value) === domain(timing) && event.value.number === record.sourceBlock)).map(event => event.value.number),
-    counts: { startupWarm: rows.length - ordinary.length, failed: ordinary.filter(row => row.failed).length,
-      noSimWork: ordinary.filter(row => row.noSimWork).length, pricingUnverified: ordinary.filter(row => row.pricingStatus === "unverified").length,
-      carriedOnly: ordinary.filter(row => row.effectiveFreshQuoted === 0 && (row.effectiveCarriedQuoted ?? 0) > 0).length },
-    metrics: { headToPublicationMs: metricSummary(ordinary.map(row => row.headToPublicationMs)),
-      headToPricingDrainMs: metricSummary(ordinary.map(row => row.headToPricingDrainMs)),
-      sizingToPassDrainMs: metricSummary(ordinary.map(row => row.sizingToPassDrainMs)) },
-  };
 }

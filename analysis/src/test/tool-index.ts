@@ -82,94 +82,6 @@ test("manual production-stage benchmarks declare archive RPC cost, not zero-CU o
   }
 });
 
-test("Algebra historical quote probe declares real RPC cost without claiming Ready or execution acceptance", () => {
-  const selected = selectTools(discoverToolIndex(repoRoot), ["algebra", "historical", "exact-quote"]);
-  assert.equal(selected[0]?.id, "listener:searcher:algebra-quoter-historical");
-  assert.equal(selected[0]?.cost, "archive-rpc");
-  assert.equal(selected[0]?.capabilities.includes("live-window"), false);
-  assert.equal(selected[0]?.capabilities.includes("execution"), false);
-});
-
-test("Ella historical Ready and local fork execution declare real costs and separate claims", () => {
-  const tools = discoverToolIndex(repoRoot);
-  const ready = selectTools(tools, ["ella", "historical", "ready"])[0];
-  const dual = selectTools(tools, ["ella", "historical", "dual"])[0];
-  assert.equal(ready?.id, "listener:searcher:ella-historical-ready");
-  assert.equal(ready?.cost, "archive-rpc");
-  assert.equal(ready?.capabilities.includes("execution"), false);
-  assert.equal(dual?.id, "listener:searcher:ella-historical-dual");
-  assert.equal(dual?.cost, "fork");
-  assert.equal(dual?.capabilities.includes("ready"), false);
-  for (const tool of [ready, dual]) for (const absent of ["live-window", "stage-timing", "benchmark"])
-    assert.equal(tool?.capabilities.includes(absent), false);
-});
-
-test("Sat1 history tools separate natural Ready from dual execution and timing", () => {
-  const tools = discoverToolIndex(repoRoot);
-  const ready = selectTools(tools, ["sat1", "historical", "ready"])[0];
-  const dual = selectTools(tools, ["sat1", "historical", "dual"])[0];
-  assert.equal(ready?.id, "listener:searcher:v4-sat1-historical-ready");
-  assert.equal(ready?.cost, "archive-rpc"); assert.equal(ready?.capabilities.includes("execution"), false);
-  assert.equal(dual?.id, "listener:searcher:v4-sat1-historical-dual");
-  assert.equal(dual?.cost, "fork"); assert.equal(dual?.capabilities.includes("ready"), false);
-  for (const tool of [ready, dual]) for (const absent of ["live-window", "stage-timing", "benchmark"])
-    assert.equal(tool?.capabilities.includes(absent), false);
-});
-
-test("SelfBurn historical Ready and dual execution keep separate non-timing scopes", () => {
-  const tools = discoverToolIndex(repoRoot);
-  const ready = selectTools(tools, ["self-burn", "historical", "ready"])[0];
-  const dual = selectTools(tools, ["self-burn", "historical", "dual"])[0];
-  assert.equal(ready?.id, "listener:searcher:self-burn-historical-ready");
-  assert.equal(ready?.cost, "archive-rpc"); assert.equal(ready?.capabilities.includes("execution"), false);
-  assert.equal(dual?.id, "listener:searcher:self-burn-historical-dual");
-  assert.equal(dual?.cost, "fork"); assert.equal(dual?.capabilities.includes("ready"), false);
-  for (const tool of [ready, dual]) for (const absent of ["live-window", "stage-timing", "benchmark"])
-    assert.equal(tool?.capabilities.includes(absent), false);
-});
-
-test("Yield Basis dual execution is archive-RPC acceptance, not zero-CU or representative latency", () => {
-  const selected = selectTools(discoverToolIndex(repoRoot), ["yieldbasis", "dual", "historical"]);
-  assert.equal(selected[0]?.id, "listener:searcher:yieldbasis-lt-dual-historical");
-  assert.equal(selected[0]?.cost, "archive-rpc");
-  assert.equal(selected[0]?.capabilities.includes("execution"), true);
-  for (const unsupported of ["live-window", "stage-timing", "benchmark"])
-    assert.equal(selected[0]?.capabilities.includes(unsupported), false);
-});
-
-test("Yield Basis and Compound natural Ready entries declare archive reads without dual or timing claims", () => {
-  const tools = discoverToolIndex(repoRoot);
-  for (const [family, id] of [["yieldbasis", "yieldbasis-lt"], ["compound", "compound-ctoken"]]) {
-    const selected = selectTools(tools, [family, "historical", "ready"]);
-    assert.equal(selected.length, 1);
-    assert.equal(selected[0]?.id, `listener:searcher:${id}-historical-ready`);
-    assert.equal(selected[0]?.cost, "archive-rpc");
-    for (const supported of ["strict", "ready", "graph"]) assert(selected[0]?.capabilities.includes(supported));
-    for (const unsupported of ["dual", "execution", "live-window", "stage-timing", "benchmark"])
-      assert.equal(selected[0]?.capabilities.includes(unsupported), false);
-  }
-});
-
-test("Kyber natural single-block Ready has its own archive-RPC entry, not an unrelated family or fixture", () => {
-  const selected = selectTools(discoverToolIndex(repoRoot), ["kyber", "historical", "ready"]);
-  assert.equal(selected.length, 1);
-  assert.equal(selected[0]?.id, "listener:searcher:kyberswap-elastic-historical-ready");
-  assert.equal(selected[0]?.cost, "archive-rpc");
-  for (const supported of ["strict", "ready", "graph"]) assert(selected[0]?.capabilities.includes(supported));
-  for (const unsupported of ["dual", "execution", "live-window", "stage-timing", "benchmark"])
-    assert.equal(selected[0]?.capabilities.includes(unsupported), false);
-});
-
-test("InfiniFi historical cache reads declare archive RPC and only quote-cache scope", () => {
-  const selected = selectTools(discoverToolIndex(repoRoot), ["infinifi", "historical", "cache"]);
-  assert.equal(selected[0]?.id, "listener:searcher:infinifi-historical-cache");
-  assert.equal(selected[0]?.kind, "analysis");
-  assert.equal(selected[0]?.cost, "archive-rpc");
-  assert.equal(selected[0]?.capabilities.includes("exact-quote"), true);
-  for (const unsupported of ["live-window", "stage-timing", "benchmark", "execution", "ready", "replay"])
-    assert.equal(selected[0]?.capabilities.includes(unsupported), false);
-});
-
 test("AppleDouble metadata is ignored without hiding an ordinary orphan CLI", () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "mev-tool-index-"));
   try {
@@ -191,37 +103,6 @@ test("AppleDouble metadata is ignored without hiding an ordinary orphan CLI", ()
       "analysis CLI has no package-script index entry: src/cli/orphan.ts",
     ]);
     assert.equal(tools.some((tool) => tool.id.includes("._ghost.sh")), false);
-  } finally {
-    fs.rmSync(fixture, { recursive: true, force: true });
-  }
-});
-
-test("Curve LP historical acceptance declares RPC/native cost without relabeling contract fixtures", () => {
-  const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "mev-tool-index-curve-lp-"));
-  try {
-    fs.mkdirSync(path.join(fixture, "analysis"), { recursive: true });
-    fs.mkdirSync(path.join(fixture, "listener"), { recursive: true });
-    fs.mkdirSync(path.join(fixture, "scripts"), { recursive: true });
-    const { scripts } = JSON.parse(fs.readFileSync(path.join(repoRoot, "listener/package.json"), "utf8")) as {
-      scripts: Record<string, string>;
-    };
-    const historical = ["searcher:curve-lp-historical-ready", "searcher:curve-lp-historical-dual"];
-    const names = [...historical, "searcher:curve-lp-family"];
-    for (const name of names) assert.equal(typeof scripts[name], "string", `missing real package script: ${name}`);
-    fs.writeFileSync(path.join(fixture, "analysis/package.json"), JSON.stringify({ scripts: {} }));
-    fs.writeFileSync(path.join(fixture, "listener/package.json"), JSON.stringify({
-      scripts: Object.fromEntries(names.map(name => [name, scripts[name]])),
-    }));
-    const tools = discoverToolIndex(fixture);
-    for (const name of historical) {
-      const tool = tools.find(tool => tool.id === `listener:${name}`)!;
-      assert.equal(tool.cost, "fork", `${name} performs historical RPC and local native EVM execution`);
-      assert.equal(tool.kind, "test", `${name} validates adaptation, not original-transaction replay`);
-      assert.equal(tool.curated, true);
-      for (const capability of ["curve", "lp", "historical-rpc", "native-evm"]) assert(tool.capabilities.includes(capability));
-    }
-    assert.equal(relatedTools(tools, ["curve", "lp"]).length, 3, "existing Curve/LP queries retain both historical entries and the contract fixture");
-    assert.equal(tools.find(tool => tool.id === "listener:searcher:curve-lp-family")!.cost, "zero-cu");
   } finally {
     fs.rmSync(fixture, { recursive: true, force: true });
   }

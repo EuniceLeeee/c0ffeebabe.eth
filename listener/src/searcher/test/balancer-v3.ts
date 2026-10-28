@@ -1,5 +1,4 @@
 import { ethers } from "ethers";
-import { rejects } from "node:assert/strict";
 import {
   balancerV3SendToAdapter,
   balancerV3SettleAdapter,
@@ -25,9 +24,10 @@ function callSelector(encoded: Uint8Array): string {
   return ethers.hexlify(encoded.slice(24, 28));
 }
 
-function testLegacyEdgeShape(): void {
-  // Legacy compatibility fixture only: these manually authored edges do not
-  // attest lifecycle admission or current production Graph membership.
+function testGraph(): void {
+  // Strict graph authority: edges come from the verified family lifecycle,
+  // never from a parallel eth_call builder. The fixture mirrors exactly what
+  // the balancer-v3 lifecycle projects for this two-token pool.
   const graph: TokenEdge[] = [
     {
       adapterId: "balancer-v3-unlock",
@@ -70,7 +70,7 @@ async function testQuote(): Promise<void> {
   assert(out === OUT, `quote output ${out}`);
 }
 
-async function testPlanRequiresStrictSession(): Promise<void> {
+async function testPlan(): Promise<void> {
   const edge: TokenEdge = {
     adapterId: "balancer-v3-unlock",
     target: POOL,
@@ -82,7 +82,7 @@ async function testPlanRequiresStrictSession(): Promise<void> {
   };
   const amountIn = 653072044530122959n;
   const haircutted = OUT - 1000n;
-  await rejects(buildResolvedPlanFromPath(
+  const plan = await buildResolvedPlanFromPath(
     { edges: [edge] },
     ADDR.ROCKSOLID_RETH,
     amountIn,
@@ -92,10 +92,14 @@ async function testPlanRequiresStrictSession(): Promise<void> {
     1n,
     "morpho-flash",
     [OUT],
-  ), { message: "plan-builder requires a strict current-source session" });
-  // Positive current Family encoding/quote/runtime coverage is executed by the
-  // same package entrypoint's Family contract suite. This rejection does not
-  // stand in for a successful strict planner/Funding or historical execution.
+  );
+  const unlock = plan.children.find((node) => node.adapterId === "balancer-v3-unlock");
+  assert(unlock !== undefined, "unlock node present");
+  assert(unlock.target.toLowerCase() === ADDR.BALANCER_V3_VAULT.toLowerCase(), "unlock targets canonical Vault");
+  assert(unlock.children.map((node) => node.adapterId).join(",") === "erc20-transfer,balancer-v3-settle,balancer-v3-swap,balancer-v3-send-to", "callback child order");
+  const sendTo = unlock.children[3];
+  assert(sendTo.amount === OUT, `sendTo must settle raw output, got ${sendTo.amount}`);
+  assert(String(unlock.children[2].params.pool).toLowerCase() === POOL.toLowerCase(), "swap names actual pool");
 }
 
 function testSelectors(): void {
@@ -127,8 +131,8 @@ function testSelectors(): void {
   assert(callSelector(balancerV3SendToAdapter.encode({ ...base, adapterId: "balancer-v3-send-to", params: { token: ADDR.RETH } }, EXECUTOR, new Uint8Array())) === "0xae639329", "sendTo selector");
 }
 
-testLegacyEdgeShape();
+await testGraph();
 await testQuote();
-await testPlanRequiresStrictSession();
+await testPlan();
 testSelectors();
-console.log("balancer-v3 legacy compatibility PASS (edge shape, stubbed quote, missing-session rejection, selectors; not historical or production planner acceptance)");
+console.log("balancer-v3 PASS (4/4)");

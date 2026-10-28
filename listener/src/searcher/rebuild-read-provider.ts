@@ -3,8 +3,24 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { gunzipSync } from "node:zlib";
 import { setTimeout as wait } from "node:timers/promises";
+import { ReadyRpcRateError, type ReadyRpcThrottle } from "./ready-rpc-throttle.js";
+import { isRpcQuotaExhaustedError, isRpcThrottleError } from "./rpc-throttle-guard.js";
 
 const MAX_PHYSICAL_REQUESTS = 8;
+type ReadyRpcResult = ethers.JsonRpcResult & { error?: unknown };
+
+// These are original provider error envelopes, not decoded contract output.
+// Do not require a 429/rate marker for an explicit spent allocation.
+function readyQuotaExhausted(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const item = error as { code?: unknown; data?: unknown; message?: unknown };
+  if (item.code === 3 || item.code === "CALL_EXCEPTION" ||
+      item.code === -32000 && typeof item.data === "string" && /^0x[0-9a-f]*$/i.test(item.data)) return false;
+  const message = typeof item.message === "string" ? item.message : "";
+  if (/\bexecution revert(?:ed)?\b/i.test(message)) return false;
+  return isRpcQuotaExhaustedError(error) ||
+    /\b(?:monthly|daily)\b.*\b(?:limit|quota|capacity)\b|\b(?:quota|credits?|compute[ -]units?)\b.*\b(?:exhaust(?:ed|ion)|deplet(?:ed|ion))\b/i.test(message);
+}
 
 export type RebuildReadProviderOptions = ethers.JsonRpcApiProviderOptions & {
   /** Infinity retains concurrency already bounded by a dedicated caller. */
@@ -14,6 +30,7 @@ export type RebuildReadProviderOptions = ethers.JsonRpcApiProviderOptions & {
   /** Optional per-response wire/body limits. Undefined preserves existing behavior. */
   readonly maxReceivedBytes?: number;
   readonly maxDecompressedBytes?: number;
+  readonly readyThrottle?: ReadyRpcThrottle;
 };
 
 /** Read fencing and bounded HTTP transport shared by rebuild providers. */
@@ -23,6 +40,7 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
   private readonly requestTimeoutMs?: number;
   private readonly maxReceivedBytes?: number;
   private readonly maxDecompressedBytes?: number;
+  private readonly readyThrottle?: ReadyRpcThrottle;
   private readonly inflight = new Set<AbortController>();
   private readonly waiting: {
     resolve: () => void;
@@ -36,7 +54,7 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     options?: RebuildReadProviderOptions,
   ) {
     const { maxPhysicalRequests = MAX_PHYSICAL_REQUESTS, requestTimeoutMs,
-      maxReceivedBytes, maxDecompressedBytes, ...rpcOptions } = options ?? {};
+      maxReceivedBytes, maxDecompressedBytes, readyThrottle, ...rpcOptions } = options ?? {};
     if (maxPhysicalRequests !== Infinity &&
         (!Number.isSafeInteger(maxPhysicalRequests) || maxPhysicalRequests < 1)) {
       throw new Error("maxPhysicalRequests must be a positive integer or Infinity");
@@ -52,10 +70,12 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     this.requestTimeoutMs = requestTimeoutMs;
     this.maxReceivedBytes = maxReceivedBytes;
     this.maxDecompressedBytes = maxDecompressedBytes;
+    this.readyThrottle = readyThrottle;
   }
 
   private assertOpen(): void {
     if (this.destroyed) throw this.destroyedError();
+    this.readyThrottle?.assertOpen();
   }
 
   private destroyedError(): Error {
@@ -66,7 +86,7 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
 
   private async acquire(): Promise<void> {
     this.assertOpen();
-    if (this.activeRequests < this.maxPhysicalRequests) {
+    if (this.activeRequests < this.physicalLimit) {
       this.activeRequests++;
       return;
     }
@@ -74,6 +94,10 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
   }
 
   private release(): void {
+    if (this.activeRequests > this.physicalLimit) {
+      this.activeRequests--;
+      return;
+    }
     const next = this.waiting.shift();
     if (next) {
       // Transfer the occupied slot directly, so later arrivals cannot jump
@@ -84,16 +108,21 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     }
   }
 
+  private get physicalLimit(): number {
+    return Math.min(this.maxPhysicalRequests, this.readyThrottle?.concurrency ?? Infinity);
+  }
+
   // Limit only the physical transport: public methods and network detection
   // can call send/_send recursively and must never hold another queue slot.
   override _send(...args: Parameters<ethers.JsonRpcProvider["_send"]>) {
-    return this.read(async () => {
+    const operation = () => this.read(async () => {
       await this.acquire();
       try {
         // The fatal latch may have changed while ethers batched the request
         // or while this batch waited for a slot. Recheck before any HTTP I/O.
         return await this.read(() => {
           this.assertOpen();
+          if (this.readyThrottle) return this.sendReady(args[0]);
           return this.requestTimeoutMs === undefined && this.maxReceivedBytes === undefined && this.maxDecompressedBytes === undefined
             ? super._send(...args) : this.sendBounded(...args);
         });
@@ -101,6 +130,26 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
         this.release();
       }
     });
+    return this.readyThrottle ? this.readyThrottle.read(operation) : operation();
+  }
+
+  private async sendReady(payload: ethers.JsonRpcPayload | ethers.JsonRpcPayload[]) {
+    const items = Array.isArray(payload) ? payload : [payload];
+    const results: ethers.JsonRpcResult[] = [];
+    for (let offset = 0; offset < items.length;) {
+      this.assertOpen();
+      const chunk = items.slice(offset, offset + this.readyThrottle!.batchMaxCount);
+      results.push(...await this.sendBounded(chunk.length === 1 ? chunk[0]! : chunk));
+      offset += chunk.length;
+    }
+    return results;
+  }
+
+  private rateFailure(quotaExhausted: boolean): ReadyRpcRateError {
+    const error = new ReadyRpcRateError(quotaExhausted);
+    this.readyThrottle?.markFailure(error);
+    this.readyThrottle?.observe(error);
+    return error;
   }
 
   private async sendBounded(payload: ethers.JsonRpcPayload | ethers.JsonRpcPayload[]) {
@@ -126,7 +175,7 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     // is checked by ethers BEFORE preflight, so the final 429 never waits.
     const preflight = request.preflightFunc, retry = request.retryFunc;
     let retryAfter: string | undefined, retryDelayMs = 0;
-    request.setThrottleParams({ slotInterval: 0 });
+    request.setThrottleParams({ slotInterval: 0, ...(this.readyThrottle ? { maxAttempts: 1 } : {}) });
     request.preflightFunc = async req => {
       const delayMs = retryDelayMs;
       retryDelayMs = 0;
@@ -204,6 +253,26 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
                 controller.abort(sizeError()); return;
               }
               checkDeadline();
+              if (this.readyThrottle && response.statusCode === 429) {
+                try {
+                  let value: unknown;
+                  try { value = body === null ? undefined : JSON.parse(body.toString("utf8")); } catch { /* Plain HTTP 429. */ }
+                  const entries = Array.isArray(value) ? value : [value];
+                  const quota = readyQuotaExhausted({ status: 429, message: body?.toString("utf8") ?? "" }) ||
+                    entries.some(item => item !== null && typeof item === "object" &&
+                    readyQuotaExhausted((item as { error?: unknown }).error ?? { status: 429, ...item }));
+                  if (entries.some(item => item !== null && typeof item === "object" && "jsonrpc" in item)) {
+                    const bound = validateReadyRpcResponse(payload, value);
+                    if (bound.some(item => readyQuotaExhausted(item.error))) throw this.rateFailure(true);
+                    if (!validReadySuccessfulReads(payload, bound) || bound.some(item => item.error !== undefined &&
+                      !isRpcThrottleError(item.error))) throw new Error("Ready HTTP 429 also contains a non-rate or malformed read");
+                  }
+                  throw this.rateFailure(quota);
+                } catch (error) {
+                  controller.abort(error);
+                  return;
+                }
+              }
               resolve({ statusCode: response.statusCode ?? 0, statusMessage: response.statusMessage ?? "", headers, body });
             } catch (error) { reject(error); }
           });
@@ -227,6 +296,17 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
       response.assertOk();
       const result = response.bodyJson;
       checkDeadline();
+      if (this.readyThrottle) {
+        const entries = validateReadyRpcResponse(payload, result);
+        const errors = entries.flatMap(item => item.error === undefined ? [] : [item.error]);
+        if (errors.some(readyQuotaExhausted)) throw this.rateFailure(true);
+        if (errors.some(isRpcThrottleError)) {
+          if (!errors.every(isRpcThrottleError) || !validReadySuccessfulReads(payload, entries)) {
+            throw new Error("Ready RPC rate response also contains a non-rate or malformed read");
+          }
+          throw this.rateFailure(false);
+        }
+      }
       // Match JsonRpcProvider._send's declared type; ethers' dispatcher still
       // receives error envelopes unchanged and maps them to public RPC errors.
       return (Array.isArray(result) ? result : [result]) as ethers.JsonRpcResult[];
@@ -240,19 +320,29 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
   }
 
   override send(...args: Parameters<ethers.JsonRpcProvider["send"]>) {
-    return this.read(() => super.send(...args));
+    return this.ownedRead(() => super.send(...args));
   }
   override getBlock(...args: Parameters<ethers.JsonRpcProvider["getBlock"]>) {
-    return this.read(() => super.getBlock(...args));
+    return this.ownedRead(() => super.getBlock(...args));
   }
   override getCode(...args: Parameters<ethers.JsonRpcProvider["getCode"]>) {
-    return this.read(() => super.getCode(...args));
+    return this.ownedRead(() => super.getCode(...args));
   }
   override getStorage(...args: Parameters<ethers.JsonRpcProvider["getStorage"]>) {
-    return this.read(() => super.getStorage(...args));
+    return this.ownedRead(() => super.getStorage(...args));
   }
   override getLogs(...args: Parameters<ethers.JsonRpcProvider["getLogs"]>) {
-    return this.read(() => super.getLogs(...args));
+    return this.ownedRead(() => super.getLogs(...args));
+  }
+
+  private async ownedRead<T>(work: () => Promise<T>): Promise<T> {
+    try { return await this.read(work); }
+    catch (error) {
+      // One ethers batch may join different candidate async contexts. Fence
+      // each consumer even when a Family catches its own rejected read.
+      if (error instanceof Error && this.readyThrottle?.isThrottle(error)) this.readyThrottle.markFailure(error);
+      throw error;
+    }
   }
 
   override destroy(): void {
@@ -260,4 +350,39 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     for (const controller of this.inflight) controller.abort(this.destroyedError());
     for (const waiter of this.waiting.splice(0)) waiter.reject(this.destroyedError());
   }
+}
+
+/** Preserve response binding; a malformed batch is never hidden by a rate retry. */
+function validateReadyRpcResponse(payload: ethers.JsonRpcPayload | ethers.JsonRpcPayload[], value: unknown): ReadyRpcResult[] {
+  const requests = Array.isArray(payload) ? payload : [payload];
+  const entries = Array.isArray(value) ? value : [value];
+  const ids = new Set(requests.map(item => item.id));
+  const seen = new Set<unknown>();
+  if (entries.length !== requests.length || entries.some(item => {
+    if (!item || typeof item !== "object" || item.jsonrpc !== "2.0" || !ids.has(item.id) || seen.has(item.id) ||
+      (Object.hasOwn(item, "result") === Object.hasOwn(item, "error"))) return true;
+    seen.add(item.id); return false;
+  })) throw new Error("Ready RPC response identity mismatch");
+  return entries;
+}
+
+function validReadySuccessfulReads(payload: ethers.JsonRpcPayload | ethers.JsonRpcPayload[], entries: ReadyRpcResult[]): boolean {
+  const requests = Array.isArray(payload) ? payload : [payload];
+  return entries.every(entry => {
+    if (entry.error !== undefined) return true;
+    const method = requests.find(item => item.id === entry.id)!.method;
+    const value = entry.result;
+    if (["eth_chainId", "eth_getBalance", "eth_getTransactionCount", "eth_blockNumber"].includes(method)) {
+      return typeof value === "string" && /^0x(?:0|[1-9a-f][0-9a-f]*)$/i.test(value);
+    }
+    if (["eth_getCode", "eth_call", "eth_getStorageAt"].includes(method)) {
+      return typeof value === "string" && /^0x(?:[0-9a-f]{2})*$/i.test(value) &&
+        (method !== "eth_getStorageAt" || value.length === 66);
+    }
+    if (["eth_getBlockByHash", "eth_getBlockByNumber"].includes(method)) {
+      return value !== null && typeof value === "object" && ["hash", "parentHash", "stateRoot"]
+        .every(key => typeof value[key] === "string" && /^0x[0-9a-f]{64}$/i.test(value[key]));
+    }
+    return true;
+  });
 }

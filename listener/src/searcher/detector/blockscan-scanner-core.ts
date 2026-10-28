@@ -21,6 +21,8 @@ export interface BlockScanCoreConfig {
   /** Allow a logical pool/instance on multiple legs; final sim remains mandatory. */
   allowRepeatedPools?: boolean;
   allowRepeatedTokens?: boolean;
+  /** Enumerate repeated tokens, then admit only protocol-mediated repeats. */
+  allowProtocolRepeats?: boolean;
   /** Optional reference-value floor: joint buy/sell prefixes for joint-dfs. */
   prefixPruningEnabled?: boolean;
   maxPrefixDrawdownBps?: number;
@@ -203,11 +205,13 @@ export function scanBlockStateFromResolvedMids(input: {
   const started = Date.now(), deadlineAtMs = started + input.cfg.budgetMs;
   const eligibleEdges: TokenEdge[] = [];
   const poolViewEdges: TokenEdge[] = [];
-  let poolRevertExcluded = false;
+  let poolRevertExcludedPriced = false;
   for (const edge of input.edges) {
     if (!isBlockScanConversionEdge(edge)) continue;
     if (input.poolRevertExcludedEdge?.(edge)) {
-      poolRevertExcluded = true;
+      // Effective publication already removes most run-excluded prices. Only
+      // a newly excluded priced edge requires rebuilding conversion references.
+      if (input.mids.has(blockScanEdgeKey(edge))) poolRevertExcludedPriced = true;
       continue;
     }
     poolViewEdges.push(edge);
@@ -215,10 +219,12 @@ export function scanBlockStateFromResolvedMids(input: {
   }
   const edgesById = new Map(eligibleEdges.map(edge => [blockScanEdgeKey(edge), edge]));
   const allowRepeatedPools = input.cfg.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS;
-  const view = poolRevertExcluded
-    ? buildBlockScanEthView(poolViewEdges, input.mids, input.cfg.ethSignalPairsPerToken, allowRepeatedPools)
+  const allowProtocolRepeats = input.cfg.allowProtocolRepeats === true;
+  let protocolRepeatRejected = 0;
+  const view = poolRevertExcludedPriced
+    ? buildBlockScanEthView(poolViewEdges, input.mids, input.cfg.ethSignalPairsPerToken, allowRepeatedPools, input.ethView)
     : input.ethView?.allowRepeatedPools === allowRepeatedPools ? input.ethView
-    : buildBlockScanEthView(eligibleEdges, input.mids, input.cfg.ethSignalPairsPerToken, allowRepeatedPools);
+    : buildBlockScanEthView(eligibleEdges, input.mids, input.cfg.ethSignalPairsPerToken, allowRepeatedPools, input.ethView);
   const quotes = view.quotes.filter(q => edgesById.has(q.id));
   const ranked = new Map<string, RankedOpportunity>();
   let capitalRejected = 0;
@@ -228,7 +234,8 @@ export function scanBlockStateFromResolvedMids(input: {
   const dfs = enumeratePaired({
     quotes, signals: view.signals, minSpreadBps: input.cfg.minSpreadBps,
     maxHops: input.cfg.maxHops, deadlineAtMs, allowRepeatedPools,
-    allowRepeatedTokens: input.cfg.allowRepeatedTokens,
+    // Protocol-mediated repeats need the enumerator to emit repeats at all.
+    allowRepeatedTokens: input.cfg.allowRepeatedTokens === true || allowProtocolRepeats,
     hopTokensPerStep: input.cfg.hopTokensPerStep,
     hopPoolsPerPair: input.cfg.hopPoolsPerPair,
     prefixPruningEnabled: input.cfg.prefixPruningEnabled,
@@ -241,6 +248,7 @@ export function scanBlockStateFromResolvedMids(input: {
       // The enumerator joins from the signal token using whole-cycle profit,
       // then rotates the completed cycle to this funded execution start.
       if (input.routeEligible && !input.routeEligible(seedEdges)) return;
+      if (allowProtocolRepeats && !protocolRepeatEligible(seedEdges)) { protocolRepeatRejected++; return; }
       // All enumerator backends emit closed, continuous, funded cycles from
       // the supplied quotes. Only the numeric conversion may still overflow.
       if (!Number.isFinite(estSpreadBps)) return;
@@ -284,7 +292,8 @@ export function scanBlockStateFromResolvedMids(input: {
       admittedCount: ordered.filter(entry => entry.estSpreadBps >
         (input.cfg.exactAdmissionSpreadBps ?? input.cfg.minSpreadBps)).length,
       selectedCount: opportunities.length, forcedSelectionCount: 0 },
-    debug: { skippedVenues: eligibleEdges.length - quotes.length, capitalRejected },
+    debug: { skippedVenues: eligibleEdges.length - quotes.length, capitalRejected,
+      ...(allowProtocolRepeats ? { protocolRepeatRejected } : {}) },
     enumeration: { algorithm: method === "joint-dfs" ? "joint-dfs" : method === "dfs" ? "paired-dfs" : "paired-layered", backend,
       ...ethViewStatistics(view, input.cfg.minSpreadBps), ...dfs },
   };
@@ -579,4 +588,38 @@ function directedRouteFingerprint(edges: TokenEdge[], deduplicateRotations: bool
 function fundingRotationRank(estSpreadBps: number, searchCenter: bigint, maxBorrow: bigint): number {
   // Effective input is positive and funding admission has already checked P <= cap.
   return estSpreadBps * (Number(searchCenter) / Number(maxBorrow));
+}
+
+/** Admission policy for SEARCHER_BLOCKSCAN_ALLOW_PROTOCOL_REPEATS_ENABLED.
+ *
+ * A token may repeat mid-cycle only when a protocol edge (redeem/withdraw/
+ * convert) re-introduces it after a pure swap consumed it: `asset -> share`
+ * then `share -> asset` is a legitimate redemption close, while `A -> B -> A`
+ * swap round-trips stay pruned. Each token may appear at most twice (the
+ * closing return to the start is exempt), and a protocol instance already used
+ * in the same cycle cannot re-introduce the token (no deposit/redeem wash). */
+export function protocolRepeatEligible(edges: readonly TokenEdge[]): boolean {
+  if (edges.length === 0) return false;
+  const tokens = [...edges.map(edge => edge.tokenIn.toLowerCase()), edges.at(-1)!.tokenOut.toLowerCase()];
+  const closing = tokens.length - 1;
+  const counts = new Map<string, number>();
+  for (let i = 0; i < closing; i++) {
+    const token = tokens[i]!;
+    const count = (counts.get(token) ?? 0) + 1;
+    if (count > 2) return false;
+    counts.set(token, count);
+  }
+  const seen = new Set<string>([tokens[0]!]);
+  const instances = new Set<string>();
+  for (let i = 1; i < closing; i++) {
+    const entering = edges[i - 1]!;
+    const instance = entering.instanceKey ?? "";
+    if (seen.has(tokens[i]!)) {
+      if (entering.slotKind !== "protocol") return false;
+      if (instance.length === 0 || instances.has(instance)) return false;
+    }
+    seen.add(tokens[i]!);
+    instances.add(instance);
+  }
+  return true;
 }

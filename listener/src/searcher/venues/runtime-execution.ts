@@ -41,10 +41,7 @@ export function runtimeWrapReceipt(p: RuntimeAmountProgram, wrapped: string, bef
     .call(wrapped, RUNTIME_WRAP.encodeFunctionData("deposit"), { valueReg: after });
 }
 
-/** Protocol-neutral native/wrapped boundary for one operation. The owner
- * supplies its native ABI/value argument; the common emitter protects native
- * inventory and wraps only this operation's receipt. r0 remains the working
- * input, and the caller reserves before/scratch for the whole operation. */
+/** Protect pre-existing native inventory and wrap only this operation's receipt. */
 export function runtimeNativeBoundary(p: RuntimeAmountProgram, wrapped: string, before = 13, scratch = 14) {
   if (![before, scratch].every(r => Number.isInteger(r) && r > 0 && r < 16) || before === scratch) {
     throw new Error("runtime native boundary registers");

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { transpileModule, ScriptTarget, ModuleKind } from "typescript";
 import {
   UniverseRebuildCheckpointStore,
   canonicalJson,
@@ -20,7 +20,6 @@ import {
 } from "../universe-rebuild-checkpoint.js";
 import {
   assertReceiptsMatchCurrentSourcePlan,
-  assertReadyFamilyActivation,
   UniverseRunIncomplete,
   refreshReadyInstances,
   restrictReadyFamilies,
@@ -31,7 +30,8 @@ import {
 } from "../universe-rebuild-runner.js";
 import { strictEdgeCollectionFromBlock } from
   "../strict-edge-collection-policy.js";
-import { assertReadyCheckpointPublicationCurrent } from "../strict-ready-runtime.js";
+import { ReadyRpcRateError, ReadyRpcThrottle } from "../ready-rpc-throttle.js";
+import { RevmFatalError } from "../revm-sim-client.js";
 
 const SOURCE = Object.freeze({
   number: 25_750_000,
@@ -100,37 +100,12 @@ async function startupReadyFromMain(
   const run = new Function(
     "rebuildStore", "rebuildWiring", "refreshReadyInstances", "rebuildUniverse",
     "UniverseRunIncomplete", "blindUseIncumbentReady", "useReadyGeneration", "console", "process",
-    "assertReadyCheckpointPublicationCurrent",
     `return (async () => { ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
   );
   return run(wiring.store, wiring, refresh,
     async () => { throw new Error("Ready reuse must not start discovery/rebuild"); },
     UniverseRunIncomplete, flags.blind, flags.useReadyGeneration,
-    { log(message: string) { wiring.log?.(message); } }, { env: {} },
-    assertReadyCheckpointPublicationCurrent);
-}
-
-// Exercise main's actual memo selection AND rehydration statements. The fixture
-// only supplies its registry domain and rehydrator; it does not choose memos.
-async function rehydrateReadyFromMain(
-  rebuildEnvelope: StartupCheckpointEnvelope,
-  rebuildWiring: RebuildUniverseInput,
-): Promise<void> {
-  const source = await readFile(new URL("../main.ts", import.meta.url), "utf8");
-  const start = source.indexOf("  const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);");
-  const end = source.indexOf("  const flashTokens =", start);
-  assert(start >= 0 && end > start, "main memo selection/rehydration boundary must exist");
-  const body = transpileModule(source.slice(start, end), {
-    compilerOptions: { target: ScriptTarget.ES2022, module: ModuleKind.ESNext },
-  }).outputText;
-  const run = new Function(
-    "readyUniverse", "rebuildEnvelope", "rebuildWiring", "selectActiveReadyMemos",
-    "assertReadyFamilyActivation", "PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG",
-    body,
-  );
-  run(rebuildEnvelope.readyGeneration, rebuildEnvelope, rebuildWiring,
-    activeReadyMemos, assertReadyFamilyActivation,
-    { forStrictFamily: () => ({ plugin: { manifest: { domain: "swap" } } }) });
+    { log(message: string) { wiring.log?.(message); } }, { env: {} });
 }
 
 function makeFixture(
@@ -345,6 +320,52 @@ async function main(): Promise<void> {
   );
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
+    {
+      const f = makeFixture(join(dir, "adaptive-recovery"));
+      const control = new ReadyRpcThrottle(4, () => {});
+      let rateAttempts = 0;
+      const ready = await rebuildUniverse({ ...f.input, readyThrottle: control, attestationConcurrency: 4,
+        attestFamilyInstanceOnce: async input => {
+          if ((input.candidate as { id: string }).id === "b" && rateAttempts++ < 3) {
+            throw new RevmFatalError({ kind: "rpc-throttle", category: "rpc-limit-code", rpcCode: 429 });
+          }
+          return f.input.attestFamilyInstanceOnce(input);
+        } });
+      assert.equal(control.concurrency, 3);
+      assert.equal(rateAttempts, 4);
+      assert.equal(ready.candidateAccounting.verified, 3);
+      assert.equal(ready.candidateAccounting.terminalRejected, 0);
+      assert.equal(ready.candidateAccounting.retryable, 0);
+      assert.equal(activeReadyMemos((await f.store.load())!).length, 3);
+    }
+    {
+      const f = makeFixture(join(dir, "adaptive-swallowed-error"));
+      const control = new ReadyRpcThrottle(4, () => {});
+      let failures = 0, seals = 0;
+      const ready = await rebuildUniverse({ ...f.input, readyThrottle: control, attestationConcurrency: 4,
+        attestFamilyInstanceOnce: async input => {
+          if ((input.candidate as { id: string }).id === "b" && failures++ < 3) control.markFailure(new ReadyRpcRateError());
+          return f.input.attestFamilyInstanceOnce(input);
+        }, sealDurableVerifiedMemo: input => { seals++; return f.input.sealDurableVerifiedMemo(input); } });
+      assert.equal(failures, 4);
+      assert.equal(seals, 3, "swallowed rate errors must be fenced before memo/outcome writes");
+      assert.equal(ready.candidateAccounting.verified, 3);
+    }
+    {
+      const f = makeFixture(join(dir, "adaptive-exhaustion"));
+      const control = new ReadyRpcThrottle(1, () => {});
+      let requests = 0;
+      await assert.rejects(rebuildUniverse({ ...f.input, readyThrottle: control, attestationConcurrency: 1,
+        attestFamilyInstanceOnce: async () => { requests++; throw new ReadyRpcRateError(); } }), /persisted at concurrency=1 batch=1/);
+      assert.equal(requests, 12);
+      const failed = (await f.store.load())!;
+      assert.equal(failed.readyGeneration, null);
+      assert.equal(Object.keys(failed.inProgressRun!.outcomesByCandidateKey).length, 0);
+      assert.equal(Object.keys(failed.verifiedMemos).length, 0);
+      const ready = await rebuildUniverse({ ...f.input, readyThrottle: new ReadyRpcThrottle(1, () => {}), attestationConcurrency: 1 });
+      assert.equal(ready.candidateAccounting.verified, 3);
+      assert.equal(f.scanCalls(), 1, "recovery continues the same sealed range without rescanning");
+    }
     // Separate Ready directories inherit the ordinary rolling-rebuild state.
     // No old outcome, coverage receipt or Graph is treated as the new run.
     {
@@ -1485,75 +1506,6 @@ async function main(): Promise<void> {
         };
         return { ...fixture, input };
       };
-
-      const orderNoWork = async (): Promise<never> => { throw new Error("graph no-op must not scan or attest"); };
-      const orderDir = join(updateDir, "graph-order");
-      const order = make(orderDir, ["b", "a"], () => ["fixture:a", "fixture:b"]);
-      type OrderGraph = { format: string; metadata: string[];
-        edges: { familyId: string; instanceKey: string; path: string[] }[] };
-      const project = (publications: Parameters<RebuildUniverseInput["buildGraphSnapshot"]>[0],
-        cutoff: Parameters<RebuildUniverseInput["buildGraphSnapshot"]>[1]): OrderGraph => {
-        const graph = order.input.buildGraphSnapshot(publications, cutoff) as OrderGraph;
-        return { format: "strict-rebuild-graph-v1", metadata: ["first", "second"],
-          edges: graph.edges.map(edge => ({ ...edge, path: ["token-in", "token-out"] })) };
-      };
-      const validateProjection = (build: typeof project) =>
-        ({ publications, graphSnapshot, cutoff }: Parameters<NonNullable<RebuildUniverseInput["assertReadyGraphSnapshot"]>>[0]) =>
-          assert.deepEqual(graphSnapshot, build(publications, cutoff), "complete graph parity");
-      const orderInput = { ...order.input, buildGraphSnapshot: project, assertReadyGraphSnapshot: validateProjection(project) };
-      const incumbent = await rebuildUniverse(orderInput);
-      assert.deepEqual((incumbent.graphSnapshot as OrderGraph).edges.map(edge => edge.instanceKey), ["inst:b", "inst:a"]);
-      assert.deepEqual(activeReadyMemos((await order.store.load())!).map(memo => memo.instanceKey), ["inst:a", "inst:b"],
-        "the initial candidate order differs from the sorted catalog used by maintenance");
-      const orderBytes = await readFile(join(orderDir, "checkpoint.json"), "utf8");
-      const noOpInput = { ...orderInput, scanSwapWindow: orderNoWork, freezeCanonicalHead: orderNoWork,
-        attestFamilyInstanceOnce: orderNoWork, findReusableMemo: orderNoWork };
-      const noOpFailures: string[] = [];
-      for (const maintain of [updateReadyFamilies, restrictReadyFamilies]) {
-        try {
-          assert.deepEqual(await maintain(noOpInput), incumbent, "no-op returns the incumbent, including its original graph order");
-        } catch (error) { noOpFailures.push(maintain.name + ": " + String(error)); }
-        assert.equal(await readFile(join(orderDir, "checkpoint.json"), "utf8"), orderBytes,
-          "no-op preserves every published byte, hash, generation and revision");
-      }
-      assert.deepEqual(noOpFailures, [], "both no-op workflows must accept an independently validated edge permutation");
-      const mutations: { name: string; mutate: (graph: OrderGraph) => unknown }[] = [
-        { name: "missing edge", mutate: graph => ({ ...graph, edges: graph.edges.slice(1) }) },
-        { name: "extra duplicate", mutate: graph => ({ ...graph, edges: [...graph.edges, graph.edges[0]] }) },
-        { name: "duplicate replacing another edge", mutate: graph => ({ ...graph, edges: [graph.edges[0], graph.edges[0]] }) },
-        { name: "changed edge field", mutate: graph => { graph.edges[0]!.instanceKey = "changed"; return graph; } },
-        { name: "edge-internal array order", mutate: graph => { graph.edges[0]!.path.reverse(); return graph; } },
-        { name: "metadata value", mutate: graph => ({ ...graph, metadata: ["changed", "second"] }) },
-        { name: "metadata array order", mutate: graph => ({ ...graph, metadata: [...graph.metadata].reverse() }) },
-        { name: "unknown metadata field", mutate: graph => ({ ...graph, additional: true }) },
-      ];
-      for (const { name, mutate } of mutations) {
-        // An independently valid current projection still cannot be published as
-        // a no-op if its complete contents differ from the sealed incumbent.
-        const changed = ((publications, cutoff) => mutate(project(publications, cutoff))) as typeof project;
-        for (const maintain of [updateReadyFamilies, restrictReadyFamilies]) {
-          await assert.rejects(maintain({ ...noOpInput, buildGraphSnapshot: changed,
-            assertReadyGraphSnapshot: validateProjection(changed) }), /no-op.*differs from incumbent/, name);
-          assert.equal(await readFile(join(orderDir, "checkpoint.json"), "utf8"), orderBytes, name);
-        }
-      }
-      for (const maintain of [updateReadyFamilies, restrictReadyFamilies]) {
-        await assert.rejects(maintain({ ...noOpInput, assertReadyGraphSnapshot: () => {
-          throw new Error("independent production validation failed");
-        } }), /independent production validation failed/, "content equality cannot bypass the production validator");
-        assert.equal(await readFile(join(orderDir, "checkpoint.json"), "utf8"), orderBytes);
-      }
-      const unknownDir = join(updateDir, "unknown-graph-order");
-      const unknown = make(unknownDir, ["b", "a"], () => ["fixture:a", "fixture:b"]);
-      await rebuildUniverse(unknown.input);
-      const unknownBytes = await readFile(join(unknownDir, "checkpoint.json"), "utf8");
-      for (const maintain of [updateReadyFamilies, restrictReadyFamilies]) {
-        await assert.rejects(maintain({ ...unknown.input, scanSwapWindow: orderNoWork, attestFamilyInstanceOnce: orderNoWork }),
-          /no-op.*differs from incumbent/, "unknown graph formats retain ordered equality");
-        assert.equal(await readFile(join(unknownDir, "checkpoint.json"), "utf8"), unknownBytes);
-      }
-      console.log("Ready no-op graph order PASS (both workflows, original bytes, full edge multiplicity, metadata and validator rejection)");
-
       const base = make(updateDir, ["a", "b", "c"], () => enabled);
       // Give a retryable outcome its actual owning Family in this fixture.
       base.failKeys.add("c");
@@ -1757,6 +1709,192 @@ async function main(): Promise<void> {
       await rm(updateDir, { recursive: true, force: true });
     }
 
+    for (const changeDefinition of [false, true]) {
+      const resumeDir = await mkdtemp(join(tmpdir(), "ready-refresh-resume-"));
+      try {
+        const f = makeFixture(resumeDir);
+        f.terminalKeys.add("c");
+        const ready = await rebuildUniverse(f.input);
+        const parent = (await f.store.load())!;
+        const path = join(resumeDir, "checkpoint.json");
+        const originalBytes = await readFile(path, "utf8");
+        let definition = "refresh-v2";
+        let scans = 0;
+        const seal = f.input.sealDurableVerifiedMemo;
+        const input = {
+          ...f.input,
+          attestationConcurrency: 1,
+          freezeCanonicalHead: async (): Promise<never> => { scans++; throw new Error("no scan"); },
+          scanSwapWindow: async (): Promise<never> => { scans++; throw new Error("no scan"); },
+          isReadyMemoDefinitionCurrent: (memo: DurableVerifiedMemo) => memo.familyDefinitionHash === definition,
+          sealDurableVerifiedMemo: (value: Parameters<typeof seal>[0]) =>
+            sealFixtureMemo({ ...seal(value), familyDefinitionHash: definition }),
+        };
+        f.failKeys.add("b");
+        await assert.rejects(refreshReadyInstances(input), /retryable.*incumbent unchanged/);
+        assert.equal(f.attestCalls.get("a"), 2);
+        assert.equal(f.attestCalls.get("b"), 4);
+        assert.equal(await readFile(path, "utf8"), originalBytes, "partial refresh never changes published Ready");
+        const restarted = new UniverseRebuildCheckpointStore({ path });
+        assert.deepEqual(await restarted.load(), parent, "restart keeps the old complete Graph");
+        const oldA = parent.verifiedMemos["cand:a"]!, oldB = parent.verifiedMemos["cand:b"]!;
+        const saved = await restarted.loadReadyRefreshResult(parent, oldA);
+        assert(saved?.status === "verified");
+        assert.equal(saved.memo.familyDefinitionHash, definition, "successful sibling survived the failed batch");
+        const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+          import { UniverseRebuildCheckpointStore } from ${JSON.stringify(new URL("../universe-rebuild-checkpoint.ts", import.meta.url).href)};
+          const store = new UniverseRebuildCheckpointStore({ path: process.argv[1] });
+          const parent = await store.load();
+          const result = await store.loadReadyRefreshResult(parent, parent.verifiedMemos["cand:a"]);
+          console.log(result.memo.familyDefinitionHash);
+        `, path], { encoding: "utf8", timeout: 30_000 });
+        assert.equal(child.status, 0, child.stderr);
+        assert.equal(child.stdout.trim(), definition, "a new OS process restores the durable proof, not in-memory state");
+        assert.equal(await restarted.loadReadyRefreshResult(parent, oldB), null, "retryable is not completed");
+        const cacheDir = path + ".ready-refresh/" + parent.checkpointFingerprint;
+        const files = await readdir(cacheDir);
+        assert.equal(files.length, 1, "one completed proof, not an all-Ready rewrite");
+        const cachedPath = join(cacheDir, files[0]!);
+        const validBytes = await readFile(cachedPath, "utf8");
+        await writeFile(cachedPath + ".tmp.interrupted", '{"version":');
+        assert.deepEqual(await restarted.loadReadyRefreshResult(parent, oldA), saved, "an interrupted temp write is not committed");
+        const corrupt = JSON.parse(validBytes);
+        corrupt.result.memo.compiledDescriptor = { tampered: true };
+        await writeFile(cachedPath, JSON.stringify(corrupt));
+        await assert.rejects(restarted.loadReadyRefreshResult(parent, oldA), /fingerprint mismatch/);
+        await writeFile(cachedPath, validBytes);
+        await assert.rejects(restarted.saveReadyRefreshResult(parent, { status: "verified", memo: sealFixtureMemo({
+          ...saved.memo, familyInstanceKey: "inst:replacement",
+        }) }), /changed identity/);
+        await assert.rejects(restarted.saveReadyRefreshResult(parent, { status: "verified", memo: sealFixtureMemo({
+          ...saved.memo, validity: { ...saved.memo.validity, proofSource: { number: SOURCE.number + 1, hash: SOURCE.hash } },
+        }) }), /different proof source/);
+        await assert.rejects(refreshReadyInstances({ ...input, store: restarted,
+          assertCanonicalHead: async () => { throw new Error("cutoff reorged before resume"); },
+        }), /cutoff reorged before resume/);
+        assert.equal(f.attestCalls.get("a"), 2);
+        if (changeDefinition) definition = "refresh-v3";
+        f.failKeys.delete("b");
+        const logs: string[] = [];
+        const next = await refreshReadyInstances({ ...input, store: restarted, log: message => logs.push(message) });
+        assert.equal(f.attestCalls.get("a"), changeDefinition ? 3 : 2,
+          "same definition resumes without RPC; a changed definition revalidates the saved proof");
+        assert.equal(f.attestCalls.get("b"), 5, "only the unfinished entry must retry on a compatible resume");
+        assert.equal(f.attestCalls.get("c"), 1, "excluded candidates are not reconsidered");
+        assert.equal(next.generation, ready.generation + 1);
+        assert.deepEqual(next.cutoff, ready.cutoff);
+        assert.deepEqual(next.activeInstanceKeys, ready.activeInstanceKeys);
+        assert.equal(scans, 0);
+        assert(logs.some(message => message.includes(changeDefinition
+          ? "reattested=2 resumed=0 reused=0" : "reattested=1 resumed=1 reused=0")));
+        const committed = (await restarted.load())!;
+        assert.equal(await restarted.loadReadyRefreshResult(committed, committed.verifiedMemos["cand:a"]!), null,
+          "a new Ready cannot reuse another parent namespace");
+        await assert.rejects(restarted.saveReadyRefreshResult(parent, saved), /parent changed/);
+        console.log(`ready refresh durable resume PASS (definitionChanged=${changeDefinition}, scans=0)`);
+      } finally {
+        await rm(resumeDir, { recursive: true, force: true });
+      }
+    }
+
+    for (const [partitions, changeDefinition] of [[false, false], [true, false], [true, true]] as const) {
+      const rejectDir = await mkdtemp(join(tmpdir(), "ready-refresh-rejection-"));
+      try {
+        const f = makeFixture(rejectDir);
+        const baseInput = { ...f.input, ...(partitions ? {
+          candidateFamilyId: () => "univ2", familyDiscoveryDefinitionHash: () => "d".repeat(64),
+        } : {}) };
+        const ready = await rebuildUniverse(baseInput);
+        const parent = (await f.store.load())!;
+        const path = join(rejectDir, "checkpoint.json");
+        const bytesBefore = await readFile(path, "utf8");
+        f.terminalKeys.add("a");
+        f.failKeys.add("c");
+        let definition = "v2";
+        const attempted: string[] = [];
+        const input = {
+          ...baseInput, attestationConcurrency: 1,
+          scanSwapWindow: async (): Promise<never> => { throw new Error("must not scan"); },
+          isReadyMemoDefinitionCurrent: (memo: DurableVerifiedMemo) => memo.familyDefinitionHash === definition,
+          isReadyRefreshRejectionCurrent: (outcome: { familyDefinitionHash: string }) => outcome.familyDefinitionHash === definition,
+          attestFamilyInstanceOnce: async (value: Parameters<typeof f.input.attestFamilyInstanceOnce>[0]) => {
+            const id = (value.candidate as { id: string }).id;
+            attempted.push(id);
+            const result = await f.input.attestFamilyInstanceOnce(value);
+            return result.status === "terminal-rejected" ? { ...result,
+              binding: { ...result.binding, familyDefinitionHash: definition, candidateFingerprint: "cf:" + id } } : result;
+          },
+          sealDurableVerifiedMemo: (value: Parameters<typeof f.input.sealDurableVerifiedMemo>[0]) =>
+            sealFixtureMemo({ ...f.input.sealDurableVerifiedMemo(value), familyDefinitionHash: definition }),
+        };
+        await assert.rejects(refreshReadyInstances(input), /cand:c: attempt=3\/3 retryable/);
+        assert.deepEqual(attempted, ["a", "b", "c", "c", "c"], "normal rejection does not abort later candidates");
+        assert.equal(await readFile(path, "utf8"), bytesBefore, "transport stop leaves complete incumbent intact");
+        const store = new UniverseRebuildCheckpointStore({ path });
+        const saved = await store.loadReadyRefreshResult(parent, parent.verifiedMemos["cand:a"]!);
+        assert(saved?.status === "terminal-rejected");
+        await assert.rejects(store.saveReadyRefreshResult(parent, { ...saved, candidateFingerprint: "different" }), /negative evidence/);
+        await assert.rejects(store.casRefreshReadyInstances({ expectedRevision: parent.revision,
+          memos: [parent.verifiedMemos["cand:b"]!, parent.verifiedMemos["cand:c"]!],
+          rejections: [{ ...saved, cutoff: { number: SOURCE.number, hash: "0x" + "ff".repeat(32) } }],
+          graphSnapshot: { edges: [] },
+        }), /negative evidence/);
+        f.failKeys.delete("c");
+        if (changeDefinition) {
+          definition = "v3";
+          f.terminalKeys.delete("a");
+        }
+        attempted.length = 0;
+        const logs: string[] = [];
+        const next = await refreshReadyInstances({ ...input, store, log: value => logs.push(value) });
+        if (changeDefinition) {
+          assert.deepEqual(attempted, ["a", "b", "c"], "changed definitions invalidate saved rejection AND success");
+          assert.deepEqual(next.activeInstanceKeys, ["inst:a", "inst:b", "inst:c"]);
+          assert.equal(next.candidateAccounting.terminalRejected, 0);
+          assert.equal(next.refreshRejections, undefined, "old rejection cannot remove a newly verified candidate");
+          assert.equal(activeReadyMemos((await store.load())!).length, 3);
+          console.log("ready refresh changed rejection definition PASS (revalidated=true, readmitted=true)");
+          continue;
+        }
+        assert.deepEqual(attempted, ["c"], "completed success and normal rejection both resume without re-attesting");
+        assert.deepEqual(next.activeInstanceKeys, ["inst:b", "inst:c"]);
+        assert.deepEqual((next.graphSnapshot as { edges: { instanceKey: string }[] }).edges.map(edge => edge.instanceKey), ["inst:b", "inst:c"]);
+        assert.deepEqual(next.candidateAccounting, { total: 3, verified: 2, terminalRejected: 1, retryable: 0, remainingUnaccounted: 0 });
+        assert.deepEqual(next.refreshRejections?.["cand:a"], saved, "reason/evidence remain in the published checkpoint");
+        assert.equal(next.familyPartitions?.univ2?.outcomesByCandidateKey["cand:a"]?.status, partitions ? "terminal-rejected" : undefined);
+        assert(logs.some(line => line.includes("reattested=1 resumed=2 reused=0 rejected=1")));
+        assert.deepEqual(activeReadyMemos((await store.load())!).map(memo => memo.familyCandidateKey), ["cand:b", "cand:c"]);
+        assert.deepEqual(next.cutoff, ready.cutoff);
+        assert.deepEqual(next.sourceCoverage, ready.sourceCoverage);
+        if (partitions) {
+          const parentAfterRejection = (await store.load())!;
+          const deltaDir = join(rejectDir, "new-definition");
+          await mkdir(deltaDir);
+          await copyFile(path, join(deltaDir, "checkpoint.json"));
+          const delta = makeFixture(deltaDir);
+          await rebuildUniverse({ ...delta.input,
+            candidateFamilyId: () => "univ2", familyDiscoveryDefinitionHash: () => "d".repeat(64),
+            isFamilyEnabled: id => id === "univ2",
+            observationRange: next.universeRange,
+            familyUpdateScope: { parentCheckpointFingerprint: parentAfterRejection.checkpointFingerprint, familyIds: ["univ2"] },
+            findReusableMemo: async () => null,
+          });
+          const restored = await updateReadyFamilies({ ...baseInput, store,
+            isFamilyEnabled: () => true, isReadyMemoDefinitionCurrent: () => true,
+            assertReadyGraphSnapshot: ({ publications, graphSnapshot, cutoff }) =>
+              assert.deepEqual(graphSnapshot, baseInput.buildGraphSnapshot(publications, cutoff)),
+            supplements: [{ familyIds: ["univ2"], checkpoint: (await delta.store.load())! }],
+          });
+          assert.deepEqual(restored.activeInstanceKeys, ["inst:a", "inst:b", "inst:c"]);
+          assert.equal(restored.refreshRejections, undefined, "a later Family replacement removes superseded rejection evidence");
+          assert.equal(activeReadyMemos((await store.load())!).length, 3);
+        }
+        console.log(`ready refresh normal rejection PASS (partitions=${partitions}, continues=true, resumes=true, graph-excluded=true)`);
+      } finally {
+        await rm(rejectDir, { recursive: true, force: true });
+      }
+    }
+
     const refreshDir = await mkdtemp(join(tmpdir(), "ready-instance-refresh-"));
     try {
       const refresh = makeFixture(refreshDir);
@@ -1765,26 +1903,6 @@ async function main(): Promise<void> {
       refresh.terminalKeys.add("c");
       const priorReady = await rebuildUniverse(refresh.input);
       const prior = (await refresh.store.load())!;
-      const selectedMemo = prior.verifiedMemos["cand:a"]!;
-      const legacyAlias = sealFixtureMemo({ ...selectedMemo,
-        familyCandidateKey: "cand:legacy-alias", candidateKey: "cand:legacy-alias",
-        compiledDescriptor: { kind: "descriptor", version: "old-alias" } });
-      const aliasFirst = { ...prior, verifiedMemos: {
-        "cand:legacy-alias": legacyAlias, ...prior.verifiedMemos,
-      } };
-      assert.doesNotThrow(() => assertReadyCheckpointPublicationCurrent(aliasFirst));
-      const consumedMemos: DurableVerifiedMemo[] = [];
-      await rehydrateReadyFromMain(aliasFirst, { ...refresh.input,
-        rehydrateVerifiedInstance: (input) => {
-          consumedMemos.push(input.memo);
-          return refresh.input.rehydrateVerifiedInstance(input);
-        },
-      });
-      assert.deepEqual(consumedMemos.map(memo => memo.familyCandidateKey),
-        activeReadyMemos(prior).map(memo => memo.familyCandidateKey),
-        "main rehydrates exactly the catalog-selected candidates even when a legacy alias comes first");
-      assert.equal(consumedMemos.find(memo => memo.familyInstanceKey === selectedMemo.familyInstanceKey),
-        selectedMemo, "main must consume the same evidence checked by the publication guard");
       const scansBefore = refresh.scanCalls();
       const noScan = async (): Promise<never> => { throw new Error("refresh must not discover"); };
       const refreshInput = {
@@ -1794,19 +1912,8 @@ async function main(): Promise<void> {
         expectedSourcePlanFingerprints: () => { throw new Error("do not relabel old discovery"); },
       };
       await assert.rejects(startupReadyFromMain({ ...refreshInput,
-        store: { load: async () => ({ ...prior, inProgressRun: { outcomesByCandidateKey: {} } }) } as unknown as UniverseRebuildCheckpointStore,
+        store: { load: async () => ({ ...prior, inProgressRun: {} }) } as unknown as UniverseRebuildCheckpointStore,
       }, { blind: false, useReadyGeneration: true }), /requires one complete Ready checkpoint/);
-      const unpublishedMemo = sealFixtureMemo({ ...prior.verifiedMemos["cand:a"]!,
-        familyCandidateKey: "cand:new", candidateKey: "cand:new",
-        familyInstanceKey: "inst:new", instanceKey: "inst:new", candidateSnapshot: { id: "new" } });
-      for (const flags of [{ blind: false, useReadyGeneration: true }, { blind: true, useReadyGeneration: false }]) {
-        await assert.rejects(startupReadyFromMain({ ...refreshInput,
-          store: { load: async () => ({ ...prior, inProgressRun: null,
-            verifiedMemos: { ...prior.verifiedMemos, "cand:new": unpublishedMemo } }) } as unknown as UniverseRebuildCheckpointStore,
-        }, flags, async () => { throw new Error("stale admission must stop before refresh"); }),
-        /Ready\/Graph is stale.*added=1/,
-        "actual main reuse path rejects a completed probe whose admitted instance is not published");
-      }
       let startupRefreshes = 0;
       const countRefresh: typeof refreshReadyInstances = async (input) => {
         startupRefreshes++;
@@ -1882,7 +1989,7 @@ async function main(): Promise<void> {
 
       // A failed attestation, source reorg or identity change cannot publish
       // a partial/smaller Ready or overwrite its sealed memos.
-      for (const outcome of ["retryable", "terminal"] as const) {
+      for (const outcome of ["retryable"] as const) {
         const keys = outcome === "retryable" ? refresh.failKeys : refresh.terminalKeys;
         keys.add("a");
         const attemptsBefore = refresh.attestCalls.get("a")!;
@@ -1913,7 +2020,7 @@ async function main(): Promise<void> {
           expectedAttempts, "every failed attempt is logged, including exhaustion");
         assert.deepEqual(await refresh.store.load(), after);
         assert.equal(await readFile(join(refreshDir, "checkpoint.json"), "utf8"), checkpointBefore,
-          "even successfully refreshed siblings are not partially persisted");
+          "successful siblings persist separately; the published Ready never changes partially");
         keys.delete("a");
       }
       await assert.rejects(refreshReadyInstances({
@@ -2003,32 +2110,6 @@ async function main(): Promise<void> {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
-  const sparseDir = await mkdtemp(join(tmpdir(), "ready-transactions-runner-"));
-  try {
-    const fixture = makeFixture(sparseDir);
-    const observationScope = { kind: "transaction-set" as const, selectionHash: "a".repeat(64), transactionCount: 3 };
-    const txInput: RebuildUniverseInput = { ...fixture.input, observationScope,
-      resolveTransactionObservationRange: async () => ({ fromBlock: 1, toBlock: SOURCE.number }),
-      scanSwapWindow: async ({ fromBlock }) => ({ observations: [{ id: "a" }, { id: "a" }, { id: "b" }],
-        sourceReceipts: sourceReceipts(fromBlock).map(receipt => ({ ...receipt, observationScope,
-          completedChunks: receipt.completedChunks.map(chunk => ({ ...chunk, observationScope })) })) }),
-      buildCoverage: value => fixture.input.buildCoverage(value).map(row => ({ ...row, observationScope })),
-    };
-    const ready = await rebuildUniverse(txInput);
-    assert.deepEqual(ready.observationScope, observationScope);
-    assert.equal(ready.universeRange.fromBlock, 1, "sparse TX bounds do not trigger continuous-window scanning");
-    assert.equal(ready.candidateAccounting.total, 2);
-    assert.deepEqual([...fixture.attestCalls], [["a", 1], ["b", 1]], "existing dedupe attests one instance once");
-    const checkpoint = await fixture.store.load();
-    await assert.rejects(rebuildUniverse(fixture.input), /observation scope differs/);
-    await assert.rejects(rebuildUniverse({ ...txInput, observationScope: { ...observationScope, selectionHash: "b".repeat(64) } }), /observation scope differs/);
-    await assert.rejects(rebuildUniverse({ ...txInput, observationWindowBlocks: 1 }), /cannot be combined/);
-    assert.deepEqual(await fixture.store.load(), checkpoint);
-    const retry = await rebuildUniverse(txInput);
-    assert.deepEqual(retry.observationScope, observationScope);
-    assert.deepEqual([...fixture.attestCalls], [["a", 1], ["b", 1]], "same TX set keeps valid strict memos");
-    console.log("transaction-set runner PASS (one Ready, existing instance dedupe, sparse scope and mismatch fences)");
-  } finally { await rm(sparseDir, { recursive: true, force: true }); }
   console.log("universe rebuild runner PASS");
 }
 

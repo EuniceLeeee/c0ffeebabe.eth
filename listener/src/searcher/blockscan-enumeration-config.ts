@@ -12,6 +12,11 @@ export const BLOCKSCAN_ENUMERATION_DEFAULTS = {
   method: "joint-dfs" as "joint-dfs" | "dfs" | "layered", // Legacy half-path methods remain explicit rollback choices.
   allowRepeatedPools: true,
   allowRepeatedTokens: false, // Keep simple cycles; the final return to the start is allowed.
+  // Live default: allow repeats only when a protocol edge (redeem/withdraw/
+  // convert) re-introduces a token already used by a swap leg. Bounded by the
+  // admission policy (<=2 occurrences, no same-instance wash) and independent
+  // from allowRepeatedTokens; set the env to 0 to restore the old pruning.
+  allowProtocolRepeats: true,
   deduplicateRotations: true, // Retain one funded execution start per directed cycle.
   signalPairsPerToken: 50,
   hopTokensPerStep: 3, // Top N distinct next tokens by reference value; 0 keeps all tokens.

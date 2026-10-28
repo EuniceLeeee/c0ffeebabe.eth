@@ -1,19 +1,25 @@
 import { ethers } from "ethers";
+import { randomUUID } from "node:crypto";
+import { classifyTitanSubmissionReceipt, observedBuilderRequest, type BuilderEvidenceSink } from "./shared/builder-observations.js";
+import { computeSubmissionFees, BRIBE_WALLET_RESERVE, type BribeGasBasis } from "./shared/submission-fees.js";
 import type { SubmitResult } from "./types.js";
+import { captureBoundedLiveSession, type BoundedLiveSession } from "./shared/bounded-live-session.js";
 
 // ─── Builder Endpoints ─────────────────────────────────────────
 
 interface BuilderEndpoint {
   name: string;
   url: string;
+  endpointId?: string;
   authSigner: boolean; // needs X-Flashbots-Signature
 }
 
 const BUILDERS: BuilderEndpoint[] = [
   { name: "flashbots", url: "https://relay.flashbots.net", authSigner: true },
-  { name: "titan", url: "https://rpc.titanbuilder.xyz", authSigner: false },
-  { name: "rsync", url: "https://rsync-builder.xyz", authSigner: false },
+  { name: "titan", url: "https://us.rpc.titanbuilder.xyz", endpointId: "titan-us", authSigner: false },
   { name: "beaverbuild", url: "https://rpc.beaverbuild.org", authSigner: false },
+  { name: "bombora", url: "https://rpc.bombora.build", authSigner: false },
+  { name: "bobthebuilder", url: "https://rpc.bobthebuilder.xyz", authSigner: false },
 ];
 
 // ─── Bundle Submission ─────────────────────────────────────────
@@ -30,6 +36,9 @@ const BUILDERS: BuilderEndpoint[] = [
  * Bundle failure = not included in block = zero cost.
  */
 export async function submitBundle(params: {
+  bribeGasBasis?: BribeGasBasis;
+  expectedProfitEth?: bigint;
+  evidence?: BuilderEvidenceSink;
   victimRawTx: string;
   calldataHex: string;
   gasUsed: number;
@@ -53,7 +62,8 @@ export async function submitBundle(params: {
   } = params;
 
   // 1. Build backrun tx
-  const { signedBackrunTx, backrunTxHash, gasLimit, nonce } = await buildSignedBackrunTx({
+  const { signedBackrunTx, backrunTxHash, gasLimit, nonce, liveSession, submissionId } = await buildSignedBackrunTx({
+    evidence: params.evidence, bribeGasBasis: params.bribeGasBasis, expectedProfitEth: params.expectedProfitEth,
     calldataHex,
     gasUsed,
     wallet,
@@ -61,6 +71,8 @@ export async function submitBundle(params: {
     provider,
     bribeWei,
     maxBaseFeePerGas,
+    targetBlock,
+    submissionMode: "victim",
   });
 
   const ts = new Date().toISOString();
@@ -78,7 +90,8 @@ export async function submitBundle(params: {
 
   // 3. Submit to all builders in parallel
   const results = await Promise.allSettled(
-    BUILDERS.map((b) => sendToBuilder(b, bundleParams, wallet))
+    BUILDERS.map((b) => sendToBuilder(b, bundleParams, wallet, liveSession,
+      { evidence: params.evidence, txHash: backrunTxHash, submissionId, targetBlock }))
   );
 
   return results.map((r, i) => {
@@ -86,6 +99,7 @@ export async function submitBundle(params: {
     return {
       builder: BUILDERS[i].name,
       accepted: false,
+      ...(BUILDERS[i].name === "titan" ? { receiptStatus: "unconfirmed" as const } : {}),
       backrunTxHash,
       error: r.reason?.message ?? String(r.reason),
     };
@@ -102,6 +116,9 @@ export async function submitBundle(params: {
  * Only sent to Flashbots relay (mev_sendBundle is Flashbots-specific).
  */
 export async function submitMevShareBundle(params: {
+  bribeGasBasis?: BribeGasBasis;
+  expectedProfitEth?: bigint;
+  evidence?: BuilderEvidenceSink;
   victimHash: string;
   calldataHex: string;
   gasUsed: number;
@@ -125,7 +142,8 @@ export async function submitMevShareBundle(params: {
   } = params;
 
   // Build + sign backrun tx (same logic as submitBundle)
-  const { signedBackrunTx, backrunTxHash } = await buildSignedBackrunTx({
+  const { signedBackrunTx, backrunTxHash, liveSession, submissionId } = await buildSignedBackrunTx({
+    evidence: params.evidence, bribeGasBasis: params.bribeGasBasis, expectedProfitEth: params.expectedProfitEth,
     calldataHex,
     gasUsed,
     wallet,
@@ -133,6 +151,8 @@ export async function submitMevShareBundle(params: {
     provider,
     bribeWei,
     maxBaseFeePerGas,
+    targetBlock,
+    submissionMode: "hash-only",
   });
 
   const bundleParams = {
@@ -154,19 +174,19 @@ export async function submitMevShareBundle(params: {
   // Flashbots auth: sign the keccak256 hash of the body as a hex STRING
   // (ethers.id returns the hex string; signMessage signs its UTF-8 bytes).
   // Signing getBytes(hash) instead produces an "invalid flashbots signature".
-  const sig = await wallet.signMessage(ethers.id(body));
-
-  const res = await fetch("https://relay.flashbots.net", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Flashbots-Signature": `${wallet.address}:${sig}`,
+  const res = await observedBuilderRequest({
+    builder: "flashbots-mev-share", purpose: "submission", method: "mev_sendBundle",
+    url: "https://relay.flashbots.net", body, txHash: backrunTxHash,
+    submissionId, targetBlock, evidence: params.evidence, secrets: [signedBackrunTx],
+    beforeSend: () => liveSession?.assertActive(),
+    headers: async () => {
+      liveSession?.assertActive();
+      const sig = await wallet.signMessage(ethers.id(body));
+      return { "Content-Type": "application/json", "X-Flashbots-Signature": `${wallet.address}:${sig}` };
     },
-    body,
-    signal: AbortSignal.timeout(5_000),
   });
 
-  const rawBody = await res.text();
+  const rawBody = res.redactedBody;
   let json: { result?: { bundleHash?: string }; error?: { message?: string } };
   try { json = JSON.parse(rawBody); } catch { json = {}; }
 
@@ -209,6 +229,9 @@ export function mevShareInclusion(targetBlock: number): {
  * the mined victim hash cannot be referenced in mev_sendBundle.
  */
 export async function submitStandaloneBundle(params: {
+  bribeGasBasis?: BribeGasBasis;
+  expectedProfitEth?: bigint;
+  evidence?: BuilderEvidenceSink;
   calldataHex: string;
   gasUsed: number;
   wallet: ethers.Wallet;
@@ -229,7 +252,8 @@ export async function submitStandaloneBundle(params: {
     maxBaseFeePerGas,
   } = params;
 
-  const { signedBackrunTx, backrunTxHash, gasLimit, nonce } = await buildSignedBackrunTx({
+  const { signedBackrunTx, backrunTxHash, gasLimit, nonce, liveSession, submissionId } = await buildSignedBackrunTx({
+    evidence: params.evidence, bribeGasBasis: params.bribeGasBasis, expectedProfitEth: params.expectedProfitEth,
     calldataHex,
     gasUsed,
     wallet,
@@ -237,6 +261,8 @@ export async function submitStandaloneBundle(params: {
     provider,
     bribeWei,
     maxBaseFeePerGas,
+    targetBlock,
+    submissionMode: "standalone",
   });
 
   const ts = new Date().toISOString();
@@ -252,7 +278,8 @@ export async function submitStandaloneBundle(params: {
   };
 
   const results = await Promise.allSettled(
-    BUILDERS.map((b) => sendToBuilder(b, bundleParams, wallet))
+    BUILDERS.map((b) => sendToBuilder(b, bundleParams, wallet, liveSession,
+      { evidence: params.evidence, txHash: backrunTxHash, submissionId, targetBlock }))
   );
 
   return results.map((r, i) => {
@@ -260,26 +287,33 @@ export async function submitStandaloneBundle(params: {
     return {
       builder: BUILDERS[i].name,
       accepted: false,
+      ...(BUILDERS[i].name === "titan" ? { receiptStatus: "unconfirmed" as const } : {}),
       backrunTxHash,
       error: r.reason?.message ?? String(r.reason),
     };
   });
 }
 
-/** Gas-cost ETH kept in reserve so the bribe never starves the base fee. */
-const BRIBE_WALLET_RESERVE = ethers.parseUnits("0.0005", "ether");
-
 export async function buildSignedBackrunTx(params: {
+  bribeGasBasis?: BribeGasBasis;
+  expectedProfitEth?: bigint;
+  evidence?: BuilderEvidenceSink;
   calldataHex: string;
   gasUsed: number;
   wallet: ethers.Wallet;
   botvmAddress: string;
   provider: ethers.JsonRpcProvider;
-  /** Maximum total priority-fee budget in wei, computed by the EV gate. */
+  /** EV-approved bid: expected payment in measured-gas mode; cap in gas-limit mode. */
   bribeWei: bigint;
   /** Exact EIP-1559 base fee for the target child block, computed by the EV gate. */
   maxBaseFeePerGas: bigint;
-}): Promise<{ signedBackrunTx: string; backrunTxHash: string; gasLimit: bigint; nonce: number }> {
+  targetBlock?: number;
+  submissionMode?: "standalone" | "victim" | "hash-only";
+}): Promise<{
+  signedBackrunTx: string; backrunTxHash: string; gasLimit: bigint; nonce: number;
+  liveSession: BoundedLiveSession | null;
+  submissionId: string;
+}> {
   const {
     calldataHex,
     gasUsed,
@@ -298,24 +332,24 @@ export async function buildSignedBackrunTx(params: {
   if (maxBaseFeePerGas <= 0n) {
     throw new Error("target block base fee unavailable");
   }
+  const liveSession = captureBoundedLiveSession({
+    wallet: wallet.address,
+    executor: botvmAddress,
+    chainId: 1,
+    targetBlock: params.targetBlock,
+    mode: params.submissionMode,
+  });
   const nonce = await wallet.getNonce("pending");
-  const gasLimit = BigInt(Math.ceil(gasUsed * 1.3)); // 30% buffer
 
   // The EV gate and signer share this exact target-block base fee. Production
   // callers may not substitute a latest-block read or a static multiplier here.
   const targetBaseFee = maxBaseFeePerGas;
 
-  // bribeWei is a maximum budget, not a promise to spend every wei. Divide by
-  // gasLimit (not measured gas) and round down, so priorityFee*actualGasUsed can
-  // never exceed the EV-approved budget for any successful execution.
   const walletBal = await provider.getBalance(wallet.address);
-  const worstGasCost = targetBaseFee * gasLimit;
-  const headroom =
-    walletBal > worstGasCost + BRIBE_WALLET_RESERVE
-      ? walletBal - worstGasCost - BRIBE_WALLET_RESERVE
-      : 0n;
-  const bribeBudget = bribeWei < headroom ? bribeWei : headroom;
-  const priorityFee = bribeBudget / gasLimit;
+  const fees = computeSubmissionFees({ measuredGasUsed: BigInt(gasUsed), targetBaseFee,
+    bribeWei, walletBalance: walletBal, basis: params.bribeGasBasis ?? "gas-limit",
+    expectedProfitEth: params.expectedProfitEth });
+  const { gasLimit, bribeBudget, priorityFee } = fees;
 
   const backrunTx: ethers.TransactionLike = {
     to: botvmAddress,
@@ -324,17 +358,48 @@ export async function buildSignedBackrunTx(params: {
     chainId: 1,
     type: 2,
     gasLimit,
-    maxFeePerGas: targetBaseFee + priorityFee,
+    maxFeePerGas: fees.maxFeePerGas,
     maxPriorityFeePerGas: priorityFee,
     value: 0,
   };
 
+  liveSession?.assertActive({
+    walletBalanceWei: walletBal,
+    worstGasCostWei: fees.worstGasCostWei,
+  });
+  const submissionId = randomUUID();
+  params.evidence?.({
+    type: "submission_fee_parameters", submission_id: submissionId,
+    captured_at_ms: Date.now(), target_block: params.targetBlock ?? null,
+    sender: wallet.address, executor: botvmAddress,
+    calldata_hash: ethers.keccak256(calldataHex), nonce, gas_limit: gasLimit.toString(),
+    requested_bribe_budget_wei: bribeWei.toString(),
+    applied_bribe_budget_wei: bribeBudget.toString(),
+    wallet_limited: fees.walletLimited, wallet_balance_wei: walletBal.toString(),
+    wallet_reserve_wei: BRIBE_WALLET_RESERVE.toString(),
+    max_priority_fee_per_gas: priorityFee.toString(),
+    max_fee_per_gas: fees.maxFeePerGas.toString(),
+    target_base_fee_per_gas: targetBaseFee.toString(),
+    bribe_gas_basis: fees.basis, bribe_gas_denominator: fees.denominator.toString(),
+    measured_gas_used: String(gasUsed), estimated_bribe_payment_wei: fees.estimatedBribeWei.toString(),
+    max_bribe_payment_at_gas_limit_wei: fees.maxBribeWei.toString(),
+    worst_transaction_fee_wei: fees.worstGasCostWei.toString(),
+    estimated_net_wei: fees.estimatedNetWei?.toString() ?? null,
+    net_at_gas_limit_wei: fees.netAtGasLimitWei?.toString() ?? null,
+  });
+  liveSession?.assertActive();
   const signedBackrunTx = await wallet.signTransaction(backrunTx);
+  liveSession?.assertActive();
+  const backrunTxHash = ethers.keccak256(signedBackrunTx);
+  params.evidence?.({ type: "submission_transaction", submission_id: submissionId,
+    tx_hash: backrunTxHash, captured_at_ms: Date.now(), target_block: params.targetBlock ?? null });
   return {
     signedBackrunTx,
-    backrunTxHash: ethers.keccak256(signedBackrunTx),
+    backrunTxHash,
     gasLimit,
     nonce,
+    liveSession,
+    submissionId,
   };
 }
 
@@ -343,7 +408,9 @@ export async function buildSignedBackrunTx(params: {
 async function sendToBuilder(
   builder: BuilderEndpoint,
   bundle: { txs: string[]; blockNumber: string },
-  wallet: ethers.Wallet
+  wallet: ethers.Wallet,
+  liveSession: BoundedLiveSession | null,
+  observation: { evidence?: BuilderEvidenceSink; txHash: string; submissionId: string; targetBlock: number },
 ): Promise<SubmitResult> {
   const body = JSON.stringify({
     jsonrpc: "2.0",
@@ -352,25 +419,28 @@ async function sendToBuilder(
     params: [bundle],
   });
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  // Flashbots relay requires X-Flashbots-Signature: sign keccak256(body) as a
-  // hex STRING (ethers.id), not its raw bytes — see submitMevShareBundle.
-  if (builder.authSigner) {
-    const sig = await wallet.signMessage(ethers.id(body));
-    headers["X-Flashbots-Signature"] = `${wallet.address}:${sig}`;
-  }
-
-  const res = await fetch(builder.url, {
-    method: "POST",
-    headers,
-    body,
-    signal: AbortSignal.timeout(5_000),
+  const res = await observedBuilderRequest({
+    ...observation, builder: builder.name, purpose: "submission", method: "eth_sendBundle",
+    endpointId: builder.endpointId,
+    url: builder.url, body, secrets: bundle.txs,
+    beforeSend: () => liveSession?.assertActive(),
+    headers: async () => {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      // Preserve the existing auth scheme and recheck every asynchronous boundary.
+      if (builder.authSigner) {
+        liveSession?.assertActive();
+        const sig = await wallet.signMessage(ethers.id(body));
+        headers["X-Flashbots-Signature"] = `${wallet.address}:${sig}`;
+      }
+      return headers;
+    },
   });
 
-  const rawBody = await res.text();
+  if (builder.name === "titan") {
+    return { builder: builder.name, ...classifyTitanSubmissionReceipt(res, 1) };
+  }
+
+  const rawBody = res.redactedBody;
   let json: { result?: { bundleHash?: string }; error?: { message?: string } };
   try { json = JSON.parse(rawBody); } catch { json = {}; }
 

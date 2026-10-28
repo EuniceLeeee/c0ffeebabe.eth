@@ -35,6 +35,36 @@ test("deep immutable data preserves canonical hash across cloned outer arrays", 
   assert.equal(fingerprint(Object.freeze({ ...value })), expected, "an equal foreign edge still derives the same hash");
 });
 
+test("the same deep-frozen graph retains its ordered hash without rescanning descriptors", t => {
+  const edges = Object.freeze([Object.freeze(edge()), Object.freeze(edge({ tokenIn: TOKEN1, tokenOut: TOKEN0 }))]);
+  const expected = uncached(edges);
+  assert.equal(strictReadyGraphContractFingerprint(edges), expected);
+  const original = Object.getOwnPropertyDescriptor;
+  let reads = 0;
+  const mock = t.mock.method(Object, "getOwnPropertyDescriptor", (object: object, key: PropertyKey) => {
+    reads++;
+    return original(object, key);
+  });
+  try {
+    assert.equal(strictReadyGraphContractFingerprint(edges), expected);
+    assert.equal(reads, 0);
+  } finally { mock.mock.restore(); }
+});
+
+test("frozen outer arrays cannot hide mutable children or accessor slots", () => {
+  const mutable = edge({ v3Fee: 3000 }), shallow = Object.freeze([mutable]);
+  const initial = strictReadyGraphContractFingerprint(shallow);
+  mutable.v3Fee = 500;
+  assert.notEqual(strictReadyGraphContractFingerprint(shallow), initial);
+  assert.equal(strictReadyGraphContractFingerprint(shallow), uncached(shallow));
+  let item = Object.freeze(edge({ v3Fee: 3000 }));
+  const getterArray = Object.freeze(Object.defineProperty([item], "0", { get: () => item }));
+  const before = strictReadyGraphContractFingerprint(getterArray);
+  item = Object.freeze(edge({ v3Fee: 100 }));
+  assert.notEqual(strictReadyGraphContractFingerprint(getterArray), before);
+  assert.equal(strictReadyGraphContractFingerprint(getterArray), uncached(getterArray));
+});
+
 test("ordered outer hash still rejects reorder, replacement, duplication and removal", () => {
   const a = Object.freeze(edge()), b = Object.freeze(edge({ tokenIn: TOKEN1, tokenOut: TOKEN0 }));
   const expected = strictReadyGraphContractFingerprint([a, b]);

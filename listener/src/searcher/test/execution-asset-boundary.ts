@@ -4,8 +4,6 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { RuntimeAmountProgram, runtimeProgramScript } from "../../adapters/runtime-amount-program.js";
 import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
-import { materializeAdapterRequests } from "../reth-adapter-work-runtime.js";
-import { declareRequestProgram, physicalAdapterRequestFingerprint, type AdapterRequest } from "../venues/adapter-request-program.js";
 import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary, executionNativeSides,
   executionAssetBoundaryAdapter } from "../execution-asset-boundary.js";
 import { RUNTIME_ERC20, RUNTIME_WRAP } from "../venues/runtime-execution.js";
@@ -19,7 +17,9 @@ const rawCall = new ethers.Interface(["function exchange(uint256)"]);
 const word = (value: bigint) => ethers.toBeHex(value, 32);
 const weth = ADDR.WETH.toLowerCase();
 
-function caseRun(nativeIn: boolean, quoted: boolean | "strict", failure?: "overspend" | "short-output" | "native-loss" | "short-unwrap", partial = false) {
+// This port covers the production quoted/runtime issuer boundary. The donor's
+// newer optional strict-program transport is not part of this implementation.
+function caseRun(nativeIn: boolean, quoted: boolean, failure?: "overspend" | "short-output" | "native-loss" | "short-unwrap", partial = false) {
   const amount = 100n, stock = 777n;
   const route = { tokenIn: nativeIn ? weth : token, tokenOut: nativeIn ? token : weth,
     executionAssets: { input: nativeIn ? "native" as const : "erc20" as const,
@@ -31,36 +31,7 @@ function caseRun(nativeIn: boolean, quoted: boolean | "strict", failure?: "overs
   });
   const leg = { actionAdapterId: "synthetic-raw-native", program: ethers.hexlify(raw.bytes()) };
   let program: string;
-  if (quoted === "strict") {
-    const req: AdapterRequest = { id: "native-proof", kind: "effect-delta-simulation",
-      executionAssetBoundary: { ...route, amountIn: amount, minimum: 200n },
-      call: { caller: { kind: "executor" }, executionMode: "executor-program", to: actor,
-        data: buildSubscriptCalldata(runtimeProgramScript(raw.bytes(), amount)) },
-      overrideIntent: { caller: { kind: "executor" }, tokenBalances: [{ token: route.tokenIn, amount }] },
-      observeTokenBalances: [route.tokenIn, route.tokenOut].map(token => ({ token, account: { kind: "executor" } })),
-      observe: ["token-delta", "native-delta"],
-    };
-    const declared = declareRequestProgram({ requirements: () => ({ transports: ["effect-delta-simulation"],
-      caller: "executor", effects: ["token-delta", "native-delta"] }), buildRequests: () => [req], decode: () => null }, {});
-    const materialized = materializeAdapterRequests(declared.requests, { executor: actor });
-    const compiled = materialized[0]; assert(compiled.kind === "effect-delta-simulation");
-    assert(!Object.hasOwn(compiled, "executionAssetBoundary"));
-    const script = ethers.getBytes(subscript.decodeFunctionData("execSubscript", compiled.call.data)[0]);
-    assert.equal(BigInt(ethers.hexlify(script.slice(1, 33))), amount);
-    program = ethers.hexlify(script.slice(36));
-    assert.notEqual(compiled.call.data, req.call.data);
-    assert.notEqual(physicalAdapterRequestFingerprint(req), physicalAdapterRequestFingerprint({ ...req,
-      executionAssetBoundary: { ...req.executionAssetBoundary!, minimum: 199n } }));
-    const invalid = [
-      { ...req, observe: ["token-delta"] }, { ...req, observeTokenBalances: [] },
-      { ...req, call: { ...req.call, executionMode: "top-level" } },
-      { ...req, executionAssetBoundary: { ...req.executionAssetBoundary, amountIn: 0n } },
-    ];
-    for (const request of invalid) assert.throws(() => declareRequestProgram({
-      requirements: () => declared.requirements, buildRequests: () => [request as AdapterRequest], decode: () => null,
-    }, {}));
-    assert.throws(() => materializeAdapterRequests([{ ...req, call: { ...req.call, to: target } }], { executor: actor }));
-  } else if (quoted) {
+  if (quoted) {
     const original: any = { requirements: [], nodes: [{ adapterId: leg.actionAdapterId, target,
       tokenIn: route.tokenIn, tokenOut: route.tokenOut, amount, params: {}, children: [] }] };
     const fragment = applyQuotedAssetBoundary({ route, executor: actor, amountIn: amount, minimum: 200n, fragment: original });
@@ -114,12 +85,12 @@ function caseRun(nativeIn: boolean, quoted: boolean | "strict", failure?: "overs
 }
 
 test("native declarations automatically bridge raw quoted/runtime operations in both directions", () => {
-  for (const nativeIn of [true, false]) for (const quoted of [true, false, "strict"] as const) {
+  for (const nativeIn of [true, false]) for (const quoted of [true, false]) {
     caseRun(nativeIn, quoted); caseRun(nativeIn, quoted, undefined, true);
   }
 });
 test("central native boundary rejects inventory subsidy and independently measures output", () => {
-  for (const quoted of [true, false, "strict"] as const) {
+  for (const quoted of [true, false]) {
     assert.throws(() => caseRun(true, quoted, "short-unwrap"), /checked uint256/);
     assert.throws(() => caseRun(false, quoted, "overspend"), /checked uint256/);
     for (const nativeIn of [true, false]) for (const failure of ["short-output", "native-loss"] as const)

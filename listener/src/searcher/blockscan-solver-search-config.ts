@@ -1,5 +1,3 @@
-import { resolveBlockScanExecutionRounding } from "../shared/executor/amount-rounding.js";
-
 export interface BlockScanSolverSearchConfig {
   readonly amountGrid: "multiples" | "geometric";
   readonly gridHalfWidth: number;
@@ -44,10 +42,16 @@ export function resolveBlockScanSolverSearchConfig(
       1,
       64,
     ),
-    // One raw unit by default; explicit 0 retains exact checks. Never haircut
-    // nominal quotes or change the working input sent to the next operation.
-    quoteToleranceRawUnits: resolveBlockScanExecutionRounding(env),
+    // Opt-in for blockscan; independent of legacy percentage settings.
+    // Quotes stay unchanged; execution passes the measured +/-1 output onward.
+    quoteToleranceRawUnits: readFlag(env.SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED) ? 1n : 0n,
   });
+}
+
+function readFlag(raw: string | undefined): boolean {
+  if (raw === undefined || raw === "0" || raw === "false") return false;
+  if (raw === "1" || raw === "true") return true;
+  throw new Error("SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED must be 0, 1, false or true");
 }
 
 function readAmountGrid(

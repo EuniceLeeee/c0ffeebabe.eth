@@ -26,12 +26,6 @@ export interface SimulationResult {
   scriptHex?: string;
   /** Original sim response; consuming it performs no RPC or replay. */
   revertEvidence?: import("./direct-revert-hop.js").DirectRevertEvidence;
-  /** Historical source-block sim already verified this trace against REVM.
-   * Reading it never invokes the live simulator's optional trace diagnosis. */
-  sourceBlockRevertEvidence?: {
-    readonly executionInput: import("./source-block.js").SourceBlockExecutionInput;
-    readonly trace: import("./revert-hop.js").RevertCallFrame;
-  };
   /** Lazy, bounded diagnosis of this exact execution, never another sizing trial. */
   traceRevert?: (control: { signal: AbortSignal; deadlineAtMs: number }) =>
     Promise<import("./revert-hop.js").RevertTraceEvidence | null>;

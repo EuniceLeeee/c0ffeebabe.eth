@@ -18,6 +18,9 @@ const MEMO_MAX_ENTRIES = 16_384, MEMO_MAX_CHARACTERS = 1_048_576;
  * Token and pool reuse have independent policies. Simple cycles stop at their
  * first closure. Funding rotations are emitted after closure. */
 export function enumerateJointDfs(input: PairedEnumerationInput) {
+  const started = performance.now();
+  let selectedAt = started, preparedAt = started;
+  let selectionComplete = false, indexingComplete = false;
   const { allowRepeatedPools, allowRepeatedTokens, prefixPruningEnabled, maxPrefixDrawdownBps, hopTokensPerStep } = resolvePairedEnumerationOptions(input);
   const prefixFloor = BigInt(10_000 - maxPrefixDrawdownBps);
   const stats = { expanded: 0, completedSignalTokens: 0, completedSignalPairs: 0,
@@ -26,16 +29,26 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
     gateRule: "signal-rooted-joint-prefix" as const,
     allowRepeatedTokens, prefixPruningEnabled, maxPrefixDrawdownBps, prefixPrunedForward: 0,
     prefixPrunedJoin: 0, prefixPrunedTotal: 0, prefixPrunedJoint: 0,
-    jointStates: 0, duplicateStatesSkipped: 0, traversal: "joint-dfs" as const,
+    jointStates: 0, duplicateStatesSkipped: 0, finalHopUnclosedPruned: 0, traversal: "joint-dfs" as const,
     phase: "prepare", hopTokensPerStep, hopTokenForwardQuotes: 0,
     hopTokenReverseQuotes: 0, hopSignalPairsSelected: 0 };
   const expired = () => stats.deadlineHit ||= Date.now() >= input.deadlineAtMs;
   const finish = () => {
     expired(); stats.phase = stats.deadlineHit ? "interrupted" : "complete";
+    if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1") {
+      const finished = performance.now();
+      try { console.log(`[searcher/blockscan-joint-timing] ${JSON.stringify({
+        tokenSelectionMs: selectionComplete ? selectedAt - started : finished - started,
+        indexingMs: selectionComplete ? (indexingComplete ? preparedAt : finished) - selectedAt : 0,
+        searchMs: indexingComplete ? finished - preparedAt : 0, deadlineHit: stats.deadlineHit,
+      })}`); } catch { /* Diagnostic observers cannot alter enumeration. */ }
+    }
     return stats;
   };
   if (expired()) return finish();
   const selected = selectTopHopTokens(input.quotes, hopTokensPerStep);
+  selectedAt = preparedAt = performance.now();
+  selectionComplete = true;
   stats.hopTokenForwardQuotes = selected.forward.size;
   stats.hopTokenReverseQuotes = selected.reverse.size;
 
@@ -83,6 +96,8 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
     seeds.push({ buy: b, sell: s });
   }
   const funding = new Set(input.funding), emitted = new Set<string>();
+  preparedAt = performance.now();
+  indexingComplete = true;
   if (funding.size === 0 || anchors.size === 0) return finish();
   stats.phase = "joint";
 
@@ -153,6 +168,12 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
             if (!allowRepeatedPools && usedPools.has(edge.pool)) continue;
             const next = reverse ? edge.from : edge.to;
             const closes = next === (reverse ? leftToken : rightToken);
+            // Both seed legs count toward the configured total. With only one
+            // hop left, an edge that cannot meet the other frontier is dead.
+            if (hops + 1 === input.maxHops && !closes) {
+              stats.finalHopUnclosedPruned++;
+              continue;
+            }
             if (!allowRepeatedTokens && usedTokens.has(next) && !closes) continue;
             path.push(id);
             if (!allowRepeatedPools) usedPools.add(edge.pool);

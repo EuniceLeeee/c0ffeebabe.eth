@@ -12,11 +12,11 @@ function run(quotes: DfsQuote[], signals: DirectedPriceSignal[], funding = ["f"]
   // This suite pins the legacy half-path policy; new defaults are exercised by joint-DFS tests.
   prefix = { prefixPruningEnabled: false, maxPrefixDrawdownBps: 1000, ...prefix };
   const cycles = new Set<string>();
-  const stats = enumeratePairedDfs({ quotes, signals, funding, maxHops, minSpreadBps: bps, allowRepeatedPools, hopTokensPerStep: 0,
+  const stats = enumeratePairedDfs({ quotes, signals, funding, maxHops, minSpreadBps: bps, allowRepeatedPools, allowRepeatedTokens: true, hopTokensPerStep: 0,
     ...prefix, deadlineAtMs: Date.now() + 10_000, onCycle: path => { cycles.add(key(path)); } });
   assert.equal(stats.deadlineHit, false);
   const layered = new Set<string>();
-  const other = enumeratePairedLayered({ quotes, signals, funding, maxHops, minSpreadBps: bps, allowRepeatedPools, hopTokensPerStep: 0,
+  const other = enumeratePairedLayered({ quotes, signals, funding, maxHops, minSpreadBps: bps, allowRepeatedPools, allowRepeatedTokens: true, hopTokensPerStep: 0,
     ...prefix, deadlineAtMs: Date.now() + 10_000, onCycle: path => {
       assert(!layered.has(key(path)), "duplicate layered route"); layered.add(key(path));
     } });
@@ -257,7 +257,7 @@ for (const allowRepeatedPools of [false, true]) {
   for (const enumerate of [enumeratePairedDfs, enumeratePairedLayered]) {
     const actual = new Set<string>();
     const stats = enumerate({ quotes: denseQuotes, signals: denseSignals, funding: ["f"], maxHops: 6,
-      minSpreadBps: 0, hopTokensPerStep: 0, allowRepeatedPools, deadlineAtMs: Date.now() + 10_000,
+      minSpreadBps: 0, hopTokensPerStep: 0, allowRepeatedPools, allowRepeatedTokens: true, deadlineAtMs: Date.now() + 10_000,
       onCycle: path => { assert(!actual.has(key(path))); actual.add(key(path)); } });
     assert(!stats.deadlineHit);
     if (!allowRepeatedPools) assert(stats.signalMatched > stats.closed, "fixture exercises pool collision rejection");

@@ -1,8 +1,3 @@
-import "../venues/swaps/curve-underlying-family/test/classic-meta-update.js";
-import "../venues/swaps/curve-underlying-family/test/lending-contract.js";
-import "../venues/swaps/curve-underlying-family/test/legacy-plain-contract.js";
-import "../venues/swaps/curve-underlying-family/test/v1-factory-contract.js";
-import "../venues/swaps/curve-underlying-family/test/legacy-factory-contract.js";
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import {
@@ -311,7 +306,7 @@ const summary = definedFamilyPluginContractSummary(
   curveUnderlyingStrictFamilyPlugin,
 );
 assert.equal(summary.domain, "swap");
-assert.deepEqual(summary.suppliedActionAdapterIds, ["curve-exchange-underlying", "curve-exchange-underlying-lending", "curve-exchange-underlying-uint-native"]);
+assert.deepEqual(summary.suppliedActionAdapterIds, ["curve-exchange-underlying"]);
 console.log("curve-underlying-family-plugin PASS");
 
 function runIdentity(
@@ -416,14 +411,3 @@ function declaredRevert(id: string): AdapterRequestResult {
 }
 
 void CURVE_BEHAVIOR_PROBE_AMOUNTS;
-
-// Production and shadow Family definitions intentionally use separate module
-// instances: definition guards freeze the supplied semantics.
-import { execFileSync } from "node:child_process";
-import { test } from "node:test";
-import { fileURLToPath } from "node:url";
-test("lending refresh uses the production lifecycle in an independent module context", () => {
-  execFileSync(process.execPath, ["--import", "tsx", fileURLToPath(new URL(
-    "../venues/swaps/curve-underlying-family/test/lending-refresh.ts", import.meta.url))],
-    { timeout: 60_000, stdio: "pipe" });
-});

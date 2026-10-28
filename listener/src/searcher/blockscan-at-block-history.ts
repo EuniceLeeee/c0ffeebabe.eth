@@ -177,8 +177,7 @@ export function historicalRejectedRoutes(bytes: string, expected: { runId: strin
       "historical reject event hash mismatch");
     const event = JSON.parse(row.rawLine);
     assert(event.type === "pipeline_dropped" && event.reason === "sim_revert_seen_this_live" &&
-      (event.stage === "planner_solver" || event.stage === "enumeration") && event.run_id === expected.runId,
-    "not a historical route cache-hit event");
+      event.stage === "planner_solver" && event.run_id === expected.runId, "not a historical route cache-hit event");
     assert(typeof event.route_id === "string" && /^0x[a-f0-9]{64}$/.test(event.route_id) &&
       event.route_id === row.routeId && !ids.has(event.route_id), "invalid or duplicate rejected route identity");
     assert(positiveInteger(row.line) && Number.isSafeInteger(row.byteOffset) && row.byteOffset >= 0 &&

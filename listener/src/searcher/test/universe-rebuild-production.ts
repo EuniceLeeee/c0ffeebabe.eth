@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { assertProbeReadPhysicalTimeout } from "./universe-rebuild-probe-read-timeout.js";
 import http from "node:http";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -38,7 +37,7 @@ import type {
   DurableVerifiedMemo,
   LegacyDurableVerifiedMemo,
 } from "../universe-rebuild-checkpoint.js";
-import { AttestationCheckpointWriter, UniverseRebuildCheckpointStore } from
+import { UniverseRebuildCheckpointStore } from
   "../universe-rebuild-checkpoint.js";
 import { durableVerifiedMemoFingerprint } from
   "../universe-rebuild-checkpoint.js";
@@ -570,7 +569,6 @@ async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  await assertProbeReadPhysicalTimeout();
   assert.equal(resolveRebuildRevmTimeoutMs({}), 180_000);
   assert.equal(resolveRebuildRevmTimeoutMs({ SEARCHER_REVM_TIMEOUT_MS: "60000" }), 60_000);
   assert.equal(resolveRebuildRevmTimeoutMs({
@@ -999,34 +997,14 @@ async function main(): Promise<void> {
     familyCandidateKey: rebuildFamilyCandidateKey(candidate),
   });
   assert.equal(sealed.candidateFingerprint, candidateFingerprint(candidate));
-  const ownerCheckpointDir = await mkdtemp(join(tmpdir(), "ready-nomination-owner-"));
-  try {
-    const path = join(ownerCheckpointDir, "ready.json");
-    const store = new UniverseRebuildCheckpointStore({ path });
-    await store.beginOrResumeRun({ expectedRevision: 0, runId: "owner-contract", cutoff: SOURCE,
-      fromBlock: SOURCE.number, universeHash: "owner-universe", candidateSetHash: "owner-candidates", candidateCount: 1,
-      candidatesByKey: { [sealed.familyCandidateKey]: candidate }, observedThrough: SOURCE,
-      sourceReceipts: [{ sourceKey: "1".repeat(64), sourceKind: "startup-candidate-union", providerIdentity: "owner-contract-fixture",
-        queryFingerprint: "2".repeat(64), fromBlock: SOURCE.number, toBlock: SOURCE.number,
-        cutoffNumber: SOURCE.number, cutoffHash: SOURCE.hash, coverageKeys: [familyId + "|startup-universe"],
-        completedChunks: [{ fromBlock: SOURCE.number, toBlock: SOURCE.number, resultCount: 1, resultHash: "3".repeat(64) }],
-        observationSetHash: "4".repeat(64), observedThrough: SOURCE, appliedThrough: SOURCE, retryableCount: 0, status: "complete" }] });
-    const outcome = { status: "verified" as const, familyCandidateKey: sealed.familyCandidateKey,
-      familyInstanceKey: sealed.familyInstanceKey, memoFingerprint: sealed.memoFingerprint };
-    const writer = new AttestationCheckpointWriter({ store, runId: "owner-contract" });
-    writer.record(outcome, sealed);
-    await writer.flush();
-    const recovered = await new UniverseRebuildCheckpointStore({ path, readChunkBytes: 7 }).load();
-    assert.deepEqual(recovered?.verifiedMemos[sealed.familyCandidateKey], sealed,
-      "actual production memo must survive original writer/CAS/journal/reload under its nomination key");
-    assert.deepEqual(recovered?.inProgressRun?.outcomesByCandidateKey[sealed.familyCandidateKey], outcome);
-    await assert.rejects(store.casMergeAttestationWrites("owner-contract", [{ outcome: { ...outcome, familyCandidateKey: "wrong-family-key" }, memo: sealed }]),
-      /memo\/outcome atomic pair mismatch/, "wrong atomic pairs remain rejected after the owner fix");
-    assert.deepEqual(await store.load(), recovered, "failed pair must preserve all prior verified evidence");
-  } finally {
-    await rm(ownerCheckpointDir, { recursive: true, force: true });
-  }
-
+  assert.throws(() => probeWiring.sealDurableVerifiedMemo({
+    candidate, proofSource: SOURCE, familyCandidateKey: "wrong-key",
+    result: { accepted: { familyId }, authorityFingerprint: authorityFor(candidate) },
+  }), /candidate key mismatch/, "the sealer must bind the caller's candidate key");
+  assert.throws(() => probeWiring.sealDurableVerifiedMemo({
+    candidate, proofSource: SOURCE, familyCandidateKey: rebuildFamilyCandidateKey(candidate),
+    result: { accepted: { familyId: "protocol:wsteth" }, authorityFingerprint: authorityFor(candidate) },
+  }), /changed candidate Family\/key/, "a foreign Family result cannot be sealed under this candidate");
   const {
     candidateSnapshot: _candidateSnapshot,
     memoFingerprint: _memoFingerprint,
@@ -1161,21 +1139,8 @@ async function main(): Promise<void> {
       }),
     }),
     proofSource: SOURCE,
-    familyCandidateKey: rebuildFamilyCandidateKey(Object.freeze({ ...candidate, pluginCandidateKey: "alias-candidate-key" })),
+    familyCandidateKey: rebuildFamilyCandidateKey({ ...candidate, pluginCandidateKey: "alias-candidate-key" }),
   });
-  const sealResult = { accepted: { familyId, lineageId: familyId, subject: String(candidate.address) },
-    authorityFingerprint: authorityFor(candidate), instance: { instanceKey: "canonical-instance", descriptor: {}, routes: [], pricingInstances: [], evidenceRefs: [] } };
-  assert.throws(() => probeWiring.sealDurableVerifiedMemo({ candidate, result: sealResult, proofSource: SOURCE,
-    familyCandidateKey: "alias" }), /verified Family does not match nomination key/,
-    "a caller-supplied noncanonical key must not bypass the atomic pair contract");
-  assert.throws(() => probeWiring.sealDurableVerifiedMemo({ candidate,
-    result: { ...sealResult, accepted: { ...sealResult.accepted, familyId: "protocol:wsteth" } },
-    proofSource: SOURCE, familyCandidateKey: rebuildFamilyCandidateKey(candidate) }), /verified Family does not match nomination key/,
-    "an independently accepted other Family cannot be sealed under this nomination");
-  assert.throws(() => probeWiring.sealDurableVerifiedMemo({ candidate,
-    result: { domain: "funding", familyId: "protocol:wsteth", asset: candidate.address, authorityFingerprint: "fixture" },
-    proofSource: SOURCE, familyCandidateKey: rebuildFamilyCandidateKey(candidate) }), /verified Family does not match nomination key/,
-    "funding results cannot bypass the nomination Family binding");
   assert.equal(
     aliasSealed.familyInstanceKey,
     sealed.familyInstanceKey,

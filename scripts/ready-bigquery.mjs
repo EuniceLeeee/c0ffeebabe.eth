@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statfsSync, unlinkSync, realpathSync, renameSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { tableRef, tableUrl, sourcePin, decodeRow, observationsFromTx, emptyCounts, digest, saveJson, makeApi } from './bigquery-table.mjs';
-import { openDiscoveryResults } from './ready-discovery-results.mjs';
 
 // Only a reference to the last completed result; the existing checkpoint remains
 // the sole authority for validation, memo reuse and retry history.
@@ -16,18 +16,8 @@ function rememberReady(profilePath, out) {
   renameSync(temporary, path);
 }
 
-export async function assertReadyPublication(root, checkpoint, generation) {
-  assert(checkpoint?.readyGeneration && checkpoint.inProgressRun === null, 'SQL Ready requires a committed completed checkpoint');
-  assert.equal(checkpoint.readyGeneration.generation, generation, 'SQL Ready generation changed before publication');
-  const { assertReadyCheckpointPublicationCurrent } = await import(pathToFileURL(root + '/listener/src/searcher/strict-ready-runtime.ts'));
-  const { PRODUCTION_FAMILY_ACTIVATIONS } = await import(pathToFileURL(root + '/listener/src/searcher/venues/production-family-composition.ts'));
-  const activation = new Map(PRODUCTION_FAMILY_ACTIVATIONS.map(({ familyId, enabled }) => [familyId, enabled]));
-  assertReadyCheckpointPublicationCurrent(checkpoint, familyId => activation.get(familyId));
-}
-
 function selectCheckpointReuse(args, out, profile) {
-  assert(!(args['no-reuse-checkpoint'] && (args['reuse-checkpoint'] !== undefined || args['reuse-proofs-checkpoint'] !== undefined)), 'Checkpoint reuse options conflict');
-  assert(!(args['reuse-proofs-checkpoint'] && args['reuse-checkpoint']), 'Choose completed Ready or proof-only inheritance');
+  assert(!(args['no-reuse-checkpoint'] && args['reuse-checkpoint'] !== undefined), 'Checkpoint reuse options conflict');
   const identityPath = out + '/run-identity.json';
   let enabled, checkpoint;
   if (existsSync(identityPath)) {
@@ -35,12 +25,12 @@ function selectCheckpointReuse(args, out, profile) {
     enabled = saved.checkpointReuse ?? (saved.reuseCheckpoint !== undefined);
     checkpoint = saved.reuseCheckpoint ?? null;
     assert(!args['no-reuse-checkpoint'] || !enabled, 'Cannot disable checkpoint reuse in a started run; use a new output directory');
-    assert((args['reuse-checkpoint'] ?? args['reuse-proofs-checkpoint']) === undefined || resolve(args['reuse-checkpoint'] ?? args['reuse-proofs-checkpoint']) === checkpoint, 'Run code/config changed: checkpoint reuse source');
+    assert(args['reuse-checkpoint'] === undefined || resolve(args['reuse-checkpoint']) === checkpoint, 'Run code/config changed: checkpoint reuse source');
   } else {
     enabled = !args['no-reuse-checkpoint'];
     const latestPath = resolve(args.profile) + '.latest-ready.json';
-    checkpoint = enabled ? args['reuse-checkpoint'] ?? args['reuse-proofs-checkpoint'] ?? profile.ready ?? null : null;
-    if (enabled && args['reuse-checkpoint'] === undefined && args['reuse-proofs-checkpoint'] === undefined && existsSync(latestPath)) {
+    checkpoint = enabled ? args['reuse-checkpoint'] ?? profile.ready ?? null : null;
+    if (enabled && args['reuse-checkpoint'] === undefined && existsSync(latestPath)) {
       checkpoint = JSON.parse(readFileSync(latestPath, 'utf8')).checkpoint;
       assert(typeof checkpoint === 'string' && checkpoint.length > 0, 'Invalid latest Ready reference; refusing a fresh rebuild');
     }
@@ -56,20 +46,17 @@ function selectCheckpointReuse(args, out, profile) {
 
 export async function main(argv = process.argv.slice(2)) {
   const { values: args } = parseArgs({ args: argv, options: {
-    table: { type: 'string' }, 'discovery-results': { type: 'string' }, out: { type: 'string' }, root: { type: 'string' },
+    table: { type: 'string' }, out: { type: 'string' }, root: { type: 'string' },
     'profile': { type: 'string', default: '/opt/mev-cloud/manual-live/profile.json' },
     'token-stdin': { type: 'boolean' }, 'auth-status': { type: 'boolean' },
     'page-size': { type: 'string', default: '1000' }, 'max-pages': { type: 'string' },
-    'concurrency': { type: 'string', default: '1' }, resume: { type: 'boolean' },
+    'concurrency': { type: 'string', default: '4' }, resume: { type: 'boolean' },
+    'revm-sim-bin': { type: 'string' },
     'reuse-checkpoint': { type: 'string' },
-    'reuse-proofs-checkpoint': { type: 'string' }, 'reuse-proofs-parent': { type: 'string' },
-    'public-env': { type: 'string' },
     'no-reuse-checkpoint': { type: 'boolean' },
   } });
   assert(args.out && args.out.startsWith('/'), '--out must be an absolute dedicated run directory');
   const out = resolve(args.out), tokenFile = out + '/bigquery-auth.json';
-  const root = resolve(args.root ?? dirname(import.meta.dirname));
-  mkdirSync(out, { recursive: true });
   if (args['token-stdin']) {
     assert(existsSync(out), 'Run directory missing');
     let token = ''; for await (const chunk of process.stdin) token += chunk;
@@ -92,93 +79,54 @@ export async function main(argv = process.argv.slice(2)) {
     const result = JSON.parse(readFileSync(out + '/result.json', 'utf8'));
     const saved = JSON.parse(readFileSync(out + '/run-identity.json', 'utf8'));
     assert.equal(saved.profilePath, resolve(args.profile), 'Completed Ready belongs to a different profile');
-    assert(existsSync(out + '/checkpoint.json'), 'Completed Ready checkpoint is missing; refusing to publish reference');
-    if (saved.publicEnvPath) {
-      assert.equal(digest(JSON.parse(readFileSync(saved.publicEnvPath, 'utf8'))), saved.publicEnvHash, 'Completed Ready public configuration changed');
-    }
-    for (const [key, value] of saved.activations) process.env[key] = value;
-    const { UniverseRebuildCheckpointStore } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-checkpoint.ts'));
-    const store = new UniverseRebuildCheckpointStore({ path: out + '/checkpoint.json' });
-    await assertReadyPublication(root, await store.load(), result.generation);
     rememberReady(args.profile, out);
     saveJson(out + '/status.json', { phase: 'ready', rows: result.read.rows, pages: result.read.pages,
       cutoff: result.cutoff, accounting: result.accounting, updatedAt: new Date().toISOString() });
     if (existsSync(tokenFile)) unlinkSync(tokenFile);
     console.log('Completed Ready publication recovered; no additional strict run started'); return;
   }
+  const root = resolve(args.root ?? dirname(import.meta.dirname));
   const profile = JSON.parse(readFileSync(args.profile, 'utf8'));
   const reuse = selectCheckpointReuse(args, out, profile);
   const reuseCheckpoint = reuse.checkpoint;
-  const savedIdentity = existsSync(out + '/run-identity.json') ? JSON.parse(readFileSync(out + '/run-identity.json', 'utf8')) : undefined;
-  const proofOnly = args['reuse-proofs-checkpoint'] !== undefined || savedIdentity?.proofOnly === true;
-  const proofParentPath = args['reuse-proofs-parent'] ?? savedIdentity?.proofParentPath ?? null;
-  assert(!proofOnly || proofParentPath?.startsWith('/'), 'Proof-only inheritance requires an absolute --reuse-proofs-parent');
-  assert(proofOnly || proofParentPath === null, '--reuse-proofs-parent requires proof-only inheritance');
-  const proofParentBytes = proofOnly ? readFileSync(dirname(reuseCheckpoint) + '/parent.json') : null;
-  const proofParent = proofParentBytes ? JSON.parse(proofParentBytes) : null;
-  assert(!(args.table && args['discovery-results']), 'Choose a table or SQL discovery results, not both');
-  const sqlResults = args['discovery-results'] === undefined ? undefined : openDiscoveryResults(
-    resolve(args['discovery-results']), JSON.parse(readFileSync(root + '/listener/src/searcher/generated/family-capability-shadow.generated.json', 'utf8')));
-  const ref = sqlResults ? undefined : tableRef(args.table ?? '');
+  const ref = tableRef(args.table ?? '');
   const pageSize = Number(args['page-size']), concurrency = Number(args.concurrency);
   assert(Number.isInteger(pageSize) && pageSize > 0 && pageSize <= 10000, 'Invalid page size');
   assert(Number.isInteger(concurrency) && concurrency > 0 && concurrency <= 24, 'Invalid concurrency');
   const maxPages = args['max-pages'] === undefined ? Infinity : Number(args['max-pages']);
   assert(maxPages === Infinity || Number.isInteger(maxPages) && maxPages > 0, 'Invalid max-pages');
   const status = value => { saveJson(out + '/status.json', { ...value, updatedAt: new Date().toISOString() }); console.log(JSON.stringify(value)); };
-  const api = makeApi(tokenFile), url = ref ? tableUrl(ref) : undefined;
-  const meta = sqlResults ? undefined : await api(url), pin = sqlResults?.pin ?? sourcePin(meta);
+  const api = makeApi(tokenFile), url = tableUrl(ref);
+  const meta = await api(url), pin = sourcePin(meta);
   const pinPath = out + '/input-pin.json';
   if (existsSync(pinPath)) { assert(args.resume, 'Existing run requires --resume'); assert.deepEqual(JSON.parse(readFileSync(pinPath, 'utf8')), pin, 'Input table changed'); }
   else saveJson(pinPath, pin);
   const endpoint = JSON.parse(readFileSync(profile.rpcFile, 'utf8')).MAINNET_RPC_URL;
   assert(typeof endpoint === 'string' && endpoint, 'Missing configured RPC');
-  const publicEnvPath = args['public-env'] ?? savedIdentity?.publicEnvPath ?? profile.publicEnv ?? null;
-  const publicEnv = publicEnvPath ? JSON.parse(readFileSync(publicEnvPath, 'utf8')) : {};
-  assert(publicEnv && typeof publicEnv === 'object' && !Array.isArray(publicEnv), 'Invalid public environment');
-  const bin = publicEnv.SEARCHER_REVM_SIM_BIN ?? profile.simulator ?? profile.release + '/runtime/listener/revm-sim/target/release/revm-sim';
-  const executor = publicEnv.BOTVM_ADDRESS ?? profile.executor, owner = publicEnv.BOTVM_OWNER ?? profile.wallet;
-  assert(executor && owner, 'Missing public execution identity');
-  assert(publicEnv.SEARCHER_DRY_RUN === undefined || publicEnv.SEARCHER_DRY_RUN === '1', 'SQL Ready requires dry-run');
-  assert(publicEnv.SEARCHER_BLOCKSCAN_SUBMIT === undefined || publicEnv.SEARCHER_BLOCKSCAN_SUBMIT === '0', 'SQL Ready cannot submit');
-  assert(existsSync(bin), 'Configured simulator does not exist');
+  const bin = realpathSync(resolve(args['revm-sim-bin'] ?? root + '/listener/revm-sim/target/release/revm-sim-ready'));
+  assert(existsSync(bin), 'Ready simulator missing; build the Ready sidecar or pass --revm-sim-bin');
   Object.assign(process.env, { SEARCHER_DRY_RUN: '1', SEARCHER_BLOCKSCAN_SUBMIT: '0', SEARCHER_TEST_DISABLE_DOTENV: '1',
-    MAINNET_RPC_URL: endpoint, SEARCHER_LIVE_RPC_URL: endpoint, SEARCHER_REVM_SIM_BIN: bin,
-    BOTVM_ADDRESS: executor, BOTVM_OWNER: owner, SEARCHER_REBUILD_REVM_TIMEOUT_MS: publicEnv.SEARCHER_REVM_TIMEOUT_MS ?? '60000' });
-  for (const key of ['SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE', 'SEARCHER_DRY_RUN_KEYLESS', 'SEARCHER_REVM_TIMEOUT_MS', 'SEARCHER_BLOCKSCAN_QUOTE_TOLERANCE_ENABLED', 'SEARCHER_EV_GATE']) {
-    if (publicEnv[key] !== undefined) { assert.equal(typeof publicEnv[key], 'string', 'Invalid public setting ' + key); process.env[key] = publicEnv[key]; }
-  }
+    MAINNET_RPC_URL: endpoint, SEARCHER_LIVE_RPC_URL: endpoint, SEARCHER_REVM_SIM_BIN: bin, SEARCHER_READY_REVM_SIM_BIN: bin,
+    BOTVM_ADDRESS: profile.executor, BOTVM_OWNER: profile.wallet, SEARCHER_REBUILD_REVM_TIMEOUT_MS: '60000' });
   const activations = [];
-  for (const file of readdirSync(root + '/listener/src/searcher/venues/production-families').filter(file => file.endsWith('.production.ts')).sort()) {
+  for (const file of readdirSync(root + '/listener/src/searcher/venues/production-families').filter(file => file.endsWith('.production.ts'))) {
     const key = readFileSync(root + '/listener/src/searcher/venues/production-families/' + file, 'utf8').match(/envKey:\s*["'](SEARCHER_FAMILY_[A-Z0-9_]+_ENABLED)["']/)?.[1];
-    if (key) {
-      assert(['0', '1'].includes(publicEnv[key]), 'Public environment must explicitly configure ' + key);
-      process.env[key] = publicEnv[key]; activations.push([key, publicEnv[key]]);
-    }
+    if (key) { process.env[key] = '1'; activations.push(key); }
   }
-  const { createRebuildWiring, rebuildFamilyInstanceDedupeKey, candidateFingerprint } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-production.ts'));
+  const { createRebuildWiring, rebuildFamilyInstanceDedupeKey } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-production.ts'));
   const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog } = await import(pathToFileURL(root + '/listener/src/searcher/venues/production-family-composition.ts'));
-  const activeFamilyIds = new Set(catalog.listAll().map(family => family.plugin.manifest.familyId));
-  const identity = { executor, transactionOrigin: owner };
-  if (proofOnly) {
-    assert(sqlResults, 'Proof-only inheritance requires fixed-range SQL discovery results');
-    assert.equal(proofParent.schema, 'ready-family-supplement/v1', 'Invalid proof parent metadata');
-    assert.deepEqual(proofParent.range, pin.blockRange, 'Proof parent range differs from SQL range');
-    assert.equal(proofParent.source.number, pin.cutoff.number, 'Proof parent cutoff differs from SQL cutoff');
-    assert.equal(proofParent.source.hash.toLowerCase(), pin.cutoff.hash.toLowerCase(), 'Proof parent cutoff hash differs');
-    assert.equal(proofParent.identity, dirname(reuseCheckpoint).split('/').at(-1), 'Proof parent directory identity differs');
-  }
+  const identity = { executor: profile.executor, transactionOrigin: profile.wallet };
   const wiring = createRebuildWiring({ rpcUrl: endpoint, executionIdentity: identity });
+  wiring.readyThrottle?.limitConcurrency(concurrency);
   const codeFiles = []; const visit = folder => { for (const file of readdirSync(folder, { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name))) {
     const path = folder + '/' + file.name;
     if (file.isDirectory()) visit(path); else if (file.isFile()) codeFiles.push([path.slice(root.length), digest(readFileSync(path).toString())]);
   } }; visit(root + '/listener/src');
   const codeHash = digest(codeFiles);
-  const readerHash = digest([readFileSync(new URL('./ready-bigquery.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./bigquery-table.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./ready-discovery-results.mjs', import.meta.url), 'utf8')]);
-  const runIdentity = { input: pin, codeHash, readerHash, executionIdentity: identity, simulator: bin, activations, plan: wiring.expectedSourcePlanFingerprints(),
-    profilePath: resolve(args.profile), checkpointReuse: reuse.enabled, reuseCheckpoint, proofOnly, proofParentPath,
-    proofParentMetadataHash: proofParentBytes ? digest(proofParentBytes.toString()) : null,
-    publicEnvPath, publicEnvHash: publicEnvPath ? digest(publicEnv) : null };
+  const readerHash = digest([readFileSync(new URL('./ready-bigquery.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./bigquery-table.mjs', import.meta.url), 'utf8')]);
+  const runIdentity = { input: pin, codeHash, readerHash, executionIdentity: identity, simulator: bin,
+    simulatorSha256: createHash('sha256').update(readFileSync(bin)).digest('hex'), activations, plan: wiring.expectedSourcePlanFingerprints(),
+    profilePath: resolve(args.profile), checkpointReuse: reuse.enabled, reuseCheckpoint };
   if (existsSync(out + '/run-identity.json')) assert.deepEqual(JSON.parse(readFileSync(out + '/run-identity.json', 'utf8')), runIdentity, 'Run code/config changed');
   else saveJson(out + '/run-identity.json', runIdentity);
   const byKey = new Map(), opaque = new Map();
@@ -197,39 +145,6 @@ export async function main(argv = process.argv.slice(2)) {
   });
   const segmentDir = out + '/pages'; mkdirSync(segmentDir, { recursive: true });
   let state = { pages: 0, rows: 0, nextPageToken: null, inputComplete: false, counts: emptyCounts(), minBlock: null, maxBlock: null, maxHash: null, chainHash: digest(pin) };
-  if (sqlResults) {
-    assert.equal(maxPages, Infinity, '--max-pages applies only to raw-table reads');
-    assert.equal(readdirSync(segmentDir).length, 0, 'SQL run cannot contain raw-table segments');
-    let candidateRecords = 0, opaqueRecords = 0;
-    const inactiveRecords = {};
-    for (const row of sqlResults.entries()) {
-      state.rows++;
-      state.minBlock = state.minBlock === null ? row.block : Math.min(state.minBlock, row.block);
-      if (state.maxBlock === null || row.block > state.maxBlock) { state.maxBlock = row.block; state.maxHash = row.snapshot.blockHash; }
-      else if (row.block === state.maxBlock) assert.equal(state.maxHash.toLowerCase(), row.snapshot.blockHash.toLowerCase(), 'Conflicting SQL observed block hash');
-      if (!activeFamilyIds.has(row.family)) { inactiveRecords[row.family] = (inactiveRecords[row.family] ?? 0) + 1; continue; }
-      if (row.kind === 'candidate') {
-        const candidate = wiring.decodeCandidateSnapshot(row.snapshot);
-        assert.equal(candidate.familyId, row.family, 'SQL candidate Family mismatch');
-        assert.equal(rebuildFamilyInstanceDedupeKey(candidate), row.instance_key, 'SQL candidate instance key mismatch');
-        assert.equal(candidateFingerprint(candidate), row.fingerprint, 'SQL candidate fingerprint mismatch');
-        mergeCandidate(candidate); candidateRecords++;
-      } else {
-        const log = row.snapshot;
-        const matches = catalog.matches({ kind: 'log', source: { number: row.block, hash: log.blockHash, generation: row.block }, address: log.address, topics: log.topics, data: log.data });
-        const retained = retainPatterns.find(item => item.familyId === row.family && matches.some(match => match.familyId === row.family && match.patternId === item.pattern.id));
-        assert(retained, 'SQL opaque evidence is not recognized by the current discovery catalog');
-        const poolId = log.topics[retained.pattern.emitter.topicIndex];
-        assert(/^0x[0-9a-f]{64}$/i.test(poolId), 'Invalid opaque instance ID');
-        assert.equal([row.family, log.address.toLowerCase(), poolId.toLowerCase()].join('|'), row.instance_key, 'SQL opaque instance key mismatch');
-        if (!opaque.has(row.instance_key) || opaque.get(row.instance_key).blockNumber < row.block) opaque.set(row.instance_key, log);
-        opaqueRecords++;
-      }
-      if (state.rows % 5000 === 0) status({ phase: 'reading-sql-results', rows: state.rows, candidates: byKey.size, opaqueInstances: opaque.size });
-    }
-    state = { ...state, pages: 0, inputComplete: true, counts: { candidateRecords, opaqueRecords, inactiveRecords } };
-    saveJson(out + '/sql-input-verified.json', { pin, rows: state.rows, candidates: byKey.size, opaqueInstances: opaque.size, inactiveRecords, requestedRange: pin.blockRange, observedRange: { fromBlock: state.minBlock, toBlock: state.maxBlock }, cutoff: pin.cutoff });
-  }
   for (const file of readdirSync(segmentDir).filter(file => /^\d{8}\.json$/.test(file)).sort()) {
     const segment = JSON.parse(readFileSync(segmentDir + '/' + file, 'utf8'));
     assert.equal(segment.previousHash, state.chainHash, 'Checkpoint chain mismatch');
@@ -283,16 +198,16 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (!state.inputComplete) { status({ phase: 'sample-complete', rows: state.rows, pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size }); return; }
   assert(state.maxBlock !== null, 'Empty table cannot produce Ready');
-  if (!sqlResults) assert.deepEqual(sourcePin(await api(url)), pin, 'Input table mutated');
-  if (existsSync(tokenFile)) unlinkSync(tokenFile);
-  const targetCutoff = sqlResults ? pin.cutoff : { number: state.maxBlock, hash: state.maxHash };
-  status({ phase: 'strict', rows: state.rows, pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size, cutoff: targetCutoff.number });
-  const cutoff = await wiring.freezeCanonicalHead(targetCutoff.number);
-  assert.equal(cutoff.hash.toLowerCase(), targetCutoff.hash.toLowerCase(), 'Requested cutoff block is not canonical');
+  assert.deepEqual(sourcePin(await api(url)), pin, 'Input table mutated');
+  unlinkSync(tokenFile);
+  status({ phase: 'strict', rows: state.rows, pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size, cutoff: state.maxBlock });
+  const cutoff = await wiring.freezeCanonicalHead(state.maxBlock);
+  assert.equal(cutoff.hash.toLowerCase(), state.maxHash.toLowerCase(), 'Input maximum block is not canonical');
   const reverse = await wiring.reverseBindOpaqueCandidates({ observations: [...opaque.values()], cutoff, knownCandidates: [...byKey.values()] });
   for (const candidate of reverse) mergeCandidate(candidate);
   const candidates = [...byKey.values()]; opaque.clear(); byKey.clear();
-  const full = createRebuildWiring({ rpcUrl: endpoint, executionIdentity: identity, startupCandidates: candidates });
+  const full = createRebuildWiring({ rpcUrl: endpoint, executionIdentity: identity, startupCandidates: candidates,
+    readyThrottle: wiring.readyThrottle });
   const { rebuildUniverse } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-runner.ts'));
   const { UniverseRebuildCheckpointStore } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-checkpoint.ts'));
   // Imported candidates use the production startup source; the normal one-block
@@ -301,54 +216,18 @@ export async function main(argv = process.argv.slice(2)) {
   const runId = 'bigquery-ready-' + digest(runIdentity).slice(0, 20);
   let prior = await store.load();
   if (prior === null && reuseCheckpoint !== null) {
-    const sourceStore = new UniverseRebuildCheckpointStore({ path: resolve(reuseCheckpoint) });
-    if (proofOnly) {
-      // Release the large completed snapshot before loading the partial store.
-      // Retain only authenticated identity summaries while loading the partial store.
-      const parent = await (async () => {
-        const parentStore = new UniverseRebuildCheckpointStore({ path: resolve(proofParentPath) });
-        const envelope = (await parentStore.loadReadOnlySnapshot())?.envelope;
-        assert(envelope?.readyGeneration && envelope.inProgressRun === null, 'Proof parent must be a completed Ready');
-        assert.equal(envelope.revision, proofParent.parentRevision, 'Proof parent revision changed');
-        assert.equal(envelope.checkpointFingerprint, proofParent.parentCheckpointFingerprint, 'Proof parent fingerprint changed');
-        return { checkpointFingerprint: envelope.checkpointFingerprint,
-          memoIdentities: Object.entries(envelope.verifiedMemos).map(([key, memo]) => [key, memo.familyId, memo.familyCandidateKey]) };
-      })();
-      const source = await sourceStore.load();
-      assert(source?.inProgressRun?.familyUpdateScope, 'Proof source is not a scoped Family supplement');
-      assert.equal(source.inProgressRun.fromBlock, pin.blockRange.fromBlock, 'Proof source range differs');
-      assert.equal(source.inProgressRun.cutoff.number, pin.cutoff.number, 'Proof source cutoff differs');
-      assert.equal(source.inProgressRun.cutoff.hash.toLowerCase(), pin.cutoff.hash.toLowerCase(), 'Proof source cutoff hash differs');
-      assert.equal(source.inProgressRun.familyUpdateScope.parentCheckpointFingerprint, parent.checkpointFingerprint, 'Proof source parent fingerprint differs');
-      assert.deepEqual(source.inProgressRun.familyUpdateScope.familyIds, proofParent.familyIds, 'Proof source scope differs from parent metadata');
-      for (const [key, familyId, familyCandidateKey] of parent.memoIdentities) {
-        const inherited = source.verifiedMemos[key];
-        assert(inherited && inherited.familyId === familyId && inherited.familyCandidateKey === familyCandidateKey, 'Partial checkpoint lost or changed inherited parent memo identity');
-      }
-      prior = await store.inheritRebuildProofsFrom(sourceStore);
-      saveJson(out + '/proof-inheritance.json', { source: reuseCheckpoint, parent: proofParentPath, parentMetadata: proofParent, parentMetadataHash: runIdentity.proofParentMetadataHash,
-        parentMemos: parent.memoIdentities.length, inheritedMemos: Object.keys(prior.verifiedMemos).length, checkpointFingerprint: prior.checkpointFingerprint, copiedCoverage: false, copiedOutcomes: false });
-    } else prior = await store.inheritReadyFrom(sourceStore);
+    prior = await store.inheritReadyFrom(new UniverseRebuildCheckpointStore({ path: resolve(reuseCheckpoint) }));
     console.log(JSON.stringify({ phase: 'ready-checkpoint-inherited', checkpointFingerprint: prior.checkpointFingerprint,
       verifiedMemos: Object.keys(prior.verifiedMemos).length, retryable: Object.keys(prior.retryableAttemptsByCandidateKey).length }));
   } else if (prior === null) {
     console.log(JSON.stringify({ phase: 'ready-checkpoint-not-inherited', reason: reuse.enabled ? 'first-run-no-previous-result' : 'explicitly-disabled' }));
   }
   const ready = await rebuildUniverse({ ...full, store,
-    freezeCanonicalHead: async requestedBlock => {
-      assert.equal(requestedBlock, cutoff.number, 'Strict must use the pinned SQL/input cutoff');
-      const frozen = await full.freezeCanonicalHead(requestedBlock);
-      assert.equal(frozen.number, cutoff.number, 'Strict cutoff number changed');
-      assert.equal(frozen.hash.toLowerCase(), cutoff.hash.toLowerCase(), 'Strict cutoff hash changed');
-      return frozen;
-    },
     runId, observationRange: { fromBlock: cutoff.number, toBlock: cutoff.number },
     attestationConcurrency: concurrency,
     resumeCompletedOutcomes: args.resume === true && prior?.inProgressRun?.runId === runId,
     log: text => console.log(text) });
-  await assertReadyPublication(root, await store.load(), ready.generation);
-  saveJson(out + '/result.json', { input: pin, inputRange: sqlResults ? pin.blockRange : { fromBlock: state.minBlock, toBlock: state.maxBlock },
-    observedInputRange: { fromBlock: state.minBlock, toBlock: state.maxBlock }, productionActivityCoverage: { fromBlock: cutoff.number, toBlock: cutoff.number }, read: state,
+  saveJson(out + '/result.json', { input: pin, inputRange: { fromBlock: state.minBlock, toBlock: state.maxBlock }, read: state,
     nominatedCandidates: candidates.length, cutoff: ready.cutoff, generation: ready.generation, accounting: ready.candidateAccounting, codeHash });
   rememberReady(args.profile, out);
   status({ phase: 'ready', rows: state.rows, pages: state.pages, cutoff: ready.cutoff, accounting: ready.candidateAccounting });
