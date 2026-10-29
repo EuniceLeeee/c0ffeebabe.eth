@@ -2,7 +2,7 @@ import { createDeclarativeModuleCatalog, type ModuleBlock } from "./declarative-
 import { declarativeRuntimeMathRegistry } from "./declarative-runtime-math-models.js";
 import type { createDeclarativeRuntimeMathRegistry } from "./declarative-runtime-math.js";
 import { declarativeMathRegistry } from "./declarative-math-models.js";
-import { validateDeclarativeQuoteProof } from "./declarative-quote-proof.js";
+import { quoteProofSteps } from "./declarative-quote-proof.js";
 import { validateDeclarativeReadFlow } from "./declarative-read-flow.js";
 import { validateDeclarativeTrialState } from "./declarative-trial-state.js";
 import type { createDeclarativeMathRegistry } from "./declarative-math.js";
@@ -41,10 +41,14 @@ export function protocolModuleCatalog(math: ReturnType<typeof createDeclarativeM
           if (block.chainQuote !== undefined) throw new Error("local math cannot claim a chain quote proof");
         } else {
           if (block.localStateUnsupportedReason !== undefined) throw new Error("chain quote cannot claim local trial state");
-          validateDeclarativeQuoteProof(block.chainQuote, block.sourceKind as "view" | "effect-simulation");
-          const proof = block.chainQuote;
-          if (!(block.steps as { id: string }[]).some(step => step.id === proof.step))
-            throw new Error("chain quote proof refers to an undefined flow step");
+          const proofs = quoteProofSteps(block.chainQuote, block.sourceKind as "view" | "effect-simulation");
+          let previous = -1;
+          for (const proof of proofs) {
+            const index = (block.steps as { id: string }[]).findIndex(step => step.id === proof.step);
+            if (index < 0) throw new Error("chain quote proof refers to an undefined flow step");
+            if (index < previous) throw new Error("chain quote proof is not in flow order");
+            previous = index;
+          }
         }
       },
       dependencies: block => block.sourceKind === "local-math" || usesModel(block) ? ["math"] : [],

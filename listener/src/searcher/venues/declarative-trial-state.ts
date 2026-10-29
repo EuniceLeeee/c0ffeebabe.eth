@@ -1,4 +1,5 @@
 import { getAddress } from "ethers";
+import { immutableDeclarativeData } from "./declarative-immutable.js";
 import { applyExactTrialState, emptyExactTrialState } from "../exact-trial-state.js";
 import type { CompiledInstanceDescriptor, ExactQuoteInput, ExactQuoteResult, ExactTrialStateRef,
   ExactTrialStateChange, FamilyRouteDescriptor, LocalExactAttempt } from "./adapter-family-plugin.js";
@@ -49,30 +50,7 @@ export function validateDeclarativeTrialState(raw: unknown): asserts raw is Decl
   }
   for (const field of [definition.input, definition.amountOut, definition.stateChanges, definition.stateEffects]) refs(field, seen);
 }
-function immutable(value: Value): Value {
-  if (value === null || ["undefined", "string", "bigint", "boolean"].includes(typeof value)) return value;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (!value || typeof value !== "object") throw new Error("trial-state values must be synchronous data");
-  if (Array.isArray(value)) {
-    const copy: Value[] = [];
-    if (Reflect.ownKeys(value).some(key => key !== "length" && (typeof key !== "string" || !/^(0|[1-9][0-9]*)$/.test(key))))
-      throw new Error("trial-state arrays must be plain data");
-    for (let index = 0; index < value.length; index++) {
-      const property = Object.getOwnPropertyDescriptor(value, String(index));
-      if (!property || !("value" in property)) throw new Error("trial-state arrays must be dense plain data");
-      copy.push(immutable(property.value));
-    }
-    return Object.freeze(copy);
-  }
-  if (Object.getPrototypeOf(value) !== Object.prototype) throw new Error("trial-state values must be plain data");
-  const copy: Record<string, Value> = {};
-  for (const key of Reflect.ownKeys(value)) {
-    const property = Object.getOwnPropertyDescriptor(value, key)!;
-    if (typeof key !== "string" || forbidden.has(key) || !("value" in property)) throw new Error("invalid trial-state data property");
-    copy[key] = immutable(property.value);
-  }
-  return Object.freeze(copy);
-}
+function immutable(value: Value): Value { return immutableDeclarativeData(value, "trial"); }
 function canonicalSource(value: CanonicalSource): void {
   if (!value || !Number.isSafeInteger(value.number) || value.number < 0 || !Number.isSafeInteger(value.generation) ||
     value.generation < 0 || !/^0x[0-9a-fA-F]{64}$/.test(value.hash)) throw new Error("trial-state requires canonical source");

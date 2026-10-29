@@ -1,6 +1,7 @@
+import { buildDeclarativeExecutionSimulation } from "./declarative-simulation.js";
 import { getAddress, hexlify } from "ethers";
 import { readProtocolModules, type DeclarativeQuoteFlow } from "./declarative-protocol-modules.js";
-import { verifyDeclarativeQuoteProof } from "./declarative-quote-proof.js";
+import { verifyDeclarativeQuoteChain } from "./declarative-quote-proof.js";
 import { compileDeclarativeTrialState } from "./declarative-trial-state.js";
 import { compileDeclarativeReadFlow } from "./declarative-read-flow.js";
 import type { BoundRuntimeMath, createDeclarativeRuntimeMathRegistry } from "./declarative-runtime-math.js";
@@ -91,13 +92,24 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
   if (raw.manifest.familyId !== raw.scope?.family || raw.manifest.domain !== "protocol") throw new Error("declaration manifest identity mismatch");
   if (!Array.isArray(raw.variantFiles) || raw.variantFiles.length !== children.length) throw new Error("declaration child count mismatch");
   shape(raw.instance, ["key", "draft", "bindingProjection"], [], "instance declaration");
-  shape(raw.routes, ["target", "bindingKey", "directions", "graphVenue", "effects"], ["assertions"], "route declaration");
-  shape(raw.pricing, ["draft", "compatibility", "static", "finalize", "sampleAmount", "exactCompatibility", "mutationKinds"], ["finalizeChecks"], "pricing declaration");
+  shape(raw.routes, ["target", "bindingKey", "directions", "graphVenue", "effects"], ["assertions", "key"], "route declaration");
+  shape(raw.pricing, ["draft", "compatibility", "static", "finalize", "sampleAmount", "exactCompatibility", "mutationKinds"], ["finalizeChecks", "stateKey", "bindingProjection"], "pricing declaration");
   shape(raw.pricing.static, ["requirements", "dependencies", "requests", "decode"], [], "static pricing declaration");
-  if (!Array.isArray(raw.routes.directions) || !raw.routes.directions.length ||
-      new Set(raw.routes.directions.map((d: Data) => d.id)).size !== raw.routes.directions.length)
-    throw new Error("declared directions must be unique and nonempty");
-  for (const d of raw.routes.directions) shape(d, ["id", "enabled", "tokenIn", "tokenOut", "adapterId", "taxonomy"], ["executionAssets"], "direction declaration");
+  if (Array.isArray(raw.routes.directions)) validateDirections(raw.routes.directions);
+  else if (!raw.routes.directions?.op) throw new Error("directions require a list or declared projection");
+  function validateDirections(directions: Data[]): void {
+    if (!directions.length || directions.length > 10000 || new Set(directions.map(d => d.id)).size !== directions.length)
+      throw new Error("declared directions must be unique and nonempty");
+    for (const d of directions) {
+      shape(d, ["id", "enabled", "tokenIn", "tokenOut", "adapterId", "taxonomy"], ["executionAssets", "fields"], "direction declaration");
+      if (typeof d.id !== "string" || !d.id.trim()) throw new Error("invalid direction identity");
+      if (d.fields !== undefined) {
+        data(d.fields, "route fields");
+        const reserved = ["routeKey", "familyId", "lineageId", "instanceKey", "tokenIn", "tokenOut", "taxonomy", "bindingRef", "runtimeRequirements", "target", "direction", "adapterId", "executionAssets"];
+        if (Object.keys(d.fields).some(key => reserved.includes(key))) throw new Error("declared route fields replace a bound field");
+      }
+    }
+  }
   const normalized = JSON.parse(JSON.stringify(raw)) as Data;
   normalized.standard = normalizeDeclarativeVariant(normalized.standard);
   normalized.pricing.static.decode = normalizeDeclarativeFieldModel(normalized.pricing.static.decode);
@@ -110,9 +122,16 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
     shape(v, ["id", "lineageId", "abi", "constants", "expressions", "match", "context", "boundState", "pricing", "exact", "readPrograms", "execution"],
       ["version", "identity", "identityParameters", "assertions", "programs", "inputs", "types", "modules", "identityKind"], "variant declaration");
     shape(v.pricing, ["refreshPolicy", "requirements", "dependencies", "mutationAddresses"],
-      ["guardProgram", "guardPrefix", "finalizeChecks", "mutationPredicate"], "variant pricing declaration");
-    shape(v.exact, ["methodId", "requirements", "evidence"],
-      ["guardProgram", "guardPrefix", "caller", "checks", "outputChecks", "protectedAddresses"], "exact declaration");
+      ["guardProgram", "guardPrefix", "finalizeChecks", "mutationPredicate", "classifyUnavailable"], "variant pricing declaration");
+    if (v.exact.unavailableReason !== undefined) {
+      shape(v.exact, ["unavailableReason"], [], "unavailable exact declaration");
+      if (typeof v.exact.unavailableReason !== "string" || !v.exact.unavailableReason.trim()) throw new Error("exact unavailable reason is required");
+    } else {
+      shape(v.exact, ["methodId", "requirements", "evidence"],
+        ["guardProgram", "guardPrefix", "caller", "checks", "outputChecks", "protectedAddresses", "retainReadEvidence", "zeroEvidence"], "exact declaration");
+      if (v.exact.retainReadEvidence !== undefined && v.exact.retainReadEvidence !== true)
+        throw new Error("retainReadEvidence must be true when declared");
+    }
     if (!["on-touch", "each-block"].includes(v.pricing.refreshPolicy)) throw new Error("invalid declared refresh policy");
     for (const p of Object.values(v.readPrograms)) shape(p as Data, ["requests", "decode"], [], "read program declaration");
     if (!v.execution || typeof v.execution.settlement?.directOutput !== "boolean")
@@ -121,16 +140,22 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
     const modules = readProtocolModules(document.modules, v.modules, options.math, options.executionMath);
     const { modules: _moduleDefinitions, ...valueDefinition } = v;
     const values = compileDeclarativeValues(valueDefinition, {}, modules.get<DeclarativeMathFunctions>("math"));
-    if (!v.readPrograms.quote && (!Object.keys(modules.blocks.quoteFlow!).length || !Object.keys(modules.blocks.pricingFlow!).length))
+    if (!v.readPrograms.quote && (!Object.keys(modules.blocks.pricingFlow!).length ||
+        (!v.exact.unavailableReason && !Object.keys(modules.blocks.quoteFlow!).length)))
       throw new Error("variant requires quote for legacy pricing/exact");
+    if (v.exact.unavailableReason && Object.keys(modules.blocks.quoteFlow!).length)
+      throw new Error("exact cannot be both unavailable and defined");
+    if (v.exact.retainReadEvidence && !Object.keys(modules.blocks.quoteFlow!).length)
+      throw new Error("read evidence requires a quote flow");
     const compileFlow = (name: string) => {
       const block = modules.get<Data>(name);
       if (!block) return undefined;
       const { sourceKind: _source, localStateUnsupportedReason: _reason, chainQuote: _proof, ...flow } = block;
-      return compileDeclarativeReadFlow(flow as any, values);
+      return compileDeclarativeReadFlow(flow as any, values, (requests, env) => materializeRequests(v, values, modules, requests, env));
     };
     const variant: Variant = { document: v, values, modules, quoteFlow: compileFlow("quoteFlow"), pricingFlow: compileFlow("pricingFlow") };
     const trial = modules.get<Data>("trialState");
+    if (trial && v.exact.retainReadEvidence) throw new Error("trial state does not support retained read evidence");
     if (trial) variant.trialState = compileDeclarativeTrialState<Descriptor, Route, Data>(trial, {
       values, models: modules.require<DeclarativeMathFunctions>("math"),
       environment: input => environment(variant, input), evidence,
@@ -171,12 +196,45 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
     return mode === "requests" ? v.values.evaluate(p.requests, env) : v.values.run(p.decode, env);
   }
   const projection = (descriptor: Descriptor) => evalRoot(document.instance.bindingProjection, { descriptor });
-  function direction(descriptor: Descriptor, name: string): Data {
-    const matches = document.routes.directions.filter((d: Data) => d.id === name);
-    if (matches.length !== 1) throw new Error("unknown declared route direction");
-    const spec = matches[0];
-    if (!evalRoot(spec.enabled, { descriptor })) throw new Error("route direction was not behavior-proven");
-    return spec;
+  function directions(descriptor: Descriptor): Data[] {
+    const value = document.routes.directions;
+    const rows = Array.isArray(value) ? value : evalRoot(value, { descriptor });
+    if (!Array.isArray(rows)) throw new Error("declared direction projection must return a list");
+    validateDirections(rows);
+    return rows;
+  }
+  const routeCache = new WeakMap<Descriptor, { routes: readonly Route[]; byKey: ReadonlyMap<string, Route> }>();
+  function deeplyFrozen(value: unknown, seen = new WeakSet<object>()): boolean {
+    if (value === null || typeof value !== "object") return typeof value !== "function";
+    if (seen.has(value)) return true;
+    if (!Object.isFrozen(value) || (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype)) return false;
+    seen.add(value);
+    return Object.values(Object.getOwnPropertyDescriptors(value)).every(field => "value" in field && deeplyFrozen(field.value, seen));
+  }
+  function projectRoutes(descriptor: Descriptor): readonly Route[] {
+    const cached = routeCache.get(descriptor);
+    if (cached) return cached.routes;
+    const v = select(descriptor), env = environment(v, { descriptor });
+    const fingerprint = hashCanonical(projection(descriptor));
+    const projected = directions(descriptor).filter(d => evalRoot(d.enabled, env)).map(d => {
+      const route = {
+        familyId: descriptor.familyId, lineageId: descriptor.lineageId, instanceKey: descriptor.instanceKey,
+        tokenIn: getAddress(evalRoot(d.tokenIn, env)), tokenOut: getAddress(evalRoot(d.tokenOut, env)), taxonomy: d.taxonomy,
+        bindingRef: { bindingKey: evalRoot(document.routes.bindingKey, env), fingerprint },
+        runtimeRequirements: descriptor.runtimeRequirements, target: env.target, direction: d.id,
+        adapterId: evalRoot(d.adapterId, env),
+        ...(d.executionAssets === undefined ? {} : { executionAssets: executionAssets(d, env) }),
+        ...(d.fields === undefined ? {} : evalRoot(d.fields, env)),
+      };
+      if (sameAddress(route.tokenIn, route.tokenOut)) throw new Error("declared route requires distinct tokens");
+      return frozen({ ...route, routeKey: routeKey(document.routes.key === undefined
+        ? [descriptor.familyId, route.bindingRef.bindingKey, d.id].join("\u001f")
+        : evalRoot(document.routes.key, { ...env, route })) }) as Route;
+    });
+    if (new Set(projected.map(route => route.routeKey)).size !== projected.length) throw new Error("duplicate declared route key");
+    const routes = Object.freeze(projected);
+    if (deeplyFrozen(descriptor)) routeCache.set(descriptor, { routes, byKey: new Map(routes.map(route => [route.routeKey, route])) });
+    return routes;
   }
   function executionAssets(d: Data, env: Data): FamilyRouteDescriptor["executionAssets"] {
     if (d.executionAssets === undefined) return undefined;
@@ -187,18 +245,41 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
   }
   function assertInvocation(descriptor: Descriptor, route: Route): void {
     const v = select(descriptor), env = environment(v, { descriptor, route });
-    const d = direction(descriptor, route.direction);
-    if (descriptor.familyId !== route.familyId || descriptor.lineageId !== route.lineageId ||
-        descriptor.lineageId !== v.document.lineageId || route.instanceKey !== descriptor.instanceKey ||
-        !sameAddress(route.target, env.target) || route.bindingRef.fingerprint !== hashCanonical(projection(descriptor)) ||
-        route.bindingRef.bindingKey !== evalRoot(document.routes.bindingKey, env) ||
-        !sameAddress(route.tokenIn, evalRoot(d.tokenIn, env)) || !sameAddress(route.tokenOut, evalRoot(d.tokenOut, env)) ||
-        route.adapterId !== evalRoot(d.adapterId, env) ||
-        JSON.stringify(route.executionAssets) !== JSON.stringify(executionAssets(d, env))) throw new Error("declarative route binding mismatch");
+    const projected = projectRoutes(descriptor);
+    const expected = routeCache.get(descriptor)?.byKey.get(route.routeKey) ?? projected.find(candidate => candidate.routeKey === route.routeKey);
+    if (!expected || hashCanonical(expected) !== hashCanonical(route)) throw new Error("declarative route binding mismatch");
     rootRun(document.routes.assertions, env);
     v.values.run(v.document.assertions ?? [], env);
   }
-  const discovery = compileDeclarativeDiscovery<Candidate>(document.discovery.definition);
+  // Pseudo requests exist only inside the Family compiler. The ordinary issuer
+  // sees the same authenticated request type as hand-authored Families.
+  function materializeRequests(definition: Data, values: Values, modules: ReturnType<typeof readProtocolModules>,
+    requests: readonly Data[], env: Data): readonly AdapterRequest[] {
+    if (!Array.isArray(requests)) throw new Error("declaration requests must be a list");
+    return requests.map(request => {
+      if (request.kind !== "declarative-execution-simulation") return request as AdapterRequest;
+      const allowed = ["kind", "id", "amountIn", "protectedTokens", "observe", "required", "context"];
+      if (Object.keys(request).some(key => !allowed.includes(key))) throw new Error("unknown execution simulation field");
+      if (request.context !== undefined && env.descriptor !== undefined)
+        throw new Error("quote simulation cannot replace its issued invocation");
+      // Identity has no admitted descriptor yet; its context is declared from
+      // prior observed facts. The transport still validates the executor actor.
+      const input = request.context === undefined ? env : request.context;
+      data(input, "execution simulation context");
+      assertDeclarativeExecutionSource(input.source);
+      if (env.source !== undefined) assertSource(input.source, env.source);
+      const invocation = { ...input, direction: input.direction ?? input.route?.direction };
+      const context = { ...invocation, ...values.evaluate(definition.context, invocation),
+        binding: values.evaluate(definition.boundState, invocation), target: evalRoot(document.routes.target, invocation),
+        simulationAmount: request.amountIn, simulationProtectedTokens: request.protectedTokens ?? [] };
+      return buildDeclarativeExecutionSimulation({ kind: "declarative-execution-simulation", id: request.id,
+        amountIn: "$simulationAmount", protectedTokens: "$simulationProtectedTokens",
+        ...(request.observe === undefined ? {} : { observe: request.observe }),
+        ...(request.required === undefined ? {} : { required: request.required }) }, context, values, definition.execution,
+        { math: modules.get<BoundRuntimeMath>("executionMath") });
+    });
+  }
+  const discovery = compileDeclarativeDiscovery<Candidate>(document.discovery.definition, primary.values);
   const identity: IdentitySemantics<Candidate, Identity> = {
     memoReuse: document.identity.memoReuse,
     identityKey: identity => evalRoot(document.identity.key, { identity }),
@@ -214,7 +295,7 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
       return compileDeclarativeIdentity<Candidate, Identity>(id, {
         id: v.document.id, familyId: document.manifest.familyId, lineageId: v.document.lineageId,
         parameters: v.document.identityParameters, kind: v.document.identityKind,
-      }, {}, v.modules.get<DeclarativeMathFunctions>("math"));
+      }, {}, v.modules.get<DeclarativeMathFunctions>("math"), (requests, env) => materializeRequests(v.document, v.values, v.modules, requests, env));
     }),
   };
   const instance: InstanceSemantics<Identity, Descriptor> = {
@@ -224,19 +305,7 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
     staticBindingProjection: projection,
   };
   const routes: RouteProjectionSemantics<Descriptor, Route> = {
-    project({ descriptor }) {
-      const v = select(descriptor), env = environment(v, { descriptor });
-      const fingerprint = hashCanonical(projection(descriptor));
-      return Object.freeze(document.routes.directions.filter((d: Data) => evalRoot(d.enabled, env)).map((d: Data) => frozen({
-        routeKey: routeKey([descriptor.familyId, evalRoot(document.routes.bindingKey, env), d.id].join("\u001f")),
-        familyId: descriptor.familyId, lineageId: descriptor.lineageId, instanceKey: descriptor.instanceKey,
-        tokenIn: evalRoot(d.tokenIn, env), tokenOut: evalRoot(d.tokenOut, env), taxonomy: d.taxonomy,
-        bindingRef: { bindingKey: evalRoot(document.routes.bindingKey, env), fingerprint },
-        runtimeRequirements: descriptor.runtimeRequirements, target: env.target, direction: d.id,
-        adapterId: evalRoot(d.adapterId, env),
-        ...(d.executionAssets === undefined ? {} : { executionAssets: executionAssets(d, env) }),
-      })));
-    },
+    project: ({ descriptor }) => projectRoutes(descriptor),
     projectGraph({ descriptor, route }) {
       assertInvocation(descriptor, route);
       return frozen({ routeActionAdapterId: route.adapterId, executionTarget: route.target,
@@ -289,13 +358,47 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
   }
   if (!Array.isArray(document.pricing.mutationKinds) || document.pricing.mutationKinds.some((kind: string) => !["log", "call"].includes(kind)))
     throw new Error("invalid declaration mutation kinds");
+  function pricingStateKey(route: Route): string {
+    const value = document.pricing.stateKey === undefined ? route.instanceKey : evalRoot(document.pricing.stateKey, { route });
+    if (typeof value !== "string" || !value.trim()) throw new Error("invalid pricing state key");
+    return value;
+  }
+  function classifyUnavailable(v: Variant, input: Data): ReadonlyMap<any, string> {
+    const declaration = v.document.pricing.classifyUnavailable;
+    if (declaration === undefined) return new Map();
+    const rows = v.values.evaluate(declaration, environment(v, input));
+    if (!Array.isArray(rows)) throw new Error("unavailable prices must be declared key/reason pairs");
+    const map = new Map<any, string>();
+    for (const row of rows) {
+      if (!Array.isArray(row) || row.length !== 2 || !input.routes.some((route: Route) => route.routeKey === row[0]) ||
+          map.has(row[0]) || typeof row[1] !== "string" || !row[1].trim()) throw new Error("invalid unavailable price classification");
+      map.set(row[0], row[1]);
+    }
+    return map;
+  }
+  function validateSnapshot(v: Variant, descriptor: Data, snapshot: ProtocolPricingSnapshot, context: Data) {
+    const routes = descriptor.routes as Route[];
+    const unavailable = classifyUnavailable(v, { descriptor, snapshot, routes });
+    if (Object.keys(snapshot.quotes).some(key => !routes.some(route => route.routeKey === key)))
+      throw new Error("pricing flow quote coverage mismatch");
+    for (const route of routes) {
+      const quote = snapshot.quotes[route.routeKey];
+      if (!quote && unavailable.has(route.routeKey)) continue;
+      const amountIn = evalRoot(document.pricing.sampleAmount, { ...context, descriptor, route, snapshot });
+      if (!quote || typeof amountIn !== "bigint" || amountIn <= 0n || quote.amountIn !== amountIn ||
+          typeof quote.amountOut !== "bigint" || quote.amountOut < 0n || (quote.amountOut === 0n && !unavailable.has(route.routeKey)))
+        throw new Error("pricing flow returned incompatible quote");
+    }
+  }
   const pricing: PricingSemantics<Descriptor, Route, Data, ProtocolPricingSnapshot, Data, Data> = {
     refreshPolicyForInstance: ({ descriptor }) => select(descriptor).document.pricing.refreshPolicy,
-    stateKey: route => route.instanceKey,
-    staticBindingProjection: ({ descriptor }) => projection(descriptor),
+    stateKey: route => pricingStateKey(route),
+    staticBindingProjection: input => document.pricing.bindingProjection === undefined
+      ? projection(input.descriptor) : evalRoot(document.pricing.bindingProjection, input),
     snapshotCompatibilityProjection: input => evalRoot(document.pricing.compatibility, input),
     compileDraft(input) {
-      if (input.stateKey !== input.descriptor.instanceKey || !input.routes.length) throw new Error("pricing requires behavior-proven routes");
+      if (!input.routes.length || input.routes.some(route => input.stateKey !== pricingStateKey(route)))
+        throw new Error("pricing requires one behavior-proven state group");
       input.routes.forEach(r => assertInvocation(input.descriptor, r));
       return frozen(evalRoot(document.pricing.draft, input));
     },
@@ -353,12 +456,8 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
           const snapshot = v.pricingFlow.program.decode({ programInput: env,
             initialResults: initialFlowResults(v.pricingFlow, env, results), dependentEvidence: input.dependentEvidence }) as ProtocolPricingSnapshot;
           data(snapshot, "pricing flow snapshot"); data(snapshot.quotes, "pricing flow quotes"); assertSource(snapshot.source, source);
-          if (Object.keys(snapshot.quotes).length !== input.descriptor.routes.length) throw new Error("pricing flow quote coverage mismatch");
-          for (const route of input.descriptor.routes as Route[]) {
-            const quote = snapshot.quotes[route.routeKey];
-            if (!quote || quote.amountIn !== evalRoot(document.pricing.sampleAmount, { descriptor: input.descriptor, route }) ||
-              typeof quote.amountOut !== "bigint" || quote.amountOut <= 0n) throw new Error("pricing flow returned incompatible quote");
-          }
+          const context = v.pricingFlow.completedEnvironment(env, initialFlowResults(v.pricingFlow, env, results), input.dependentEvidence);
+          validateSnapshot(v, input.descriptor, snapshot, context);
           return frozen(snapshot);
         }
         guard(v, { ...input, routes: input.descriptor.routes }, false, results);
@@ -368,18 +467,22 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
           const amountIn = evalRoot(document.pricing.sampleAmount, { descriptor: input.descriptor, route });
           const env = environment(v, { ...input, route, results, source, amountIn, requestId: `current:${route.direction}` });
           const amountOut = program(v, "quote", env, "decode");
-          if (typeof amountOut !== "bigint" || amountOut <= 0n) throw new Error("declarative quote returned no output");
+          if (typeof amountOut !== "bigint" || amountOut < 0n) throw new Error("declarative quote returned invalid output");
           quotes[route.routeKey] = { amountIn, amountOut };
         }
-        return frozen({ source, quotes });
+        const snapshot = { source, quotes };
+        validateSnapshot(v, input.descriptor, snapshot, {});
+        return frozen(snapshot);
       },
       deriveMids({ descriptor, snapshot, routes }) {
-        return new Map(routes.map(route => {
+        const unavailable = classifyUnavailable(select(descriptor), { descriptor, snapshot, routes });
+        return new Map(routes.filter(route => !unavailable.has(route.routeKey)).map(route => {
           const quote = snapshot.quotes[route.routeKey];
-          if (!quote) throw new Error("current quote missing");
+          if (!quote || quote.amountOut <= 0n) throw new Error("current quote missing");
           return [route.routeKey, protocolMid({ route, adapterId: route.adapterId, target: route.target, quote })];
         }));
       },
+      classifyUnavailable: input => classifyUnavailable(select(input.descriptor), input),
     },
     dependencies(input) {
       const v = select(input.descriptor);
@@ -387,12 +490,22 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
     },
     mutation: {
       compile: ({ entries }) => {
-        const byKey = new Map(entries.map(entry => [entry.descriptor.instanceKey.toLowerCase(), entry]));
-        const index = compileAddressMutations(entries, input => ({
-          addresses: uniqueAddresses(select(input.descriptor).values.evaluate(select(input.descriptor).document.pricing.mutationAddresses, environment(select(input.descriptor), input))), keys: [input.descriptor.instanceKey],
+        // The address index normalizes its keys; pricing state keys are opaque.
+        // Use local canonical IDs and return the original keys without folding.
+        const indexed = entries.map((entry, index) => {
+          const keys = [...new Set(entry.routes.map(pricingStateKey))];
+          const stateKey = entry.stateKey ?? (keys.length === 1 ? keys[0] : undefined);
+          if (!stateKey || keys.some(key => key !== stateKey)) throw new Error("mutation entry must identify one pricing state group");
+          return { ...entry, stateKey, mutationKey: `group:${index}` };
+        });
+        const byKey = new Map(indexed.map(entry => [entry.mutationKey, entry]));
+        const indexKeys = new Map(indexed.map(entry => [entry.stateKey, entry.mutationKey]));
+        const index = compileAddressMutations(indexed, input => ({
+          addresses: uniqueAddresses(select(input.descriptor).values.evaluate(select(input.descriptor).document.pricing.mutationAddresses, environment(select(input.descriptor), input))), keys: [indexKeys.get(input.stateKey)!],
         }), { kinds: document.pricing.mutationKinds });
         return { dependencies: index.dependencies, affectedStateKeys: ({ observation }) =>
-          index.affectedStateKeys({ observation }).filter(key => acceptsMutation({ ...byKey.get(key)!, observation })) };
+          index.affectedStateKeys({ observation }).map(key => byKey.get(key)!)
+            .filter(entry => acceptsMutation({ ...entry, observation })).map(entry => entry.stateKey) };
       },
       affectedStateKeys(input) {
         const observation = input.observation;
@@ -403,24 +516,32 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
         const dependencies = uniqueAddresses(v.values.evaluate(v.document.pricing.dependencies, env));
         return dependencies.some(a => sameAddress(a, target)) &&
           uniqueAddresses(v.values.evaluate(v.document.pricing.mutationAddresses, env)).some(a => sameAddress(a, target))
-          ? [input.descriptor.instanceKey] : [];
+          ? [...new Set(input.routes.map(pricingStateKey))] : [];
       },
     },
   };
   function evidence(input: Data, amountOut: bigint) {
     const v = select(input.descriptor);
-    const value = v.values.evaluate(v.document.exact.evidence, environment(v, { ...input, amountOut }));
+    const declaration = amountOut === 0n && v.document.exact.zeroEvidence !== undefined ? v.document.exact.zeroEvidence : v.document.exact.evidence;
+    const value = v.values.evaluate(declaration, environment(v, { ...input, amountOut }));
+    if (value && Object.hasOwn(value, "readProof")) throw new Error("exact evidence cannot replace framework read proof");
     return frozen(v.trialState ? { ...value, executor: getAddress(input.executor) } : value);
   }
   const exact: ExactQuoteSemantics<Descriptor, Route, Data> = {
     methods: invocation => {
       const selected = invocation ? select(invocation.descriptor) : primary;
+      if (selected.document.exact.unavailableReason) return Object.freeze([]);
       requireAvailableExtension(selected, "quoteFlow");
       requireAvailableExtension(selected, "trialState");
       const provenance = selected.modules.get<DeclarativeQuoteFlow>("quoteFlow");
       return Object.freeze([
-      localZeroExactMethod("local-zero", input => ({ amountOut: 0n, evidence: evidence(input, 0n) })),
-      { id: document.standard.exact.methodId, kind: "request-program" as const,
+      localZeroExactMethod("local-zero", input => {
+        assertInvocation(input.descriptor, input.route);
+        const v = select(input.descriptor);
+        v.values.run(v.document.exact.checks ?? [], environment(v, input));
+        return { amountOut: 0n, evidence: evidence(input, 0n) };
+      }),
+      { id: selected.document.exact.methodId, kind: "request-program" as const,
         ...(provenance?.sourceKind === "local-math"
           ? { trialState: selected.trialState ? { quote(input: ExactQuoteInput<Descriptor, Route>) {
               assertInvocation(input.descriptor, input.route);
@@ -442,6 +563,7 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
             const v = select(input.descriptor);
             requireAvailableExtension(v, "quoteFlow");
             requireAvailableExtension(v, "trialState");
+            v.values.run(v.document.exact.checks ?? [], environment(v, input));
             return requirements(v.document.exact.requirements, v.quoteFlow?.program.requirements(flowEnvironment(v, input)));
           },
           buildRequests(input) {
@@ -467,7 +589,18 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
             return v.quoteFlow.program.buildDependentProgram!({ ...input, programInput: env,
               initialResults: initialFlowResults(v.quoteFlow, env, input.initialResults) });
           },
-          decode({ programInput: input, initialResults: results, dependentEvidence }) {
+          decode: decodeExact,
+        },
+      },
+    ]);
+    },
+    cacheCompatibilityProjection: input => evalRoot(document.pricing.exactCompatibility, input),
+  };
+  function decodeExact({ programInput: input, initialResults: results, dependentEvidence }: {
+    programInput: ExactQuoteInput<Descriptor, Route>; initialResults: readonly AdapterRequestResult[]; dependentEvidence: readonly unknown[];
+  }) {
+            assertInvocation(input.descriptor, input.route);
+            select(input.descriptor).values.run(select(input.descriptor).document.exact.checks ?? [], environment(select(input.descriptor), input));
             if (input.amountIn === 0n) return { amountOut: 0n, evidence: evidence(input, 0n) };
             const v = select(input.descriptor), env = environment(v, { ...input, results, requestId: "exact-preview" });
             requireAvailableExtension(v, "quoteFlow");
@@ -482,23 +615,21 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
             if (typeof amountOut !== "bigint" || amountOut <= 0n) throw new Error("exact quote returned no output");
             const declaration = v.modules.get<DeclarativeQuoteFlow>("quoteFlow");
             if (v.quoteFlow && declaration && declaration.sourceKind !== "local-math") {
-              const proof = declaration.chainQuote as { step: string; requestId: string };
-              const observed = v.quoteFlow.requestEvidence(flowInput,
-                initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence, proof.step, proof.requestId);
-              verifyDeclarativeQuoteProof({ proof, sourceKind: declaration.sourceKind, ...observed,
+              verifyDeclarativeQuoteChain({ proof: declaration.chainQuote, sourceKind: declaration.sourceKind,
+                observation: proof => v.quoteFlow!.requestEvidence(flowInput,
+                  initialFlowResults(v.quoteFlow!, flowInput, results), dependentEvidence, proof.step, proof.requestId),
                 source: input.source, amountIn: input.amountIn, amountOut,
                 tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut, executor: input.executor });
             }
             const guardResult = guard(v, input, true, results);
             v.values.run(v.document.exact.outputChecks ?? [], { ...env, amountOut, guardResult });
-            return frozen(transition ?? { amountOut, evidence: evidence(input, amountOut) });
-          },
-        },
-      },
-    ]);
-    },
-    cacheCompatibilityProjection: input => evalRoot(document.pricing.exactCompatibility, input),
-  };
+            if (transition) return frozen(transition);
+            const context = v.quoteFlow ? v.quoteFlow.completedEnvironment(flowInput,
+              initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence) : env;
+            const fields = evidence({ ...context, ...input, quoteResult: output }, amountOut);
+            return frozen({ amountOut, evidence: v.document.exact.retainReadEvidence
+              ? { ...fields, readProof: { initialResults: results, dependentEvidence } } : fields });
+  }
   function executionProgram(input: Data) {
     const v = select(input.descriptor), env = environment(v, input);
     const spec = v.document.execution;
@@ -518,10 +649,20 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
     },
     buildFragment(input) {
       assertInvocation(input.descriptor, input.route);
-      const e = input.exactEvidence;
+      const e = input.exactEvidence, v = select(input.descriptor);
+      if (v.document.exact.unavailableReason) throw new Error(v.document.exact.unavailableReason);
+      let expected: Data;
+      if (v.document.exact.retainReadEvidence) {
+        data(e.readProof, "execution read proof");
+        shape(e.readProof, ["initialResults", "dependentEvidence"], [], "execution read proof");
+        const decoded = decodeExact({ programInput: { ...input, source: e.source } as any,
+          initialResults: e.readProof.initialResults, dependentEvidence: e.readProof.dependentEvidence });
+        if (decoded.amountOut !== input.quotedAmountOut) throw new Error("execution read proof amount mismatch");
+        expected = decoded.evidence;
+      } else expected = evidence({ ...input, source: e.source }, input.quotedAmountOut);
       if (e.executor !== undefined && !sameAddress(e.executor, input.executor)) throw new Error("execution actor/evidence mismatch");
       if (input.amountIn <= 0n || input.quotedAmountOut <= 0n ||
-          hashCanonical(e) !== hashCanonical(evidence({ ...input, source: e.source }, input.quotedAmountOut)))
+          hashCanonical(e) !== hashCanonical(expected))
         throw new Error("execution received incompatible exact evidence");
       const program = executionProgram({ ...input, source: e.source, recipient: input.executor, settlementRequested: false });
       return { requirements: [], nodes: [{ adapterId: input.route.adapterId, target: input.route.target,

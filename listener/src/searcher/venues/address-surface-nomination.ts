@@ -5,6 +5,13 @@ import type {
   UnifiedObservation,
 } from "./adapter-family-plugin.js";
 import type { CanonicalSource } from "./adapter-request-program.js";
+import type { CanonicalValue } from "./canonical-value.js";
+
+export interface NominationOpaqueInput {
+  readonly nomination: CaptureNominationInput;
+  readonly source: CanonicalSource;
+  readonly provider: CaptureNominationProvider;
+}
 
 const EIP1967_IMPLEMENTATION_SLOT =
   "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
@@ -21,6 +28,9 @@ const EIP1967_IMPLEMENTATION_SLOT =
 export function createAddressSurfaceNomination(input: {
   readonly opaqueLabels: readonly string[];
   readonly interfaceFingerprints: readonly string[];
+  /** Explicit opt-in. Opaque data nominates a candidate; it never admits one.
+   * Null means insufficient evidence. Existing callers still omit opaque. */
+  readonly resolveOpaque?: (input: NominationOpaqueInput) => Promise<CanonicalValue | null>;
 }): {
   nominate(input: {
     readonly nominations: readonly CaptureNominationInput[];
@@ -35,17 +45,19 @@ export function createAddressSurfaceNomination(input: {
       const results: UnifiedObservation[] = [];
       for (const nomination of nominations) {
         if (!matchesOpaqueLabel(nomination.opaque, labels)) continue;
-        const address = canonicalAddress(nomination.address);
         try {
-          const [code, implementationWord] = await Promise.all([
+          const address = canonicalAddress(nomination.address);
+          const [code, implementationWord, opaque] = await Promise.all([
             provider.getCode(address, source.number),
             provider.getStorage(
               address,
               EIP1967_IMPLEMENTATION_SLOT,
               source.number,
             ),
+            input.resolveOpaque?.({ nomination, source, provider }),
           ]);
           if (!ethers.isHexString(code) || code === "0x") continue;
+          if (input.resolveOpaque && opaque === null) continue;
           results.push(Object.freeze({
             kind: "address-surface" as const,
             source,
@@ -54,6 +66,7 @@ export function createAddressSurfaceNomination(input: {
             implementationWord: ethers.zeroPadValue(implementationWord, 32)
               .toLowerCase(),
             interfaceFingerprints: fingerprints,
+            ...(input.resolveOpaque ? { opaque: opaque! } : {}),
           }));
         } catch {
           // One unreadable nomination must not block the next one.

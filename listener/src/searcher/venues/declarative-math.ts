@@ -1,6 +1,8 @@
 import { assertModuleData, type ModuleBlock } from "./declarative-modules.js";
+import { immutableDeclarativeData } from "./declarative-immutable.js";
 
-export type MathValue = bigint | boolean | string | readonly MathValue[] | { readonly [key: string]: MathValue };
+export type MathMapKey = null | bigint | boolean | string | number;
+export type MathValue = MathMapKey | readonly MathValue[] | ReadonlyMap<MathMapKey, MathValue> | { readonly [key: string]: MathValue };
 /** A statically imported pure model. No transport, encoding, settlement or
  * protocol lookup belongs in this entry. The JSON selects an opaque ID/version. */
 export interface DeclarativeMathModel {
@@ -14,14 +16,7 @@ export interface MathBindings { readonly version: 1; readonly entries: Readonly<
 export type DeclarativeMathFunctions = Readonly<Record<string, (value: any) => any>>;
 const forbidden = new Set(["__proto__", "constructor", "prototype"]);
 function immutable(value: MathValue): MathValue {
-  if (["bigint", "boolean", "string"].includes(typeof value)) return value;
-  if (Array.isArray(value)) return Object.freeze(value.map(immutable));
-  if (!value || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype)
-    throw new Error("math values must be lossless, plain data");
-  return Object.freeze(Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(value)).map(([key, field]) => {
-    if (forbidden.has(key) || !("value" in field)) throw new Error("invalid math input property");
-    return [key, immutable(field.value)];
-  })));
+  return immutableDeclarativeData(value, "math");
 }
 export function createDeclarativeMathRegistry(models: readonly DeclarativeMathModel[]) {
   const entries = new Map<string, DeclarativeMathModel>();

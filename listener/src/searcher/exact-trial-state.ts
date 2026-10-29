@@ -18,6 +18,15 @@ interface State {
 const snapshots = new WeakMap<ExactTrialSnapshot, State>();
 const immutableValues = new WeakSet<object>();
 
+/** Shared data boundary for pure math and trial state. Reusing this issuer keeps
+ * readonly Map proxies interoperable with subsequent atomic state publication. */
+export function immutableExactTrialData<T>(value: T): T { return immutableData(value) as T; }
+/** Only locally issued immutable containers may use the readonly Map methods;
+ * arbitrary proxies must never impersonate one of our internal Map targets. */
+export function isImmutableExactTrialData(value: unknown): boolean {
+  return value !== null && typeof value === "object" && immutableValues.has(value);
+}
+
 /** A route composition failure, not evidence that an entire Family is broken. */
 export class ExactTrialStateConflictError extends Error {
   constructor(message: string) { super(message); this.name = "ExactTrialStateConflictError"; }

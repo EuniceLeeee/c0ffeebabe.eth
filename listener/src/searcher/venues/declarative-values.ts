@@ -1,3 +1,4 @@
+import { executorFromObservedSimulation, decodeDeclarativeExecutionSimulationReceipt } from "./declarative-simulation.js";
 import { Interface, getAddress, keccak256, ZeroAddress } from "ethers";
 import type { AdapterRequestResult } from "./adapter-request-program.js";
 import { RequiredAdapterRequestError } from "./adapter-request-failure.js";
@@ -18,9 +19,9 @@ export interface DeclarativeValuesDocument {
   readonly expressions: Record<string, Value>;
   readonly programs?: Record<string, readonly Value[]>;
 }
-const ops = new Set(["mul", "max", "program", "number", "lower", "unique", "decodeAll", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "model", "requestFailure"]);
+const ops = new Set(["simulationActor", "programReceipt", "mul", "max", "program", "number", "lower", "unique", "decodeAll", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "model", "requestFailure"]);
 const arity: Record<string, [number, number]> = Object.fromEntries([
-  ["mul", [2, 2]], ["max", [2, 2]],
+  ["simulationActor", [1, 1]], ["programReceipt", [1, 1]], ["mul", [2, 2]], ["max", [2, 2]],
   ...["number", "lower", "unique", "successful", "word", "bool", "objectEntries", "objectFromEntries"].map(k => [k, [1, 1]]), ["program", [2, 2]], ["pow", [2, 2]], ["decodeAll", [3, 3]],
   ...["uint", "address", "hash", "codeHash", "defined", "not", "length", "string", "sortId", "result", "returned", "code", "shape", "wordSurface", "source", "effects", "tokenDelta", "supplyDelta", "event", "requestFailure"].map(k => [k, [1, 1]]),
   ...["get", "sameAddress", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "omit", "at", "join", "assertSource", "maskHash", "matches", "expression", "math", "model"].map(k => [k, [2, 2]]),
@@ -103,6 +104,7 @@ export function compileDeclarativeValues(
   Object.keys(doc.expressions).forEach(name => check("expression", name));
   Object.keys(doc.programs ?? {}).forEach(name => check("program", name));
   let budget = 0;
+  let observations: { requests: readonly any[]; results: readonly AdapterRequestResult[] } = { requests: [], results: [] };
   function evaluateInternal(x: Value, env: Env): Value {
     if (++budget > 100000) throw new Error("declarative expression budget exceeded");
     if (typeof x === "string" && x.startsWith("$")) {
@@ -123,6 +125,19 @@ export function compileDeclarativeValues(
     if (!("op" in x)) return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, evaluateInternal(v, env)]).filter(([, v]) => v !== undefined));
     const args = x.args, e = (i: number) => evaluateInternal(args[i], env);
     switch (x.op) {
+      case "simulationActor":
+      case "programReceipt": {
+        const declaration = e(0);
+        const allowed = ["requestId", "source", "tokenIn", "amountIn", ...(x.op === "programReceipt" ? ["executor", "tokenOut"] : [])];
+        if (!declaration || typeof declaration !== "object" || Array.isArray(declaration) ||
+            Object.keys(declaration).some(key => !allowed.includes(key)) || typeof declaration.requestId !== "string")
+          throw new Error("simulation evidence must select an observed request id");
+        const requests = observations.requests.filter((request: any) => request.id === declaration.requestId);
+        const results = observations.results.filter((result: AdapterRequestResult) => result.id === declaration.requestId);
+        if (requests.length !== 1 || results.length !== 1) throw new Error("simulation evidence requires a unique observed request/result pair");
+        const input = { ...declaration, request: requests[0], result: results[0] };
+        return x.op === "simulationActor" ? executorFromObservedSimulation(input) : decodeDeclarativeExecutionSimulationReceipt(input);
+      }
       case "uint": return BigInt(e(0));
       case "number": { const v = Number(e(0)); if (!Number.isSafeInteger(v)) throw new Error("unsafe declaration number"); return v; }
       case "lower": return String(e(0)).toLowerCase();
@@ -237,8 +252,17 @@ export function compileDeclarativeValues(
     return undefined;
   }
   const prepare = (env: Env): Env => ({ missing: undefined, ...Object.fromEntries((doc.inputs ?? []).map(name => [name, undefined])), ...env, constants: doc.constants });
+  function invoke(env: Env, action: (prepared: Env) => Value): Value {
+    const previous = observations, previousBudget = budget;
+    // Observation authority comes from the public invocation, never a local
+    // JSON let/argument named requests or results. Nested evaluations restore it.
+    observations = { requests: Object.freeze([...(env.requests ?? [])]), results: Object.freeze([...(env.results ?? [])]) };
+    budget = 0;
+    try { return action(prepare(env)); }
+    finally { observations = previous; budget = previousBudget; }
+  }
   return Object.freeze({
-    evaluate(value: Value, env: Env): Value { budget = 0; return evaluateInternal(value, prepare(env)); },
-    run(statements: readonly Value[], env: Env): Value { budget = 0; return runInternal(statements, prepare(env)); },
+    evaluate(value: Value, env: Env): Value { return invoke(env, prepared => evaluateInternal(value, prepared)); },
+    run(statements: readonly Value[], env: Env): Value { return invoke(env, prepared => runInternal(statements, prepared)); },
   });
 }

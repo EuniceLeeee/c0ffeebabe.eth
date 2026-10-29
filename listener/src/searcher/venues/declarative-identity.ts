@@ -21,7 +21,7 @@ export interface DeclarativeIdentityDocument {
   };
 }
 const forbidden = new Set(["__proto__", "prototype", "constructor"]);
-const reserved = new Set(["candidate", "evidence", "results", "profile", "constants", "missing", "index"]);
+const reserved = new Set(["requests", "step", "executionRoundingRawUnits", "candidate", "evidence", "results", "profile", "constants", "missing", "index"]);
 function binding(name: string): void {
   if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(name) || reserved.has(name) || forbidden.has(name)) throw new Error("invalid declarative binding");
 }
@@ -32,13 +32,14 @@ export function compileDeclarativeIdentity<C extends FamilyCandidate, I extends 
   profile: { id: string; familyId: I["familyId"]; lineageId: I["lineageId"]; parameters?: Readonly<Record<string, unknown>>; kind?: IdentityVariantKind },
   math: Readonly<Record<string, (value: bigint) => bigint>> = {},
   models: Readonly<Record<string, (value: any) => any>> = {},
+  materializeRequests?: (requests: readonly Value[], environment: Env) => readonly AdapterRequest[],
 ): IdentityVariant<C, I, unknown> {
   if (profile.kind !== undefined && !["factory-child", "registry-member", "standalone-contract", "singleton-subinstance", "custom"].includes(profile.kind))
     throw new Error("unknown declarative identity kind");
   validateDeclarativeValue(raw);
   if (Object.keys(raw).some(key => !["version", "inputs", "scope", "abi", "constants", "discovery", "expressions", "programs", "identity"].includes(key)))
     throw new Error("unknown definition field");
-  const roots = new Set(["candidate", "evidence", "results", "profile", "constants", "missing", "index", "error"]);
+  const roots = new Set(["requests", "step", "executionRoundingRawUnits", "candidate", "evidence", "results", "profile", "constants", "missing", "index", "error"]);
   for (const name of raw.inputs ?? []) { binding(name); roots.add(name); }
   function visit(value: Value, fn: (value: Value) => void): void {
     fn(value);
@@ -86,25 +87,28 @@ export function compileDeclarativeIdentity<C extends FamilyCandidate, I extends 
   const values = compileDeclarativeValues(doc, math, models);
   const evaluate = values.evaluate, run = values.run;
   const environment = (step: Value, results: readonly AdapterRequestResult[] = []) => ({ candidate: step.candidate,
-    evidence: step.evidence, results, missing: undefined, profile: { id: profile.id, familyId: profile.familyId, lineageId: profile.lineageId, ...profile.parameters }, constants: doc.constants });
+    evidence: step.evidence, step: step.step, executionRoundingRawUnits: step.executionRoundingRawUnits, results, missing: undefined, profile: { id: profile.id, familyId: profile.familyId, lineageId: profile.lineageId, ...profile.parameters }, constants: doc.constants });
   const stage = (step: Value) => {
     const id = run(doc.identity.select, environment(step));
     if (!Object.prototype.hasOwnProperty.call(doc.identity.stages, id)) throw new Error("unknown declared identity stage");
     return doc.identity.stages[id];
   };
+  function buildRequests(step: Value): readonly AdapterRequest[] {
+    const selected = stage(step), env = environment(step);
+    const declared = evaluate(selected.requests, env);
+    const requests = materializeRequests ? materializeRequests(declared, env) : declared;
+    if (!Array.isArray(requests) || new Set(requests.map((r: AdapterRequest) => r.id)).size !== requests.length)
+      throw new Error("duplicate declared request id");
+    return freeze(requests);
+  }
   return {
     id: profile.id, kind: profile.kind ?? "standalone-contract", lineageId: profile.lineageId, applies: () => true,
-    requirements: step => stage(step).requirements,
-    buildRequests: step => {
-      const selected = stage(step);
-      const requests = evaluate(selected.requests, environment(step)) as AdapterRequest[];
-      if (!Array.isArray(requests) || new Set(requests.map(r => r.id)).size !== requests.length) throw new Error("duplicate declared request id");
-      return freeze(requests);
-    },
+    requirements: step => freeze(evaluate(stage(step).requirements, environment(step))),
+    buildRequests,
     decode: ({ step, results }) => {
       const selected = stage(step);
       for (const result of results) if (!result.ok && !selected.optionalFailures?.includes(result.id)) throw new RequiredAdapterRequestError(result);
-      return freeze(run(selected.decode, environment(step, results)));
+      return freeze(run(selected.decode, { ...environment(step, results), requests: buildRequests(step) }));
     },
     decide: step => { return freeze(run(doc.identity.decide, environment(step))); },
   };

@@ -1,3 +1,4 @@
+import { immutableDeclarativeData } from "./declarative-immutable.js";
 import type { BoundRequestProgram, DependentRequestProgram } from "./adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource, RequestRequirements } from "./adapter-request-program.js";
 import { RequiredAdapterRequestError } from "./adapter-request-failure.js";
@@ -31,18 +32,7 @@ function keys(value: unknown, allowed: readonly string[], label: string): assert
     Object.keys(value).length !== allowed.length || Object.keys(value).some(key => !allowed.includes(key)))
     throw new Error(`invalid ${label}`);
 }
-function freeze<T>(value: T): T {
-  if (Array.isArray(value)) return Object.freeze(value.map(freeze)) as T;
-  if (value && typeof value === "object") {
-    if (Object.getPrototypeOf(value) !== Object.prototype) throw new Error("read-flow values must be plain data");
-    return Object.freeze(Object.fromEntries(Object.entries(Object.getOwnPropertyDescriptors(value)).map(([key, field]) => {
-      if (forbidden.has(key) || !("value" in field)) throw new Error("invalid read-flow data property");
-      return [key, freeze(field.value)];
-    }))) as T;
-  }
-  if (typeof value === "function" || typeof value === "symbol") throw new Error("read-flow values must be data");
-  return value;
-}
+function freeze<T>(value: T): T { return immutableDeclarativeData(value, "trial"); }
 function source(value: CanonicalSource): CanonicalSource {
   if (!value || !Number.isSafeInteger(value.number) || value.number < 0 ||
     !Number.isSafeInteger(value.generation) || value.generation < 0 || !/^0x[0-9a-fA-F]{64}$/.test(value.hash))
@@ -78,7 +68,8 @@ export function validateDeclarativeReadFlow(raw: unknown): asserts raw is Declar
 /** JSON owns the ordered dependency rounds. The returned program declares
  * work to the existing issuer/scheduler; it performs no transport or scheduling.
  * Each invocation is reconstructed from its source-bound prior round evidence. */
-export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues) {
+export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues,
+  materializeRequests?: (requests: readonly Value[], environment: Record<string, Value>) => readonly AdapterRequest[]) {
   validateDeclarativeReadFlow(raw);
   const copied: DeclarativeReadFlow = JSON.parse(JSON.stringify(raw));
   const definition = freeze({ ...copied, steps: copied.steps.map(step => ({ ...step,
@@ -101,7 +92,9 @@ export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues)
     return { ...input, steps: checked, results };
   };
   function requestsAt(index: number, input: ReadFlowInput, steps: Record<string, Value>, seen: ReadonlySet<string>) {
-    const requests = values.evaluate(definition.steps[index]!.requests, env(input, steps));
+    const environment = env(input, steps);
+    const declared = values.evaluate(definition.steps[index]!.requests, environment);
+    const requests = materializeRequests ? materializeRequests(declared, environment) : declared;
     if (!Array.isArray(requests) || requests.some(request => !request || typeof request !== "object" ||
       typeof request.id !== "string" || !request.id.length || seen.has(request.id)) ||
       new Set(requests.map(request => request.id)).size !== requests.length)
@@ -119,7 +112,7 @@ export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues)
       if (!result.ok && requests.find(request => request.id === result.id)!.required !== false)
         throw new RequiredAdapterRequestError(result);
     }
-    const output = values.run(definition.steps[index]!.decode, env(input, steps, results));
+    const output = values.run(definition.steps[index]!.decode, { ...env(input, steps, results), requests });
     if (output === undefined) throw new Error("read-flow step returned undefined");
     return freeze(output);
   }
@@ -180,6 +173,11 @@ export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues)
   return Object.freeze({ program,
     start: (input: ReadFlowInput) => bound(0, input, {}, new Set()),
     stepIds: Object.freeze(definition.steps.map(step => step.id)),
+    completedEnvironment(input: ReadFlowInput, initial: readonly AdapterRequestResult[], dependent: readonly unknown[]) {
+      if (dependent.length !== definition.steps.length - 1) throw new Error("read-flow is incomplete");
+      const { steps } = reconstruct(input, initial, dependent);
+      return env(input, steps, initial);
+    },
     observedResults(input: ReadFlowInput, initial: readonly AdapterRequestResult[], dependent: readonly unknown[]) {
       if (dependent.length !== definition.steps.length - 1) throw new Error("read-flow is incomplete");
       return freeze(reconstruct(input, initial, dependent).evidence.map(item => item.result));

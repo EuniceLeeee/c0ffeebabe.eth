@@ -242,7 +242,7 @@ ERC4626 是 1 个 Family：主 `erc4626.json` 与 Custodian/InfiniFi 两个子 J
 - 为具体协议写 JSON、注册纯 TS 数学模型及版本；两个数学注册清单目前不含新的协议业务模型。
 - 迁移 retained reverse-discovery 需先核对既有公共能力；当前声明式发现的该接口仍明确 unsupported，identity 阶段的链上关系证明不能冒称已实现反向发现。
 - 队列、非即时资产、多资产路线及原生币 effect proof 等具体语义须逐项核对；目前 effect quote proof 只对 ERC20 扣款/到账给出支持，不泛化为 native 证明。
-- 新 trial-state 数学边界目前仅接受普通对象/数组；含 `Map` 的旧状态会明确拒绝，尚无通用表示转换器，因此不能把 xWin 的现有组合回归写成 xWin 已完成 JSON 迁移。
+- 更新于 2026-10-29：trial-state 数学边界已支持嵌套只读 `Map`，共用原状态冻结器和提交器，保留类型与依赖失效语义。旧 xWin 数学/组合回归不能替代 xWin 的 JSON 协议迁移验收。
 - 保留每族原版本/方向/变体和已有有效证据，补新增能力对应的原测试；没有实际实例的变体按既定口径记录，不强造通过。
 - 完成状态仍由既有验收报告维护。本轮不引入新的事实 producer，不把 `compiled` 写成“适配已通过”，不自动跑 live。
 
@@ -254,3 +254,19 @@ ERC4626 是 1 个 Family：主 `erc4626.json` 与 Custodian/InfiniFi 两个子 J
 - 测试前后未更改任何具体协议 JSON；未运行新 live、协议链上验收或性能测试。结果只证明公共框架与现有接线合同，不能推导 33 个 Protocol 已迁移。
 
 本地证据目录 `logs/protocol-json-framework-20261028/`；云端同名目录保留全部初次失败、修复后成功、原生成清单和日志。历史盘点的旧 `sourcePins` 原样保留；本次框架指纹与验证范围另记在同名 JSON 的 `implementationReceipt`。当前含其他未提交代码的云端清单与提交内容清单分别按各自真实源码生成，不手改旧 hash 过门。
+
+
+## 9. 2026-10-29 迁移窗口缺口回填
+
+在本窗口原云端工作区补公共 TS，另一迁移工作区及其 JSON/未提交修改只读保留。此次不迁移具体协议、不改 Family 默认、不启动 live。
+
+- G1：两版发现定义的空 `candidateSources` 不再投影为无效的生产字段；插件自身仍拒绝无效声明。原 wstETH/Rocksolid 草稿有完整注册失败→通过对照。
+- G2/G4：有序 view 报价证明链与中间观测证据；可选 retained read proof 在 quoted 执行前重新核验。
+- G3/G6：明确未提供 Exact 时保留独立价格能力；JSON 申明逐方向零价/不可用原因；RPC/缺结果仍失败，不能包装成有效价格。
+- G5：opaque/来源字段、optional/nullable 字段、仅作提名线索的日志及固定 source 的提名读取流程。
+- G7：已验证实例数据驱动的方向列表、稳定键/额外绑定字段、逐方向价格状态组；失效索引保留 opaque key。深不可变实例复用投影。
+- G8：纯数学/读取结果/试算状态支持不可变嵌套 Map，复用现有状态签发与提交机制。
+- G9：身份与报价流程可把同一执行动作编译成 executor-program 模拟请求；共用代码按实际 request ID 取真实观测，不允许 JSON 伪造或局部遮蔽 receipt。
+- G10：Compound 的 prefix、revert 分类与跨轮来源属于草稿需要补回的声明；exchange-rate 中间证据已有公共入口。原失败断言继续保留，尚未把 Compound 重新迁移/验收。
+
+详细字段、调用点、测试范围和仍不支持的组合见 [公共框架缺口交付与迁移接口](protocol-json-framework-gaps-20261029.md)。新增字段是显式 opt-in；旧三个 ERC4626 JSON 未改。`trialState + retainReadEvidence` 暂不支持并在注册时明确拒绝，不能登记为已编译能力。

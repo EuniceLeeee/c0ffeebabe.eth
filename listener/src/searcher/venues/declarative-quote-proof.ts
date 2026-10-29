@@ -116,3 +116,45 @@ export function verifyDeclarativeQuoteProof(input: {
   if (delta(tokenIn) !== -amountIn || delta(tokenOut) !== amountOut)
     throw new Error("chain quote proof input debit or output receipt mismatch");
 }
+
+/** Ordered view conversions: the output of each issued call is the input of
+ * the next. JSON selects calls and ABI fields, never computes proof amounts. */
+export type DeclarativeQuoteChain = DeclarativeQuoteProof | { readonly steps: readonly DeclarativeQuoteProof[] };
+export function quoteProofSteps(raw: unknown, kind: DeclarativeQuoteSource): readonly DeclarativeQuoteProof[] {
+  record(raw);
+  if (!Object.hasOwn(raw, "steps")) {
+    validateDeclarativeQuoteProof(raw, kind);
+    return [raw];
+  }
+  if (kind !== "view" || Object.keys(raw).length !== 1 || !Array.isArray(raw.steps) ||
+      raw.steps.length < 2 || raw.steps.length > 128) throw new Error("invalid ordered chain quote proof");
+  const seen = new Set<string>();
+  for (const step of raw.steps) {
+    validateDeclarativeQuoteProof(step, kind);
+    const key = `${step.step}:${step.requestId}`;
+    if (seen.has(key)) throw new Error("duplicate chain quote proof request");
+    seen.add(key);
+  }
+  return raw.steps;
+}
+export function verifyDeclarativeQuoteChain(input: Omit<Parameters<typeof verifyDeclarativeQuoteProof>[0], "proof" | "request" | "result"> & {
+  readonly proof: unknown;
+  readonly observation: (proof: DeclarativeQuoteProof) => { request: AdapterRequest; result: AdapterRequestResult };
+}): void {
+  const steps = quoteProofSteps(input.proof, input.sourceKind);
+  let amount = input.amountIn;
+  for (let index = 0; index < steps.length; index++) {
+    const proof = steps[index]!, observed = input.observation(proof);
+    let output = input.amountOut;
+    if (index < steps.length - 1) {
+      if (!observed.result.ok) throw new Error("chain quote proof lacks successful intermediate result");
+      const fragment = FunctionFragment.from(proof.signature!);
+      const abi = new Interface([fragment]);
+      const value = atPath(abi.decodeFunctionResult(fragment, observed.result.data), proof.outputPath!);
+      if (typeof value !== "bigint") throw new Error("chain quote proof intermediate amount is invalid");
+      output = value;
+    }
+    verifyDeclarativeQuoteProof({ ...input, proof, ...observed, amountIn: amount, amountOut: output });
+    amount = output;
+  }
+}
