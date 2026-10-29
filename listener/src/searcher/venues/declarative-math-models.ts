@@ -1,4 +1,5 @@
 import { arcanaAmountMathModel } from "./arcana-migration-math.js";
+import { badgerSettWithdrawMathModel } from "./badger-sett-withdraw-math.js";
 import { boringWithdrawOutMathModel } from "./boring-vault-teller-math.js";
 import { compoundCTokenExchangeRateMathModel } from "./compound-ctoken-math.js";
 import { createDeclarativeMathRegistry, type DeclarativeMathModel } from "./declarative-math.js";
@@ -29,6 +30,7 @@ const models: readonly DeclarativeMathModel[] = [
   originOusdMintQuoteMathModel,
   originStethArmQuoteMathModel,
   arcanaAmountMathModel,
+  badgerSettWithdrawMathModel,
   boringWithdrawOutMathModel,
   defaultCollateralQuoteMathModel,
 ];

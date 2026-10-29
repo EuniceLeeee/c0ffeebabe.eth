@@ -10,7 +10,6 @@ import { instanceKey } from "../../../adapter-family-identifiers.js";
 import { plugin } from "../../../production-families/badger-sett-withdraw.production.js";
 import { CODE, VAULT, STRATEGY, TOKEN, LOCKER, ADMIN_SLOT, IMPLEMENTATION_SLOT, address } from "../codec.js";
 import { FAMILY, LINEAGE } from "../manifest.js";
-import { program } from "../exact.js";
 import type { Binding, Descriptor, State } from "../types.js";
 import type { PublicState } from "./export-public-state.js";
 // Only committed, allowlisted public fields are loaded here. The optional raw
@@ -116,7 +115,13 @@ export const input = (f = fixture(), amountIn = 10n ** 18n, at = source()) => {
   const d = descriptor(f), r = plugin.routes.project({ descriptor: d })[0];
   return { descriptor: d, route: r, amountIn, source: at, executor: actor, runtimeEvidence: [] };
 };
+export function exactProgram(i = input()) {
+  const method = plugin.exact.methods(i).find(m => m.kind === "request-program");
+  if (!method || !method.program) throw new Error("declarative exact program unavailable");
+  return method.program;
+}
 export async function collect(f = fixture(), i = input(f)) {
+  const program = exactProgram(i);
   const initialResults = await read(f, program.buildRequests(i), i.source), dependentEvidence: unknown[] = [];
   for (let completedRound = 0; completedRound < 4; completedRound++) {
     const round = program.buildDependentProgram!({ programInput: i, completedRound, initialResults, priorEvidence: dependentEvidence });

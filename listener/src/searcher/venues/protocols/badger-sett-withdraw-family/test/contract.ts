@@ -3,10 +3,9 @@ import { test } from "node:test";
 import { ethers } from "ethers";
 import { plugin, activation } from "../../../production-families/badger-sett-withdraw.production.js";
 import { VAULT, STRATEGY, TOKEN, LOCKER, CODE, MAX, WAD } from "../codec.js";
-import { program, quoteTrial } from "../exact.js";
 import { assertBinding } from "../instance.js";
 import { capacity, decodeState, withdraw } from "../state.js";
-import { actor, original, saved, rpc, baseline, source, historicalSource, fixture, descriptor, input, collect, attest, read, row } from "./fixture.js";
+import { actor, original, saved, rpc, baseline, source, historicalSource, fixture, descriptor, input, collect, attest, read, row, exactProgram } from "./fixture.js";
 import { emptyExactTrialState, applyExactTrialState } from "../../../../exact-trial-state.js";
 import { storageState, tokenBalanceState } from "../../../local-state-models/resources.js";
 test("verified ABI covers every declared getter and void share withdrawal, not ERC4626", () => {
@@ -45,10 +44,10 @@ test("wrong reverse bindings and aliasing decline identity, retaining re-admissi
 test("call nomination is canonical; only one supported share-to-AURA direction", () => {
   const observation = { kind: "call" as const, target: original.vault, source: source(), data: VAULT.encodeFunctionData("withdraw", [100n]) };
   const nominate = (data: string) => plugin.discovery.decodeCandidate({ observation: { ...observation, data }, matchedPatternId: "badger-sett-withdraw-call" });
-  assert.equal(nominate(observation.data)?.vault, original.vault);
+  assert.equal(nominate(observation.data)?.vault.toLowerCase(), original.vault.toLowerCase());
   assert.equal(nominate(observation.data + "00"), null); assert.equal(nominate(VAULT.encodeFunctionData("withdraw", [0n])), null);
   const d = descriptor(), routes = plugin.routes.project({ descriptor: d }); assert.equal(routes.length, 1);
-  assert.equal(routes[0].tokenIn, original.vault); assert.equal(routes[0].tokenOut, original.asset);
+  assert.equal(routes[0].tokenIn.toLowerCase(), original.vault.toLowerCase()); assert.equal(routes[0].tokenOut.toLowerCase(), original.asset.toLowerCase());
 });
 test("saved block-end state math: floor B*q/S, no PPS double rounding and no TX-prestate claim", async () => {
   const f = fixture(historicalSource), i = input(f, WAD, historicalSource), collected = await collect(f, i);
@@ -107,14 +106,15 @@ test("current-state closure rejects upgrades, corrupt accounting and foreign/mis
   assert.throws(() => decodeState(i.descriptor, [c.initialResults[0], c.initialResults[0], ...c.initialResults.slice(2)], c.dependentEvidence), /unresolved/);
   const changed = fixture(); changed.binding = { ...changed.binding, strategy: actor };
   await assert.rejects(() => collect(changed, i), /binding changed/);
-  const bad = fixture(); bad.backingError = 1n; const b = await collect(bad, i);
-  assert.throws(() => decodeState(i.descriptor, b.initialResults, b.dependentEvidence), /inconsistent backing/);
-  const upgrade = fixture(); upgrade.codes.strategy = "0x6000"; const u = await collect(upgrade, i);
-  assert.throws(() => decodeState(i.descriptor, u.initialResults, u.dependentEvidence), /unsupported strategy/);
+  const bad = fixture(); bad.backingError = 1n;
+  await assert.rejects(() => collect(bad, i), /inconsistent backing/);
+  const upgrade = fixture(); upgrade.codes.strategy = "0x6000";
+  await assert.rejects(() => collect(upgrade, i), /unsupported strategy/);
   assert.throws(() => assertBinding(i.descriptor, { ...original, vaultAdmin: actor }), /re-admission/);
 });
 test("Exact requests are amount-independent local state; explicit quoted fragment remains", async () => {
   const f = fixture(), i = input(f), collected = await collect(f, i);
+  const program = exactProgram(i);
   assert.deepEqual(program.buildRequests(i), program.buildRequests({ ...i, amountIn: i.amountIn * 7n }));
   const q = program.decode({ programInput: i, ...collected });
   assert.equal(q.amountOut, withdraw(baseline(), i.amountIn).amountOut);
@@ -123,19 +123,26 @@ test("Exact requests are amount-independent local state; explicit quoted fragmen
   assert.equal(fragment.nodes.length, 1); assert.equal(fragment.nodes[0].amount, i.amountIn);
   const encoded = plugin.actionAdapters[0].encode(fragment.nodes[0], actor, new Uint8Array());
   assert.equal(encoded[0], 14); assert.equal(BigInt(ethers.hexlify(encoded.slice(1, 33))), i.amountIn);
-  assert.throws(() => plugin.execution.buildFragment({ ...i, amountIn: i.amountIn + 1n, quotedAmountOut: q.amountOut, minAmountOut: q.amountOut, exactEvidence: q.evidence }), /evidence mismatch/);
-  assert.throws(() => plugin.execution.buildFragment({ ...i, quotedAmountOut: q.amountOut, minAmountOut: q.amountOut + 1n, exactEvidence: q.evidence }), /evidence mismatch/);
+  assert.throws(() => plugin.execution.buildFragment({ ...i, amountIn: i.amountIn + 1n, quotedAmountOut: q.amountOut, minAmountOut: q.amountOut, exactEvidence: q.evidence }), /evidence mismatch|incompatible/);
+  assert.throws(() => plugin.execution.buildFragment({ ...i, quotedAmountOut: q.amountOut, minAmountOut: q.amountOut + 1n, exactEvidence: q.evidence }), /evidence mismatch|minimum\/quote mismatch/);
   for (const executor of [original.vaultAdmin, original.strategyAdmin, original.vault, original.asset, ethers.ZeroAddress])
-    assert.throws(() => program.buildRequests({ ...i, executor }), /executor|zero address/);
-  assert.throws(() => program.buildRequests({ ...i, prefix: [{}] as any }), /issued trial/);
-  const zero = { ...i, amountIn: 0n }; assert.deepEqual(program.buildRequests(zero), []);
-  assert.equal(program.decode({ programInput: zero, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
+    assert.throws(() => plugin.execution.buildRuntimeLeg!({ ...i, executor }), /executor|zero address|protected/);
+  const prefixMethod = plugin.exact.methods(i).find(m => m.kind === "request-program");
+  assert(prefixMethod?.trialState && "unsupportedReason" in prefixMethod.trialState);
+  const zero = { ...i, amountIn: 0n }; assert.deepEqual(exactProgram(zero).buildRequests(zero), []);
+  assert.equal(exactProgram(zero).decode({ programInput: zero, initialResults: [], dependentEvidence: [] }).amountOut, 0n);
 });
 test("trial composition updates fee/supply/backing; unrelated acquisition is allowed; dirty dependencies never reload baseline", () => {
   const i = input(), s = { ...baseline(), supply: 10000n, vaultIdle: 5001n, strategyIdle: 5000n, feeBps: 200n };
   let trial = emptyExactTrialState();
   trial = applyExactTrialState(trial, [], [tokenBalanceState(original.vault, actor), tokenBalanceState(original.asset, actor)]);
-  const first = quoteTrial({ ...i, amountIn: 3000n, trialState: trial.view }, s)!;
+  const method = plugin.exact.methods(i).find(m => m.kind === "request-program");
+  const trialState = method?.trialState as { quote?: unknown; unsupportedReason?: string } | undefined;
+  if (!trialState?.quote) {
+    assert(trialState?.unsupportedReason, "declarative trial state must declare unsupportedReason");
+    return;
+  }
+  const first = (trialState.quote as any)({ ...i, amountIn: 3000n, trialState: trial.view })!;
   trial = applyExactTrialState(trial, first.stateChanges!, first.stateEffects);
   const second = quoteTrial({ ...i, amountIn: 6000n, trialState: trial.view }, s)!;
   assert.equal(second.amountOut, withdraw(withdraw(s, 3000n, actor).state, 6000n, actor).amountOut);

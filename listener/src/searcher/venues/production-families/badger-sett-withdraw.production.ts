@@ -1,15 +1,12 @@
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/protocols/badger-sett-withdraw-family/badger-sett-withdraw.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
-import { manifest } from "../protocols/badger-sett-withdraw-family/manifest.js";
-import { discovery } from "../protocols/badger-sett-withdraw-family/discovery.js";
-import { identity } from "../protocols/badger-sett-withdraw-family/identity.js";
-import { instance } from "../protocols/badger-sett-withdraw-family/instance.js";
-import { routes } from "../protocols/badger-sett-withdraw-family/routes.js";
-import { pricing } from "../protocols/badger-sett-withdraw-family/pricing.js";
-import { exact } from "../protocols/badger-sett-withdraw-family/exact.js";
-import { execution } from "../protocols/badger-sett-withdraw-family/execution.js";
-import { protocol } from "../protocols/badger-sett-withdraw-family/protocol.js";
-import { capture } from "../protocols/badger-sett-withdraw-family/capture.js";
-import { action } from "../protocols/badger-sett-withdraw-family/action.js";
-export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [action] });
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_BADGER_SETT_WITHDRAW_ENABLED" });
+import { compileDeclarativeProtocol } from "../declarative-protocol.js";
+import type { FamilyTypes } from "../../generated/declarative-family-types/badger-sett-withdraw.generated.js";
+import definition from "../protocols/badger-sett-withdraw-family/badger-sett-withdraw.json";
+
+export const activation = defineFamilyActivation({"enabled":true,"envKey":"SEARCHER_FAMILY_BADGER_SETT_WITHDRAW_ENABLED"});
+
+export const plugin = defineProtocolFamily(compileDeclarativeProtocol<FamilyTypes>(definition, []));

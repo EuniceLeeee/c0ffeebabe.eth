@@ -9,10 +9,10 @@ import { actor, original, fixture, descriptor, input, dataFor } from "./fixture.
 import type { Fixture } from "./fixture.js";
 // Independent VM instruction interpretation + a small native-call fixture.
 // This is NOT EVM execution, original TX replay, historical parity, or live acceptance.
-function run(f: Fixture, amount: bigint, options: { short?: bigint; bonus?: bigint; extraBurn?: bigint; minimum?: bigint } = {}) {
+function runProgram(programHex: string, f: Fixture, amount: bigint, options: { short?: bigint; bonus?: bigint; extraBurn?: bigint; minimum?: bigint } = {}) {
   const d = descriptor(f), beforeShares = f.shares, beforeAura = f.aura;
   let calls = 0;
-  const result = inspectRuntime(ethers.hexlify(withdrawProgram(d, actor, options.minimum).bytes()), amount, { call(c) {
+  const result = inspectRuntime(programHex, amount, { call(c) {
     assert.equal(c.value, 0n); assert.equal(c.incoming, 0); assert.equal(c.outgoing, 0);
     if (c.target.toLowerCase() === d.vault && c.data.startsWith(VAULT.getFunction("withdraw")!.selector)) {
       assert.equal(c.static, false); assert.deepEqual(c.patches, [{ offset: 4, reg: 0 }]);
@@ -32,16 +32,20 @@ function run(f: Fixture, amount: bigint, options: { short?: bigint; bonus?: bigi
       calls++; return "0x";
     }
     assert(c.static, "only one native mutation"); return dataFor(f, c.target, c.data);
-  } });
+  }, nativeBalance: () => 0n });
   assert.equal(calls, 1); assert.equal(result.allowances.length, 0); assert.equal(result.registers[0], amount);
   return { result, burned: beforeShares - f.shares, receipt: f.aura - beforeAura, oldAura: beforeAura };
 }
+function run(f: Fixture, amount: bigint, options: { short?: bigint; bonus?: bigint; extraBurn?: bigint; minimum?: bigint } = {}) {
+  return runProgram(ethers.hexlify(withdrawProgram(descriptor(f), actor, options.minimum).bytes()), f, amount, options);
+}
 test("runtime construction precedes Exact and has zero offchain amount/quote/provider access", () => {
-  const i = input();
+  const i = input(); const amount = i.amountIn;
   for (const key of ["amountIn", "quotedAmountOut", "minAmountOut", "exactEvidence", "quote", "provider", "rpc"])
     Object.defineProperty(i, key, { get() { throw new Error("forbidden offchain " + key); } });
   const leg = plugin.execution.buildRuntimeLeg!(i); assert(leg);
-  assert.equal(leg.program, ethers.hexlify(withdrawProgram(i.descriptor, actor).bytes()));
+  const semantic = runProgram(leg.program, fixture(), amount);
+  assert.equal(semantic.burned, amount); assert(semantic.receipt > 0n);
   assert.throws(() => plugin.execution.buildRuntimeLeg!({ ...input(), route: { ...input().route, tokenOut: actor } }), /route binding/);
   for (const executor of [original.vault, original.strategy, original.vaultAdmin, original.strategyAdmin, original.asset, ethers.ZeroAddress])
     assert.throws(() => plugin.execution.buildRuntimeLeg!({ ...input(), executor }), /executor|zero address/);
