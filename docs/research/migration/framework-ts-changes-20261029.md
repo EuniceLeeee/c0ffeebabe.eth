@@ -136,3 +136,86 @@ npm run family-capability-manifest:check
 node --import tsx --test src/searcher/test/declarative-*.test.ts
 # 对应 family 契约/lifecycle
 ```
+
+---
+
+## 五、按 app-run2 上架范围收敛（2026-10-29 二次修订）
+
+app-run2 `production-families` 中 `enabled: true` 的非 swap 协议族：
+`astra-multitoken, badger-sett-withdraw, eigenpie, erc4626-silo-redeem, erc4626,
+ethertoken-native-redeem, goldx, metronome-hgusdc, metronome-synth, psm, rocksolid,
+self-burn-native, set-redemption, token-conversion, token-migration, wsteth`。
+
+其中尚未适配通过的只有 5 个：**badger / token-migration / metronome-synth /
+set-redemption / token-conversion**。下面只针对这 5 个提改动；未上架族（compound、peapods、
+psv、curve-lp、yieldbasis、ondo、mellow、yearn、few-wrapped、olympus、metafactory、
+origin-*、arcana、boring、default-collateral）**暂不改 TS**。
+
+### P1. badger —— 不需要新模块（优先测试侧）
+- 现状：JSON 能表达；契约 12/16，失败全部来自测试 fixture 把声明式 route 喂给**手写**
+  `exact.ts/routes.ts`（`routes.ts:13` 的 `assertRoute`），以及地址 EIP-55 大小写。
+- 改动选择（二选一）：
+  - **推荐（测试侧，不改框架）**：`badger-sett-withdraw-family/test/fixture.ts` 的
+    `collect()` 改用 `plugin.exact.methods(input)` 返回的 `program`，不再 import `../exact.js`；
+    地址比较统一 `toLowerCase()`。
+  - 若必须保持测试原样：框架加 `routes.exact` 模式（不追加 `target/adapterId/direction`）
+    + 地址按声明大小写输出（`declarative-protocol.ts:100-109,220-232`）。
+- 结论：**框架零改动即可，优先测试适配**。
+
+### P2. token-migration —— 3 个小 API 兼容（约 20 行）
+1. `exact.methods` 顺序：现在 local-zero 永远在第一个（`declarative-protocol.ts:539-546`），
+   测试/消费方按 `methods[0]` 取正报价。改为：**local-zero 追加到末尾**，或允许
+   `exact.methodOrder` 声明。
+2. `pricing.static` 可省略：`finalizePricingDescriptor` 要求 `input.staticEvidence`
+   （`declarative-protocol.ts:412`），TS 该族没有 static 阶段。改为：JSON 未声明
+   `pricing.static` 时跳过该证据（或允许 `static: null`）。
+3. 错误文案：`declarative-identity.ts:108-111` 抛 typed `RequiredAdapterRequestError`，
+   测试断言 `/unresolved/`。改为：message 保留 `unresolved` 语义（如 `identity unresolved: ...`）
+   或允许 JSON 声明 `identity.unresolvedMessage`。
+- 结论：改 3 处编译器行为，风险低，改完 12/12。
+
+### P3. metronome-synth —— oracleVictim（1 个模块）
+- 位置：`build-declarative-production.ts:141` 拒绝 `protocol.oracleVictim`；
+  `adapter-family-plugin.ts:2461-2466,4698-4751` 要求同步 `oracleVictim.decode`。
+- 改法：v2 允许 `protocol.oracleVictim` 声明（含 decode 引用/已注册 victim 模型），
+  保持 hashed capability root 与能力清单不变。
+- 风险：中；victim 是 capability root，需补负例（错误 oracle/缺 decode 拒绝）。
+
+### P4. set-redemption —— 三项结构性能力
+1. **提名 fan-out + 双通道 + reverseBinding**
+   - `declarative-nomination.ts:62-66` 只允许单 opaque/null；
+   - `declarative-discovery.ts:266-272` txSeed 仅 tx-evidence。
+   - 改法：允许返回 opaque 数组（每元素一条 observation）、txSeed 与 address-surface 并存、
+     可选 reverseBinding 声明。
+2. **多资产执行 fan-out / 嵌套程序**
+   - `declarative-execution.ts:161-168` 强制一 debit 一 credit；`:26-33,244-298` 静态 steps；
+     `declarative-protocol.ts:650-671` 单 action node。
+   - 改法：steps 支持 `forEach: "$descriptor.components"` 动态展开，每项允许独立 debit/credit/effect；
+     允许嵌套 program 引用；补 log 断言操作。
+3. **direct-calldata action**
+   - `declarative-execution.ts:471-492` 只会编码 runtimeAmountProgram。
+   - 改法：允许 `action.encode: { signature, args }`（无 runtime 金额时直接 ABI 编码）。
+- 风险：高（执行图与提名预算），需要上限保护与负例。
+
+### P5. token-conversion —— 只读 runtime-proof（最后做）
+- 位置：`declarative-values.ts:22,217-218`（闭集 op，无字节码索引/循环）；
+  TS 依赖闭包是 EVM opcode 遍历（`variants.ts:32-49`、`asset-runtime.ts:20-47`）。
+- 改法：新增 sanctioned 只读 `runtimeProof` 操作（输出依赖集合），或注册“依赖闭包”证明模型；
+  严格只读、不进入执行路径、不承载 ABI/授权。
+- 风险：高；若投入不允许，该族保持 blocked（上架族里唯一可能长期阻塞的）。
+
+### 建议顺序与验收
+1. badger：测试 fixture 改造（不动框架）→ 契约 16/16；
+2. token-migration：P2 三处小改 → 契约 12/12；
+3. metronome-synth：P3 → 契约 + lifecycle；
+4. set-redemption：P4（分 3 小步，每步跑原契约）；
+5. token-conversion：P5（视投入）。
+
+每步之后：
+```
+npm run family-capability-manifest:generate
+npm run build:live
+npm run family-capability-manifest:check
+node --import tsx --test src/searcher/test/declarative-*.test.ts
+# 对应 family contract/lifecycle
+```
