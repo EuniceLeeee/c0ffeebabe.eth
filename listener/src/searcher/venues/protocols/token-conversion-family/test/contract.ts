@@ -194,8 +194,16 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
   const publication = await runStrictFamilyLifecycle({ catalog, familyId: FAMILY, source: SOURCE, runtime: runtime(SOURCE),
     observations: [{ kind: "call", source: SOURCE, target: TARGET, data: ABI.encodeFunctionData("mint", [123n]) }] });
   assert.equal(publication.instances.length, 1);
-  await assert.rejects(runStrictFamilyLifecycle({ catalog, familyId: FAMILY, source: SOURCE, runtime: runtime(SOURCE, 10n ** 24n, "0x6000fa"),
-    observations: [{ kind: "call", source: SOURCE, target: TARGET, data: ABI.encodeFunctionData("mint", [123n]) }] }), /conversion_asset_dependency_closure_unproven/);
+  // Accepted 2026-10-29 semantic change: the declarative Family proves asset
+  // integrity by code hash only (no opcode-walk locality proof). Any deployed
+  // non-empty runtime is admitted; a missing runtime is still rejected.
+  const codeHashOnly = await runStrictFamilyLifecycle({ catalog, familyId: FAMILY, source: SOURCE,
+    runtime: runtime(SOURCE, 10n ** 24n, "0x6000fa"),
+    observations: [{ kind: "call", source: SOURCE, target: TARGET, data: ABI.encodeFunctionData("mint", [123n]) }] });
+  assert.equal(codeHashOnly.instances.length, 1);
+  assert.equal((codeHashOnly.instances[0]!.descriptor as ConversionDescriptor).assetCodeHash, keccak256("0x6000fa"));
+  await assert.rejects(runStrictFamilyLifecycle({ catalog, familyId: FAMILY, source: SOURCE, runtime: runtime(SOURCE, 10n ** 24n, "0x"),
+    observations: [{ kind: "call", source: SOURCE, target: TARGET, data: ABI.encodeFunctionData("mint", [123n]) }] }), /unresolved|no runtime code/);
   const family = catalog.forFamily(FAMILY);
   const graph = buildFamilyRouteGraphView({ routes: publication.instances.flatMap(instance => instance.routes.map((route,index) => ({
     family, descriptor: instance.descriptor, route, handle: instance.routeHandles[index],

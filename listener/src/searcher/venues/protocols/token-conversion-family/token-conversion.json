@@ -1,0 +1,4833 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:token-conversion"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:token-conversion",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "token-conversion-mint",
+      "token-conversion-redeem"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "wrap"
+      },
+      {
+        "slotKind": "protocol",
+        "protocolAction": "redeem"
+      }
+    ],
+    "supportedLineages": [
+      "token-conversion:btb-bear-v1",
+      "token-conversion:xwin-allocations-v1"
+    ],
+    "poolAdapterIds": [
+      "token-conversion"
+    ],
+    "edgeAdapterIds": [
+      "token-conversion-mint",
+      "token-conversion-redeem"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "token-conversion",
+        "addressField": "target",
+        "fields": {
+          "target": "address",
+          "variantHint": "string"
+        },
+        "optionalFields": [
+          "variantHint"
+        ],
+        "key": [
+          "target"
+        ]
+      },
+      "calls": [
+        {
+          "id": "token-conversion-mint",
+          "signature": "function mint(uint256)",
+          "fields": {
+            "target": {
+              "from": "target"
+            },
+            "variantHint": {
+              "from": "literal",
+              "value": "btb-bear-v1"
+            }
+          },
+          "predicates": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                74
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "btb",
+                        "mint",
+                        [
+                          "$args.0"
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "token-conversion-redeem",
+          "signature": "function redeem(uint256)",
+          "fields": {
+            "target": {
+              "from": "target"
+            },
+            "variantHint": {
+              "from": "literal",
+              "value": "btb-bear-v1"
+            }
+          },
+          "predicates": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                74
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "btb",
+                        "redeem",
+                        [
+                          "$args.0"
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "token-conversion-deposit",
+          "signature": "function deposit(uint256,uint32)",
+          "fields": {
+            "target": {
+              "from": "target"
+            },
+            "variantHint": {
+              "from": "literal",
+              "value": "xwin-allocations-v1"
+            }
+          },
+          "predicates": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                138
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "xwin",
+                        "deposit",
+                        [
+                          "$args.0",
+                          "$args.1"
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "token-conversion-withdraw",
+          "signature": "function withdraw(uint256,uint32)",
+          "fields": {
+            "target": {
+              "from": "target"
+            },
+            "variantHint": {
+              "from": "literal",
+              "value": "xwin-allocations-v1"
+            }
+          },
+          "predicates": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                138
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "xwin",
+                        "withdraw",
+                        [
+                          "$args.0",
+                          "$args.1"
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [],
+      "surface": {
+        "id": "token-conversion-surface",
+        "fingerprint": "token-conversion:btb-bear-v1",
+        "fields": {
+          "target": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "token-conversion"
+      ],
+      "nomination": "address-surface"
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "abi": {
+        "btb": [
+          "function BTB_TOKEN() view returns(address)",
+          "function totalSupply() view returns(uint256)",
+          "function balanceOf(address) view returns(uint256)",
+          "function getStats() view returns(uint256 btbBalance,uint256 btbbSupply)",
+          "function approve(address,uint256) returns(bool)",
+          "function mint(uint256) returns(uint256)",
+          "function redeem(uint256) returns(uint256)",
+          "event Transfer(address indexed from,address indexed to,uint256 value)",
+          "event Minted(address indexed user,uint256 btbAmount,uint256 btbbAmount)",
+          "event Redeemed(address indexed user,uint256 btbbAmount,uint256 btbAmount)"
+        ],
+        "erc20": [
+          "function balanceOf(address) view returns(uint256)",
+          "function approve(address,uint256) returns(bool)"
+        ],
+        "xwin": [
+          "function baseToken() view returns(address)",
+          "function xWinSwap() view returns(address)",
+          "function priceMaster() view returns(address)",
+          "function lockingAddress() view returns(address)",
+          "function getTargetNamesAddress() view returns(address[])",
+          "function paused() view returns(bool)",
+          "function deposit(uint256,uint32) returns(uint256)",
+          "function withdraw(uint256,uint32) returns(uint256)"
+        ]
+      },
+      "constants": {
+        "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "sampleCap": "1000000000000000000",
+        "topics": {
+          "transfer": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+          "minted": "0x25b428dfde728ccfaddad7e29e4ac23c24ed7fd1a6e3e3f91894a9a073f5dfff",
+          "redeemed": "0xf3a670cd3af7d64b488926880889d08a8585a138ff455227af6737339a1ec262"
+        }
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "code",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "asset",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "code"
+              ]
+            }
+          },
+          {
+            "return": "sim",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "state"
+              ]
+            }
+          },
+          {
+            "return": "done"
+          }
+        ],
+        "stages": {
+          "code": {
+            "requirements": {
+              "transports": [
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
+              }
+            ],
+            "decode": [
+              {
+                "let": "observedCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "identity-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "attempt": [
+                  {
+                    "let": "asset",
+                    "value": {
+                      "op": "addressWord",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            "$observedCode",
+                            837,
+                            32
+                          ]
+                        },
+                        {
+                          "malformed": "unsupported conversion runtime",
+                          "zero": "unsupported conversion runtime"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "return": {
+                      "phase": "code",
+                      "asset": "$asset",
+                      "codeHash": {
+                        "op": "codeHash",
+                        "args": [
+                          "$observedCode"
+                        ]
+                      }
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "return": {
+                      "phase": "rejected"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "asset": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.asset"
+                  ]
+                }
+              },
+              {
+                "id": "identity-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "btb",
+                    "BTB_TOKEN",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "btb",
+                    "totalSupply",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-backing",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.asset"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "erc20",
+                    "balanceOf",
+                    [
+                      "$candidate.target"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        [
+                          "identity-asset-code",
+                          "identity-asset",
+                          "identity-supply",
+                          "identity-backing"
+                        ],
+                        "rowId",
+                        {
+                          "op": "successful",
+                          "args": [
+                            "$rowId"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "assetCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "identity-asset-code"
+                  ]
+                }
+              },
+              {
+                "let": "getter",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "btb",
+                    "BTB_TOKEN",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-asset"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$getter",
+                    "$evidence.asset"
+                  ]
+                },
+                "error": "conversion asset getter/code mismatch"
+              },
+              {
+                "let": "supply",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "btb",
+                    "totalSupply",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-supply"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "backing",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "erc20",
+                    "balanceOf",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-backing"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "sample",
+                "value": {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$constants.sampleCap"
+                      ]
+                    },
+                    {
+                      "op": "min",
+                      "args": [
+                        "$supply",
+                        "$backing"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "state",
+                  "asset": "$evidence.asset",
+                  "codeHash": "$evidence.codeHash",
+                  "assetCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$assetCode"
+                    ]
+                  },
+                  "sample": "$sample"
+                }
+              }
+            ]
+          },
+          "sim": {
+            "requirements": {
+              "transports": [
+                "effect-delta-simulation"
+              ],
+              "caller": "executor",
+              "effects": [
+                "return-data",
+                "token-delta",
+                "total-supply-delta",
+                "logs"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-mint",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {
+                      "kind": "executor"
+                    },
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.asset"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$candidate.target"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  },
+                  {
+                    "caller": {
+                      "kind": "executor"
+                    },
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.asset"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$candidate.target"
+                            ]
+                          },
+                          "$evidence.sample"
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.target"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "btb",
+                      "mint",
+                      [
+                        "$evidence.sample"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "address",
+                        "args": [
+                          "$evidence.asset"
+                        ]
+                      },
+                      "amount": "$evidence.sample"
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.asset"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.asset"
+                      ]
+                    },
+                    "account": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    }
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "logs"
+                ]
+              },
+              {
+                "id": "identity-redeem",
+                "kind": "effect-delta-simulation",
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.target"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "btb",
+                      "redeem",
+                      [
+                        "$evidence.sample"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "address",
+                        "args": [
+                          "$candidate.target"
+                        ]
+                      },
+                      "amount": "$evidence.sample"
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.asset"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.asset"
+                      ]
+                    },
+                    "account": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    }
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "logs"
+                ]
+              }
+            ],
+            "decode": [
+              {
+                "let": "mintResult",
+                "value": {
+                  "op": "returned",
+                  "args": [
+                    "identity-mint"
+                  ]
+                }
+              },
+              {
+                "let": "mintData",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    "$mintResult",
+                    "data"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "btb",
+                        "mint",
+                        "$mintData",
+                        0
+                      ]
+                    },
+                    "$evidence.sample"
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "mintEffects",
+                "value": {
+                  "op": "effects",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$mintResult",
+                        "effects"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "mintShares",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$mintEffects",
+                        "tokenDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$row",
+                            "token"
+                          ]
+                        },
+                        {
+                          "op": "address",
+                          "args": [
+                            "$candidate.target"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$mintShares"
+                      ]
+                    },
+                    1
+                  ]
+                },
+                "error": "missing or duplicate conversion share balance"
+              },
+              {
+                "let": "mintActor",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$mintShares",
+                        0
+                      ]
+                    },
+                    "account"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$mintActor",
+                            {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$mintActor",
+                            {
+                              "op": "address",
+                              "args": [
+                                "$evidence.asset"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt actor mismatch"
+              },
+              {
+                "let": "mintShareRows",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$mintEffects",
+                        "tokenDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "token"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "account"
+                              ]
+                            },
+                            "$mintActor"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$mintShareRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$mintShareRows",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "mul",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "1"
+                              ]
+                            },
+                            "$evidence.sample"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "mintAssetActorRows",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$mintEffects",
+                        "tokenDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "token"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$evidence.asset"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "account"
+                              ]
+                            },
+                            "$mintActor"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$mintAssetActorRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$mintAssetActorRows",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "mul",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "-1"
+                              ]
+                            },
+                            "$evidence.sample"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "mintAssetTargetRows",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$mintEffects",
+                        "tokenDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "token"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$evidence.asset"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "account"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$mintAssetTargetRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$mintAssetTargetRows",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "mul",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "1"
+                              ]
+                            },
+                            "$evidence.sample"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "mintSupply",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$mintEffects",
+                        "totalSupplyDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$row",
+                            "token"
+                          ]
+                        },
+                        {
+                          "op": "address",
+                          "args": [
+                            "$candidate.target"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$mintSupply"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$mintSupply",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "mul",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "1"
+                              ]
+                            },
+                            "$evidence.sample"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "mintEvents",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$mintEffects",
+                        "logs"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "address"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$row",
+                                    "topics"
+                                  ]
+                                },
+                                0
+                              ]
+                            },
+                            "$constants.topics.minted"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$mintEvents"
+                      ]
+                    },
+                    1
+                  ]
+                },
+                "error": "conversion lifecycle event mismatch"
+              },
+              {
+                "let": "mintEvent",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$mintEvents",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "mintUser",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$mintEvent",
+                            "topics"
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "mintAmount0",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$mintEvent",
+                            "data"
+                          ]
+                        },
+                        0,
+                        32
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "mintAmount1",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$mintEvent",
+                            "data"
+                          ]
+                        },
+                        32,
+                        32
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$mintUser",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$mintActor"
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion lifecycle event mismatch"
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$mintAmount0",
+                        "$evidence.sample"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$mintAmount1",
+                        "$evidence.sample"
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion lifecycle event mismatch"
+              },
+              {
+                "let": "redeemResult",
+                "value": {
+                  "op": "returned",
+                  "args": [
+                    "identity-redeem"
+                  ]
+                }
+              },
+              {
+                "let": "redeemData",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    "$redeemResult",
+                    "data"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "btb",
+                        "redeem",
+                        "$redeemData",
+                        0
+                      ]
+                    },
+                    "$evidence.sample"
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "redeemEffects",
+                "value": {
+                  "op": "effects",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$redeemResult",
+                        "effects"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "redeemShares",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$redeemEffects",
+                        "tokenDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$row",
+                            "token"
+                          ]
+                        },
+                        {
+                          "op": "address",
+                          "args": [
+                            "$candidate.target"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$redeemShares"
+                      ]
+                    },
+                    1
+                  ]
+                },
+                "error": "missing or duplicate conversion share balance"
+              },
+              {
+                "let": "redeemActor",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$redeemShares",
+                        0
+                      ]
+                    },
+                    "account"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$redeemActor",
+                            {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$redeemActor",
+                            {
+                              "op": "address",
+                              "args": [
+                                "$evidence.asset"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt actor mismatch"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$redeemActor",
+                    "$mintActor"
+                  ]
+                },
+                "error": "conversion receipt actor mismatch"
+              },
+              {
+                "let": "redeemShareRows",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$redeemEffects",
+                        "tokenDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "token"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "account"
+                              ]
+                            },
+                            "$redeemActor"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$redeemShareRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$redeemShareRows",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "mul",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "-1"
+                              ]
+                            },
+                            "$evidence.sample"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "redeemAssetActorRows",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$redeemEffects",
+                        "tokenDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "token"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$evidence.asset"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "account"
+                              ]
+                            },
+                            "$redeemActor"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$redeemAssetActorRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$redeemAssetActorRows",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "mul",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "1"
+                              ]
+                            },
+                            "$evidence.sample"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "redeemAssetTargetRows",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$redeemEffects",
+                        "tokenDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "token"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$evidence.asset"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "account"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$redeemAssetTargetRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$redeemAssetTargetRows",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "mul",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "-1"
+                              ]
+                            },
+                            "$evidence.sample"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "redeemSupply",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$redeemEffects",
+                        "totalSupplyDeltas"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$row",
+                            "token"
+                          ]
+                        },
+                        {
+                          "op": "address",
+                          "args": [
+                            "$candidate.target"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$redeemSupply"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$redeemSupply",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "mul",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "-1"
+                              ]
+                            },
+                            "$evidence.sample"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion receipt/supply/backing mismatch"
+              },
+              {
+                "let": "redeemEvents",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$redeemEffects",
+                        "logs"
+                      ]
+                    },
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "address"
+                              ]
+                            },
+                            {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$row",
+                                    "topics"
+                                  ]
+                                },
+                                0
+                              ]
+                            },
+                            "$constants.topics.redeemed"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$redeemEvents"
+                      ]
+                    },
+                    1
+                  ]
+                },
+                "error": "conversion lifecycle event mismatch"
+              },
+              {
+                "let": "redeemEvent",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$redeemEvents",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "redeemUser",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$redeemEvent",
+                            "topics"
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "redeemAmount0",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$redeemEvent",
+                            "data"
+                          ]
+                        },
+                        0,
+                        32
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "redeemAmount1",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$redeemEvent",
+                            "data"
+                          ]
+                        },
+                        32,
+                        32
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$redeemUser",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$redeemActor"
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion lifecycle event mismatch"
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$redeemAmount0",
+                        "$evidence.sample"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$redeemAmount1",
+                        "$evidence.sample"
+                      ]
+                    }
+                  ]
+                },
+                "error": "conversion lifecycle event mismatch"
+              },
+              {
+                "return": {
+                  "phase": "active",
+                  "asset": "$evidence.asset",
+                  "codeHash": "$evidence.codeHash",
+                  "assetCodeHash": "$evidence.assetCodeHash",
+                  "proofHash": {
+                    "op": "hash",
+                    "args": [
+                      {
+                        "codeHash": "$evidence.codeHash",
+                        "assetCodeHash": "$evidence.assetCodeHash",
+                        "sample": "$evidence.sample",
+                        "mint": {
+                          "source": {
+                            "op": "get",
+                            "args": [
+                              "$mintResult",
+                              "source"
+                            ]
+                          },
+                          "actor": "$mintActor"
+                        },
+                        "redeem": {
+                          "source": {
+                            "op": "get",
+                            "args": [
+                              "$redeemResult",
+                              "source"
+                            ]
+                          },
+                          "actor": "$redeemActor"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "done": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "unsupported_conversion_runtime",
+              "evidenceRequestIds": [
+                "identity-code"
+              ]
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "conversion_no_backed_probe_capacity"
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "state"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.sample",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "active"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": "$candidate.target",
+                "variant": "btb-bear-v1",
+                "asset": "$evidence.asset",
+                "codeHash": "$evidence.codeHash",
+                "assetCodeHash": "$evidence.assetCodeHash",
+                "provenance": [
+                  {
+                    "kind": "code-hash-and-balance-proof",
+                    "subject": "$candidate.target",
+                    "evidenceHash": "$evidence.proofHash"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.subject"
+                ]
+              }
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "target": {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          },
+          "asset": {
+            "op": "address",
+            "args": [
+              "$identity.asset"
+            ]
+          },
+          "codeHash": "$identity.codeHash",
+          "variant": "$identity.variant"
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$identity.variant",
+                "btb-bear-v1"
+              ]
+            },
+            {
+              "assetCodeHash": "$identity.assetCodeHash"
+            },
+            {
+              "proxyAdmin": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$identity.proxyAdmin"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            }
+          ]
+        }
+      ]
+    },
+    "bindingProjection": {
+      "op": "merge",
+      "args": [
+        {
+          "variant": "$descriptor.variant",
+          "target": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.target"
+                ]
+              }
+            ]
+          },
+          "asset": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.asset"
+                ]
+              }
+            ]
+          },
+          "codeHash": "$descriptor.codeHash"
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.variant",
+                "btb-bear-v1"
+              ]
+            },
+            {
+              "assetCodeHash": "$descriptor.assetCodeHash"
+            },
+            {
+              "proxyAdmin": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.proxyAdmin"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "routes": {
+    "target": {
+      "op": "address",
+      "args": [
+        "$descriptor.target"
+      ]
+    },
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "mint",
+        "enabled": true,
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$descriptor.asset"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        "adapterId": "token-conversion-mint",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "wrap"
+        }
+      },
+      {
+        "id": "redeem",
+        "enabled": true,
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$descriptor.asset"
+          ]
+        },
+        "adapterId": "token-conversion-redeem",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.familyId",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.target"
+                ]
+              }
+            ]
+          },
+          "$route.direction"
+        ],
+        "\u001f"
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "address",
+          "args": [
+            "$route.tokenIn"
+          ]
+        },
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "address",
+          "args": [
+            "$route.tokenOut"
+          ]
+        },
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.familyId",
+            "$descriptor.familyId"
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.lineageId",
+            "$descriptor.lineageId"
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.instanceKey",
+            "$descriptor.instanceKey"
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.target",
+            "$descriptor.target"
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            {
+              "op": "join",
+              "args": [
+                [
+                  "token-conversion-",
+                  "$route.direction"
+                ],
+                ""
+              ]
+            }
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "or",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "mint"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "redeem"
+              ]
+            }
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.taxonomy.slotKind",
+            "protocol"
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.taxonomy.protocolAction",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "mint"
+                  ]
+                },
+                "wrap",
+                "redeem"
+              ]
+            }
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "mint"
+                  ]
+                },
+                "$descriptor.asset",
+                "$descriptor.target"
+              ]
+            }
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "mint"
+                  ]
+                },
+                "$descriptor.target",
+                "$descriptor.asset"
+              ]
+            }
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.bindingRef.bindingKey",
+            "$descriptor.target"
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      }
+    ]
+  },
+  "pricing": {
+    "stateKey": "$route.instanceKey",
+    "bindingProjection": {
+      "op": "merge",
+      "args": [
+        {
+          "variant": "$descriptor.variant",
+          "target": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.target"
+                ]
+              }
+            ]
+          },
+          "asset": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.asset"
+                ]
+              }
+            ]
+          },
+          "codeHash": "$descriptor.codeHash"
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.variant",
+                "btb-bear-v1"
+              ]
+            },
+            {
+              "assetCodeHash": "$descriptor.assetCodeHash"
+            },
+            {
+              "proxyAdmin": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.proxyAdmin"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "compatibility": {
+      "op": "merge",
+      "args": [
+        {
+          "variant": "$descriptor.variant",
+          "target": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.target"
+                ]
+              }
+            ]
+          },
+          "asset": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.asset"
+                ]
+              }
+            ]
+          },
+          "codeHash": "$descriptor.codeHash"
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.variant",
+                "btb-bear-v1"
+              ]
+            },
+            {
+              "assetCodeHash": "$descriptor.assetCodeHash"
+            },
+            {
+              "proxyAdmin": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.proxyAdmin"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$draft.target"
+              ]
+            }
+          ]
+        },
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$draft.asset"
+              ]
+            }
+          ]
+        }
+      ],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "finalizeChecks": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$draft.routes"
+              ]
+            },
+            2
+          ]
+        },
+        "error": "conversion pricing route group"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$draft.routes",
+                    0
+                  ]
+                },
+                "direction"
+              ]
+            },
+            "mint"
+          ]
+        },
+        "error": "conversion pricing route group"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$draft.routes",
+                    1
+                  ]
+                },
+                "direction"
+              ]
+            },
+            "redeem"
+          ]
+        },
+        "error": "conversion pricing route group"
+      }
+    ],
+    "sampleAmount": {
+      "op": "if",
+      "args": [
+        {
+          "op": "eq",
+          "args": [
+            "$descriptor.variant",
+            "xwin-allocations-v1"
+          ]
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "mint"
+              ]
+            },
+            "$steps.state.navBase",
+            {
+              "op": "uint",
+              "args": [
+                "1000000000000000000"
+              ]
+            }
+          ]
+        },
+        {
+          "op": "min",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                "1000000000000000000"
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "mint"
+                  ]
+                },
+                {
+                  "op": "sub",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                      ]
+                    },
+                    {
+                      "op": "max",
+                      "args": [
+                        "$steps.state.supply",
+                        "$steps.state.backing"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "min",
+                  "args": [
+                    "$steps.state.supply",
+                    "$steps.state.backing"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "exactCompatibility": {
+      "variant": "$descriptor.variant",
+      "codeHash": "$descriptor.codeHash",
+      "executor": {
+        "op": "lower",
+        "args": [
+          "$executor"
+        ]
+      },
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "xwinMode": "local"
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "btb-bear-v1",
+    "lineageId": "token-conversion:btb-bear-v1",
+    "abi": {
+      "btb": [
+        "function BTB_TOKEN() view returns(address)",
+        "function totalSupply() view returns(uint256)",
+        "function balanceOf(address) view returns(uint256)",
+        "function getStats() view returns(uint256 btbBalance,uint256 btbbSupply)",
+        "function approve(address,uint256) returns(bool)",
+        "function mint(uint256) returns(uint256)",
+        "function redeem(uint256) returns(uint256)",
+        "event Transfer(address indexed from,address indexed to,uint256 value)",
+        "event Minted(address indexed user,uint256 btbAmount,uint256 btbbAmount)",
+        "event Redeemed(address indexed user,uint256 btbbAmount,uint256 btbAmount)"
+      ],
+      "erc20": [
+        "function balanceOf(address) view returns(uint256)",
+        "function approve(address,uint256) returns(bool)"
+      ],
+      "xwin": [
+        "function baseToken() view returns(address)",
+        "function xWinSwap() view returns(address)",
+        "function priceMaster() view returns(address)",
+        "function lockingAddress() view returns(address)",
+        "function getTargetNamesAddress() view returns(address[])",
+        "function paused() view returns(bool)",
+        "function deposit(uint256,uint32) returns(uint256)",
+        "function withdraw(uint256,uint32) returns(uint256)"
+      ]
+    },
+    "constants": {
+      "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "sampleCap": "1000000000000000000",
+      "topics": {
+        "transfer": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+        "minted": "0x25b428dfde728ccfaddad7e29e4ac23c24ed7fd1a6e3e3f91894a9a073f5dfff",
+        "redeemed": "0xf3a670cd3af7d64b488926880889d08a8585a138ff455227af6737339a1ec262"
+      }
+    },
+    "expressions": {},
+    "match": {
+      "op": "eq",
+      "args": [
+        "$descriptor.variant",
+        "btb-bear-v1"
+      ]
+    },
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.variant",
+            "btb-bear-v1"
+          ]
+        },
+        "error": "conversion variant mismatch"
+      },
+      {
+        "assert": {
+          "op": "ne",
+          "args": [
+            "$descriptor.target",
+            "$descriptor.asset"
+          ]
+        },
+        "error": "conversion token aliasing"
+      }
+    ],
+    "readPrograms": {},
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "get-code",
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.target"
+              ]
+            }
+          ]
+        },
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.asset"
+              ]
+            }
+          ]
+        }
+      ],
+      "mutationAddresses": [
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.target"
+              ]
+            }
+          ]
+        },
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.asset"
+              ]
+            }
+          ]
+        }
+      ],
+      "classifyUnavailable": {
+        "op": "flatMap",
+        "args": [
+          "$routes",
+          "candidateRoute",
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$snapshot.quotes",
+                      "$candidateRoute.routeKey"
+                    ]
+                  }
+                ]
+              },
+              [],
+              [
+                [
+                  "$candidateRoute.routeKey",
+                  "conversion_no_probe_capacity"
+                ]
+              ]
+            ]
+          }
+        ]
+      },
+      "finalizeChecks": []
+    },
+    "exact": {
+      "methodId": "bear-local-state",
+      "requirements": {
+        "transports": [
+          "get-code",
+          "eth-call"
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "$constants.maxUint256"
+                ]
+              }
+            ]
+          },
+          "error": "conversion exact input outside uint256"
+        }
+      ],
+      "protectedAddresses": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.asset"
+          ]
+        }
+      ],
+      "evidence": {
+        "kind": "token-conversion-balance-quote",
+        "source": "$source",
+        "executor": "$executor",
+        "direction": "$direction",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.asset"
+          ]
+        }
+      ],
+      "approval": {
+        "token": {
+          "op": "address",
+          "args": [
+            "$route.tokenIn"
+          ]
+        },
+        "spender": {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        "mode": "exact-clear",
+        "when": {
+          "op": "eq",
+          "args": [
+            "$direction",
+            "mint"
+          ]
+        }
+      },
+      "call": {
+        "target": {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        "signature": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$direction",
+                "mint"
+              ]
+            },
+            "function mint(uint256) returns(uint256)",
+            "function redeem(uint256) returns(uint256)"
+          ]
+        },
+        "args": [
+          {
+            "runtime": "amountIn"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": {
+            "op": "address",
+            "args": [
+              "$route.tokenIn"
+            ]
+          },
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": {
+            "op": "address",
+            "args": [
+              "$route.tokenOut"
+            ]
+          },
+          "account": "$executor"
+        }
+      ]
+    },
+    "modules": {
+      "pricingFlow": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "state",
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "current-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                }
+              },
+              {
+                "id": "current-asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                }
+              },
+              {
+                "id": "current-stats",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "btb",
+                    "getStats",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        [
+                          "current-code",
+                          "current-asset-code",
+                          "current-stats"
+                        ],
+                        "rowId",
+                        {
+                          "op": "successful",
+                          "args": [
+                            "$rowId"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "observedCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "current-code"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        "$observedCode"
+                      ]
+                    },
+                    "$descriptor.codeHash"
+                  ]
+                },
+                "error": "conversion runtime changed"
+              },
+              {
+                "let": "assetCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "current-asset-code"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        "$assetCode"
+                      ]
+                    },
+                    "$descriptor.assetCodeHash"
+                  ]
+                },
+                "error": "conversion asset runtime changed"
+              },
+              {
+                "let": "stats",
+                "value": {
+                  "op": "decodeAll",
+                  "args": [
+                    "btb",
+                    "getStats",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "current-stats"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "source": {
+                    "op": "source",
+                    "args": [
+                      {
+                        "op": "map",
+                        "args": [
+                          [
+                            "current-stats"
+                          ],
+                          "rowId",
+                          {
+                            "op": "successful",
+                            "args": [
+                              "$rowId"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "supply": {
+                    "op": "at",
+                    "args": [
+                      "$stats",
+                      1
+                    ]
+                  },
+                  "backing": {
+                    "op": "at",
+                    "args": [
+                      "$stats",
+                      0
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "result": {
+          "source": "$steps.state.source",
+          "supply": "$steps.state.supply",
+          "backing": "$steps.state.backing",
+          "quotes": {
+            "op": "objectFromEntries",
+            "args": [
+              {
+                "op": "flatMap",
+                "args": [
+                  "$routes",
+                  "candidateRoute",
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "gt",
+                        "args": [
+                          {
+                            "op": "min",
+                            "args": [
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1000000000000000000"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "eq",
+                                    "args": [
+                                      "$candidateRoute.direction",
+                                      "mint"
+                                    ]
+                                  },
+                                  {
+                                    "op": "sub",
+                                    "args": [
+                                      {
+                                        "op": "uint",
+                                        "args": [
+                                          "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                                        ]
+                                      },
+                                      {
+                                        "op": "max",
+                                        "args": [
+                                          "$steps.state.supply",
+                                          "$steps.state.backing"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "min",
+                                    "args": [
+                                      "$steps.state.supply",
+                                      "$steps.state.backing"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      [
+                        [
+                          "$candidateRoute.routeKey",
+                          {
+                            "amountIn": {
+                              "op": "min",
+                              "args": [
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "1000000000000000000"
+                                  ]
+                                },
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        "$candidateRoute.direction",
+                                        "mint"
+                                      ]
+                                    },
+                                    {
+                                      "op": "sub",
+                                      "args": [
+                                        {
+                                          "op": "uint",
+                                          "args": [
+                                            "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                                          ]
+                                        },
+                                        {
+                                          "op": "max",
+                                          "args": [
+                                            "$steps.state.supply",
+                                            "$steps.state.backing"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "min",
+                                      "args": [
+                                        "$steps.state.supply",
+                                        "$steps.state.backing"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "amountOut": {
+                              "op": "min",
+                              "args": [
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "1000000000000000000"
+                                  ]
+                                },
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        "$candidateRoute.direction",
+                                        "mint"
+                                      ]
+                                    },
+                                    {
+                                      "op": "sub",
+                                      "args": [
+                                        {
+                                          "op": "uint",
+                                          "args": [
+                                            "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                                          ]
+                                        },
+                                        {
+                                          "op": "max",
+                                          "args": [
+                                            "$steps.state.supply",
+                                            "$steps.state.backing"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "min",
+                                      "args": [
+                                        "$steps.state.supply",
+                                        "$steps.state.backing"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      ],
+                      []
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "quoteFlow": {
+        "version": 1,
+        "sourceKind": "local-math",
+        "steps": [
+          {
+            "id": "state",
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "exact-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                }
+              },
+              {
+                "id": "exact-asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                }
+              },
+              {
+                "id": "exact-stats",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "btb",
+                    "getStats",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        [
+                          "exact-code",
+                          "exact-asset-code",
+                          "exact-stats"
+                        ],
+                        "rowId",
+                        {
+                          "op": "successful",
+                          "args": [
+                            "$rowId"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "observedCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "exact-code"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        "$observedCode"
+                      ]
+                    },
+                    "$descriptor.codeHash"
+                  ]
+                },
+                "error": "conversion runtime changed"
+              },
+              {
+                "let": "assetCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "exact-asset-code"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        "$assetCode"
+                      ]
+                    },
+                    "$descriptor.assetCodeHash"
+                  ]
+                },
+                "error": "conversion asset runtime changed"
+              },
+              {
+                "let": "stats",
+                "value": {
+                  "op": "decodeAll",
+                  "args": [
+                    "btb",
+                    "getStats",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "exact-stats"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "source": {
+                    "op": "source",
+                    "args": [
+                      {
+                        "op": "map",
+                        "args": [
+                          [
+                            "exact-stats"
+                          ],
+                          "rowId",
+                          {
+                            "op": "successful",
+                            "args": [
+                              "$rowId"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "supply": {
+                    "op": "at",
+                    "args": [
+                      "$stats",
+                      1
+                    ]
+                  },
+                  "backing": {
+                    "op": "at",
+                    "args": [
+                      "$stats",
+                      0
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "result": "$steps.state"
+      },
+      "trialState": {
+        "version": 1,
+        "reads": [
+          {
+            "id": "bear",
+            "refs": [
+              {
+                "key": {
+                  "op": "join",
+                  "args": [
+                    [
+                      "evm:",
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$descriptor.target"
+                            ]
+                          }
+                        ]
+                      },
+                      ":conversion"
+                    ],
+                    ""
+                  ]
+                },
+                "schema": "btb-bear-v1:trial-v1",
+                "binding": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "descriptor": {
+                        "op": "merge",
+                        "args": [
+                          {
+                            "variant": "$descriptor.variant",
+                            "target": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$descriptor.target"
+                                  ]
+                                }
+                              ]
+                            },
+                            "asset": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$descriptor.asset"
+                                  ]
+                                }
+                              ]
+                            },
+                            "codeHash": "$descriptor.codeHash"
+                          },
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$descriptor.variant",
+                                  "btb-bear-v1"
+                                ]
+                              },
+                              {
+                                "assetCodeHash": "$descriptor.assetCodeHash"
+                              },
+                              {
+                                "proxyAdmin": {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "address",
+                                      "args": [
+                                        "$descriptor.proxyAdmin"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "executor": {
+                        "op": "lower",
+                        "args": [
+                          "$executor"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "dependencies": [
+                  {
+                    "op": "join",
+                    "args": [
+                      [
+                        "storage:",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$descriptor.target"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      ""
+                    ]
+                  },
+                  {
+                    "op": "join",
+                    "args": [
+                      [
+                        "token-supply:",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$descriptor.target"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      ""
+                    ]
+                  },
+                  {
+                    "op": "join",
+                    "args": [
+                      [
+                        "token-balance:",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$descriptor.asset"
+                              ]
+                            }
+                          ]
+                        },
+                        ":",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$descriptor.target"
+                              ]
+                            }
+                          ]
+                        }
+                      ],
+                      ""
+                    ]
+                  }
+                ]
+              }
+            ],
+            "initial": [
+              "$prepared"
+            ]
+          }
+        ],
+        "model": "bearQuote",
+        "input": {
+          "state": {
+            "op": "at",
+            "args": [
+              "$stateReads.bear",
+              0
+            ]
+          },
+          "direction": "$direction",
+          "amountIn": "$amountIn"
+        },
+        "amountOut": "$modelResult.amountOut",
+        "stateChanges": [
+          {
+            "ref": {
+              "key": {
+                "op": "join",
+                "args": [
+                  [
+                    "evm:",
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$descriptor.target"
+                          ]
+                        }
+                      ]
+                    },
+                    ":conversion"
+                  ],
+                  ""
+                ]
+              },
+              "schema": "btb-bear-v1:trial-v1",
+              "binding": {
+                "op": "hash",
+                "args": [
+                  {
+                    "descriptor": {
+                      "op": "merge",
+                      "args": [
+                        {
+                          "variant": "$descriptor.variant",
+                          "target": {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$descriptor.target"
+                                ]
+                              }
+                            ]
+                          },
+                          "asset": {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$descriptor.asset"
+                                ]
+                              }
+                            ]
+                          },
+                          "codeHash": "$descriptor.codeHash"
+                        },
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                "$descriptor.variant",
+                                "btb-bear-v1"
+                              ]
+                            },
+                            {
+                              "assetCodeHash": "$descriptor.assetCodeHash"
+                            },
+                            {
+                              "proxyAdmin": {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "address",
+                                    "args": [
+                                      "$descriptor.proxyAdmin"
+                                    ]
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "executor": {
+                      "op": "lower",
+                      "args": [
+                        "$executor"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependencies": [
+                {
+                  "op": "join",
+                  "args": [
+                    [
+                      "storage:",
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$descriptor.target"
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    ""
+                  ]
+                },
+                {
+                  "op": "join",
+                  "args": [
+                    [
+                      "token-supply:",
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$descriptor.target"
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    ""
+                  ]
+                },
+                {
+                  "op": "join",
+                  "args": [
+                    [
+                      "token-balance:",
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$descriptor.asset"
+                            ]
+                          }
+                        ]
+                      },
+                      ":",
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$descriptor.target"
+                            ]
+                          }
+                        ]
+                      }
+                    ],
+                    ""
+                  ]
+                }
+              ]
+            },
+            "value": {
+              "source": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$stateReads.bear",
+                      0
+                    ]
+                  },
+                  "source"
+                ]
+              },
+              "supply": "$modelResult.supply",
+              "backing": "$modelResult.backing"
+            }
+          }
+        ],
+        "stateEffects": [
+          {
+            "op": "join",
+            "args": [
+              [
+                "storage:",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.target"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              ""
+            ]
+          },
+          {
+            "op": "join",
+            "args": [
+              [
+                "token-supply:",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.target"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              ""
+            ]
+          },
+          {
+            "op": "join",
+            "args": [
+              [
+                "token-balance:",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.asset"
+                      ]
+                    }
+                  ]
+                },
+                ":",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.target"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              ""
+            ]
+          },
+          {
+            "op": "join",
+            "args": [
+              [
+                "token-balance:",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.target"
+                      ]
+                    }
+                  ]
+                },
+                ":",
+                {
+                  "op": "lower",
+                  "args": [
+                    "$executor"
+                  ]
+                }
+              ],
+              ""
+            ]
+          },
+          {
+            "op": "join",
+            "args": [
+              [
+                "token-balance:",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.asset"
+                      ]
+                    }
+                  ]
+                },
+                ":",
+                {
+                  "op": "lower",
+                  "args": [
+                    "$executor"
+                  ]
+                }
+              ],
+              ""
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "variantFiles": [
+    "./xwin-allocations-v1.json"
+  ],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "token-conversion-mint",
+        "lineage": "custom-protocol:token-conversion",
+        "edgeKind": "protocol",
+        "action": "wrap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function mint(uint256)"
+        },
+        {
+          "signature": "function deposit(uint256,uint32)"
+        }
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "token-conversion-redeem",
+        "lineage": "custom-protocol:token-conversion",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function redeem(uint256)"
+        },
+        {
+          "signature": "function withdraw(uint256,uint32)"
+        }
+      ]
+    }
+  ],
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "bearQuote": {
+          "model": "token-conversion:bear",
+          "version": 1
+        },
+        "xwinLocal": {
+          "model": "token-conversion:xwin-local",
+          "version": 1
+        },
+        "xwinQuote": {
+          "model": "token-conversion:xwin-quote",
+          "version": 1
+        }
+      }
+    }
+  }
+}

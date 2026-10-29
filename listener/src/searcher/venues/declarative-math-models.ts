@@ -13,6 +13,7 @@ import { peapodsDebondMathModel, peapodsRuntimeShapeMathModel } from "./peapods-
 import { psmConversionMathModel } from "./psm-math.js";
 import { selfBurnNativeWrapFeeMathModel } from "./self-burn-native-math.js";
 import { stakedUsdatEventAssetsMathModel } from "./staked-usdat-math.js";
+import { bearQuoteMathModel, xwinLocalStateMathModel, xwinQuoteMathModel } from "./token-conversion-math.js";
 
 // Static, source-hashed math entries are registered here by protocol migration.
 // JSON never imports arbitrary files or executable handlers. An absent model
@@ -33,5 +34,8 @@ const models: readonly DeclarativeMathModel[] = [
   badgerSettWithdrawMathModel,
   boringWithdrawOutMathModel,
   defaultCollateralQuoteMathModel,
+  bearQuoteMathModel,
+  xwinLocalStateMathModel,
+  xwinQuoteMathModel,
 ];
 export const declarativeMathRegistry = createDeclarativeMathRegistry(models);
