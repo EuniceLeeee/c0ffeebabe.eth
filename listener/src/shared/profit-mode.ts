@@ -1,4 +1,4 @@
-/** Positive EV is the default; positive gross profit is a bounded-live experiment. */
+/** Positive EV is the default; gross mode tries it first before bounded fallback. */
 export type ProfitMode = "positive-ev" | "positive-gross-profit";
 
 export const POSITIVE_GROSS_PROFIT_BRIBE_BPS = 9_900;
@@ -11,6 +11,13 @@ export function resolveProfitMode(value: string | undefined): ProfitMode {
   if (value === undefined || value === "positive-ev") return "positive-ev";
   if (value === "positive-gross-profit") return value;
   throw new Error("profit mode must be positive-ev or positive-gross-profit");
+}
+
+/** A gross-profit session may choose the stricter positive-EV submission;
+ * positive-EV-only authority can never be escalated to the gross fallback. */
+export function permitAllowsProfitMode(permit: ProfitMode | undefined, submission: ProfitMode): boolean {
+  const mode = resolveProfitMode(permit);
+  return mode === submission || (mode === "positive-gross-profit" && submission === "positive-ev");
 }
 
 export function validatePositiveGrossProfitMode(input: {

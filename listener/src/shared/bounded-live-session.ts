@@ -1,6 +1,6 @@
 import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { resolveProfitMode, type ProfitMode } from "./profit-mode.js";
+import { permitAllowsProfitMode, resolveProfitMode, type ProfitMode } from "./profit-mode.js";
 
 const MAX_WALLET_WEI = 200_000_000_000_000_000n;
 const MAX_WALL_MS = 12 * 60 * 60 * 1_000;
@@ -131,7 +131,7 @@ export function captureBoundedLiveSession(params: {
   if (!isAbsolute(path)) fail("invalid-permit-path");
   const runId = process.env.SEARCHER_LIVE_SESSION_ID;
   const initial = readPermit(path);
-  if (profitMode !== resolveProfitMode(initial.profitMode)) fail("profit-mode-mismatch");
+  if (!permitAllowsProfitMode(initial.profitMode, profitMode)) fail("profit-mode-mismatch");
   if (runId !== initial.runId || params.chainId !== initial.chainId
     || !address(params.wallet) || params.wallet.toLowerCase() !== initial.wallet.toLowerCase()
     || !address(params.executor) || params.executor.toLowerCase() !== initial.executor.toLowerCase()) {

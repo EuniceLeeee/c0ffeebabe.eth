@@ -154,7 +154,7 @@ import {
 import {
   MempoolIntakeRefreshSignal,
 } from "./mempool-intake-refresh-signal.js";
-import { computeBidEth, evaluateEv, valueInEth } from "./ev-evaluator.js";
+import { computeBidEth, evaluateEv, selectBlockScanProfitEvaluation, valueInEth } from "./ev-evaluator.js";
 import {
   createProfitTokenValuation,
   type ProfitTokenValuation,
@@ -5294,6 +5294,8 @@ export async function maybeSubmitBlockScanAtomic(params: {
   };
   let evStartedAt: number | null = null;
   let finalSimStatus: BlockScanAtomicResult["finalSimStatus"] = "not-run";
+  let selectedProfitMode = params.config.blockScanProfitMode;
+  let submissionAttempted = false;
   let auditSimulation: BlindProductionOpportunityEvidence["simulation"] | null =
     params.collectBlindAudit
       ? {
@@ -5336,6 +5338,8 @@ export async function maybeSubmitBlockScanAtomic(params: {
     return {
       decision,
       submitted,
+      submissionAttempted,
+      profitMode: selectedProfitMode,
       terminalForQuoteSet,
       finalSimStatus,
       audit: auditSimulation && terminalAuditEv
@@ -5380,7 +5384,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
     seedPools: opp.seedEdges.map((edge) => edge.target),
   });
   const eventBase = (targetBlock: number) => ({
-    profit_mode: config.blockScanProfitMode,
+    profit_mode: selectedProfitMode,
     opportunity_id: opportunityId,
     route_id: routeId,
     target_block: targetBlock,
@@ -5438,6 +5442,25 @@ export async function maybeSubmitBlockScanAtomic(params: {
 
   const targetOffset = params.historicalExecutionMode === "source-block" ? 0 : 1;
   let targetBlock = sourceBlock + targetOffset;
+  const handleAtomicError = (err: unknown): BlockScanAtomicResult => {
+    if (signal.aborted) throw signal.reason ?? err;
+    if (err instanceof BlockScanPassDeadlineError) {
+      const reason = err.stage === "final simulation" ? "final_sim_deadline" : "ev_or_submit_deadline";
+      recordAuditEv({ executionStatus: "not_run", decision: "reject", reason });
+      drop(targetBlock, "deadline", reason, err.message);
+      return finish(reason);
+    }
+    if (err instanceof FinalSimulationWorkRuntimeError) {
+      const reason = err.failureCode === "timeout" ? "final_sim_deadline" : "final_sim_unresolved";
+      recordAuditEv({ executionStatus: "not_run", decision: "reject", reason });
+      drop(targetBlock, "final_verify", reason, err.message);
+      return finish(reason);
+    }
+    const error = err instanceof Error ? err.message : String(err);
+    console.log(`[searcher/blockscan] block=${sourceBlock} submit error ring=${ring}: ${error}`);
+    drop(targetBlock, "submit", "blockscan_submit_error", error);
+    return finish("blockscan_submit_error");
+  };
   try {
     const latestAtVerify = await awaitBlockScanDeadline(
       readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
@@ -5608,7 +5631,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
 
     timing.evStartedAtMs = Date.now();
     evStartedAt = performance.now();
-    const ev = await awaitBlockScanDeadline(
+    const evaluatedEv = await awaitBlockScanDeadline(
       evaluateEv(
         params.historicalExecutionMode === "source-block" ? {
           getBlock: async (tag: number | "latest") => {
@@ -5634,6 +5657,10 @@ export async function maybeSubmitBlockScanAtomic(params: {
       undefined,
       signal,
     );
+    const selected = selectBlockScanProfitEvaluation(evaluatedEv,
+      { ...config, profitMode: config.blockScanProfitMode }, config.minNetEth);
+    selectedProfitMode = selected.profitMode;
+    const ev = selected.evaluation;
     if (params.historicalExecutionMode === "source-block" && ev.feeStateAvailable &&
         ev.maxBaseFeePerGas.toString() !== (sim as import("./simulator/source-block.js").SourceBlockSimulationResult).sourceBlockEvidence.baseFeePerGas) {
       throw new Error("source-block EV and execution fee disagree");
@@ -5657,10 +5684,10 @@ export async function maybeSubmitBlockScanAtomic(params: {
     recordAuditEv({
       executionStatus: "pass",
       decision: "allow",
-      reason: config.evGate ? (config.blockScanProfitMode === "positive-gross-profit" ? "positive_gross_profit_gate_pass" : "ev_gate_pass") : "ev_gate_disabled",
+      reason: config.evGate ? (selectedProfitMode === "positive-gross-profit" ? "positive_gross_profit_gate_pass" : "ev_gate_pass") : "ev_gate_disabled",
     });
     const evEvent = {
-      profit_mode: config.blockScanProfitMode,
+      profit_mode: selectedProfitMode,
       expected_profit_eth: expectedProfitEth.toString(),
       gas_cost_eth: gasCostEth.toString(),
       bid_eth: bidEth.toString(),
@@ -5765,7 +5792,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
     }
 
     if (config.evGate) {
-      const positiveGrossProfit = config.blockScanProfitMode === "positive-gross-profit";
+      const positiveGrossProfit = selectedProfitMode === "positive-gross-profit";
       // Final simulation success and positive raw profit were checked above.
       // This experiment changes economics only; gas, valuation, source and
       // position checks still apply, and the signer requires a matching permit.
@@ -5781,13 +5808,13 @@ export async function maybeSubmitBlockScanAtomic(params: {
           decision: "reject",
           reason,
         });
-        console.log(`[searcher/blockscan] block=${sourceBlock} profit gate rejected mode=${config.blockScanProfitMode} ring=${ring}: ${error}`);
+        console.log(`[searcher/blockscan] block=${sourceBlock} profit gate rejected mode=${selectedProfitMode} ring=${ring}: ${error}`);
         drop(targetBlock, "submit_gate", reason, error, evEvent);
         return finish(reason);
       }
       console.log(
         `[searcher/blockscan] block=${sourceBlock} ${positiveGrossProfit ? "positive-gross-profit approved (gas loss accepted)" : "EV ok"}: net=${ethers.formatEther(netEvWei)} ETH ` +
-          `profitMode=${config.blockScanProfitMode} ` +
+          `profitMode=${selectedProfitMode} runProfitMode=${config.blockScanProfitMode} ` +
           `profitEth=${ethers.formatEther(expectedProfitEth)} ` +
           `gas=${ethers.formatEther(gasCostEth)} bribe=${ethers.formatEther(bidEth)} ` +
           `ethUsd=${ethUsd ?? "n/a"} targetBaseFee=${maxBaseFeePerGas}`,
@@ -5806,145 +5833,143 @@ export async function maybeSubmitBlockScanAtomic(params: {
     }
 
     closeEvTiming();
-    const latestAtSubmit = await awaitBlockScanDeadline(
-      readUncachedLatestBlock(provider),
-      passDeadlineAtMs,
-      "pre-submit source-head verification",
-      undefined,
-      signal,
-    );
-    const submitHead = latestAtSubmit.number;
-    const submitHeadHash = latestAtSubmit.hash;
-    if (
-      submitHead !== sourceBlock ||
-      submitHeadHash !== sourceBlockHash.toLowerCase()
-    ) {
-      targetBlock = Math.max(sourceBlock, submitHead) + 1;
-      const error =
-        `stale source block ${sourceBlock} head=${submitHead} ` +
-        `forkHash=${sourceBlockHash} canonicalHash=${submitHeadHash}`;
-      console.log(`[searcher/blockscan] block=${sourceBlock} stale before submit ring=${ring}: ${error}`);
-      drop(targetBlock, "submit_gate", "blockscan_stale_state", error);
-      return finish("blockscan_stale_state");
-    }
+    const submit = async (): Promise<BlockScanAtomicResult> => {
+      try {
+        signal.throwIfAborted();
+        if (Date.now() >= passDeadlineAtMs) throw new BlockScanPassDeadlineError("submission");
+        // A later candidate can add pool/route rejects while this fallback waits.
+        if (simRejects.has(routeId) || opp.seedEdges.some(edge => simRejects.hasPool(edge))) {
+          drop(targetBlock, "submit_gate", "sim_revert_seen_this_live");
+          return finish("sim_revert_seen_this_live");
+        }
+        const latestAtSubmit = await awaitBlockScanDeadline(
+          readUncachedLatestBlock(provider),
+          passDeadlineAtMs,
+          "pre-submit source-head verification",
+          undefined,
+          signal,
+        );
+        const submitHead = latestAtSubmit.number;
+        const submitHeadHash = latestAtSubmit.hash;
+        if (
+          submitHead !== sourceBlock ||
+          submitHeadHash !== sourceBlockHash.toLowerCase()
+        ) {
+          targetBlock = Math.max(sourceBlock, submitHead) + 1;
+          const error =
+            `stale source block ${sourceBlock} head=${submitHead} ` +
+            `forkHash=${sourceBlockHash} canonicalHash=${submitHeadHash}`;
+          console.log(`[searcher/blockscan] block=${sourceBlock} stale before submit ring=${ring}: ${error}`);
+          drop(targetBlock, "submit_gate", "blockscan_stale_state", error);
+          return finish("blockscan_stale_state");
+        }
 
-    const decision = submissionCoordinator.offer({
-      strategy: "block-scan",
-      opportunityId,
-      targetBlock,
-      netEvWei,
-      deadlineAtMs: passDeadlineAtMs,
-    });
-    if (!decision.admit) {
-      console.log(
-        `[searcher/blockscan] block=${sourceBlock} submit gated ring=${ring} targetBlock=${targetBlock} ` +
-          `reason=${decision.reason}`,
-      );
-      drop(targetBlock, "submit_gate", decision.reason);
-      return finish(decision.reason);
-    }
+        const decision = submissionCoordinator.offer({
+          strategy: "block-scan",
+          opportunityId,
+          targetBlock,
+          netEvWei,
+          deadlineAtMs: passDeadlineAtMs,
+        });
+        if (!decision.admit) {
+          console.log(
+            `[searcher/blockscan] block=${sourceBlock} submit gated ring=${ring} targetBlock=${targetBlock} ` +
+              `reason=${decision.reason}`,
+          );
+          drop(targetBlock, "submit_gate", decision.reason);
+          return finish(decision.reason);
+        }
 
-    if (signal.aborted) {
-      throw signal.reason ?? new Error("block-scan atomic execution aborted");
-    }
-    const results = await bundleRouter.submit({
-      victimTxHash: "",
-      mode: "standalone",
-      profitMode: config.blockScanProfitMode,
-      backrunCalldata: sim.calldata,
-      targetBlock,
-      expectedProfit: sim.netProfit,
-      expectedProfitEth,
-      bribeBps: config.bribeBps,
-      bribeWei: bidEth,
-      maxBaseFeePerGas,
-      gasUsed: gasUnits,
-      safety: { leavesStandingPosition: containsStandingPosition, authorized: standingGuard.allowed },
-    });
-    const bundleHash = results.find((r) => r.bundleHash)?.bundleHash;
-    const backrunTxHash = results.find((r) => r.backrunTxHash)?.backrunTxHash;
-    const accepted = results.filter((r) => r.accepted).length;
-    if (!backrunTxHash) {
-      const error = results.find((r) => r.error)?.error ?? "missing backrun tx hash";
-      console.log(`[searcher/blockscan] block=${sourceBlock} submit failed ring=${ring}: ${error}`);
-      drop(targetBlock, "submit", "bundle_router_rejected", error);
-      return finish("bundle_router_rejected");
-    }
+        if (signal.aborted) {
+          throw signal.reason ?? new Error("block-scan atomic execution aborted");
+        }
+        submissionAttempted = true;
+        const results = await bundleRouter.submit({
+          victimTxHash: "",
+          mode: "standalone",
+          profitMode: selectedProfitMode,
+          backrunCalldata: sim.calldata,
+          targetBlock,
+          expectedProfit: sim.netProfit,
+          expectedProfitEth,
+          bribeBps: config.bribeBps,
+          bribeWei: bidEth,
+          maxBaseFeePerGas,
+          gasUsed: gasUnits,
+          safety: { leavesStandingPosition: containsStandingPosition, authorized: standingGuard.allowed },
+        });
+        const bundleHash = results.find((r) => r.bundleHash)?.bundleHash;
+        const backrunTxHash = results.find((r) => r.backrunTxHash)?.backrunTxHash;
+        const accepted = results.filter((r) => r.accepted).length;
+        if (!backrunTxHash) {
+          const error = results.find((r) => r.error)?.error ?? "missing backrun tx hash";
+          console.log(`[searcher/blockscan] block=${sourceBlock} submit failed ring=${ring}: ${error}`);
+          drop(targetBlock, "submit", "bundle_router_rejected", error);
+          return finish("bundle_router_rejected");
+        }
 
-    console.log(
-      `[searcher/blockscan] block=${sourceBlock} ${config.dryRun ? "dry-run queued" : "submitted"} ` +
-        `atomic via eth_sendBundle targetBlock=${targetBlock} profit=${sim.netProfit} ` +
-        `route=${route}${bundleHash ? ` bundleHash=${bundleHash}` : ""}`,
-    );
-    emitEvent({
-      type: "bundle_submitted",
-      ...eventBase(targetBlock),
-      submission_target_block: targetBlock,
-      mode: "eth_sendBundle",
-      simulated_profit: sim.netProfit.toString(),
-      simulated_profit_eth: expectedProfitEth.toString(),
-      bid: bidEth.toString(),
-      gas_cost_eth: gasCostEth.toString(),
-      net_ev_wei: netEvWei.toString(),
-      eth_usd: ethUsd,
-      eth_usd_round_id: ethUsdRoundId?.toString() ?? null,
-      eth_usd_updated_at: ethUsdUpdatedAt?.toString() ?? null,
-      max_base_fee_per_gas: maxBaseFeePerGas.toString(),
-      decision_parent_hash: evSourceBlockHash,
-      tx_hash: backrunTxHash,
-      calldata_hash: ethers.keccak256(sim.calldata),
-      builders_sent: results.map((r) => r.builder),
-      bundle_hash: bundleHash,
-      accepted,
-    });
-    if (results.some((r) => r.accepted)) {
-      trackInclusion({
-        provider,
-        backrunTxHash,
-        opportunityId,
-        targetBlock,
-        watchBlocks: config.inclusionWatchBlocks,
-        emit: emitEvent,
-      });
+        console.log(
+          `[searcher/blockscan] block=${sourceBlock} ${config.dryRun ? "dry-run queued" : "submitted"} ` +
+            `atomic via eth_sendBundle targetBlock=${targetBlock} profit=${sim.netProfit} ` +
+            `route=${route}${bundleHash ? ` bundleHash=${bundleHash}` : ""}`,
+        );
+        emitEvent({
+          type: "bundle_submitted",
+          ...eventBase(targetBlock),
+          submission_target_block: targetBlock,
+          mode: "eth_sendBundle",
+          simulated_profit: sim.netProfit.toString(),
+          simulated_profit_eth: expectedProfitEth.toString(),
+          bid: bidEth.toString(),
+          gas_cost_eth: gasCostEth.toString(),
+          net_ev_wei: netEvWei.toString(),
+          eth_usd: ethUsd,
+          eth_usd_round_id: ethUsdRoundId?.toString() ?? null,
+          eth_usd_updated_at: ethUsdUpdatedAt?.toString() ?? null,
+          max_base_fee_per_gas: maxBaseFeePerGas.toString(),
+          decision_parent_hash: evSourceBlockHash,
+          tx_hash: backrunTxHash,
+          calldata_hash: ethers.keccak256(sim.calldata),
+          builders_sent: results.map((r) => r.builder),
+          bundle_hash: bundleHash,
+          accepted,
+        });
+        if (results.some((r) => r.accepted)) {
+          trackInclusion({
+            provider,
+            backrunTxHash,
+            opportunityId,
+            targetBlock,
+            watchBlocks: config.inclusionWatchBlocks,
+            emit: emitEvent,
+          });
+        }
+        return finish(
+          results.some((result) => result.accepted)
+            ? "bundle_submitted_accepted"
+            : "bundle_submitted_unaccepted",
+          true,
+        );
+      } catch (err) { return handleAtomicError(err); }
+    };
+    if (selectedProfitMode === "positive-gross-profit") {
+      console.log(`[searcher/blockscan-profit-selection] ${JSON.stringify({
+        sourceBlock, targetBlock, profitMode: selectedProfitMode, decision: "deferred-until-positive-ev-pass-completes", netEvWei: netEvWei.toString(),
+      })}`);
+      return { ...finish("gross_profit_fallback_deferred", false, false), deferredSubmission: {
+        netEvWei, submit,
+        discard(reason) {
+          const decision = reason === "preferred_submitted" ? "positive_ev_preferred"
+            : reason === "fallback_superseded" ? "gross_profit_fallback_superseded" : "gross_profit_fallback_cancelled";
+          recordAuditEv({ executionStatus: "pass", decision: "reject", reason: decision });
+          drop(targetBlock, "submit_gate", decision);
+          return finish(decision);
+        },
+      } };
     }
-    return finish(
-      results.some((result) => result.accepted)
-        ? "bundle_submitted_accepted"
-        : "bundle_submitted_unaccepted",
-      true,
-    );
+    return await submit();
   } catch (err) {
-    if (signal.aborted) {
-      throw signal.reason ?? err;
-    }
-    if (err instanceof BlockScanPassDeadlineError) {
-      const reason = err.stage === "final simulation"
-        ? "final_sim_deadline"
-        : "ev_or_submit_deadline";
-      recordAuditEv({
-        executionStatus: "not_run",
-        decision: "reject",
-        reason,
-      });
-      drop(targetBlock, "deadline", reason, err.message);
-      return finish(reason);
-    }
-    if (err instanceof FinalSimulationWorkRuntimeError) {
-      const reason = err.failureCode === "timeout"
-        ? "final_sim_deadline"
-        : "final_sim_unresolved";
-      recordAuditEv({
-        executionStatus: "not_run",
-        decision: "reject",
-        reason,
-      });
-      drop(targetBlock, "final_verify", reason, err.message);
-      return finish(reason);
-    }
-    const error = err instanceof Error ? err.message : String(err);
-    console.log(`[searcher/blockscan] block=${sourceBlock} submit error ring=${ring}: ${error}`);
-    drop(targetBlock, "submit", "blockscan_submit_error", error);
-    return finish("blockscan_submit_error");
+    return handleAtomicError(err);
   }
 }
 

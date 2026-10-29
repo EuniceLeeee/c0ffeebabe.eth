@@ -53,6 +53,21 @@ The existing measured-gas priority-fee mechanism is retained: rounding and actua
 actual bribe, so gas-only loss is an estimate, not a guaranteed loss bound. Wallet affordability still uses
 the full gas limit. This policy change does not itself restart or extend any already-running session.
 
+### 2026-10-29 — positive-EV-first inside gross-profit mode
+
+The user changed only `positive-gross-profit` mode: first try the original positive-EV policy, bidding
+99% of profit remaining after source-pinned measured gas. Gross-only candidates wait until this source
+pass finishes; if no positive-EV submission was sent, the existing 99%-of-pre-gas-gross policy may be used
+as fallback. Once a positive-EV transaction has been sent, that pass cannot send a loss-accepting fallback;
+`not_included` is not a same-block rebidding trigger. The separate `positive-ev` mode remains EV-only.
+An indeterminate submission outcome also suppresses fallback: it is not proof that no transaction was sent.
+Both choices reuse one mandatory final simulation and pinned valuation/fee observation. Deferred submission
+rechecks source, deadline, run-local rejects, permit and wallet limits. No extra candidate budget, expiry,
+wallet allowance, or standing-position permission is introduced. A gross-profit permit may authorize the
+stricter positive-EV submission, but positive-EV-only authority can never authorize gross fallback; permit
+identity must remain immutable across the asynchronous operation. Activation and terminal confirmation
+remain independent deployment/start requirements.
+
 ### Dual-live A/B sub-envelope (all required)
 - A is the bounded-live champion wallet `0xb8578B6de173C8554FF0390dB5a7effA567DDA3c` with BotVM
   `0x4aF9495C4aC24c5CD3b0C90611550a1996415BCe`. B is the dedicated challenger wallet

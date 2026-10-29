@@ -605,7 +605,7 @@ export async function main(args) {
   try { console.log(JSON.stringify({ checkOnly: true, signing: false, broadcast: false, head: check.head,
     blocks: options.blocks, walletBalanceWei: check.balance.toString(), release: profile.release,
     profitMode: options.profitMode ?? 'positive-ev',
-    bribeBasis: options.profitMode === 'positive-gross-profit' ? 'simulated-profit-before-gas' : 'profit-after-gas',
+    bribeBasis: options.profitMode === 'positive-gross-profit' ? 'positive-ev-after-gas-first; gross-before-gas-fallback' : 'profit-after-gas',
     bribeBps: 9900, bribeGasBasis: 'measured-gas', gasLimitBufferBps: 3000,
     nodeHeapMiB: 11264, serviceMemoryMaxGiB: 13,
     readyGeneration: release.readyGeneration, readyReused: true, automaticRestart: false,

@@ -38,6 +38,8 @@ import {
 import { BlockScanFamilyStageBudget } from "./detector/blockscan-family-budget.js";
 import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
 import { runOrderedBlockScanPipeline } from "./blockscan-ordered-pipeline.js";
+import { SubmissionPreference, type DeferredSubmission } from "./execution/submission-preference.js";
+import type { ProfitMode } from "../shared/profit-mode.js";
 import { blockScanGrossProfitWeth } from "./blockscan-profit-priority.js";
 import { createScannedProfitTokenValuation } from "./scanned-profit-token-valuation.js";
 import type { ProfitTokenValuation } from "./profit-token-valuation.js";
@@ -388,6 +390,11 @@ function sanitizeBlockScanFailureMessage(message: string): string {
 export interface BlockScanAtomicResult {
   decision: string;
   submitted: boolean;
+  /** Entered the submission boundary; outcome may be indeterminate. */
+  submissionAttempted?: boolean;
+  profitMode?: ProfitMode;
+  /** An in-memory, source-bound final-sim result; no persisted submit authority. */
+  deferredSubmission?: DeferredSubmission<BlockScanAtomicResult>;
   /** False only when another quote-ranked amount should still be tried. */
   terminalForQuoteSet: boolean;
   finalSimStatus: "not-run" | "succeeded" | "failed";
@@ -4465,6 +4472,29 @@ export class BlockScanRuntimeLoop {
       });
       const finalSimFamilyBudget = new BlockScanFamilyStageBudget();
       const terminalQuoteSets = new Set<number>();
+      const submissionPreference = new SubmissionPreference<BlockScanAtomicResult>({ signal: passSignal, deadlineAtMs: passDeadlineAtMs });
+      const deferredOwners = new Map<DeferredSubmission<BlockScanAtomicResult>, QuotedBlockScanPlan>();
+      const submittedAuditOpportunities = new Set<string>();
+      const recordAtomicResult = (quoted: QuotedBlockScanPlan, atomic: BlockScanAtomicResult): void => {
+        atomicResults.push(atomic);
+        if (!auditOpportunities) return;
+        const key = blindOpportunityEvidenceKey(quoted.item.opp);
+        const attempted = atomic.submitted || atomic.submissionAttempted === true;
+        // Discarding an earlier amount must not erase the same opportunity's
+        // actual submission evidence (including an indeterminate outcome).
+        if (submittedAuditOpportunities.has(key) && !attempted) return;
+        if (attempted) submittedAuditOpportunities.add(key);
+        const auditEvidence = auditOpportunities.get(key);
+        if (auditEvidence && atomic.audit) auditOpportunities.set(key, {
+          ...auditEvidence, simulation: atomic.audit.simulation, ev: atomic.audit.ev,
+        });
+      };
+      const recordDeferredResult = (entry: DeferredSubmission<BlockScanAtomicResult>, atomic: BlockScanAtomicResult): void => {
+        const quoted = deferredOwners.get(entry);
+        if (!quoted) throw new Error("deferred submission lost its source-pass owner");
+        deferredOwners.delete(entry);
+        recordAtomicResult(quoted, atomic);
+      };
       const consumePlan = async (
         _index: number,
         quotes: readonly QuotedBlockScanPlan[],
@@ -4508,7 +4538,9 @@ export class BlockScanRuntimeLoop {
             plans: quoted.item.planCount,
             passDeadlineAtMs,
             sourceBlockHash,
-            signal,
+            // The ordered pipeline detaches its own controller after draining.
+            // Deferred sends must still observe the source pass's cancellation.
+            signal: AbortSignal.any([signal, passSignal]),
             onFinalSimStart: (startedAtMs) => {
               if (
                 firstFinalSimStartedAtMs === null ||
@@ -4518,24 +4550,17 @@ export class BlockScanRuntimeLoop {
               }
             },
           });
-          atomicResults.push(atomic);
+          if (atomic.deferredSubmission) {
+            deferredOwners.set(atomic.deferredSubmission, quoted);
+            submissionPreference.defer(atomic.deferredSubmission);
+          } else {
+            recordAtomicResult(quoted, atomic);
+            if ((atomic.submitted || atomic.submissionAttempted) && atomic.profitMode === "positive-ev") submissionPreference.notePreferredSubmission();
+          }
           if (atomic.timing.evFinishedAtMs !== null) {
             firstEvFinishedAtMs = firstEvFinishedAtMs === null
               ? atomic.timing.evFinishedAtMs
               : Math.min(firstEvFinishedAtMs, atomic.timing.evFinishedAtMs);
-          }
-          const auditEvidence = auditOpportunities?.get(
-            blindOpportunityEvidenceKey(quoted.item.opp),
-          );
-          if (auditEvidence && atomic.audit) {
-            auditOpportunities!.set(
-              blindOpportunityEvidenceKey(quoted.item.opp),
-              {
-                ...auditEvidence,
-                simulation: atomic.audit.simulation,
-                ev: atomic.audit.ev,
-              },
-            );
           }
           if (atomic.finalSimStatus === "succeeded") {
             finalSimFamilyBudget.recordSuccess(quoted.item.opp.seedEdges);
@@ -4579,10 +4604,15 @@ export class BlockScanRuntimeLoop {
             sealAuditBoundary("planner_solver_done", "planner_solver");
           },
         });
+        solvePipelineSignal = passSignal;
+        await submissionPreference.flush(recordDeferredResult);
       } finally {
-        finalSimulationRuntime.close(
-          new Error(`block-scan final simulation generation ${generation} ended`),
-        );
+        try { submissionPreference.cancel(recordDeferredResult); }
+        finally {
+          finalSimulationRuntime.close(
+            new Error(`block-scan final simulation generation ${generation} ended`),
+          );
+        }
       }
       if (Date.now() >= passDeadlineAtMs && atomicResults.length === 0) {
         outcome = "budget_exceeded";

@@ -229,6 +229,7 @@ test("profit mode is explicit, preserves positive-EV defaults, and cannot affect
 for (const [profit, profitMode, valueScale] of [
   [25n, "positive-ev", 1_000_000_000n], [0n, "positive-ev", 1_000_000_000n],
   [25n, "positive-ev", 1n], [25n, "positive-gross-profit", 1n], [0n, "positive-gross-profit", 1n],
+  [25n, "positive-gross-profit", 1_000_000_000n],
 ] as const) test(`production final gate: profit=${profit} policy=${profitMode} scale=${valueScale}, no submission`, async () => {
   const r = response(); r.strict!.tokenDeltas[0]!.delta = profit.toString();
   const sim = reconcile(input, r, trace(), [profit.toString(), ...traceDeltas.slice(1)]);
@@ -264,10 +265,14 @@ for (const [profit, profitMode, valueScale] of [
       assert.equal(evaluation.evaluation.maxBaseFeePerGas, 1000n);
       assert.equal(evaluation.evaluation.gasUnits, 25000n); assert.equal(evaluation.calldata, input.calldata);
       assert.equal(methods.length, 4);
-      if (profitMode === "positive-gross-profit") {
+      if (profitMode === "positive-gross-profit" && valueScale === 1n) {
         assert.equal(evaluation.evaluation.bidEth, 24n); // floor(25 * 99%), no gas subtraction.
         assert.equal(evaluation.evaluation.netEvWei, 1n - 25_000_000n);
         assert.equal(result.audit?.ev.reason, "positive_gross_profit_gate_pass");
+      } else if (profitMode === "positive-gross-profit") {
+        assert.equal(result.profitMode, "positive-ev");
+        assert.equal(evaluation.evaluation.bidEth, (25_000_000_000n - 25_000_000n) * 9900n / 10000n);
+        assert.equal(result.audit?.ev.reason, "ev_gate_pass");
       }
     } else {
       assert.equal(evaluation, undefined); assert.equal(methods.length, 1);

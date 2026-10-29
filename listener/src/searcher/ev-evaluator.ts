@@ -84,6 +84,23 @@ export function computeBidEth(
   return (surplus * BigInt(policy.bribeBps)) / 10000n;
 }
 
+/** Reuse one pinned valuation/gas observation; never read state or simulate a
+ * second time to compare the two economic policies. Plain positive-EV mode
+ * never acquires the loss-accepting fallback. */
+export function selectBlockScanProfitEvaluation(
+  evaluation: EvEvaluation,
+  policy: Pick<EvPolicy, "profitMode" | "bribeBps" | "bribeAllAboveGas">,
+  minimumNet: bigint,
+): { profitMode: ProfitMode; evaluation: EvEvaluation } {
+  const mode = resolveProfitMode(policy.profitMode);
+  if (mode === "positive-ev") return { profitMode: mode, evaluation };
+  const bidEth = computeBidEth(evaluation.expectedProfitEth, evaluation.gasCostEth, { ...policy, profitMode: "positive-ev" });
+  const netEvWei = evaluation.expectedProfitEth - evaluation.gasCostEth - bidEth;
+  return netEvWei > 0n && netEvWei > minimumNet
+    ? { profitMode: "positive-ev", evaluation: { ...evaluation, bidEth, netEvWei } }
+    : { profitMode: mode, evaluation };
+}
+
 /**
  * The next block's EIP-1559 base fee is fully determined by its parent.
  * Searcher bundles target exactly parent.number + 1, so a blanket 2x fee

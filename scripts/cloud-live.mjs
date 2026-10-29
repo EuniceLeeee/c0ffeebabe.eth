@@ -60,7 +60,7 @@ export async function main(args) {
       const gross = profitMode === 'positive-gross-profit';
       const confirmation = `START ${blocks}${gross ? ' POSITIVE-GROSS-PROFIT' : ''}`;
       const economics = gross
-        ? 'Simulation-positive trading: bid 99% of gross profit BEFORE gas; negative net EV and gas losses accepted.'
+        ? 'EV-first trading: bid 99% AFTER gas for positive-EV candidates; only if none is sent, fall back to 99% BEFORE gas for positive gross profit. Gas losses accepted on fallback.'
         : 'Net-positive EV-gated trading.';
       const answer = await prompt.question(`This will start real trading for at most ${blocks} source blocks. ${economics} No auto-restart. Type ${confirmation} to continue: `);
       assert.equal(answer.trim(), confirmation, 'start cancelled');

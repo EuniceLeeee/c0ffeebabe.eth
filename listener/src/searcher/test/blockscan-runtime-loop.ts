@@ -955,6 +955,72 @@ function completeRuntimeFixture(graph: VerifiedGraphView): any {
       sourceBlock: graph.sourceBlock, sourceBlockHash: graph.sourceBlockHash } };
 }
 
+for (const selection of ["preferred", "uncertain", "fallback", "cancel"] as const)
+test(`runHead wires deferred gross selection through the production pipeline: ${selection}`, async context => {
+  context.mock.method(console, "log", () => {});
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("unexpected state sim"); } },
+    async closeAndDrain() {} }));
+  const edges = twoWayPoolEdges([target, `0x${"dd".repeat(20)}`]);
+  const sends: string[] = [], discarded: string[] = [];
+  let atomicCalls = 0, completion: any;
+  f.coordinator.prepare = async (input: any) => completeRuntimeFixture(input.graph);
+  context.mock.method(AnvilSolver.prototype, "solve", async (_plan: any, _state: any, _probe: any, options: any) => {
+    const plans = [1n, 2n].map(amount => ({ root: { adapterId: "skip", target: actor, children: [],
+      tokenIn: priceFundingToken, tokenOut: priceFundingToken, amount, params: {} },
+      profitToken: priceFundingToken, netProfit: 1n, flashAmount: amount, templateName: "fixture" }));
+    options.onDeferredCandidates(plans);
+    return plans[0];
+  });
+  Object.assign(f.deps, {
+    exactRefineEnabled: false, blockScanGraph: () => edges,
+    exactQuoteStateFactory: () => ({ async call() { throw new Error("unexpected quote"); } }),
+    strictSession: async () => ({ edges, runtimeEvidenceFromPendingExecution: () => [],
+      familyIdForEdge: () => "fixture", async issueExact() { throw new Error("unexpected Exact"); } }),
+    amountReference: { prepare(input: any) { return new Map(input.opportunities.map((opp: any) => [opp, 123n])); } },
+    frozenTopology: { topologyKey: "fixture", async observeHeader(number: number) {
+      return { number, hash: hash(number), parentHash: hash(number - 1), timestamp: 1,
+        baseFeePerGas: 1n, gasUsed: 0n, gasLimit: 30_000_000n, transactionHashes: [] };
+    } },
+    directFinalSimulation: { concurrency: 1, async simulate() { throw new Error("atomic boundary is mocked"); } },
+    blockScanPlanner: () => ({ setFlashLiquidity() {}, setGraph() {}, async planBlockScanFromSeedEdges(opp: any) {
+      return [{ opportunity: { ...opp, startToken: opp.flashToken, profitToken: opp.flashToken },
+        tokenPath: { edges: [...opp.seedEdges] }, templateName: "fixture", root: {},
+        maxFlashAmount: opp.searchSeed.maxInput, flashAdapterIds: ["fixture-flash"],
+        flashAdapterId: "fixture-flash", cycleTokens: [opp.flashToken], borrowableTokens: [] }];
+    } }),
+    blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
+      maxCandidates: 1, pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
+    async submitAtomic() {
+      atomicCalls++;
+      const result = (decision: string, submitted = false) => ({ decision, submitted,
+        terminalForQuoteSet: true, finalSimStatus: "succeeded" as const, audit: null,
+        timing: { finalSimMs: 1, evMs: 1, finalSimStartedAtMs: Date.now(),
+          finalSimFinishedAtMs: Date.now(), evStartedAtMs: Date.now(), evFinishedAtMs: Date.now() } });
+      if (atomicCalls === 1) return { ...result("deferred"), terminalForQuoteSet: false,
+        profitMode: "positive-gross-profit", deferredSubmission: { netEvWei: -1n,
+          async submit() { sends.push("gross"); return { ...result("fallback", true), profitMode: "positive-gross-profit" }; },
+          discard(reason: string) { discarded.push(reason); return result(reason); },
+        } };
+      assert.deepEqual(sends, [], "gross must not precede a later finalist");
+      if (selection === "cancel") { f.runtimeAbort.abort(new Error("fixture cancelled")); throw f.runtimeAbort.signal.reason; }
+      if (selection === "fallback") return result("below_ev_gate");
+      sends.push("ev");
+      return { ...result(selection, selection === "preferred"), submissionAttempted: true, profitMode: "positive-ev" };
+    },
+  });
+  try {
+    const pass = f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() },
+      { through: "ev", onSnapshot() {}, onEnumeration() {}, onComplete(result) { completion = result; } });
+    if (selection === "cancel") await assert.rejects(pass, /fixture cancelled/); else await pass;
+    assert.equal(atomicCalls, 2, "a deferred gross result must not terminate its quote set");
+    assert.deepEqual(sends, selection === "cancel" ? [] : [selection === "fallback" ? "gross" : "ev"]);
+    assert.deepEqual(discarded, selection === "fallback" ? [] : [selection === "cancel" ? "pass_cancelled" : "preferred_submitted"]);
+    assert.equal(completion.atomicResults.length, selection === "cancel" ? 1 : 2, "deferred outcome recorded exactly once");
+    assert(completion.atomicResults.every((result: any) => !result.deferredSubmission));
+    assert.equal(completion.timing.finalSimMs, selection === "cancel" ? 1 : 2, "flush must not count a second simulation");
+  } finally { await f.loop.shutdown(); }
+});
+
 function pendingEvidenceFixture(number: number) {
   const txHash = hash(999), canonicalPayload = "0x", payloadHash = ethers.keccak256(canonicalPayload);
   const now = Date.now(), mono = performance.now();
@@ -964,6 +1030,33 @@ function pendingEvidenceFixture(number: number) {
       evidenceHash: ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
         ["string", "bytes32", "uint256", "bytes32", "bytes32"], ["fixture", txHash, number, hash(number), payloadHash])) }] };
 }
+
+test("settling a deferred amount cannot overwrite an already submitted opportunity's audit", () => {
+  const text = readFileSync(new URL("../blockscan-runtime-loop.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("runtime.ts", text, ts.ScriptTarget.Latest, true);
+  let expression: ts.Expression | undefined;
+  function visit(node: ts.Node): void {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === "recordAtomicResult") expression = node.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert(expression);
+  const atomicResults: any[] = [], submittedAuditOpportunities = new Set<string>();
+  const auditOpportunities = new Map(["ev", "gross", "uncertain", "rejected"].map(id => [id, {} as any]));
+  const record = runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
+    { atomicResults, submittedAuditOpportunities, auditOpportunities,
+      blindOpportunityEvidenceKey: (opp: string) => opp });
+  for (const [id, submitted, submissionAttempted] of [["ev", true, true], ["gross", true, true], ["uncertain", false, true]] as const) {
+    const selected = { submitted, submissionAttempted, audit: { simulation: id, ev: { decision: "allow", reason: id } } };
+    record({ item: { opp: id } }, selected);
+    record({ item: { opp: id } }, { submitted: false, audit: { simulation: "discarded", ev: { decision: "reject" } } });
+    assert.deepEqual(auditOpportunities.get(id)?.ev, selected.audit.ev);
+  }
+  const rejected = { submitted: false, audit: { simulation: "failed", ev: { decision: "reject" } } };
+  record({ item: { opp: "rejected" } }, rejected);
+  assert.deepEqual(auditOpportunities.get("rejected")?.ev, rejected.audit.ev);
+  assert.equal(atomicResults.length, 7, "all terminal outcomes remain available for per-amount analysis");
+});
 
 test("historical prices-only warmup clears bootstrap and the next pass consumes the published predecessor", async context => {
   context.mock.method(console, "log", () => {});

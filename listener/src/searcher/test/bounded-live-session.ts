@@ -141,6 +141,20 @@ async function main(): Promise<void> {
       maxBaseFeePerGas: params.maxBaseFeePerGas, gasUsed: params.gasUsed });
     assert.equal(grossResult.filter(r => r.accepted).length, 5);
     assert.equal(signs, 1); assert.equal(sends, 5);
+    reset(); write({ profitMode: "positive-gross-profit" });
+    const evFirst = await router.submit({ mode: "standalone", profitMode: "positive-ev",
+      victimTxHash: "", backrunCalldata: params.calldataHex, targetBlock: params.targetBlock,
+      expectedProfit: 64_001n, expectedProfitEth: 1_000_000_000_000_000n, bribeWei: 1n,
+      maxBaseFeePerGas: params.maxBaseFeePerGas, gasUsed: params.gasUsed });
+    assert.equal(evFirst.filter(r => r.accepted).length, 5);
+    assert.equal(signs, 1); assert.equal(sends, 5);
+    reset(); write({ profitMode: "positive-gross-profit" });
+    const unsafeEv = await router.submit({ mode: "standalone", profitMode: "positive-ev",
+      victimTxHash: "", backrunCalldata: params.calldataHex, targetBlock: params.targetBlock,
+      expectedProfit: 1n, expectedProfitEth: 1n, bribeWei: 1n,
+      maxBaseFeePerGas: params.maxBaseFeePerGas, gasUsed: params.gasUsed });
+    assert.equal(unsafeEv[0]?.error, "non_positive_ev_budget");
+    assert.equal(signs + sends, 0);
     for (const [patch, message] of [
       [{ status: "stopped" }, "inactive"], [{ validUntilMs: NOW }, "expired"],
       [{ firstTargetBlock: 102, lastTargetBlock: 351 }, "target-outside-window"],
