@@ -1,0 +1,20 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../protocols/boring-vault-teller-family/manifest.js";
+import { boringDiscovery as discovery } from "../protocols/boring-vault-teller-family/discovery.js";
+import { boringIdentity as identity } from "../protocols/boring-vault-teller-family/identity.js";
+import { boringInstance as instance } from "../protocols/boring-vault-teller-family/instance.js";
+import { boringRoutes as routes } from "../protocols/boring-vault-teller-family/routes.js";
+import { boringPricing as pricing } from "../protocols/boring-vault-teller-family/pricing.js";
+import { boringExact as exact } from "../protocols/boring-vault-teller-family/exact.js";
+import { boringExecution as execution } from "../protocols/boring-vault-teller-family/execution.js";
+import { boringProtocol as protocol } from "../protocols/boring-vault-teller-family/protocol.js";
+import { boringCapture as capture } from "../protocols/boring-vault-teller-family/capture.js";
+import { boringFamilyOwnedAction } from "../protocols/boring-vault-teller-family/action.js";
+
+export const plugin = defineProtocolFamily({
+  manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture,
+  actionAdapters: [boringFamilyOwnedAction],
+});
+
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_BORING_VAULT_TELLER_ENABLED" });

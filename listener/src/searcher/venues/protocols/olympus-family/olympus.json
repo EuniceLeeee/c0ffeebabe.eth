@@ -1,0 +1,1534 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:olympus"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_OLYMPUS_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:olympus",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "olympus-unstake"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "convert"
+      }
+    ],
+    "supportedLineages": [
+      "olympus:staking-v3-gohm-unstake"
+    ],
+    "poolAdapterIds": [
+      "olympus"
+    ],
+    "edgeAdapterIds": [
+      "olympus-unstake"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "sources": [
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "olympus-staking",
+        "addressField": "target"
+      },
+      "calls": [
+        {
+          "id": "olympus-unstake-call",
+          "signature": "unstake(address,uint256,bool,bool)"
+        }
+      ],
+      "events": [],
+      "surface": {
+        "id": "olympus-staking-surface",
+        "fingerprint": "olympus-staking-v3-unstake-v1"
+      },
+      "labels": [
+        "olympus",
+        "protocol:olympus"
+      ]
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "olympus": [
+          "function unstake(address recipient,uint256 amount,bool trigger,bool rebasing)",
+          "function index() view returns (uint256)",
+          "function OHM() view returns (address)",
+          "function gOHM() view returns (address)"
+        ],
+        "erc20": [
+          "function decimals() view returns (uint8)"
+        ]
+      },
+      "constants": {
+        "stakingCodeHash": "0x6c1ff3d80434554eea4896f01540b4f810e10ef4e5e68de15de530672bb9176a",
+        "gOhmCodeHash": "0x09cabd71e420dac57ffa1cc568893a32b683d2f98076570c1756e1ec14d13bb9",
+        "ohmCodeHash": "0xbbfa9eba3c06791a338705ffc5b6566e8b1cc70a570fc7ab798d71af4dc8bcdd",
+        "gOhmDecimals": "18",
+        "ohmDecimals": "9",
+        "zero": "0x0000000000000000000000000000000000000000"
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "surface",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "tokens",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "surface"
+              ]
+            }
+          },
+          {
+            "return": "complete",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "complete"
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "surface": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "olympus-staking-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
+              },
+              {
+                "id": "olympus-ohm",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "olympus",
+                    "OHM",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "olympus-gohm",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "olympus",
+                    "gOHM",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {
+                        "op": "successful",
+                        "args": [
+                          "olympus-staking-code"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "olympus-ohm"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "olympus-gohm"
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              },
+              {
+                "let": "stakingCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "olympus-staking-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "ohm",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "olympus",
+                        "OHM",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "olympus-ohm"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "gohm",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "olympus",
+                        "gOHM",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "olympus-gohm"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "surface",
+                  "source": "$source",
+                  "staking": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.target"
+                    ]
+                  },
+                  "stakingCodeHash": "$stakingCodeHash",
+                  "gOHM": "$gohm",
+                  "OHM": "$ohm"
+                }
+              }
+            ]
+          },
+          "tokens": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "olympus-gohm-code",
+                "kind": "get-code",
+                "address": "$evidence.gOHM"
+              },
+              {
+                "id": "olympus-ohm-code",
+                "kind": "get-code",
+                "address": "$evidence.OHM"
+              },
+              {
+                "id": "olympus-gohm-decimals",
+                "kind": "eth-call",
+                "to": "$evidence.gOHM",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "erc20",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "olympus-ohm-decimals",
+                "kind": "eth-call",
+                "to": "$evidence.OHM",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "erc20",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {
+                        "op": "successful",
+                        "args": [
+                          "olympus-gohm-code"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "olympus-ohm-code"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "olympus-gohm-decimals"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "olympus-ohm-decimals"
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                },
+                "error": "standard protocol result came from a foreign source"
+              },
+              {
+                "return": {
+                  "phase": "complete",
+                  "source": "$evidence.source",
+                  "staking": "$evidence.staking",
+                  "stakingCodeHash": "$evidence.stakingCodeHash",
+                  "gOHM": "$evidence.gOHM",
+                  "OHM": "$evidence.OHM",
+                  "gOhmCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "olympus-gohm-code"
+                        ]
+                      }
+                    ]
+                  },
+                  "ohmCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "olympus-ohm-code"
+                        ]
+                      }
+                    ]
+                  },
+                  "gOhmDecimals": {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "erc20",
+                          "decimals",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "olympus-gohm-decimals"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "ohmDecimals": {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "erc20",
+                          "decimals",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "olympus-ohm-decimals"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "complete": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "surface"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "olympus_staking_code_not_matched",
+              "evidenceRequestIds": [
+                "olympus-staking-code"
+              ]
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.stakingCodeHash"
+                  ]
+                },
+                "$constants.stakingCodeHash"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "olympus_gohm_code_not_matched",
+              "evidenceRequestIds": [
+                "olympus-gohm-code"
+              ]
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.gOhmCodeHash"
+                  ]
+                },
+                "$constants.gOhmCodeHash"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "olympus_ohm_code_not_matched",
+              "evidenceRequestIds": [
+                "olympus-ohm-code"
+              ]
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.ohmCodeHash"
+                  ]
+                },
+                "$constants.ohmCodeHash"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "olympus_token_decimals_not_matched",
+              "evidenceRequestIds": [
+                "olympus-gohm-decimals",
+                "olympus-ohm-decimals"
+              ]
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    "$evidence.gOhmDecimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$constants.gOhmDecimals"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$evidence.ohmDecimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$constants.ohmDecimals"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "olympus_token_surface_alias",
+              "evidenceRequestIds": [
+                "olympus-gohm",
+                "olympus-ohm"
+              ]
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.gOHM",
+                    "$evidence.OHM"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.gOHM",
+                    "$evidence.staking"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.OHM",
+                    "$evidence.staking"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.gOHM",
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.OHM",
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.staking"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "olympus-staking-v3-code-and-token-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.staking"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "stakingCodeHash": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.stakingCodeHash"
+                            ]
+                          },
+                          "gOhmCodeHash": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.gOhmCodeHash"
+                            ]
+                          },
+                          "ohmCodeHash": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.ohmCodeHash"
+                            ]
+                          },
+                          "gOHM": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.gOHM"
+                            ]
+                          },
+                          "OHM": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.OHM"
+                            ]
+                          },
+                          "gOhmDecimals": "$constants.gOhmDecimals",
+                          "ohmDecimals": "$constants.ohmDecimals"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "gOHM": "$evidence.gOHM",
+                "OHM": "$evidence.OHM",
+                "gOhmDecimals": {
+                  "op": "uint",
+                  "args": [
+                    "$constants.gOhmDecimals"
+                  ]
+                },
+                "ohmDecimals": {
+                  "op": "uint",
+                  "args": [
+                    "$constants.ohmDecimals"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "staking": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "gOHM": {
+        "op": "address",
+        "args": [
+          "$identity.gOHM"
+        ]
+      },
+      "OHM": {
+        "op": "address",
+        "args": [
+          "$identity.OHM"
+        ]
+      },
+      "gOhmDecimals": "$identity.gOhmDecimals",
+      "ohmDecimals": "$identity.ohmDecimals"
+    },
+    "bindingProjection": {
+      "staking": {
+        "op": "lower",
+        "args": [
+          "$descriptor.staking"
+        ]
+      },
+      "gOHM": {
+        "op": "lower",
+        "args": [
+          "$descriptor.gOHM"
+        ]
+      },
+      "OHM": {
+        "op": "lower",
+        "args": [
+          "$descriptor.OHM"
+        ]
+      },
+      "gOhmDecimals": "$descriptor.gOhmDecimals",
+      "ohmDecimals": "$descriptor.ohmDecimals",
+      "quoteSemantics": "floor(gohm*index/1e18)-v1"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.staking",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        "$descriptor.staking"
+      ]
+    },
+    "directions": [
+      {
+        "id": "unstake",
+        "enabled": true,
+        "tokenIn": "$descriptor.gOHM",
+        "tokenOut": "$descriptor.OHM",
+        "adapterId": "olympus-unstake",
+        "executionAssets": {
+          "input": "erc20",
+          "output": "erc20"
+        },
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "convert"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          "$descriptor.staking"
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "staking": "$descriptor.staking",
+      "gOHM": "$descriptor.gOHM",
+      "OHM": "$descriptor.OHM",
+      "route": {
+        "op": "at",
+        "args": [
+          "$routes",
+          0
+        ]
+      },
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "staking": {
+        "op": "lower",
+        "args": [
+          "$descriptor.staking"
+        ]
+      },
+      "gOHM": {
+        "op": "lower",
+        "args": [
+          "$descriptor.gOHM"
+        ]
+      },
+      "OHM": {
+        "op": "lower",
+        "args": [
+          "$descriptor.OHM"
+        ]
+      },
+      "semantics": "olympus-staking-index-unstake-v1"
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [
+        "$draft.staking"
+      ],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "$constants.sample"
+      ]
+    },
+    "exactCompatibility": {
+      "staking": {
+        "op": "lower",
+        "args": [
+          "$descriptor.staking"
+        ]
+      },
+      "gOHM": {
+        "op": "lower",
+        "args": [
+          "$descriptor.gOHM"
+        ]
+      },
+      "OHM": {
+        "op": "lower",
+        "args": [
+          "$descriptor.OHM"
+        ]
+      },
+      "direction": "$route.direction",
+      "quoteSemantics": "olympus-index-floor-v1",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": [
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "olympus-staking-v3-unstake",
+    "lineageId": "olympus:staking-v3-gohm-unstake",
+    "abi": {
+      "olympus": [
+        "function unstake(address recipient,uint256 amount,bool trigger,bool rebasing)",
+        "function index() view returns (uint256)",
+        "function OHM() view returns (address)",
+        "function gOHM() view returns (address)"
+      ],
+      "erc20": [
+        "function decimals() view returns (uint8)"
+      ]
+    },
+    "constants": {
+      "gOhmDecimals": "18",
+      "ohmDecimals": "9",
+      "sample": "1000000000000000000",
+      "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.direction",
+            "unstake"
+          ]
+        },
+        "error": "Olympus route is incompatible with its staking descriptor"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            "$descriptor.gOHM"
+          ]
+        },
+        "error": "Olympus route is incompatible with its staking descriptor"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            "$descriptor.OHM"
+          ]
+        },
+        "error": "Olympus route is incompatible with its staking descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            "olympus-unstake"
+          ]
+        },
+        "error": "Olympus route is incompatible with its staking descriptor"
+      }
+    ],
+    "inputs": [
+      "trialState",
+      "prefix"
+    ],
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.staking",
+        "$descriptor.gOHM",
+        "$descriptor.OHM"
+      ],
+      "mutationAddresses": [
+        "$descriptor.staking"
+      ]
+    },
+    "exact": {
+      "methodId": "olympus-index",
+      "requirements": {
+        "transports": []
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "gte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "Olympus exact input cannot be negative"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "$constants.maxUint256"
+                ]
+              }
+            ]
+          },
+          "error": "Olympus exact input exceeds uint256"
+        },
+        {
+          "assert": {
+            "op": "not",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$trialState"
+                ]
+              }
+            ]
+          },
+          "error": "Olympus sequential local state transition model is unproven",
+          "when": {
+            "op": "gt",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "or",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "defined",
+                    "args": [
+                      "$prefix"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$prefix"
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          },
+          "error": "Olympus sequential local state transition model is unproven",
+          "when": {
+            "op": "gt",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "retainReadEvidence": true,
+      "evidence": {
+        "kind": "olympus-index-unstake",
+        "source": "$source",
+        "staking": "$descriptor.staking",
+        "gOHM": "$descriptor.gOHM",
+        "OHM": "$descriptor.OHM",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "index": "$steps.index",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "zeroEvidence": {
+        "kind": "olympus-index-unstake",
+        "source": "$source",
+        "staking": "$descriptor.staking",
+        "gOHM": "$descriptor.gOHM",
+        "OHM": "$descriptor.OHM",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "index": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "rejectRuntimeEvidence": true,
+      "protectedAddresses": [
+        "$descriptor.staking",
+        "$descriptor.gOHM",
+        "$descriptor.OHM"
+      ],
+      "preflight": [
+        {
+          "target": "$descriptor.staking",
+          "signature": "function index() view returns (uint256)",
+          "args": [],
+          "save": {
+            "indexRaw": 0
+          }
+        }
+      ],
+      "steps": [
+        {
+          "id": "expected",
+          "math": {
+            "model": "olympusIndexRuntime",
+            "inputs": {
+              "amountIn": {
+                "runtime": "amountIn"
+              },
+              "index": {
+                "runtime": "indexRaw"
+              }
+            },
+            "outputs": {
+              "amountOut": "expectedOut"
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "indexRaw"
+                },
+                "operator": "gte",
+                "right": 1
+              }
+            ]
+          }
+        },
+        {
+          "id": "unstake",
+          "call": {
+            "target": "$descriptor.staking",
+            "signature": "function unstake(address,uint256,bool,bool)",
+            "args": [
+              "$recipient",
+              {
+                "runtime": "amountIn"
+              },
+              false,
+              false
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "expectedOut"
+          }
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "olympusIndexQuote": {
+          "model": "olympus:index-quote",
+          "version": 1
+        }
+      }
+    },
+    "executionMath": {
+      "version": 1,
+      "entries": {
+        "olympusIndexRuntime": {
+          "model": "olympus:index-runtime-quote",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "Olympus unstake burn/payout state transition is not modeled for sequential trials",
+      "steps": [
+        {
+          "id": "index",
+          "requirements": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "transports": []
+              },
+              {
+                "transports": [
+                  "eth-call"
+                ]
+              }
+            ]
+          },
+          "requests": [
+            {
+              "id": "exact-index",
+              "kind": "eth-call",
+              "to": {
+                "op": "address",
+                "args": [
+                  "$descriptor.staking"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "olympus",
+                  "index",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "quoteIndex",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "olympus",
+                      "index",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "exact-index"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": "$quoteIndex"
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "model",
+        "args": [
+          "olympusIndexQuote",
+          {
+            "amountIn": "$amountIn",
+            "index": "$steps.index"
+          }
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-index",
+              "kind": "eth-call",
+              "to": {
+                "op": "address",
+                "args": [
+                  "$descriptor.staking"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "olympus",
+                  "index",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "quoteIndex",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "olympus",
+                      "index",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-index"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": "$quoteIndex"
+            }
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "index": "$steps.quote",
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            [
+              [
+                "$routes.0.routeKey",
+                {
+                  "amountIn": {
+                    "op": "uint",
+                    "args": [
+                      "$constants.sample"
+                    ]
+                  },
+                  "amountOut": {
+                    "op": "model",
+                    "args": [
+                      "olympusIndexQuote",
+                      {
+                        "amountIn": {
+                          "op": "uint",
+                          "args": [
+                            "$constants.sample"
+                          ]
+                        },
+                        "index": "$steps.quote"
+                      }
+                    ]
+                  }
+                }
+              ]
+            ]
+          ]
+        }
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "olympus-unstake",
+        "lineage": "custom-protocol:olympus",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function unstake(address,uint256,bool,bool)"
+        }
+      ]
+    }
+  ]
+}

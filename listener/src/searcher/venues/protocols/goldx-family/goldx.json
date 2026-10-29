@@ -1,0 +1,1013 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:goldx"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_GOLDX_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:goldx",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "goldx-mint"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "convert"
+      }
+    ],
+    "supportedLineages": [
+      "goldx:active-unit-mint"
+    ],
+    "poolAdapterIds": [
+      "goldx"
+    ],
+    "edgeAdapterIds": [
+      "goldx-mint"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "sources": [
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "goldx-minter",
+        "addressField": "target"
+      },
+      "calls": [
+        {
+          "id": "goldx-mint-call",
+          "signature": "mint(address,uint256)"
+        }
+      ],
+      "events": [],
+      "surface": {
+        "id": "goldx-unit-mint-surface",
+        "fingerprint": "goldx-unit-mint-v1"
+      },
+      "labels": [
+        "goldx",
+        "protocol:goldx"
+      ]
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "goldx": [
+          "function unit() view returns (uint256)"
+        ]
+      },
+      "constants": {},
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "active-unit"
+          }
+        ],
+        "stages": {
+          "active-unit": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
+              },
+              {
+                "id": "identity-unit",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "goldx",
+                    "unit",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "identity-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "unit",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "goldx",
+                        "unit",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-unit"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "codeHash": "$codeHash",
+                  "unit": "$unit"
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "goldx_unit_inactive",
+              "evidenceRequestIds": [
+                "active-unit-mint"
+              ]
+            },
+            "when": {
+              "op": "lte",
+              "args": [
+                "$evidence.unit",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "goldx-active-unit-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "codeHash": "$evidence.codeHash",
+                          "unit": "$evidence.unit"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "unit": "$evidence.unit"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "target": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "collateral": {
+        "op": "address",
+        "args": [
+          "$constants.paxg"
+        ]
+      },
+      "receipt": {
+        "op": "address",
+        "args": [
+          "$constants.goldx"
+        ]
+      }
+    },
+    "bindingProjection": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "collateral": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.collateral"
+            ]
+          }
+        ]
+      },
+      "receipt": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.receipt"
+            ]
+          }
+        ]
+      },
+      "quoteSemantics": "floor(amount*unit/1e18)"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "mint",
+        "enabled": true,
+        "tokenIn": "$descriptor.collateral",
+        "tokenOut": "$descriptor.receipt",
+        "adapterId": "goldx-mint",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "convert"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "target": "$descriptor.target",
+      "route": {
+        "op": "at",
+        "args": [
+          "$routes",
+          0
+        ]
+      },
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "collateral": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.collateral"
+            ]
+          }
+        ]
+      },
+      "receipt": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.receipt"
+            ]
+          }
+        ]
+      }
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [
+        "$draft.target"
+      ],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "$constants.sample"
+      ]
+    },
+    "exactCompatibility": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "direction": "$route.direction",
+      "quoteSemantics": "source-unit-checked-formula-v1",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": [
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "active-unit-mint",
+    "lineageId": "goldx:active-unit-mint",
+    "abi": {
+      "goldx": [
+        "function unit() view returns (uint256)",
+        "function mint(address receiver,uint256 amount)"
+      ]
+    },
+    "constants": {
+      "paxg": "0x45804880De22913dAFE09f4980848ECE6EcbAf78",
+      "goldx": "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0",
+      "sample": "1000000000000000000",
+      "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.direction",
+            "mint"
+          ]
+        },
+        "error": "GOLDx route is incompatible with its mint descriptor"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            "$descriptor.collateral"
+          ]
+        },
+        "error": "GOLDx route is incompatible with its mint descriptor"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            "$descriptor.receipt"
+          ]
+        },
+        "error": "GOLDx route is incompatible with its mint descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            "goldx-mint"
+          ]
+        },
+        "error": "GOLDx route is incompatible with its mint descriptor"
+      }
+    ],
+    "pricing": {
+      "mutationAddresses": [
+        "$descriptor.target"
+      ],
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.target",
+        "$descriptor.collateral",
+        "$descriptor.receipt"
+      ]
+    },
+    "exact": {
+      "methodId": "goldx-unit",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "retainReadEvidence": true,
+      "checks": [
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "$constants.maxUint256"
+                ]
+              }
+            ]
+          },
+          "error": "GOLDx exact input exceeds uint256"
+        },
+        {
+          "assert": {
+            "op": "not",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$trialState"
+                ]
+              }
+            ]
+          },
+          "error": "GOLDx collateral transfer, mint fee and supply transition model is unproven"
+        },
+        {
+          "assert": {
+            "op": "not",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$prefix"
+                ]
+              }
+            ]
+          },
+          "error": "GOLDx local state transition model is unproven"
+        }
+      ],
+      "evidence": {
+        "kind": "goldx-unit-quote",
+        "source": "$source",
+        "target": "$descriptor.target",
+        "unit": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            "$steps.unit"
+          ]
+        },
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {
+      "quote": {
+        "requests": [
+          {
+            "id": "$requestId",
+            "kind": "eth-call",
+            "to": "$descriptor.target",
+            "data": {
+              "op": "encode",
+              "args": [
+                "goldx",
+                "unit",
+                []
+              ]
+            },
+            "completion": "return-data"
+          }
+        ],
+        "result": {
+          "op": "model",
+          "args": [
+            "goldxUnit",
+            {
+              "amountIn": "$amountIn",
+              "unit": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "goldx",
+                      "unit",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "$requestId"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.target"
+      ],
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.target",
+        "mode": "ensure"
+      },
+      "call": {
+        "target": "$descriptor.target",
+        "signature": "function mint(address,uint256)",
+        "args": [
+          "$executor",
+          {
+            "runtime": "amountIn"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "minimum": 1
+        }
+      ]
+    },
+    "inputs": [
+      "trialState",
+      "prefix"
+    ]
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "goldxUnit": {
+          "model": "goldx:unit-quote",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "GOLDx collateral transfer, mint fee and supply transition model is unproven",
+      "steps": [
+        {
+          "id": "unit",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "quote-unit",
+              "kind": "eth-call",
+              "to": "$descriptor.target",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "goldx",
+                  "unit",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "return": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "goldx",
+                      "unit",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "quote-unit"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "model",
+        "args": [
+          "goldxUnit",
+          {
+            "amountIn": "$amountIn",
+            "unit": "$steps.unit"
+          }
+        ]
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "goldx-mint",
+        "lineage": "goldx",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function mint(address,uint256)"
+        }
+      ]
+    }
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "GoldxCandidate": {
+        "type": "object",
+        "extends": [
+          "FamilyCandidate"
+        ],
+        "fields": {
+          "candidateKind": {
+            "literal": "goldx-minter"
+          },
+          "target": {
+            "type": "string"
+          }
+        }
+      },
+      "GoldxIdentityEvidence": {
+        "type": "object",
+        "fields": {
+          "codeHash": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "bigint"
+          }
+        }
+      },
+      "GoldxIdentity": {
+        "type": "object",
+        "extends": [
+          "VerifiedIdentity"
+        ],
+        "fields": {
+          "unit": {
+            "type": "bigint"
+          }
+        }
+      },
+      "GoldxDescriptor": {
+        "type": "object",
+        "extends": [
+          "CompiledInstanceDescriptor"
+        ],
+        "fields": {
+          "target": {
+            "type": "string"
+          },
+          "collateral": {
+            "type": "string"
+          },
+          "receipt": {
+            "type": "string"
+          }
+        }
+      },
+      "GoldxRoute": {
+        "type": "object",
+        "extends": [
+          "FamilyRouteDescriptor"
+        ],
+        "fields": {
+          "target": {
+            "type": "string"
+          },
+          "direction": {
+            "literal": "mint"
+          },
+          "adapterId": {
+            "literal": "goldx-mint"
+          }
+        }
+      },
+      "GoldxPricingDraft": {
+        "type": "object",
+        "fields": {
+          "instanceKey": {
+            "ref": "InstanceKey"
+          },
+          "target": {
+            "type": "string"
+          },
+          "route": {
+            "ref": "GoldxRoute"
+          },
+          "routes": {
+            "array": {
+              "ref": "GoldxRoute"
+            }
+          }
+        }
+      },
+      "GoldxPricingStatic": {
+        "type": "object",
+        "fields": {}
+      },
+      "GoldxPricingDescriptor": {
+        "type": "object",
+        "extends": [
+          "GoldxPricingDraft",
+          "GoldxPricingStatic"
+        ],
+        "fields": {}
+      },
+      "GoldxExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {
+            "literal": "goldx-unit-quote"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "target": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "bigint"
+          },
+          "amountIn": {
+            "type": "bigint"
+          },
+          "amountOut": {
+            "type": "bigint"
+          },
+          "bindingFingerprint": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "contracts": {
+      "candidate": "GoldxCandidate",
+      "identityEvidence": "GoldxIdentityEvidence",
+      "identity": "GoldxIdentity",
+      "descriptor": "GoldxDescriptor",
+      "route": "GoldxRoute",
+      "pricingDraft": "GoldxPricingDraft",
+      "pricingDescriptor": "GoldxPricingDescriptor",
+      "pricingStatic": "GoldxPricingStatic",
+      "exactEvidence": "GoldxExactEvidence"
+    }
+  }
+}

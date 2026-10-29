@@ -1,0 +1,117 @@
+import { MaxUint256 } from "ethers";
+import type { DeclarativeMathModel, MathValue } from "./declarative-math.js";
+
+/**
+ * Curve v0.3.1 StableSwap-2 LP source arithmetic.
+ *
+ * `mintQuote` mirrors `curve-lp-family/model.ts` (fee-adjusted D2, not the
+ * fee-free `calc_token_amount`). It is a pure protocol model: no transport,
+ * encoding, pool lookup or admission authority.
+ */
+const MAX_UINT256 = MaxUint256;
+const PRECISIONS = [1n, 10n ** 12n] as const;
+const DECIMALS = [18, 6] as const;
+
+type MintInput = {
+  readonly balances: readonly [bigint, bigint];
+  readonly amp: bigint;
+  readonly fee: bigint;
+  readonly totalSupply: bigint;
+  readonly killed: boolean;
+  readonly index: number;
+  readonly amount: bigint;
+};
+
+function plain(value: MathValue, fields: readonly string[], label: string): Record<string, MathValue> {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+    throw new Error(`${label} must be a plain object`);
+  }
+  const record = value as Record<string, MathValue>;
+  const keys = Reflect.ownKeys(record);
+  if (keys.some(key => typeof key !== "string") ||
+      keys.some(key => typeof key === "string" && !fields.includes(key)) ||
+      fields.some(key => !Object.hasOwn(record, key))) {
+    throw new Error(`${label} has missing or unknown fields: ${keys.map(String).join(",")} / ${fields.join(",")}`);
+  }
+  return record;
+}
+
+function uint(value: MathValue | undefined, label: string): bigint {
+  if (typeof value !== "bigint" || value < 0n || value > MAX_UINT256) {
+    throw new Error(`${label} must be a uint256`);
+  }
+  return value;
+}
+
+function input(value: MathValue): MintInput {
+  const source = plain(value, ["balances", "amp", "fee", "totalSupply", "killed", "index", "amount"], "curve-lp stableswap2 mint input");
+  const balances = source.balances;
+  if (!Array.isArray(balances) || balances.length !== 2) throw new Error("curve-lp legacy balance domain");
+  const index = source.index;
+  if (index !== 0 && index !== 1) throw new Error("curve-lp no mint capacity");
+  if (typeof source.killed !== "boolean") throw new Error("curve-lp killed flag");
+  return Object.freeze({
+    balances: Object.freeze([uint(balances[0], "curve-lp balance 0"), uint(balances[1], "curve-lp balance 1")]) as readonly [bigint, bigint],
+    amp: uint(source.amp, "curve-lp amp"),
+    fee: uint(source.fee, "curve-lp fee"),
+    totalSupply: uint(source.totalSupply, "curve-lp total supply"),
+    killed: source.killed,
+    index,
+    amount: uint(source.amount, "curve-lp mint amount"),
+  });
+}
+
+const add = (a: bigint, b: bigint) => uint(a + b, "curve-lp add");
+const sub = (a: bigint, b: bigint) => uint(a - b, "curve-lp sub");
+const mul = (a: bigint, b: bigint) => uint(a * b, "curve-lp mul");
+const div = (a: bigint, b: bigint) => { if (!b) throw new Error("curve-lp zero divisor"); return uint(a) / uint(b); };
+const distance = (a: bigint, b: bigint) => a > b ? a - b : b - a;
+
+function invariant(balances: readonly [bigint, bigint], amp: bigint): bigint {
+  const xp = balances.map((b, i) => div(mul(10n ** 18n * PRECISIONS[i], uint(b)), 10n ** 18n));
+  const sum = add(xp[0], xp[1]); if (!sum) return 0n;
+  const ann = mul(uint(amp), 2n); let d = sum;
+  for (let k = 0; k < 255; k++) {
+    const prior = d; let p = d;
+    for (const x of xp) p = div(mul(p, d), mul(x, 2n));
+    d = div(mul(add(div(mul(ann, sum), 100n), mul(p, 2n)), d), add(div(mul(sub(ann, 100n), d), 100n), mul(3n, p)));
+    if (distance(d, prior) <= 1n) return d;
+  }
+  throw new Error("curve-lp invariant did not converge");
+}
+
+/** Source `add_liquidity` path. Initial multi-coin bootstrap is outside one-input conversion. */
+function mintQuote(source: MintInput): bigint {
+  const { balances, amp, fee: feeRaw, totalSupply, killed, index, amount } = source;
+  if (killed || !totalSupply || balances.some(b => b <= 0n) || !amp || feeRaw > 5n * 10n ** 9n) {
+    throw new Error("curve-lp no mint capacity");
+  }
+  const d0 = invariant(balances, amp), next: [bigint, bigint] = [balances[0], balances[1]];
+  next[index] = add(next[index], amount);
+  const d1 = invariant(next, amp); if (d1 <= d0) throw new Error("curve-lp input below mint resolution");
+  const fee = div(mul(feeRaw, 2n), 4n);
+  for (let i = 0; i < 2; i++) {
+    const ideal = div(mul(d1, balances[i]), d0);
+    next[i] = sub(next[i], div(mul(fee, distance(ideal, next[i])), 10n ** 10n));
+  }
+  const out = div(mul(totalSupply, sub(invariant(next, amp), d0)), d0);
+  if (!out) throw new Error("curve-lp zero minted output");
+  return out;
+}
+
+export const curveLpStableSwap2MintMathModel: DeclarativeMathModel = {
+  id: "curve-lp-stableswap2-mint",
+  version: 1,
+  validateInput(value) {
+    const source = input(value);
+    if (source.index >= DECIMALS.length) throw new Error("curve-lp legacy coin index");
+    if (!source.amount) throw new Error("curve-lp no mint capacity");
+    if (source.amount > MAX_UINT256) throw new Error("curve-lp uint256 bounds");
+  },
+  evaluate(value) {
+    return mintQuote(input(value));
+  },
+  validateOutput(value) {
+    if (typeof value !== "bigint" || value <= 0n || value > MAX_UINT256) throw new Error("curve-lp mint output must be a positive uint256");
+  },
+};

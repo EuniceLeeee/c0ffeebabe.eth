@@ -1,0 +1,1543 @@
+{
+  "version": 2,
+  "scope": {"family": "protocol:origin-steth-arm"},
+  "production": {
+    "domain": "protocol",
+    "activation": {"enabled": false, "envKey": "SEARCHER_FAMILY_ORIGIN_STETH_ARM_ENABLED"}
+  },
+  "manifest": {
+    "familyId": "protocol:origin-steth-arm",
+    "domain": "protocol",
+    "ownedActionAdapterIds": ["origin-steth-arm-swap"],
+    "requiredInfraActionAdapterIds": ["erc20-approve"],
+    "allowedTaxonomy": [{"slotKind": "protocol", "protocolAction": "convert"}],
+    "supportedLineages": ["origin-steth-arm-lido"],
+    "poolAdapterIds": ["origin-steth-arm"],
+    "edgeAdapterIds": ["origin-steth-arm-swap"],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": ["observed-call", "address-surface"],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "origin-steth-arm",
+        "addressField": "target",
+        "fields": {"target": "address"},
+        "key": ["target"]
+      },
+      "calls": [
+        {
+          "id": "origin-steth-arm-swap-call",
+          "signature": "swapExactTokensForTokens(address,address,uint256,uint256,address)",
+          "fields": {"target": {"from": "target"}},
+          "predicates": [
+            {"op": "gt", "args": [{"op": "uint", "args": ["$args.2"]}, {"op": "uint", "args": ["0"]}]}
+          ]
+        }
+      ],
+      "events": [],
+      "surface": {
+        "id": "origin-steth-arm-surface",
+        "fingerprint": "origin-steth-arm-swap-v1",
+        "fields": {"target": {"from": "emitter"}}
+      },
+      "labels": ["origin-steth-arm", "protocol:origin-steth-arm"],
+      "nomination": "address-surface"
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+    "definition": {
+      "version": 1,
+      "abi": {
+        "arm": [
+          "function swapExactTokensForTokens(address inToken,address outToken,uint256 amountIn,uint256 amountOutMin,address to) returns (uint256[] amounts)",
+          "function traderate0() view returns (uint256)",
+          "function traderate1() view returns (uint256)"
+        ],
+        "erc20": [
+          "function approve(address spender,uint256 amount) returns (bool)"
+        ]
+      },
+      "constants": {
+        "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "steth": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+        "zeroAddress": "0x0000000000000000000000000000000000000000",
+        "probeRecipient": "0x0000000000000000000000000000000000000001",
+        "priceScale": "1000000000000000000000000000000000000",
+        "maxRate": "2000000000000000000000000000000000000",
+        "sampleSmall": "1000000000000",
+        "sampleLarge": "1000000000000000",
+        "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+        "traderate0Slot": "0x0000000000000000000000000000000000000000000000000000000000000032",
+        "traderate1Slot": "0x0000000000000000000000000000000000000000000000000000000000000033",
+        "proxyCodeHash": "0x2f2547c03a7df08ab5b52c16c83ce594279bd2f79b39d43008bbf9dee11c7510",
+        "implementationCodeHash": "0x12828de7a5e8dd262821cf306d4f6d3c12d494816316cad5d72cea22f4c5d63d",
+        "stethCodeHash": "0xb9c1c929064cd21734c102a698e68bf617feefcfa5a9f62407c45401546736bf",
+        "wethCodeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23"
+      },
+      "expressions": {
+        "validRate": {
+          "op": "and",
+          "args": [
+            {"op": "gt", "args": ["$rate", {"op": "uint", "args": ["0"]}]},
+            {"op": "lte", "args": ["$rate", {"op": "uint", "args": ["$constants.maxRate"]}]}
+          ]
+        }
+      },
+      "programs": {
+        "swapProbe": [
+          {
+            "let": "effects",
+            "value": {"op": "effects", "args": [{"op": "get", "args": ["$result", "effects"]}]}
+          },
+          {"let": "deltas", "value": {"op": "get", "args": ["$effects", "tokenDeltas"]}},
+          {
+            "return": false,
+            "when": {"op": "ne", "args": [{"op": "get", "args": ["$result", "completion"]}, "returned"]}
+          },
+          {"let": "inputIsWeth", "value": {"op": "sameAddress", "args": ["$tokenIn", "$weth"]}},
+          {"let": "outputIsWeth", "value": {"op": "sameAddress", "args": ["$tokenOut", "$weth"]}},
+          {"return": false, "when": {"op": "eq", "args": ["$inputIsWeth", "$outputIsWeth"]}},
+          {
+            "let": "inputDeltas",
+            "value": {"op": "filter", "args": ["$deltas", "row", {"op": "sameAddress", "args": ["$row.token", "$tokenIn"]}]}
+          },
+          {"let": "payers", "value": {"op": "filter", "args": ["$inputDeltas", "row", {"op": "lt", "args": ["$row.delta", {"op": "uint", "args": ["0"]}]}]}},
+          {"return": false, "when": {"op": "ne", "args": [{"op": "length", "args": ["$payers"]}, 1]}},
+          {"let": "payer", "value": {"op": "get", "args": [{"op": "at", "args": ["$payers", 0]}, "account"]}},
+          {"return": false, "when": {"op": "sameAddress", "args": ["$payer", "$target"]}},
+          {"return": false, "when": {"op": "sameAddress", "args": ["$payer", "$probeRecipient"]}},
+          {"return": false, "when": {"op": "sameAddress", "args": ["$payer", "$zeroAddress"]}},
+          {
+            "let": "deliveredInput",
+            "value": {"op": "sub", "args": [{"op": "uint", "args": ["0"]}, {"op": "get", "args": [{"op": "at", "args": ["$payers", 0]}, "delta"]}]}
+          },
+          {"return": false, "when": {"op": "not", "args": [{"op": "gt", "args": ["$deliveredInput", {"op": "uint", "args": ["0"]}]}]}},
+          {
+            "let": "inputTargets",
+            "value": {"op": "filter", "args": ["$inputDeltas", "row", {"op": "sameAddress", "args": ["$row.account", "$target"]}]}
+          },
+          {"return": false, "when": {"op": "ne", "args": [{"op": "length", "args": ["$inputTargets"]}, 1]}},
+          {"let": "targetInputCredit", "value": {"op": "get", "args": [{"op": "at", "args": ["$inputTargets", 0]}, "delta"]}},
+          {"return": false, "when": {"op": "and", "args": ["$inputIsWeth", {"op": "ne", "args": ["$deliveredInput", "$amount"]}]}},
+          {
+            "return": false,
+            "when": {"op": "and", "args": ["$inputIsWeth", {"op": "ne", "args": ["$targetInputCredit", "$deliveredInput"]}]}
+          },
+          {"return": false, "when": {"op": "and", "args": [{"op": "not", "args": ["$inputIsWeth"]}, {"op": "gt", "args": ["$deliveredInput", "$amount"]}]}},
+          {
+            "return": false,
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "not", "args": ["$inputIsWeth"]},
+                {"op": "gt", "args": [{"op": "sub", "args": ["$amount", "$deliveredInput"]}, {"op": "uint", "args": ["2"]}]}
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "not", "args": ["$inputIsWeth"]},
+                {"op": "gt", "args": ["$targetInputCredit", "$deliveredInput"]}
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "not", "args": ["$inputIsWeth"]},
+                {"op": "gt", "args": [{"op": "sub", "args": ["$deliveredInput", "$targetInputCredit"]}, {"op": "uint", "args": ["1"]}]}
+              ]
+            }
+          },
+          {
+            "let": "outputDeltas",
+            "value": {"op": "filter", "args": ["$deltas", "row", {"op": "sameAddress", "args": ["$row.token", "$tokenOut"]}]}
+          },
+          {
+            "let": "recipients",
+            "value": {"op": "filter", "args": ["$outputDeltas", "row", {"op": "sameAddress", "args": ["$row.account", "$probeRecipient"]}]}
+          },
+          {
+            "let": "targetOutputs",
+            "value": {"op": "filter", "args": ["$outputDeltas", "row", {"op": "sameAddress", "args": ["$row.account", "$target"]}]}
+          },
+          {"return": false, "when": {"op": "ne", "args": [{"op": "length", "args": ["$outputDeltas"]}, 2]}},
+          {"return": false, "when": {"op": "ne", "args": [{"op": "length", "args": ["$recipients"]}, 1]}},
+          {"return": false, "when": {"op": "ne", "args": [{"op": "length", "args": ["$targetOutputs"]}, 1]}},
+          {"let": "deliveredOutput", "value": {"op": "get", "args": [{"op": "at", "args": ["$recipients", 0]}, "delta"]}},
+          {
+            "let": "targetDebit",
+            "value": {"op": "sub", "args": [{"op": "uint", "args": ["0"]}, {"op": "get", "args": [{"op": "at", "args": ["$targetOutputs", 0]}, "delta"]}]}
+          },
+          {"return": false, "when": {"op": "not", "args": [{"op": "gt", "args": ["$deliveredOutput", {"op": "uint", "args": ["0"]}]}]}},
+          {"return": false, "when": {"op": "not", "args": [{"op": "gt", "args": ["$targetDebit", {"op": "uint", "args": ["0"]}]}]}},
+          {
+            "return": false,
+            "when": {"op": "and", "args": ["$outputIsWeth", {"op": "ne", "args": ["$deliveredOutput", "$expectedOut"]}]}
+          },
+          {
+            "return": false,
+            "when": {"op": "and", "args": ["$outputIsWeth", {"op": "ne", "args": ["$targetDebit", "$deliveredOutput"]}]}
+          },
+          {
+            "return": false,
+            "when": {"op": "and", "args": [{"op": "not", "args": ["$outputIsWeth"]}, {"op": "gt", "args": ["$deliveredOutput", "$expectedOut"]}]}
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "not", "args": ["$outputIsWeth"]},
+                {"op": "gt", "args": [{"op": "sub", "args": ["$expectedOut", "$deliveredOutput"]}, {"op": "uint", "args": ["1"]}]}
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "not", "args": ["$outputIsWeth"]},
+                {"op": "gt", "args": ["$targetDebit", "$deliveredOutput"]}
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "not", "args": ["$outputIsWeth"]},
+                {"op": "gt", "args": [{"op": "sub", "args": ["$deliveredOutput", "$targetDebit"]}, {"op": "uint", "args": ["1"]}]}
+              ]
+            }
+          },
+          {"return": true}
+        ]
+      },
+      "identity": {
+        "select": [
+          {"return": "proxy", "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]}},
+          {"return": "binding", "when": {"op": "eq", "args": ["$evidence.phase", "proxy"]}},
+          {"return": "behavior", "when": {"op": "eq", "args": ["$evidence.phase", "binding"]}},
+          {"return": "verified", "when": {"op": "eq", "args": ["$evidence.phase", "verified"]}}
+        ],
+        "stages": {
+          "proxy": {
+            "requirements": {"transports": ["get-code", "get-storage"]},
+            "requests": [
+              {
+                "id": "identity-proxy-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$candidate.target"]}
+              },
+              {
+                "id": "identity-implementation-slot",
+                "kind": "get-storage",
+                "address": {"op": "address", "args": ["$candidate.target"]},
+                "slot": "$constants.implementationSlot"
+              },
+              {
+                "id": "identity-steth-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$constants.steth"]}
+              },
+              {
+                "id": "identity-weth-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$constants.weth"]}
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "matches",
+                  "args": [
+                    {"op": "get", "args": [{"op": "successful", "args": ["identity-implementation-slot"]}, "data"]},
+                    "^0x[0-9a-fA-F]{64}$"
+                  ]
+                },
+                "error": "Origin stETH ARM identity implementation slot is malformed"
+              },
+              {
+                "return": {
+                  "phase": "proxy",
+                  "source": {"op": "source", "args": ["$results"]},
+                  "proxyCodeHash": {"op": "codeHash", "args": [{"op": "code", "args": ["identity-proxy-code"]}]},
+                  "stethCodeHash": {"op": "codeHash", "args": [{"op": "code", "args": ["identity-steth-code"]}]},
+                  "wethCodeHash": {"op": "codeHash", "args": [{"op": "code", "args": ["identity-weth-code"]}]},
+                  "implementation": {
+                    "op": "address",
+                    "args": [
+                      {
+                        "op": "bytes",
+                        "args": [
+                          {"op": "get", "args": [{"op": "successful", "args": ["identity-implementation-slot"]}, "data"]},
+                          12,
+                          20
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "binding": {
+            "requirements": {"transports": ["get-code", "get-storage"]},
+            "requests": [
+              {
+                "id": "identity-implementation-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$evidence.implementation"]}
+              },
+              {
+                "id": "identity-traderate0",
+                "kind": "get-storage",
+                "address": {"op": "address", "args": ["$candidate.target"]},
+                "slot": "$constants.traderate0Slot"
+              },
+              {
+                "id": "identity-traderate1",
+                "kind": "get-storage",
+                "address": {"op": "address", "args": ["$candidate.target"]},
+                "slot": "$constants.traderate1Slot"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {"op": "get", "args": [{"op": "successful", "args": ["identity-implementation-code"]}, "source"]},
+                    "$evidence.source"
+                  ]
+                },
+                "error": "Origin stETH ARM implementation code source mismatch"
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {"op": "get", "args": [{"op": "successful", "args": ["identity-traderate0"]}, "source"]},
+                    "$evidence.source"
+                  ]
+                },
+                "error": "Origin stETH ARM traderate0 source mismatch"
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {"op": "get", "args": [{"op": "successful", "args": ["identity-traderate1"]}, "source"]},
+                    "$evidence.source"
+                  ]
+                },
+                "error": "Origin stETH ARM traderate1 source mismatch"
+              },
+              {
+                "return": {
+                  "phase": "binding",
+                  "source": "$evidence.source",
+                  "proxyCodeHash": "$evidence.proxyCodeHash",
+                  "implementation": "$evidence.implementation",
+                  "stethCodeHash": "$evidence.stethCodeHash",
+                  "wethCodeHash": "$evidence.wethCodeHash",
+                  "implementationCodeHash": {"op": "codeHash", "args": [{"op": "code", "args": ["identity-implementation-code"]}]},
+                  "traderate0": {
+                    "op": "word",
+                    "args": [{"op": "get", "args": [{"op": "successful", "args": ["identity-traderate0"]}, "data"]}]
+                  },
+                  "traderate1": {
+                    "op": "word",
+                    "args": [{"op": "get", "args": [{"op": "successful", "args": ["identity-traderate1"]}, "data"]}]
+                  }
+                }
+              }
+            ]
+          },
+          "behavior": {
+            "requirements": {
+              "transports": ["effect-delta-simulation"],
+              "caller": "executor",
+              "effects": ["return-data", "revert-data", "token-delta"]
+            },
+            "requests": [
+              {
+                "id": "identity-swap:steth-to-weth:1000000000000",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {"kind": "executor"},
+                    "to": {"op": "address", "args": ["$constants.steth"]},
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          {"op": "address", "args": ["$candidate.target"]},
+                          {"op": "uint", "args": ["$constants.sampleSmall"]}
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {"kind": "executor"},
+                  "executionMode": "impersonated-call-frame",
+                  "to": {"op": "address", "args": ["$candidate.target"]},
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "arm",
+                      "swapExactTokensForTokens",
+                      [
+                        {"op": "address", "args": ["$constants.steth"]},
+                        {"op": "address", "args": ["$constants.weth"]},
+                        {"op": "uint", "args": ["$constants.sampleSmall"]},
+                        {"op": "uint", "args": ["0"]},
+                        {"op": "address", "args": ["$constants.probeRecipient"]}
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {"kind": "executor"},
+                  "tokenBalances": [
+                    {
+                      "token": {"op": "address", "args": ["$constants.steth"]},
+                      "amount": {"op": "uint", "args": ["$constants.sampleSmall"]}
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {"token": {"op": "address", "args": ["$constants.steth"]}, "account": {"kind": "executor"}},
+                  {
+                    "token": {"op": "address", "args": ["$constants.steth"]},
+                    "account": {"op": "address", "args": ["$candidate.target"]}
+                  },
+                  {
+                    "token": {"op": "address", "args": ["$constants.weth"]},
+                    "account": {"op": "address", "args": ["$constants.probeRecipient"]}
+                  },
+                  {
+                    "token": {"op": "address", "args": ["$constants.weth"]},
+                    "account": {"op": "address", "args": ["$candidate.target"]}
+                  }
+                ],
+                "observe": ["return-data", "revert-data", "token-delta"]
+              },
+              {
+                "id": "identity-swap:steth-to-weth:1000000000000000",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {"kind": "executor"},
+                    "to": {"op": "address", "args": ["$constants.steth"]},
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          {"op": "address", "args": ["$candidate.target"]},
+                          {"op": "uint", "args": ["$constants.sampleLarge"]}
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {"kind": "executor"},
+                  "executionMode": "impersonated-call-frame",
+                  "to": {"op": "address", "args": ["$candidate.target"]},
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "arm",
+                      "swapExactTokensForTokens",
+                      [
+                        {"op": "address", "args": ["$constants.steth"]},
+                        {"op": "address", "args": ["$constants.weth"]},
+                        {"op": "uint", "args": ["$constants.sampleLarge"]},
+                        {"op": "uint", "args": ["0"]},
+                        {"op": "address", "args": ["$constants.probeRecipient"]}
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {"kind": "executor"},
+                  "tokenBalances": [
+                    {
+                      "token": {"op": "address", "args": ["$constants.steth"]},
+                      "amount": {"op": "uint", "args": ["$constants.sampleLarge"]}
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {"token": {"op": "address", "args": ["$constants.steth"]}, "account": {"kind": "executor"}},
+                  {
+                    "token": {"op": "address", "args": ["$constants.steth"]},
+                    "account": {"op": "address", "args": ["$candidate.target"]}
+                  },
+                  {
+                    "token": {"op": "address", "args": ["$constants.weth"]},
+                    "account": {"op": "address", "args": ["$constants.probeRecipient"]}
+                  },
+                  {
+                    "token": {"op": "address", "args": ["$constants.weth"]},
+                    "account": {"op": "address", "args": ["$candidate.target"]}
+                  }
+                ],
+                "observe": ["return-data", "revert-data", "token-delta"]
+              },
+              {
+                "id": "identity-swap:weth-to-steth:1000000000000",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {"kind": "executor"},
+                    "to": {"op": "address", "args": ["$constants.weth"]},
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          {"op": "address", "args": ["$candidate.target"]},
+                          {"op": "uint", "args": ["$constants.sampleSmall"]}
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {"kind": "executor"},
+                  "executionMode": "impersonated-call-frame",
+                  "to": {"op": "address", "args": ["$candidate.target"]},
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "arm",
+                      "swapExactTokensForTokens",
+                      [
+                        {"op": "address", "args": ["$constants.weth"]},
+                        {"op": "address", "args": ["$constants.steth"]},
+                        {"op": "uint", "args": ["$constants.sampleSmall"]},
+                        {"op": "uint", "args": ["0"]},
+                        {"op": "address", "args": ["$constants.probeRecipient"]}
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {"kind": "executor"},
+                  "tokenBalances": [
+                    {
+                      "token": {"op": "address", "args": ["$constants.weth"]},
+                      "amount": {"op": "uint", "args": ["$constants.sampleSmall"]}
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {"token": {"op": "address", "args": ["$constants.weth"]}, "account": {"kind": "executor"}},
+                  {
+                    "token": {"op": "address", "args": ["$constants.weth"]},
+                    "account": {"op": "address", "args": ["$candidate.target"]}
+                  },
+                  {
+                    "token": {"op": "address", "args": ["$constants.steth"]},
+                    "account": {"op": "address", "args": ["$constants.probeRecipient"]}
+                  },
+                  {
+                    "token": {"op": "address", "args": ["$constants.steth"]},
+                    "account": {"op": "address", "args": ["$candidate.target"]}
+                  }
+                ],
+                "observe": ["return-data", "revert-data", "token-delta"]
+              },
+              {
+                "id": "identity-swap:weth-to-steth:1000000000000000",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {"kind": "executor"},
+                    "to": {"op": "address", "args": ["$constants.weth"]},
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          {"op": "address", "args": ["$candidate.target"]},
+                          {"op": "uint", "args": ["$constants.sampleLarge"]}
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {"kind": "executor"},
+                  "executionMode": "impersonated-call-frame",
+                  "to": {"op": "address", "args": ["$candidate.target"]},
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "arm",
+                      "swapExactTokensForTokens",
+                      [
+                        {"op": "address", "args": ["$constants.weth"]},
+                        {"op": "address", "args": ["$constants.steth"]},
+                        {"op": "uint", "args": ["$constants.sampleLarge"]},
+                        {"op": "uint", "args": ["0"]},
+                        {"op": "address", "args": ["$constants.probeRecipient"]}
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {"kind": "executor"},
+                  "tokenBalances": [
+                    {
+                      "token": {"op": "address", "args": ["$constants.weth"]},
+                      "amount": {"op": "uint", "args": ["$constants.sampleLarge"]}
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {"token": {"op": "address", "args": ["$constants.weth"]}, "account": {"kind": "executor"}},
+                  {
+                    "token": {"op": "address", "args": ["$constants.weth"]},
+                    "account": {"op": "address", "args": ["$candidate.target"]}
+                  },
+                  {
+                    "token": {"op": "address", "args": ["$constants.steth"]},
+                    "account": {"op": "address", "args": ["$constants.probeRecipient"]}
+                  },
+                  {
+                    "token": {"op": "address", "args": ["$constants.steth"]},
+                    "account": {"op": "address", "args": ["$candidate.target"]}
+                  }
+                ],
+                "observe": ["return-data", "revert-data", "token-delta"]
+              }
+            ],
+            "decode": [
+              {"let": "fwdSmall", "value": {"op": "successful", "args": ["identity-swap:steth-to-weth:1000000000000"]}},
+              {"let": "fwdLarge", "value": {"op": "successful", "args": ["identity-swap:steth-to-weth:1000000000000000"]}},
+              {"let": "revSmall", "value": {"op": "successful", "args": ["identity-swap:weth-to-steth:1000000000000"]}},
+              {"let": "revLarge", "value": {"op": "successful", "args": ["identity-swap:weth-to-steth:1000000000000000"]}},
+              {
+                "assert": {"op": "assertSource", "args": [{"op": "get", "args": ["$fwdSmall", "source"]}, "$evidence.source"]},
+                "error": "Origin stETH ARM steth-to-weth small probe source mismatch"
+              },
+              {
+                "assert": {"op": "assertSource", "args": [{"op": "get", "args": ["$fwdLarge", "source"]}, "$evidence.source"]},
+                "error": "Origin stETH ARM steth-to-weth large probe source mismatch"
+              },
+              {
+                "assert": {"op": "assertSource", "args": [{"op": "get", "args": ["$revSmall", "source"]}, "$evidence.source"]},
+                "error": "Origin stETH ARM weth-to-steth small probe source mismatch"
+              },
+              {
+                "assert": {"op": "assertSource", "args": [{"op": "get", "args": ["$revLarge", "source"]}, "$evidence.source"]},
+                "error": "Origin stETH ARM weth-to-steth large probe source mismatch"
+              },
+              {
+                "return": {
+                  "phase": "verified",
+                  "source": "$evidence.source",
+                  "proxyCodeHash": "$evidence.proxyCodeHash",
+                  "implementation": "$evidence.implementation",
+                  "stethCodeHash": "$evidence.stethCodeHash",
+                  "wethCodeHash": "$evidence.wethCodeHash",
+                  "implementationCodeHash": "$evidence.implementationCodeHash",
+                  "traderate0": "$evidence.traderate0",
+                  "traderate1": "$evidence.traderate1",
+                  "behaviorValid": {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "program",
+                        "args": [
+                          "swapProbe",
+                          {
+                            "result": "$fwdSmall",
+                            "tokenIn": {"op": "address", "args": ["$constants.steth"]},
+                            "tokenOut": {"op": "address", "args": ["$constants.weth"]},
+                            "amount": {"op": "uint", "args": ["$constants.sampleSmall"]},
+                            "expectedOut": {"op": "model", "args": ["quote", {"amountIn": {"op": "uint", "args": ["$constants.sampleSmall"]}, "rate": "$evidence.traderate1"}]},
+                            "target": {"op": "address", "args": ["$candidate.target"]},
+                            "weth": {"op": "address", "args": ["$constants.weth"]},
+                            "steth": {"op": "address", "args": ["$constants.steth"]},
+                            "probeRecipient": {"op": "address", "args": ["$constants.probeRecipient"]},
+                            "zeroAddress": {"op": "address", "args": ["$constants.zeroAddress"]}
+                          }
+                        ]
+                      },
+                      {
+                        "op": "program",
+                        "args": [
+                          "swapProbe",
+                          {
+                            "result": "$fwdLarge",
+                            "tokenIn": {"op": "address", "args": ["$constants.steth"]},
+                            "tokenOut": {"op": "address", "args": ["$constants.weth"]},
+                            "amount": {"op": "uint", "args": ["$constants.sampleLarge"]},
+                            "expectedOut": {"op": "model", "args": ["quote", {"amountIn": {"op": "uint", "args": ["$constants.sampleLarge"]}, "rate": "$evidence.traderate1"}]},
+                            "target": {"op": "address", "args": ["$candidate.target"]},
+                            "weth": {"op": "address", "args": ["$constants.weth"]},
+                            "steth": {"op": "address", "args": ["$constants.steth"]},
+                            "probeRecipient": {"op": "address", "args": ["$constants.probeRecipient"]},
+                            "zeroAddress": {"op": "address", "args": ["$constants.zeroAddress"]}
+                          }
+                        ]
+                      },
+                      {
+                        "op": "program",
+                        "args": [
+                          "swapProbe",
+                          {
+                            "result": "$revSmall",
+                            "tokenIn": {"op": "address", "args": ["$constants.weth"]},
+                            "tokenOut": {"op": "address", "args": ["$constants.steth"]},
+                            "amount": {"op": "uint", "args": ["$constants.sampleSmall"]},
+                            "expectedOut": {"op": "model", "args": ["quote", {"amountIn": {"op": "uint", "args": ["$constants.sampleSmall"]}, "rate": "$evidence.traderate0"}]},
+                            "target": {"op": "address", "args": ["$candidate.target"]},
+                            "weth": {"op": "address", "args": ["$constants.weth"]},
+                            "steth": {"op": "address", "args": ["$constants.steth"]},
+                            "probeRecipient": {"op": "address", "args": ["$constants.probeRecipient"]},
+                            "zeroAddress": {"op": "address", "args": ["$constants.zeroAddress"]}
+                          }
+                        ]
+                      },
+                      {
+                        "op": "program",
+                        "args": [
+                          "swapProbe",
+                          {
+                            "result": "$revLarge",
+                            "tokenIn": {"op": "address", "args": ["$constants.weth"]},
+                            "tokenOut": {"op": "address", "args": ["$constants.steth"]},
+                            "amount": {"op": "uint", "args": ["$constants.sampleLarge"]},
+                            "expectedOut": {"op": "model", "args": ["quote", {"amountIn": {"op": "uint", "args": ["$constants.sampleLarge"]}, "rate": "$evidence.traderate0"}]},
+                            "target": {"op": "address", "args": ["$candidate.target"]},
+                            "weth": {"op": "address", "args": ["$constants.weth"]},
+                            "steth": {"op": "address", "args": ["$constants.steth"]},
+                            "probeRecipient": {"op": "address", "args": ["$constants.probeRecipient"]},
+                            "zeroAddress": {"op": "address", "args": ["$constants.zeroAddress"]}
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "behaviorProofHash": {
+                    "op": "hash",
+                    "args": [
+                      {
+                        "implementationCodeHash": {"op": "lower", "args": ["$evidence.implementationCodeHash"]},
+                        "target": {"op": "lower", "args": ["$candidate.target"]},
+                        "traderate0": "$evidence.traderate0",
+                        "traderate1": "$evidence.traderate1",
+                        "probes": [
+                          {
+                            "direction": "steth-to-weth",
+                            "amount": {"op": "uint", "args": ["$constants.sampleSmall"]},
+                            "expectedOut": {"op": "model", "args": ["quote", {"amountIn": {"op": "uint", "args": ["$constants.sampleSmall"]}, "rate": "$evidence.traderate1"}]},
+                            "requestId": "identity-swap:steth-to-weth:1000000000000"
+                          },
+                          {
+                            "direction": "steth-to-weth",
+                            "amount": {"op": "uint", "args": ["$constants.sampleLarge"]},
+                            "expectedOut": {"op": "model", "args": ["quote", {"amountIn": {"op": "uint", "args": ["$constants.sampleLarge"]}, "rate": "$evidence.traderate1"}]},
+                            "requestId": "identity-swap:steth-to-weth:1000000000000000"
+                          },
+                          {
+                            "direction": "weth-to-steth",
+                            "amount": {"op": "uint", "args": ["$constants.sampleSmall"]},
+                            "expectedOut": {"op": "model", "args": ["quote", {"amountIn": {"op": "uint", "args": ["$constants.sampleSmall"]}, "rate": "$evidence.traderate0"}]},
+                            "requestId": "identity-swap:weth-to-steth:1000000000000"
+                          },
+                          {
+                            "direction": "weth-to-steth",
+                            "amount": {"op": "uint", "args": ["$constants.sampleLarge"]},
+                            "expectedOut": {"op": "model", "args": ["quote", {"amountIn": {"op": "uint", "args": ["$constants.sampleLarge"]}, "rate": "$evidence.traderate0"}]},
+                            "requestId": "identity-swap:weth-to-steth:1000000000000000"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "verified": {
+            "requirements": {"transports": []},
+            "requests": [],
+            "decode": [{"return": "$evidence"}]
+          }
+        },
+        "decide": [
+          {"return": {"status": "continue"}, "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]}},
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "origin_steth_arm_proxy_code_mismatch",
+              "evidenceRequestIds": ["identity-proxy-code"]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "eq", "args": ["$evidence.phase", "proxy"]},
+                {
+                  "op": "ne",
+                  "args": [
+                    {"op": "lower", "args": ["$evidence.proxyCodeHash"]},
+                    {"op": "lower", "args": ["$constants.proxyCodeHash"]}
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "origin_steth_arm_implementation_missing",
+              "evidenceRequestIds": ["identity-implementation-slot"]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "eq", "args": ["$evidence.phase", "proxy"]},
+                {"op": "sameAddress", "args": ["$evidence.implementation", "$constants.zeroAddress"]}
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "origin_steth_arm_token_code_mismatch",
+              "evidenceRequestIds": ["identity-steth-code", "identity-weth-code"]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "eq", "args": ["$evidence.phase", "proxy"]},
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "ne",
+                      "args": [
+                        {"op": "lower", "args": ["$evidence.stethCodeHash"]},
+                        {"op": "lower", "args": ["$constants.stethCodeHash"]}
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        {"op": "lower", "args": ["$evidence.wethCodeHash"]},
+                        {"op": "lower", "args": ["$constants.wethCodeHash"]}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {"return": {"status": "continue"}, "when": {"op": "eq", "args": ["$evidence.phase", "proxy"]}},
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "origin_steth_arm_implementation_code_mismatch",
+              "evidenceRequestIds": ["identity-implementation-code"]
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                {"op": "lower", "args": ["$evidence.implementationCodeHash"]},
+                {"op": "lower", "args": ["$constants.implementationCodeHash"]}
+              ]
+            }
+          },
+          {
+            "return": {"status": "retryable", "reasonCode": "origin_steth_arm_price_out_of_range"},
+            "when": {
+              "op": "or",
+              "args": [
+                {"op": "not", "args": [{"op": "expression", "args": ["validRate", {"rate": "$evidence.traderate0"}]}]},
+                {"op": "not", "args": [{"op": "expression", "args": ["validRate", {"rate": "$evidence.traderate1"}]}]}
+              ]
+            }
+          },
+          {"return": {"status": "continue"}, "when": {"op": "eq", "args": ["$evidence.phase", "binding"]}},
+          {
+            "return": {"status": "retryable", "reasonCode": "origin_steth_arm_swap_behavior_not_proven"},
+            "when": {"op": "not", "args": ["$evidence.behaviorValid"]}
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {"op": "address", "args": ["$candidate.target"]},
+                "provenance": [
+                  {
+                    "kind": "origin-steth-arm-proxy-swap-proof",
+                    "subject": {"op": "address", "args": ["$candidate.target"]},
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "proxyCodeHash": "$evidence.proxyCodeHash",
+                          "implementation": {"op": "lower", "args": ["$evidence.implementation"]},
+                          "implementationCodeHash": "$evidence.implementationCodeHash",
+                          "stethCodeHash": "$evidence.stethCodeHash",
+                          "wethCodeHash": "$evidence.wethCodeHash",
+                          "traderate0": "$evidence.traderate0",
+                          "traderate1": "$evidence.traderate1",
+                          "behaviorProofHash": "$evidence.behaviorProofHash",
+                          "executionVerified": true,
+                          "source": "$evidence.source"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "weth": {"op": "address", "args": ["$constants.weth"]},
+                "steth": {"op": "address", "args": ["$constants.steth"]},
+                "implementation": {"op": "address", "args": ["$evidence.implementation"]},
+                "proxyCodeHash": {"op": "lower", "args": ["$evidence.proxyCodeHash"]},
+                "implementationCodeHash": {"op": "lower", "args": ["$evidence.implementationCodeHash"]},
+                "stethCodeHash": {"op": "lower", "args": ["$evidence.stethCodeHash"]},
+                "wethCodeHash": {"op": "lower", "args": ["$evidence.wethCodeHash"]}
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [{"kind": "source-state", "freshness": "pinned-block"}],
+      "target": {"op": "address", "args": ["$identity.subject"]},
+      "weth": {"op": "address", "args": ["$identity.weth"]},
+      "steth": {"op": "address", "args": ["$identity.steth"]},
+      "implementation": {"op": "address", "args": ["$identity.implementation"]},
+      "proxyCodeHash": {"op": "lower", "args": ["$identity.proxyCodeHash"]},
+      "implementationCodeHash": {"op": "lower", "args": ["$identity.implementationCodeHash"]},
+      "stethCodeHash": {"op": "lower", "args": ["$identity.stethCodeHash"]},
+      "wethCodeHash": {"op": "lower", "args": ["$identity.wethCodeHash"]}
+    },
+    "bindingProjection": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "weth": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.weth"]}]},
+      "steth": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.steth"]}]},
+      "implementation": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.implementation"]}]},
+      "proxyCodeHash": {"op": "lower", "args": ["$descriptor.proxyCodeHash"]},
+      "implementationCodeHash": {"op": "lower", "args": ["$descriptor.implementationCodeHash"]},
+      "stethCodeHash": {"op": "lower", "args": ["$descriptor.stethCodeHash"]},
+      "wethCodeHash": {"op": "lower", "args": ["$descriptor.wethCodeHash"]},
+      "priceScale": {"op": "uint", "args": ["$constants.priceScale"]},
+      "rateModel": "origin-arm-linear-price-v1",
+      "rateSlots": {
+        "traderate0": "$constants.traderate0Slot",
+        "traderate1": "$constants.traderate1Slot"
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+    "directions": [
+      {
+        "id": "steth-to-weth",
+        "enabled": true,
+        "tokenIn": "$descriptor.steth",
+        "tokenOut": "$descriptor.weth",
+        "adapterId": "origin-steth-arm-swap",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "convert"}
+      },
+      {
+        "id": "weth-to-steth",
+        "enabled": true,
+        "tokenIn": "$descriptor.weth",
+        "tokenOut": "$descriptor.steth",
+        "adapterId": "origin-steth-arm-swap",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "convert"}
+      }
+    ],
+    "assertions": [
+      {
+        "condition": {"op": "sameAddress", "args": ["$descriptor.weth", "$constants.weth"]},
+        "error": "Origin stETH ARM descriptor WETH is not the verified token"
+      },
+      {
+        "condition": {"op": "sameAddress", "args": ["$descriptor.steth", "$constants.steth"]},
+        "error": "Origin stETH ARM descriptor stETH is not the verified token"
+      },
+      {
+        "condition": {"op": "not", "args": [{"op": "sameAddress", "args": ["$descriptor.weth", "$descriptor.steth"]}]},
+        "error": "Origin stETH ARM requires distinct stETH/WETH assets"
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]}
+    },
+    "effects": [
+      {"kind": "token-delta", "token": "$route.tokenIn", "account": "executor", "direction": "decrease"},
+      {"kind": "token-delta", "token": "$route.tokenOut", "account": "executor", "direction": "increase"}
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "target": "$descriptor.target",
+      "weth": "$descriptor.weth",
+      "steth": "$descriptor.steth",
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "weth": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.weth"]}]},
+      "steth": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.steth"]}]},
+      "rateModel": "origin-arm-linear-price-v1"
+    },
+    "static": {
+      "requirements": {"transports": []},
+      "dependencies": ["$draft.target", "$draft.weth", "$draft.steth"],
+      "requests": [],
+      "decode": [{"return": {}}]
+    },
+    "finalize": {"op": "merge", "args": ["$draft", "$staticEvidence"]},
+    "finalizeChecks": [
+      {
+        "condition": {"op": "eq", "args": [{"op": "length", "args": ["$draft.routes"]}, 2]},
+        "error": "Origin stETH ARM pricing requires exactly two verified routes"
+      },
+      {
+        "condition": {"op": "not", "args": [{"op": "sameAddress", "args": ["$draft.weth", "$draft.steth"]}]},
+        "error": "Origin stETH ARM requires distinct stETH/WETH assets"
+      }
+    ],
+    "sampleAmount": {"op": "uint", "args": ["$constants.priceSample"]},
+    "exactCompatibility": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$route.target"]}]},
+      "direction": "$route.direction",
+      "quoteSemantics": "origin-arm-linear-price-v1",
+      "priceScale": {"op": "uint", "args": ["$constants.priceScale"]},
+      "rateSlot": {
+        "op": "if",
+        "args": [
+          {"op": "eq", "args": ["$route.direction", "steth-to-weth"]},
+          "$constants.traderate1Slot",
+          "$constants.traderate0Slot"
+        ]
+      },
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "implementationCodeHash": "$descriptor.implementationCodeHash"
+    },
+    "mutationKinds": ["call"]
+  },
+  "protocol": {
+    "candidateKinds": ["observed-call", "address-surface"],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "origin-steth-arm-swap",
+    "lineageId": "origin-steth-arm-lido",
+    "abi": {
+      "arm": [
+        "function swapExactTokensForTokens(address inToken,address outToken,uint256 amountIn,uint256 amountOutMin,address to) returns (uint256[] amounts)",
+        "function traderate0() view returns (uint256)",
+        "function traderate1() view returns (uint256)"
+      ],
+      "erc20": [
+        "function approve(address spender,uint256 amount) returns (bool)"
+      ]
+    },
+    "constants": {
+      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "steth": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+      "zeroAddress": "0x0000000000000000000000000000000000000000",
+      "priceScale": "1000000000000000000000000000000000000",
+      "maxRate": "2000000000000000000000000000000000000",
+      "priceSample": "1000000000000000000",
+      "traderate0Slot": "0x0000000000000000000000000000000000000000000000000000000000000032",
+      "traderate1Slot": "0x0000000000000000000000000000000000000000000000000000000000000033"
+    },
+    "expressions": {
+      "rateOf": {
+        "op": "if",
+        "args": [
+          {"op": "eq", "args": ["$direction", "steth-to-weth"]},
+          "$rate1",
+          "$rate0"
+        ]
+      },
+      "validRate": {
+        "op": "and",
+        "args": [
+          {"op": "gt", "args": ["$rate", {"op": "uint", "args": ["0"]}]},
+          {"op": "lte", "args": ["$rate", {"op": "uint", "args": ["$constants.maxRate"]}]}
+        ]
+      },
+      "quoteOf": {
+        "op": "model",
+        "args": ["quote", {"amountIn": "$amountIn", "rate": "$rate"}]
+      },
+      "routeQuoted": {
+        "op": "if",
+        "args": [
+          {
+            "op": "expression",
+            "args": [
+              "validRate",
+              {
+                "rate": {
+                  "op": "expression",
+                  "args": ["rateOf", {"direction": "$direction", "rate0": "$rate0", "rate1": "$rate1"}]
+                }
+              }
+            ]
+          },
+          {
+            "op": "gt",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "quoteOf",
+                  {
+                    "amountIn": {"op": "uint", "args": ["$constants.priceSample"]},
+                    "rate": {
+                      "op": "expression",
+                      "args": ["rateOf", {"direction": "$direction", "rate0": "$rate0", "rate1": "$rate1"}]
+                    }
+                  }
+                ]
+              },
+              {"op": "uint", "args": ["0"]}
+            ]
+          },
+          false
+        ]
+      }
+    },
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {"transports": ["get-storage"]},
+      "dependencies": {"op": "unique", "args": [["$descriptor.target", "$descriptor.weth", "$descriptor.steth"]]},
+      "mutationAddresses": ["$descriptor.target"],
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {"op": "defined", "args": [{"op": "get", "args": ["$snapshot.unavailable", "$route.routeKey"]}]}
+            ]
+          },
+          "route",
+          ["$route.routeKey", {"op": "get", "args": ["$snapshot.unavailable", "$route.routeKey"]}]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "origin-steth-arm-price",
+      "requirements": {"transports": []},
+      "retainReadEvidence": true,
+      "evidence": {
+        "kind": "origin-steth-arm-linear-price",
+        "source": "$source",
+        "target": "$descriptor.target",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "direction": "$route.direction",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "rate": "$steps.rate.rate",
+        "rateSlot": {
+          "op": "if",
+          "args": [
+            {"op": "eq", "args": ["$route.direction", "steth-to-weth"]},
+            "$constants.traderate1Slot",
+            "$constants.traderate0Slot"
+          ]
+        },
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "zeroEvidence": {
+        "kind": "origin-steth-arm-linear-price",
+        "source": "$source",
+        "target": "$descriptor.target",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "direction": "$route.direction",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "rate": {"op": "uint", "args": ["0"]},
+        "rateSlot": {
+          "op": "if",
+          "args": [
+            {"op": "eq", "args": ["$route.direction", "steth-to-weth"]},
+            "$constants.traderate1Slot",
+            "$constants.traderate0Slot"
+          ]
+        },
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {"directOutput": true},
+      "protectedAddresses": ["$descriptor.target"],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "not",
+            "args": [{"op": "sameAddress", "args": ["$recipient", "$constants.zeroAddress"]}]
+          },
+          "error": "Origin stETH ARM swap recipient is the zero address"
+        }
+      ],
+      "steps": [
+        {
+          "id": "rate",
+          "static": true,
+          "call": {
+            "target": "$descriptor.target",
+            "signature": {
+              "op": "if",
+              "args": [
+                {"op": "eq", "args": ["$route.direction", "steth-to-weth"]},
+                "function traderate1() view returns (uint256)",
+                "function traderate0() view returns (uint256)"
+              ]
+            },
+            "args": [],
+            "save": {"rate": 0}
+          }
+        },
+        {
+          "id": "minOut",
+          "math": {
+            "model": "quote",
+            "inputs": {"amountIn": {"runtime": "amountIn"}, "rate": {"runtime": "rate"}},
+            "outputs": {"amountOut": "swapMinOut"},
+            "checks": [
+              {"left": {"runtime": "swapMinOut"}, "operator": "gte", "right": "1"}
+            ]
+          }
+        },
+        {
+          "id": "swap",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$descriptor.target",
+            "mode": "exact-clear"
+          },
+          "call": {
+            "target": "$descriptor.target",
+            "signature": "function swapExactTokensForTokens(address inToken,address outToken,uint256 amountIn,uint256 amountOutMin,address to) returns (uint256[] amounts)",
+            "args": [
+              "$route.tokenIn",
+              "$route.tokenOut",
+              {"runtime": "amountIn"},
+              {"runtime": "swapMinOut"},
+              "$recipient"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {"runtime": "amountIn"}
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {"quote": {"model": "origin-steth-arm:linear-quote", "version": 1}}
+    },
+    "executionMath": {
+      "version": 1,
+      "entries": {"quote": {"model": "origin-steth-arm:runtime-quote", "version": 1}}
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "origin-steth-arm operator price words are read per quote; no sequential trial overlay is modeled",
+      "steps": [
+        {
+          "id": "rate",
+          "requirements": {
+            "op": "if",
+            "args": [
+              {"op": "eq", "args": ["$amountIn", {"op": "uint", "args": ["0"]}]},
+              {"transports": []},
+              {"transports": ["get-storage"]}
+            ]
+          },
+          "requests": [
+            {
+              "id": "exact-traderate",
+              "kind": "get-storage",
+              "address": {"op": "address", "args": ["$descriptor.target"]},
+              "slot": {
+                "op": "if",
+                "args": [
+                  {"op": "eq", "args": ["$route.direction", "steth-to-weth"]},
+                  "$constants.traderate1Slot",
+                  "$constants.traderate0Slot"
+                ]
+              }
+            }
+          ],
+          "decode": [
+            {
+              "let": "rate",
+              "value": {"op": "word", "args": [{"op": "get", "args": [{"op": "returned", "args": ["exact-traderate"]}, "data"]}]}
+            },
+            {
+              "let": "amountOut",
+              "value": {"op": "model", "args": ["quote", {"amountIn": "$amountIn", "rate": "$rate"}]}
+            },
+            {
+              "assert": {"op": "gt", "args": ["$amountOut", {"op": "uint", "args": ["0"]}]},
+              "error": "Origin stETH ARM exact quote returned no output"
+            },
+            {
+              "return": {
+                "rate": "$rate",
+                "amountOut": "$amountOut",
+                "source": {"op": "source", "args": ["$results"]}
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.rate.amountOut"
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "rates",
+          "requirements": {"transports": ["get-storage"]},
+          "requests": [
+            {
+              "id": "current-traderate0",
+              "kind": "get-storage",
+              "address": {"op": "address", "args": ["$descriptor.target"]},
+              "slot": "$constants.traderate0Slot"
+            },
+            {
+              "id": "current-traderate1",
+              "kind": "get-storage",
+              "address": {"op": "address", "args": ["$descriptor.target"]},
+              "slot": "$constants.traderate1Slot"
+            }
+          ],
+          "decode": [
+            {
+              "let": "rate0",
+              "value": {"op": "word", "args": [{"op": "get", "args": [{"op": "returned", "args": ["current-traderate0"]}, "data"]}]}
+            },
+            {
+              "let": "rate1",
+              "value": {"op": "word", "args": [{"op": "get", "args": [{"op": "returned", "args": ["current-traderate1"]}, "data"]}]}
+            },
+            {
+              "return": {
+                "rate0": "$rate0",
+                "rate1": "$rate1",
+                "source": {"op": "source", "args": ["$results"]}
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "objectFromEntries",
+        "args": [
+          [
+            ["source", "$source"],
+            ["rates", {"op": "objectFromEntries", "args": [[["steth-to-weth", "$steps.rates.rate1"], ["weth-to-steth", "$steps.rates.rate0"]]]}],
+            [
+              "quotes",
+              {
+                "op": "objectFromEntries",
+                "args": [
+                  {
+                    "op": "map",
+                    "args": [
+                      {
+                        "op": "filter",
+                        "args": [
+                          "$routes",
+                          "route",
+                          {
+                            "op": "expression",
+                            "args": [
+                              "routeQuoted",
+                              {
+                                "direction": "$route.direction",
+                                "rate0": "$steps.rates.rate0",
+                                "rate1": "$steps.rates.rate1"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "route",
+                      [
+                        "$route.routeKey",
+                        {
+                          "amountIn": {"op": "uint", "args": ["$constants.priceSample"]},
+                          "amountOut": {
+                            "op": "expression",
+                            "args": [
+                              "quoteOf",
+                              {
+                                "amountIn": {"op": "uint", "args": ["$constants.priceSample"]},
+                                "rate": {
+                                  "op": "expression",
+                                  "args": [
+                                    "rateOf",
+                                    {"direction": "$route.direction", "rate0": "$steps.rates.rate0", "rate1": "$steps.rates.rate1"}
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              "unavailable",
+              {
+                "op": "objectFromEntries",
+                "args": [
+                  {
+                    "op": "map",
+                    "args": [
+                      {
+                        "op": "filter",
+                        "args": [
+                          "$routes",
+                          "route",
+                          {
+                            "op": "not",
+                            "args": [
+                              {
+                                "op": "expression",
+                                "args": [
+                                  "routeQuoted",
+                                  {
+                                    "direction": "$route.direction",
+                                    "rate0": "$steps.rates.rate0",
+                                    "rate1": "$steps.rates.rate1"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "route",
+                      [
+                        "$route.routeKey",
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "expression",
+                              "args": [
+                                "validRate",
+                                {
+                                  "rate": {
+                                    "op": "expression",
+                                    "args": [
+                                      "rateOf",
+                                      {"direction": "$route.direction", "rate0": "$steps.rates.rate0", "rate1": "$steps.rates.rate1"}
+                                    ]
+                                  }
+                                }
+                              ]
+                            },
+                            "origin-steth-arm zero output",
+                            "origin-steth-arm price out of range"
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        ]
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "origin-steth-arm-swap",
+        "lineage": "custom-protocol:origin-steth-arm",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function swapExactTokensForTokens(address,address,uint256,uint256,address)"}
+      ]
+    }
+  ]
+}

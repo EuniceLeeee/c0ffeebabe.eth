@@ -1,0 +1,5309 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:peapods-debond"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_PEAPODS_DEBOND_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:peapods-debond",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "peapods-debond"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "redeem"
+      }
+    ],
+    "supportedLineages": [
+      "peapods:weighted-single-asset-v1"
+    ],
+    "poolAdapterIds": [
+      "peapods-debond"
+    ],
+    "edgeAdapterIds": [
+      "peapods-debond"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "landed-log",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "peapods-debond",
+        "addressField": "pod",
+        "fields": {
+          "pod": "address"
+        },
+        "key": [
+          "pod"
+        ]
+      },
+      "calls": [
+        {
+          "id": "peapods-debond-call",
+          "signature": "debond(uint256,address[],uint8[])",
+          "fields": {
+            "pod": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    0
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "pod",
+                        "debond",
+                        "$args"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "peapods-debond-log",
+          "signature": "Debond(address indexed wallet,uint256 amountDebonded)",
+          "fields": {
+            "pod": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "surface": {
+        "id": "peapods-debond-surface",
+        "fingerprint": "peapods:weighted-debond",
+        "fields": {
+          "pod": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "peapods-debond"
+      ],
+      "nomination": "address-surface"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "pod": [
+          "function debond(uint256,address[],uint8[])",
+          "function totalSupply() view returns(uint256)",
+          "function balanceOf(address) view returns(uint256)",
+          "function decimals() view returns(uint8)",
+          "function getAllAssets() view returns(tuple(address token,uint256 weighting,uint256 basePriceUSDX96,address c1,uint256 q1)[])",
+          "function isAsset(address) view returns(bool)",
+          "function indexType() view returns(uint8)",
+          "function DEBOND_FEE() view returns(uint256)",
+          "function lpStakingPool() view returns(address)",
+          "function indexFund() view returns(address)",
+          "event Debond(address indexed wallet,uint256 amountDebonded)",
+          "event Transfer(address indexed from,address indexed to,uint256 value)"
+        ]
+      },
+      "constants": {
+        "wad": "1000000000000000000",
+        "debondTopic": "0xe4bf69c2fff7ace5eed72842e9abf52af2218a3a78cb83d7824f999dbfd75e71",
+        "transferTopic": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "base",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "dependencies",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "root"
+              ]
+            }
+          },
+          {
+            "return": "probe",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "dependencies"
+              ]
+            }
+          },
+          {
+            "return": "probe"
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-pod-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.pod"
+                  ]
+                }
+              },
+              {
+                "id": "identity-getAllAssets",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.pod"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "getAllAssets",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-indexType",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.pod"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "indexType",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.pod"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-lpStakingPool",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.pod"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "lpStakingPool",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-DEBOND_FEE",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.pod"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "DEBOND_FEE",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "attempt": [
+                  {
+                    "let": "code",
+                    "value": {
+                      "op": "code",
+                      "args": [
+                        "identity-pod-code"
+                      ]
+                    }
+                  },
+                  {
+                    "let": "runtime",
+                    "value": {
+                      "op": "model",
+                      "args": [
+                        "runtime",
+                        {
+                          "code": "$code"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "assets",
+                    "value": {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "decodeAll",
+                          "args": [
+                            "pod",
+                            "getAllAssets",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "identity-getAllAssets"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$assets"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "error": "peapods unsupported topology/variant"
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "pod",
+                            "indexType",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "identity-indexType"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods unsupported topology/variant"
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "pod",
+                            "decimals",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "identity-decimals"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "18"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods unsupported topology/variant"
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "pod",
+                            "DEBOND_FEE",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "identity-DEBOND_FEE"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$runtime",
+                            "feeBps"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods unsupported topology/variant"
+                  },
+                  {
+                    "let": "asset",
+                    "value": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$assets",
+                                0
+                              ]
+                            },
+                            "token"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "staking",
+                    "value": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "pod",
+                            "lpStakingPool",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "identity-lpStakingPool"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "pod",
+                    "value": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pod"
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$pod",
+                            "$asset"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods aliased dependencies"
+                  },
+                  {
+                    "assert": {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$pod",
+                            "$staking"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods aliased dependencies"
+                  },
+                  {
+                    "assert": {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$asset",
+                            "$staking"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods aliased dependencies"
+                  },
+                  {
+                    "return": {
+                      "phase": "root",
+                      "source": {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$results",
+                              0
+                            ]
+                          },
+                          "source"
+                        ]
+                      },
+                      "root": {
+                        "pod": "$pod",
+                        "asset": "$asset",
+                        "staking": "$staking",
+                        "codeHash": {
+                          "op": "get",
+                          "args": [
+                            "$runtime",
+                            "codeHash"
+                          ]
+                        },
+                        "feeBps": {
+                          "op": "get",
+                          "args": [
+                            "$runtime",
+                            "feeBps"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "return": {
+                      "phase": "unavailable",
+                      "reason": {
+                        "op": "get",
+                        "args": [
+                          "$error",
+                          "message"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "dependencies": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence.root",
+                        "asset"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "identity-staking-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence.root",
+                        "staking"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "identity-indexFund",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence.root",
+                        "staking"
+                      ]
+                    }
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "indexFund",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-asset-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence.root",
+                        "asset"
+                      ]
+                    }
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence.root",
+                        "pod"
+                      ]
+                    }
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "totalSupply",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-backing",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence.root",
+                        "asset"
+                      ]
+                    }
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "balanceOf",
+                    [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$evidence.root",
+                          "pod"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-isAsset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence.root",
+                        "pod"
+                      ]
+                    }
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "isAsset",
+                    [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$evidence.root",
+                          "asset"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "attempt": [
+                  {
+                    "assert": {
+                      "op": "assertSource",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$results",
+                                0
+                              ]
+                            },
+                            "source"
+                          ]
+                        },
+                        "$evidence.source"
+                      ]
+                    },
+                    "error": "peapods dependency source mismatch"
+                  },
+                  {
+                    "let": "assetCode",
+                    "value": {
+                      "op": "code",
+                      "args": [
+                        "identity-asset-code"
+                      ]
+                    }
+                  },
+                  {
+                    "let": "stakingCode",
+                    "value": {
+                      "op": "code",
+                      "args": [
+                        "identity-staking-code"
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "pod",
+                            "indexFund",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "identity-indexFund"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence.root",
+                            "pod"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods reciprocal identity mismatch"
+                  },
+                  {
+                    "assert": {
+                      "op": "bool",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-isAsset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods reciprocal identity mismatch"
+                  },
+                  {
+                    "let": "decimals",
+                    "value": {
+                      "op": "number",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "pod",
+                            "decimals",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "identity-asset-decimals"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "lte",
+                      "args": [
+                        "$decimals",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "36"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods unsupported asset decimals"
+                  },
+                  {
+                    "let": "pod",
+                    "value": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence.root",
+                            "pod"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "asset",
+                    "value": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence.root",
+                            "asset"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "staking",
+                    "value": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence.root",
+                            "staking"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "binding",
+                    "value": {
+                      "pod": "$pod",
+                      "asset": "$asset",
+                      "codeHash": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$evidence.root",
+                              "codeHash"
+                            ]
+                          }
+                        ]
+                      },
+                      "assetCodeHash": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "codeHash",
+                            "args": [
+                              "$assetCode"
+                            ]
+                          }
+                        ]
+                      },
+                      "staking": "$staking",
+                      "stakingCodeHash": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "codeHash",
+                            "args": [
+                              "$stakingCode"
+                            ]
+                          }
+                        ]
+                      },
+                      "decimals": "$decimals",
+                      "feeBps": {
+                        "op": "get",
+                        "args": [
+                          "$evidence.root",
+                          "feeBps"
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "let": "state",
+                    "value": {
+                      "source": {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$results",
+                              0
+                            ]
+                          },
+                          "source"
+                        ]
+                      },
+                      "feeBps": {
+                        "op": "get",
+                        "args": [
+                          "$binding",
+                          "feeBps"
+                        ]
+                      },
+                      "supply": {
+                        "op": "uint",
+                        "args": [
+                          {
+                            "op": "decode",
+                            "args": [
+                              "pod",
+                              "totalSupply",
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "returned",
+                                    "args": [
+                                      "identity-supply"
+                                    ]
+                                  },
+                                  "data"
+                                ]
+                              },
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      "backing": {
+                        "op": "uint",
+                        "args": [
+                          {
+                            "op": "decode",
+                            "args": [
+                              "pod",
+                              "balanceOf",
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "returned",
+                                    "args": [
+                                      "identity-backing"
+                                    ]
+                                  },
+                                  "data"
+                                ]
+                              },
+                              0
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "let": "amountIn",
+                    "value": {
+                      "op": "min",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$state",
+                            "supply"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "1000000000000000000"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "quote",
+                    "value": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$amountIn",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "model",
+                          "args": [
+                            "debond",
+                            {
+                              "supply": {
+                                "op": "get",
+                                "args": [
+                                  "$state",
+                                  "supply"
+                                ]
+                              },
+                              "backing": {
+                                "op": "get",
+                                "args": [
+                                  "$state",
+                                  "backing"
+                                ]
+                              },
+                              "feeBps": {
+                                "op": "get",
+                                "args": [
+                                  "$state",
+                                  "feeBps"
+                                ]
+                              },
+                              "amountIn": "$amountIn"
+                            }
+                          ]
+                        },
+                        {
+                          "amountOut": {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$amountIn",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$quote",
+                                "amountOut"
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods no positive liquid behavior sample"
+                  },
+                  {
+                    "return": {
+                      "op": "merge",
+                      "args": [
+                        "$evidence",
+                        {
+                          "phase": "dependencies",
+                          "binding": "$binding",
+                          "state": "$state",
+                          "amountIn": "$amountIn"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "return": {
+                      "phase": "unavailable",
+                      "reason": {
+                        "op": "get",
+                        "args": [
+                          "$error",
+                          "message"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "probe": {
+            "requirements": {
+              "transports": [
+                "effect-delta-simulation"
+              ],
+              "caller": "executor",
+              "effects": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta",
+                "logs"
+              ]
+            },
+            "requests": [
+              {
+                "id": "peapods-active-debond",
+                "kind": "effect-delta-simulation",
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "address",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "binding"
+                            ]
+                          },
+                          "pod"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "pod",
+                      "debond",
+                      [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "amountIn"
+                          ]
+                        },
+                        [],
+                        []
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$evidence",
+                                  "binding"
+                                ]
+                              },
+                              "pod"
+                            ]
+                          }
+                        ]
+                      },
+                      "amount": {
+                        "op": "get",
+                        "args": [
+                          "$evidence",
+                          "amountIn"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "binding"
+                              ]
+                            },
+                            "pod"
+                          ]
+                        }
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "binding"
+                              ]
+                            },
+                            "pod"
+                          ]
+                        }
+                      ]
+                    },
+                    "account": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "binding"
+                              ]
+                            },
+                            "pod"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "binding"
+                              ]
+                            },
+                            "asset"
+                          ]
+                        }
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "binding"
+                              ]
+                            },
+                            "asset"
+                          ]
+                        }
+                      ]
+                    },
+                    "account": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "binding"
+                              ]
+                            },
+                            "pod"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "logs"
+                ]
+              }
+            ],
+            "decode": [
+              {
+                "attempt": [
+                  {
+                    "assert": {
+                      "op": "assertSource",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$results",
+                                0
+                              ]
+                            },
+                            "source"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "source"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods behavior source mismatch"
+                  },
+                  {
+                    "let": "entry",
+                    "value": {
+                      "op": "returned",
+                      "args": [
+                        "peapods-active-debond"
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$entry",
+                            "data"
+                          ]
+                        },
+                        "0x"
+                      ]
+                    },
+                    "error": "peapods debond not returned"
+                  },
+                  {
+                    "let": "effects",
+                    "value": {
+                      "op": "effects",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$entry",
+                            "effects"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "deltas",
+                    "value": {
+                      "op": "get",
+                      "args": [
+                        "$effects",
+                        "tokenDeltas"
+                      ]
+                    }
+                  },
+                  {
+                    "let": "pod",
+                    "value": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$evidence",
+                                    "binding"
+                                  ]
+                                },
+                                "pod"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "asset",
+                    "value": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$evidence",
+                                    "binding"
+                                  ]
+                                },
+                                "asset"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "staking",
+                    "value": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$evidence",
+                                    "binding"
+                                  ]
+                                },
+                                "staking"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "actorRows",
+                    "value": {
+                      "op": "filter",
+                      "args": [
+                        "$deltas",
+                        "d",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "token"
+                                  ]
+                                },
+                                "$pod"
+                              ]
+                            },
+                            {
+                              "op": "ne",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "account"
+                                  ]
+                                },
+                                "$pod"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$actorRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "error": "peapods missing scoped deltas"
+                  },
+                  {
+                    "let": "actor",
+                    "value": {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$actorRows",
+                            0
+                          ]
+                        },
+                        "account"
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$actor",
+                            "$pod"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods invalid behavior caller"
+                  },
+                  {
+                    "assert": {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$actor",
+                            "$asset"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods invalid behavior caller"
+                  },
+                  {
+                    "assert": {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$actor",
+                            "$staking"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods invalid behavior caller"
+                  },
+                  {
+                    "let": "quote",
+                    "value": {
+                      "op": "model",
+                      "args": [
+                        "debond",
+                        {
+                          "supply": {
+                            "op": "get",
+                            "args": [
+                              {
+                                "supply": {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$evidence",
+                                        "state"
+                                      ]
+                                    },
+                                    "supply"
+                                  ]
+                                },
+                                "backing": {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$evidence",
+                                        "state"
+                                      ]
+                                    },
+                                    "backing"
+                                  ]
+                                },
+                                "feeBps": {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$evidence",
+                                        "state"
+                                      ]
+                                    },
+                                    "feeBps"
+                                  ]
+                                }
+                              },
+                              "supply"
+                            ]
+                          },
+                          "backing": {
+                            "op": "get",
+                            "args": [
+                              {
+                                "supply": {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$evidence",
+                                        "state"
+                                      ]
+                                    },
+                                    "supply"
+                                  ]
+                                },
+                                "backing": {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$evidence",
+                                        "state"
+                                      ]
+                                    },
+                                    "backing"
+                                  ]
+                                },
+                                "feeBps": {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$evidence",
+                                        "state"
+                                      ]
+                                    },
+                                    "feeBps"
+                                  ]
+                                }
+                              },
+                              "backing"
+                            ]
+                          },
+                          "feeBps": {
+                            "op": "get",
+                            "args": [
+                              {
+                                "supply": {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$evidence",
+                                        "state"
+                                      ]
+                                    },
+                                    "supply"
+                                  ]
+                                },
+                                "backing": {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$evidence",
+                                        "state"
+                                      ]
+                                    },
+                                    "backing"
+                                  ]
+                                },
+                                "feeBps": {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$evidence",
+                                        "state"
+                                      ]
+                                    },
+                                    "feeBps"
+                                  ]
+                                }
+                              },
+                              "feeBps"
+                            ]
+                          },
+                          "amountIn": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "amountIn"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$deltas"
+                          ]
+                        },
+                        4
+                      ]
+                    },
+                    "error": "peapods missing scoped deltas"
+                  },
+                  {
+                    "let": "row",
+                    "value": {
+                      "op": "filter",
+                      "args": [
+                        "$deltas",
+                        "d",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "token"
+                                  ]
+                                },
+                                "$pod"
+                              ]
+                            },
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "account"
+                                  ]
+                                },
+                                "$actor"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$row"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "error": "peapods debit/receipt mismatch"
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$row",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "sub",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "amountIn"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods debit/receipt mismatch"
+                  },
+                  {
+                    "let": "row",
+                    "value": {
+                      "op": "filter",
+                      "args": [
+                        "$deltas",
+                        "d",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "token"
+                                  ]
+                                },
+                                "$pod"
+                              ]
+                            },
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "account"
+                                  ]
+                                },
+                                "$pod"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$row"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "error": "peapods debit/receipt mismatch"
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$row",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$quote",
+                            "feeShares"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods debit/receipt mismatch"
+                  },
+                  {
+                    "let": "row",
+                    "value": {
+                      "op": "filter",
+                      "args": [
+                        "$deltas",
+                        "d",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "token"
+                                  ]
+                                },
+                                "$asset"
+                              ]
+                            },
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "account"
+                                  ]
+                                },
+                                "$actor"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$row"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "error": "peapods debit/receipt mismatch"
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$row",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$quote",
+                            "amountOut"
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods debit/receipt mismatch"
+                  },
+                  {
+                    "let": "row",
+                    "value": {
+                      "op": "filter",
+                      "args": [
+                        "$deltas",
+                        "d",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "token"
+                                  ]
+                                },
+                                "$asset"
+                              ]
+                            },
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$d",
+                                    "account"
+                                  ]
+                                },
+                                "$pod"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$row"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "error": "peapods debit/receipt mismatch"
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$row",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "sub",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$quote",
+                                "amountOut"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods debit/receipt mismatch"
+                  },
+                  {
+                    "let": "supplyDeltas",
+                    "value": {
+                      "op": "get",
+                      "args": [
+                        "$effects",
+                        "totalSupplyDeltas"
+                      ]
+                    }
+                  },
+                  {
+                    "let": "podSupply",
+                    "value": {
+                      "op": "filter",
+                      "args": [
+                        "$supplyDeltas",
+                        "s",
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$s",
+                                "token"
+                              ]
+                            },
+                            "$pod"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$podSupply"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "error": "peapods burn mismatch"
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$podSupply",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "sub",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$quote",
+                                "burned"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods burn mismatch"
+                  },
+                  {
+                    "let": "foreignSupply",
+                    "value": {
+                      "op": "filter",
+                      "args": [
+                        "$supplyDeltas",
+                        "s",
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$s",
+                                "token"
+                              ]
+                            },
+                            "$pod"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "every",
+                      "args": [
+                        "$foreignSupply",
+                        "s",
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$s",
+                                "delta"
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "error": "peapods burn mismatch"
+                  },
+                  {
+                    "assert": {
+                      "op": "event",
+                      "args": [
+                        {
+                          "result": "$entry",
+                          "abi": "pod",
+                          "address": {
+                            "op": "address",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$evidence",
+                                      "binding"
+                                    ]
+                                  },
+                                  "pod"
+                                ]
+                              }
+                            ]
+                          },
+                          "name": "Debond",
+                          "fields": {
+                            "wallet": {
+                              "op": "address",
+                              "args": [
+                                "$actor"
+                              ]
+                            },
+                            "amountDebonded": {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "amountIn"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    "error": "peapods event/caller mismatch"
+                  },
+                  {
+                    "let": "behaviorHash",
+                    "value": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "binding": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "binding"
+                            ]
+                          },
+                          "source": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "source"
+                            ]
+                          },
+                          "amountIn": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "amountIn"
+                            ]
+                          },
+                          "amountOut": {
+                            "op": "get",
+                            "args": [
+                              "$quote",
+                              "amountOut"
+                            ]
+                          },
+                          "actor": "$actor",
+                          "supply": {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$evidence",
+                                  "state"
+                                ]
+                              },
+                              "supply"
+                            ]
+                          },
+                          "backing": {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$evidence",
+                                  "state"
+                                ]
+                              },
+                              "backing"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "return": {
+                      "op": "merge",
+                      "args": [
+                        "$evidence",
+                        {
+                          "phase": "active",
+                          "amountOut": {
+                            "op": "get",
+                            "args": [
+                              "$quote",
+                              "amountOut"
+                            ]
+                          },
+                          "actor": "$actor",
+                          "behaviorHash": "$behaviorHash"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "return": {
+                      "phase": "unavailable",
+                      "reason": {
+                        "op": "get",
+                        "args": [
+                          "$error",
+                          "message"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "$evidence.reason"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "unavailable"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "active"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "binding"
+                          ]
+                        },
+                        "pod"
+                      ]
+                    }
+                  ]
+                },
+                "binding": {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "binding"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "source-runtime-reciprocal-staking-and-positive-debond-effects-not-factory",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "binding"
+                              ]
+                            },
+                            "pod"
+                          ]
+                        }
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "binding": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "binding"
+                            ]
+                          },
+                          "source": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "source"
+                            ]
+                          },
+                          "behavior": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "behaviorHash"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.binding.pod"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.binding.pod"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.binding.pod"
+                ]
+              }
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            },
+            {
+              "kind": "quote-completion",
+              "mode": "return-data"
+            }
+          ]
+        },
+        {
+          "pod": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.binding.pod"
+                ]
+              }
+            ]
+          },
+          "asset": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.binding.asset"
+                ]
+              }
+            ]
+          },
+          "codeHash": {
+            "op": "lower",
+            "args": [
+              "$identity.binding.codeHash"
+            ]
+          },
+          "assetCodeHash": {
+            "op": "lower",
+            "args": [
+              "$identity.binding.assetCodeHash"
+            ]
+          },
+          "staking": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.binding.staking"
+                ]
+              }
+            ]
+          },
+          "stakingCodeHash": {
+            "op": "lower",
+            "args": [
+              "$identity.binding.stakingCodeHash"
+            ]
+          },
+          "decimals": {
+            "op": "number",
+            "args": [
+              "$identity.binding.decimals"
+            ]
+          },
+          "feeBps": "$identity.binding.feeBps"
+        }
+      ]
+    },
+    "bindingProjection": {
+      "pod": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.pod"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "codeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.codeHash"
+        ]
+      },
+      "assetCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.assetCodeHash"
+        ]
+      },
+      "staking": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.staking"
+            ]
+          }
+        ]
+      },
+      "stakingCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.stakingCodeHash"
+        ]
+      },
+      "decimals": {
+        "op": "number",
+        "args": [
+          "$descriptor.decimals"
+        ]
+      },
+      "feeBps": "$descriptor.feeBps"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pod",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.pod"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "redeem",
+        "enabled": true,
+        "tokenIn": "$descriptor.pod",
+        "tokenOut": "$descriptor.asset",
+        "adapterId": "peapods-debond",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        {
+          "op": "concat",
+          "args": [
+            [
+              "$descriptor.familyId",
+              [
+                ":"
+              ],
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.pod"
+                    ]
+                  }
+                ]
+              },
+              [
+                ":redeem:"
+              ],
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.asset"
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        ""
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.pod"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            "peapods-debond"
+          ]
+        },
+        "error": "peapods route binding mismatch"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "finalizeChecks": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$draft.routes"
+              ]
+            },
+            1
+          ]
+        },
+        "error": "peapods pricing route group"
+      }
+    ],
+    "compatibility": {
+      "pod": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.pod"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "codeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.codeHash"
+        ]
+      },
+      "assetCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.assetCodeHash"
+        ]
+      },
+      "staking": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.staking"
+            ]
+          }
+        ]
+      },
+      "stakingCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.stakingCodeHash"
+        ]
+      },
+      "decimals": {
+        "op": "number",
+        "args": [
+          "$descriptor.decimals"
+        ]
+      },
+      "feeBps": "$descriptor.feeBps"
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [
+        "$draft.pod",
+        "$draft.asset"
+      ],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "min",
+      "args": [
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$steps",
+                "state"
+              ]
+            },
+            "supply"
+          ]
+        },
+        {
+          "op": "uint",
+          "args": [
+            "1000000000000000000"
+          ]
+        }
+      ]
+    },
+    "exactCompatibility": {
+      "binding": "$route.bindingRef.fingerprint",
+      "route": "$route.routeKey",
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "source-weighted-single-asset-effects",
+    "lineageId": "peapods:weighted-single-asset-v1",
+    "identityKind": "standalone-contract",
+    "abi": {
+      "pod": [
+        "function debond(uint256,address[],uint8[])",
+        "function totalSupply() view returns(uint256)",
+        "function balanceOf(address) view returns(uint256)",
+        "function decimals() view returns(uint8)",
+        "function getAllAssets() view returns(tuple(address token,uint256 weighting,uint256 basePriceUSDX96,address c1,uint256 q1)[])",
+        "function isAsset(address) view returns(bool)",
+        "function indexType() view returns(uint8)",
+        "function DEBOND_FEE() view returns(uint256)",
+        "function lpStakingPool() view returns(address)",
+        "function indexFund() view returns(address)",
+        "event Debond(address indexed wallet,uint256 amountDebonded)",
+        "event Transfer(address indexed from,address indexed to,uint256 value)"
+      ]
+    },
+    "constants": {
+      "wad": "1000000000000000000",
+      "debondTopic": "0xe4bf69c2fff7ace5eed72842e9abf52af2218a3a78cb83d7824f999dbfd75e71",
+      "transferTopic": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+    },
+    "expressions": {
+      "peapodsPricingSnapshot": {
+        "source": "$source",
+        "feeBps": {
+          "op": "get",
+          "args": [
+            "$state",
+            "feeBps"
+          ]
+        },
+        "supply": {
+          "op": "get",
+          "args": [
+            "$state",
+            "supply"
+          ]
+        },
+        "backing": {
+          "op": "get",
+          "args": [
+            "$state",
+            "backing"
+          ]
+        },
+        "amountIn": {
+          "op": "min",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$state",
+                "supply"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1000000000000000000"
+              ]
+            }
+          ]
+        },
+        "amountOut": {
+          "op": "get",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    {
+                      "op": "min",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$state",
+                            "supply"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "1000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "model",
+                  "args": [
+                    "debond",
+                    {
+                      "supply": {
+                        "op": "get",
+                        "args": [
+                          "$state",
+                          "supply"
+                        ]
+                      },
+                      "backing": {
+                        "op": "get",
+                        "args": [
+                          "$state",
+                          "backing"
+                        ]
+                      },
+                      "feeBps": {
+                        "op": "get",
+                        "args": [
+                          "$state",
+                          "feeBps"
+                        ]
+                      },
+                      "amountIn": {
+                        "op": "min",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$state",
+                              "supply"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "1000000000000000000"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "amountOut": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                }
+              ]
+            },
+            "amountOut"
+          ]
+        },
+        "available": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$state",
+                        "supply"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1000000000000000000"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            {
+                              "op": "min",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$state",
+                                    "supply"
+                                  ]
+                                },
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "1000000000000000000"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "model",
+                          "args": [
+                            "debond",
+                            {
+                              "supply": {
+                                "op": "get",
+                                "args": [
+                                  "$state",
+                                  "supply"
+                                ]
+                              },
+                              "backing": {
+                                "op": "get",
+                                "args": [
+                                  "$state",
+                                  "backing"
+                                ]
+                              },
+                              "feeBps": {
+                                "op": "get",
+                                "args": [
+                                  "$state",
+                                  "feeBps"
+                                ]
+                              },
+                              "amountIn": {
+                                "op": "min",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$state",
+                                      "supply"
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "1000000000000000000"
+                                    ]
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "amountOut": {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "amountOut"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "flatMap",
+              "args": [
+                "$routes",
+                "route",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            {
+                              "op": "min",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$state",
+                                    "supply"
+                                  ]
+                                },
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "1000000000000000000"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "gt",
+                                      "args": [
+                                        {
+                                          "op": "min",
+                                          "args": [
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                "$state",
+                                                "supply"
+                                              ]
+                                            },
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                "1000000000000000000"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "uint",
+                                          "args": [
+                                            "0"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "model",
+                                      "args": [
+                                        "debond",
+                                        {
+                                          "supply": {
+                                            "op": "get",
+                                            "args": [
+                                              "$state",
+                                              "supply"
+                                            ]
+                                          },
+                                          "backing": {
+                                            "op": "get",
+                                            "args": [
+                                              "$state",
+                                              "backing"
+                                            ]
+                                          },
+                                          "feeBps": {
+                                            "op": "get",
+                                            "args": [
+                                              "$state",
+                                              "feeBps"
+                                            ]
+                                          },
+                                          "amountIn": {
+                                            "op": "min",
+                                            "args": [
+                                              {
+                                                "op": "get",
+                                                "args": [
+                                                  "$state",
+                                                  "supply"
+                                                ]
+                                              },
+                                              {
+                                                "op": "uint",
+                                                "args": [
+                                                  "1000000000000000000"
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "amountOut": {
+                                        "op": "uint",
+                                        "args": [
+                                          "0"
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                },
+                                "amountOut"
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    [
+                      [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$route",
+                            "routeKey"
+                          ]
+                        },
+                        {
+                          "amountIn": {
+                            "op": "min",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$state",
+                                  "supply"
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1000000000000000000"
+                                ]
+                              }
+                            ]
+                          },
+                          "amountOut": {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "gt",
+                                    "args": [
+                                      {
+                                        "op": "min",
+                                        "args": [
+                                          {
+                                            "op": "get",
+                                            "args": [
+                                              "$state",
+                                              "supply"
+                                            ]
+                                          },
+                                          {
+                                            "op": "uint",
+                                            "args": [
+                                              "1000000000000000000"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "op": "uint",
+                                        "args": [
+                                          "0"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "model",
+                                    "args": [
+                                      "debond",
+                                      {
+                                        "supply": {
+                                          "op": "get",
+                                          "args": [
+                                            "$state",
+                                            "supply"
+                                          ]
+                                        },
+                                        "backing": {
+                                          "op": "get",
+                                          "args": [
+                                            "$state",
+                                            "backing"
+                                          ]
+                                        },
+                                        "feeBps": {
+                                          "op": "get",
+                                          "args": [
+                                            "$state",
+                                            "feeBps"
+                                          ]
+                                        },
+                                        "amountIn": {
+                                          "op": "min",
+                                          "args": [
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                "$state",
+                                                "supply"
+                                              ]
+                                            },
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                "1000000000000000000"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "amountOut": {
+                                      "op": "uint",
+                                      "args": [
+                                        "0"
+                                      ]
+                                    }
+                                  }
+                                ]
+                              },
+                              "amountOut"
+                            ]
+                          }
+                        }
+                      ]
+                    ],
+                    []
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "inputs": [
+      "prefix",
+      "trialState"
+    ],
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "get-code",
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.pod",
+        "$descriptor.asset"
+      ],
+      "mutationAddresses": [
+        "$descriptor.pod",
+        "$descriptor.asset"
+      ],
+      "mutationPredicate": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$observation.kind",
+              "log"
+            ]
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$observation.address",
+                  "$descriptor.pod"
+                ]
+              },
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$observation.address",
+                      "$descriptor.asset"
+                    ]
+                  },
+                  {
+                    "op": "or",
+                    "args": [
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "$constants.transferTopic"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "matches",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$observation",
+                                      "data"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "^0x[0-9a-f]{64}$"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "bytes",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      1
+                                    ]
+                                  },
+                                  12,
+                                  20
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$descriptor.pod"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "bytes",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      2
+                                    ]
+                                  },
+                                  12,
+                                  20
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$descriptor.pod"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$observation.target",
+                  "$descriptor.pod"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$observation.target",
+                  "$descriptor.asset"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "classifyUnavailable": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$snapshot.available",
+              false
+            ]
+          },
+          {
+            "op": "map",
+            "args": [
+              "$routes",
+              "r",
+              [
+                {
+                  "op": "get",
+                  "args": [
+                    "$r",
+                    "routeKey"
+                  ]
+                },
+                "peapods-no-positive-backing"
+              ]
+            ]
+          },
+          []
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "weighted-source-amount",
+      "requirements": {
+        "transports": [
+          "get-code",
+          "eth-call"
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "assertSource",
+            "args": [
+              "$source",
+              "$source"
+            ]
+          },
+          "error": "peapods invalid source"
+        },
+        {
+          "assert": {
+            "op": "matches",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$source",
+                      "hash"
+                    ]
+                  }
+                ]
+              },
+              "^0x[0-9a-f]{64}$"
+            ]
+          },
+          "error": "peapods invalid source"
+        },
+        {
+          "assert": {
+            "op": "gte",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$source",
+                  "number"
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "peapods invalid source"
+        },
+        {
+          "assert": {
+            "op": "gte",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$source",
+                  "generation"
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "peapods invalid source"
+        },
+        {
+          "assert": {
+            "op": "or",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      {
+                        "op": "coalesce",
+                        "args": [
+                          "$prefix",
+                          []
+                        ]
+                      }
+                    ]
+                  },
+                  0
+                ]
+              },
+              {
+                "op": "defined",
+                "args": [
+                  "$trialState"
+                ]
+              }
+            ]
+          },
+          "error": "peapods prefix requires issued trial state"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                ]
+              }
+            ]
+          },
+          "error": "peapods invalid uint256"
+        }
+      ],
+      "evidence": {
+        "kind": "peapods-weighted-local",
+        "source": "$source",
+        "fingerprint": "$route.bindingRef.fingerprint",
+        "routeKey": "$route.routeKey",
+        "executor": "$executor",
+        "direction": "$route.direction",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "modules": {
+      "quoteFlow": {
+        "version": 1,
+        "sourceKind": "local-math",
+        "steps": [
+          {
+            "id": "state",
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "pod-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.pod"
+                  ]
+                }
+              },
+              {
+                "id": "asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                }
+              },
+              {
+                "id": "pod-assets",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.pod"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "getAllAssets",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "pod-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.pod"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "totalSupply",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "asset-backing",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "balanceOf",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.pod"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$results",
+                            0
+                          ]
+                        },
+                        "source"
+                      ]
+                    },
+                    "$source"
+                  ]
+                },
+                "error": "peapods state source mismatch"
+              },
+              {
+                "let": "podCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "pod-code"
+                  ]
+                }
+              },
+              {
+                "let": "assetCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "asset-code"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            "$podCode"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$descriptor.codeHash"
+                      ]
+                    }
+                  ]
+                },
+                "error": "peapods source binding changed"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            "$assetCode"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$descriptor.assetCodeHash"
+                      ]
+                    }
+                  ]
+                },
+                "error": "peapods source binding changed"
+              },
+              {
+                "let": "assets",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "decodeAll",
+                      "args": [
+                        "pod",
+                        "getAllAssets",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "pod-assets"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$assets"
+                      ]
+                    },
+                    1
+                  ]
+                },
+                "error": "peapods asset topology changed"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$assets",
+                            0
+                          ]
+                        },
+                        "token"
+                      ]
+                    },
+                    "$descriptor.asset"
+                  ]
+                },
+                "error": "peapods asset topology changed"
+              },
+              {
+                "return": {
+                  "supply": {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "pod",
+                          "totalSupply",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "pod-supply"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "backing": {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "pod",
+                          "balanceOf",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "asset-backing"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "feeBps": "$descriptor.feeBps"
+                }
+              }
+            ]
+          }
+        ],
+        "result": "$steps.state"
+      },
+      "pricingFlow": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "state",
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "pod-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.pod"
+                  ]
+                }
+              },
+              {
+                "id": "asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                }
+              },
+              {
+                "id": "pod-assets",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.pod"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "getAllAssets",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "pod-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.pod"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "totalSupply",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "asset-backing",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pod",
+                    "balanceOf",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.pod"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$results",
+                            0
+                          ]
+                        },
+                        "source"
+                      ]
+                    },
+                    "$source"
+                  ]
+                },
+                "error": "peapods state source mismatch"
+              },
+              {
+                "let": "podCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "pod-code"
+                  ]
+                }
+              },
+              {
+                "let": "assetCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "asset-code"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            "$podCode"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$descriptor.codeHash"
+                      ]
+                    }
+                  ]
+                },
+                "error": "peapods source binding changed"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            "$assetCode"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$descriptor.assetCodeHash"
+                      ]
+                    }
+                  ]
+                },
+                "error": "peapods source binding changed"
+              },
+              {
+                "let": "assets",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "decodeAll",
+                      "args": [
+                        "pod",
+                        "getAllAssets",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "pod-assets"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$assets"
+                      ]
+                    },
+                    1
+                  ]
+                },
+                "error": "peapods asset topology changed"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$assets",
+                            0
+                          ]
+                        },
+                        "token"
+                      ]
+                    },
+                    "$descriptor.asset"
+                  ]
+                },
+                "error": "peapods asset topology changed"
+              },
+              {
+                "return": {
+                  "supply": {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "pod",
+                          "totalSupply",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "pod-supply"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "backing": {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "pod",
+                          "balanceOf",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "asset-backing"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "feeBps": "$descriptor.feeBps"
+                }
+              }
+            ]
+          }
+        ],
+        "result": {
+          "op": "expression",
+          "args": [
+            "peapodsPricingSnapshot",
+            {
+              "state": "$steps.state",
+              "routes": "$descriptor.routes"
+            }
+          ]
+        }
+      },
+      "trialState": {
+        "version": 1,
+        "reads": [
+          {
+            "id": "state",
+            "refs": [
+              {
+                "key": {
+                  "op": "join",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        "evm:",
+                        {
+                          "op": "address",
+                          "args": [
+                            "$descriptor.pod"
+                          ]
+                        },
+                        ":peapods-debond"
+                      ]
+                    },
+                    ""
+                  ]
+                },
+                "schema": "peapods-weighted-v1",
+                "binding": {
+                  "op": "get",
+                  "args": [
+                    "$route.bindingRef",
+                    "fingerprint"
+                  ]
+                },
+                "dependencies": [
+                  {
+                    "op": "join",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          "storage:",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$descriptor.pod"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      ""
+                    ]
+                  },
+                  {
+                    "op": "join",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          "storage:",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$descriptor.asset"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      ""
+                    ]
+                  },
+                  {
+                    "op": "join",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          "token-supply:",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$descriptor.pod"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      ""
+                    ]
+                  },
+                  {
+                    "op": "join",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          "token-balance:",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$descriptor.asset"
+                                ]
+                              }
+                            ]
+                          },
+                          ":",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$descriptor.pod"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      ""
+                    ]
+                  }
+                ]
+              }
+            ],
+            "initial": [
+              "$prepared"
+            ]
+          }
+        ],
+        "model": "debond",
+        "amountOut": {
+          "op": "get",
+          "args": [
+            "$modelResult",
+            "amountOut"
+          ]
+        },
+        "stateChanges": [
+          {
+            "ref": {
+              "key": {
+                "op": "join",
+                "args": [
+                  {
+                    "op": "concat",
+                    "args": [
+                      "evm:",
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.pod"
+                        ]
+                      },
+                      ":peapods-debond"
+                    ]
+                  },
+                  ""
+                ]
+              },
+              "schema": "peapods-weighted-v1",
+              "binding": {
+                "op": "get",
+                "args": [
+                  "$route.bindingRef",
+                  "fingerprint"
+                ]
+              },
+              "dependencies": [
+                {
+                  "op": "join",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        "storage:",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$descriptor.pod"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    ""
+                  ]
+                },
+                {
+                  "op": "join",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        "storage:",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$descriptor.asset"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    ""
+                  ]
+                },
+                {
+                  "op": "join",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        "token-supply:",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$descriptor.pod"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    ""
+                  ]
+                },
+                {
+                  "op": "join",
+                  "args": [
+                    {
+                      "op": "concat",
+                      "args": [
+                        "token-balance:",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$descriptor.asset"
+                              ]
+                            }
+                          ]
+                        },
+                        ":",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$descriptor.pod"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    ""
+                  ]
+                }
+              ]
+            },
+            "value": {
+              "op": "get",
+              "args": [
+                "$modelResult",
+                "state"
+              ]
+            }
+          }
+        ],
+        "stateEffects": [
+          {
+            "op": "join",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  "storage:",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.pod"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              ""
+            ]
+          },
+          {
+            "op": "join",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  "storage:",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.asset"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              ""
+            ]
+          },
+          {
+            "op": "join",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  "token-supply:",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.pod"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              ""
+            ]
+          },
+          {
+            "op": "join",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  "token-balance:",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.asset"
+                        ]
+                      }
+                    ]
+                  },
+                  ":",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.pod"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              ""
+            ]
+          }
+        ],
+        "input": {
+          "op": "merge",
+          "args": [
+            {
+              "op": "at",
+              "args": [
+                "$stateReads.state",
+                0
+              ]
+            },
+            {
+              "amountIn": "$amountIn"
+            }
+          ]
+        }
+      }
+    },
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.pod",
+        "$descriptor.asset",
+        "$descriptor.staking"
+      ],
+      "steps": [
+        {
+          "id": "debond",
+          "call": {
+            "target": "$descriptor.pod",
+            "signature": "function debond(uint256,address[],uint8[])",
+            "args": [
+              {
+                "runtime": "amountIn"
+              },
+              [],
+              []
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "runtime": {
+          "model": "peapods:runtime-shape",
+          "version": 1
+        },
+        "debond": {
+          "model": "peapods:debond",
+          "version": 1
+        }
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "peapods-debond",
+        "lineage": "custom-protocol:peapods-debond",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function debond(uint256,address[],uint8[])"
+        }
+      ]
+    }
+  ]
+}

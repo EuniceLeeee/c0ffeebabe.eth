@@ -1,0 +1,15 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../protocols/ondo-usdy-family/manifest.js";
+import { ondoDiscovery as discovery } from "../protocols/ondo-usdy-family/discovery.js";
+import { ondoIdentity as identity } from "../protocols/ondo-usdy-family/identity.js";
+import { ondoInstance as instance } from "../protocols/ondo-usdy-family/instance.js";
+import { ondoRoutes as routes } from "../protocols/ondo-usdy-family/routes.js";
+import { ondoPricing as pricing } from "../protocols/ondo-usdy-family/pricing.js";
+import { ondoExact as exact } from "../protocols/ondo-usdy-family/exact.js";
+import { ondoExecution as execution } from "../protocols/ondo-usdy-family/execution.js";
+import { ondoProtocol as protocol } from "../protocols/ondo-usdy-family/protocol.js";
+import { ondoCapture as capture } from "../protocols/ondo-usdy-family/capture.js";
+import { ondoFamilyOwnedAction } from "../protocols/ondo-usdy-family/action.js";
+export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [ondoFamilyOwnedAction] });
+export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ONDO_USDY_ENABLED" });

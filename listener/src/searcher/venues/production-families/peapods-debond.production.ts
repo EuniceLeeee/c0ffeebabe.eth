@@ -1,15 +1,11 @@
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/protocols/peapods-debond-family/peapods-debond.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
-import { manifest } from "../protocols/peapods-debond-family/manifest.js";
-import { discovery } from "../protocols/peapods-debond-family/discovery.js";
-import { identity } from "../protocols/peapods-debond-family/identity.js";
-import { instance } from "../protocols/peapods-debond-family/instance.js";
-import { routes } from "../protocols/peapods-debond-family/routes.js";
-import { pricing } from "../protocols/peapods-debond-family/pricing.js";
-import { exact } from "../protocols/peapods-debond-family/exact.js";
-import { execution } from "../protocols/peapods-debond-family/execution.js";
-import { protocol } from "../protocols/peapods-debond-family/protocol.js";
-import { capture } from "../protocols/peapods-debond-family/capture.js";
-import { action } from "../protocols/peapods-debond-family/action.js";
-export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [action] });
-export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_PEAPODS_DEBOND_ENABLED" });
+import { compileDeclarativeProtocol } from "../declarative-protocol.js";
+import definition from "../protocols/peapods-debond-family/peapods-debond.json";
+
+export const activation = defineFamilyActivation({"enabled":false,"envKey":"SEARCHER_FAMILY_PEAPODS_DEBOND_ENABLED"});
+
+export const plugin = defineProtocolFamily(compileDeclarativeProtocol(definition, []));

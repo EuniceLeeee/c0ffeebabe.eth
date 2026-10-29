@@ -1,0 +1,308 @@
+import assert from "node:assert/strict";
+import { ethers } from "ethers";
+import { renderDeclarativeProductionEntry } from "../build-declarative-production.js";
+import { createDeclarativeProtocolRuntime } from "../venues/declarative-protocol.js";
+import { declareRequestProgram, type AdapterRequest } from "../venues/adapter-request-program.js";
+import definition from "../venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json";
+import { plugin as ts } from "../venues/production-families/yieldbasis-lt.production.js";
+import { inspectRuntime } from "./runtime-program-testkit.js";
+import {
+  answerFor, CANDIDATE, EXECUTOR, FOREIGN, LT, ASSET, STABLECOIN, CRYPTOPOOL, AMM, STAKER, SOURCE,
+  identityWith, descriptor, PREVIEW_PER_SHARE, LIQUIDITY_TOTAL, LIVE_SUPPLY_TOKENS, POOL_ASSET_BALANCE,
+  PROBE_SHARES,
+} from "../venues/protocols/yieldbasis-lt-family/test/fixtures.js";
+
+const root = process.cwd();
+const definitionFile = `${root}/src/searcher/venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json`;
+const rendered = renderDeclarativeProductionEntry({ rootDirectory: root, definitionFile, document: definition });
+const runtime = createDeclarativeProtocolRuntime(definition as any, []);
+const family = runtime.definition;
+
+function walk(reply: (request: AdapterRequest) => any) {
+  const variant = family.identity.variants[0]!;
+  let evidence: any;
+  const rounds: string[][] = [];
+  for (let step = 0; step < 8; step++) {
+    const input = { candidate: CANDIDATE, evidence, step };
+    const decision = variant.decide(input as never);
+    if (decision.status !== "continue") return { decision, rounds };
+    const declared = declareRequestProgram({ requirements: variant.requirements, buildRequests: variant.buildRequests, decode: () => undefined }, input as never);
+    rounds.push(declared.requests.map(r => r.id));
+    evidence = variant.decode({ step: input, results: declared.requests.map(reply) } as never);
+  }
+  throw new Error("did not converge");
+}
+
+console.log("rendered:", rendered.format, rendered.familyId, rendered.ownedActionAdapterIds.join(","));
+console.log("coverage:", JSON.stringify(runtime.moduleCoverage[0]!.modules.map((m: any) => `${m.key}=${m.state}`)));
+
+// ---- identity (both branches)
+const withdrawWalk = walk(answerFor());
+assert.equal(withdrawWalk.decision.status, "verified");
+assert.deepEqual(withdrawWalk.decision.identity, identityWith());
+const depositReply = answerFor({ deposit: true });
+const depositWalk = walk(depositReply);
+assert.equal(depositWalk.decision.status, "verified");
+assert.deepEqual(depositWalk.decision.identity, identityWith(depositReply));
+assert.equal(depositWalk.rounds.length, 4);
+assert.deepEqual(depositWalk.rounds[3], ["active-deposit-program"]);
+assert.equal((depositWalk.decision.identity as any).depositPathVerified, true);
+// reverted guarded program: withdrawal stays admitted, deposit is not projected
+{
+  const revertReply = answerFor({ deposit: true, programReverts: true });
+  const reverted = walk(revertReply);
+  assert.equal(reverted.decision.status, "verified");
+  assert.deepEqual(reverted.decision.identity, identityWith(revertReply));
+  assert.equal((reverted.decision.identity as any).depositPathVerified, false);
+  assert.notEqual((reverted.decision.identity as any).facts.depositProgramProof, null);
+  const rDescriptor = family.instance.finalizeDescriptor({ identity: reverted.decision.identity, draft: family.instance.compileDraft(reverted.decision.identity), sharedBindings: [] } as never) as any;
+  assert.deepEqual(family.routes.project({ descriptor: rDescriptor }).map((r: any) => r.direction), ["withdraw"]);
+  console.log("identity(reverted program): withdrawal admitted, deposit withheld, deep-equal TS");
+}
+console.log("identity: withdraw + deposit deep-equal TS, 3/4 rounds, program proof", (depositWalk.decision.identity as any).facts.depositProgramProof.slice(0, 12));
+
+// ---- discovery (both call patterns, both events, address surface)
+{
+  const LTIF = new ethers.Interface([
+    "function withdraw(uint256,uint256)", "function withdraw(uint256,uint256,address)",
+    "function deposit(uint256,uint256,uint256)", "function deposit(uint256,uint256,uint256,address)",
+    "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+    "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)",
+  ]);
+  const cases: [string, any][] = [
+    ["yieldbasis-lt-withdraw-call", { kind: "call", target: LT, data: LTIF.encodeFunctionData("withdraw(uint256,uint256)", [1n, 1n]) }],
+    ["yieldbasis-lt-withdraw-receiver-call", { kind: "call", target: LT, data: LTIF.encodeFunctionData("withdraw(uint256,uint256,address)", [1n, 1n, EXECUTOR]) }],
+    ["yieldbasis-lt-deposit-call", { kind: "call", target: LT, data: LTIF.encodeFunctionData("deposit(uint256,uint256,uint256)", [1n, 1n, 1n]) }],
+    ["yieldbasis-lt-deposit-receiver-call", { kind: "call", target: LT, data: LTIF.encodeFunctionData("deposit(uint256,uint256,uint256,address)", [1n, 1n, 1n, EXECUTOR]) }],
+    ["yieldbasis-lt-withdraw-log", (() => { const e = LTIF.encodeEventLog("Withdraw", [EXECUTOR, EXECUTOR, EXECUTOR, 1n, 1n]); return { kind: "log", address: LT, topics: e.topics, data: e.data }; })()],
+    ["yieldbasis-lt-deposit-log", (() => { const e = LTIF.encodeEventLog("Deposit", [EXECUTOR, EXECUTOR, 1n, 2n]); return { kind: "log", address: LT, topics: e.topics, data: e.data }; })()],
+    ["yieldbasis-lt-levamm-surface", { kind: "address-surface", address: LT,
+      kindDetail: "interface", interfaceFingerprints: ["yieldbasis-lt-levamm-surface-v1"], patternId: "yieldbasis-lt-levamm-surface" }],
+  ];
+  for (const [patternId, observation] of cases) {
+    const got = family.discovery.decodeCandidate({ observation, matchedPatternId: patternId } as never);
+    const want = ts.discovery.decodeCandidate({ observation, matchedPatternId: patternId } as never);
+    assert.deepEqual(got, want, patternId);
+  }
+  assert.equal(family.discovery.candidateKey(CANDIDATE), LT.toLowerCase());
+  assert.equal((family.discovery as any).txSeedNominations, true);
+  assert.equal(family.discovery.callPatterns.length, 4);
+  console.log("discovery: four call patterns, both events, surface, candidateKey equal TS");
+}
+
+// ---- descriptor + routes + graph
+const jWithdraw = family.instance.finalizeDescriptor({ identity: withdrawWalk.decision.identity, draft: family.instance.compileDraft(withdrawWalk.decision.identity), sharedBindings: [] } as never) as any;
+const tWithdraw = descriptor(answerFor()) as any;
+assert.deepEqual(jWithdraw, tWithdraw);
+const jDeposit = family.instance.finalizeDescriptor({ identity: depositWalk.decision.identity, draft: family.instance.compileDraft(depositWalk.decision.identity), sharedBindings: [] } as never) as any;
+const tDeposit = descriptor(depositReply) as any;
+assert.deepEqual(jDeposit, tDeposit);
+for (const [j, t] of [[jWithdraw, tWithdraw], [jDeposit, tDeposit]] as const) {
+  const jr = family.routes.project({ descriptor: j });
+  const tr = ts.routes.project({ descriptor: t });
+  assert.deepEqual(jr, tr);
+  for (let i = 0; i < jr.length; i++) assert.deepEqual(family.routes.projectGraph({ descriptor: j, route: jr[i] } as never), ts.routes.projectGraph({ descriptor: t, route: tr[i] } as never));
+}
+assert.deepEqual(family.routes.project({ descriptor: jWithdraw }).map(r => r.direction), ["withdraw"]);
+assert.deepEqual(family.routes.project({ descriptor: jDeposit }).map(r => r.direction), ["withdraw", "deposit"]);
+console.log("descriptor/routes/graph: deep-equal TS; withdraw-only and both-direction projection");
+
+// ---- pricing (static, draft, current, snapshot, mids, dependencies)
+for (const [j, t] of [[jWithdraw, tWithdraw], [jDeposit, tDeposit]] as const) {
+  const jp = family.pricing, tp = ts.pricing as any;
+  const jr = family.routes.project({ descriptor: j });
+  const jdraft = jp.compileDraft({ descriptor: j, stateKey: j.instanceKey, routes: jr } as never) as any;
+  const tdraft = tp.compileDraft({ descriptor: t, stateKey: t.instanceKey, routes: ts.routes.project({ descriptor: t }) } as never) as any;
+  assert.deepEqual(jdraft, tdraft);
+  const jstatic = jp.staticEvidence;
+  const jstat = jstatic.decode({ programInput: jdraft, results: jstatic.buildRequests(jdraft as never).map(depositReply) } as never) as any;
+  const tstat = tp.staticEvidence.decode({ programInput: tdraft, results: tp.staticEvidence.buildRequests(tdraft).map(depositReply) } as never);
+  assert.deepEqual(jstat, tstat);
+  const jpd = jp.finalizePricingDescriptor({ draft: jdraft, staticEvidence: jstat } as never) as any;
+  const tpd = tp.finalizePricingDescriptor({ draft: tdraft, staticEvidence: tstat } as never) as any;
+  assert.deepEqual(jpd, tpd);
+  const jreq = jp.current.buildRequests({ descriptor: jpd, source: SOURCE, stateKey: j.instanceKey } as never);
+  const treq = tp.current.buildRequests({ descriptor: tpd, source: SOURCE, stateKey: t.instanceKey } as never);
+  assert.deepEqual(jreq.map(r => [r.id, r.kind, r.to, r.data]), treq.map((r: any) => [r.id, r.kind, r.to, r.data]));
+  const jsnap = jp.current.decodeSnapshot({ descriptor: jpd, initialResults: jreq.map(depositReply), dependentEvidence: [] } as never) as any;
+  const tsnap = tp.current.decodeSnapshot({ descriptor: tpd, initialResults: treq.map(depositReply), dependentEvidence: [] } as never);
+  assert.deepEqual(jsnap.quotes, tsnap.quotes);
+  const jmids = jp.current.deriveMids({ descriptor: jpd, snapshot: jsnap, routes: jr } as never);
+  const tmids = tp.current.deriveMids({ descriptor: tpd, snapshot: tsnap, routes: ts.routes.project({ descriptor: t }) } as never);
+  assert.deepEqual([...jmids.entries()], [...tmids.entries()]);
+  const tRoutes = ts.routes.project({ descriptor: t });
+  const tFull = { ...(t as any), routes: tRoutes };
+  const jFull = { ...(j as any), routes: jr };
+  assert.deepEqual(jp.dependencies({ descriptor: jFull } as never), tp.dependencies({ descriptor: tFull } as never));
+  assert.deepEqual(jp.staticBindingProjection({ descriptor: jFull } as never), tp.staticBindingProjection({ descriptor: tFull } as never));
+  assert.deepEqual(jp.snapshotCompatibilityProjection({ descriptor: jFull } as never), tp.snapshotCompatibilityProjection({ descriptor: tFull } as never));
+}
+console.log("pricing: draft/static/finalize/current/snapshot/mid/dependencies deep-equal TS");
+
+// ---- exact: withdraw faithful, deposit fails closed at the declared chain proof
+{
+  const route = family.routes.project({ descriptor: jWithdraw })[0]!;
+  const input = { descriptor: jWithdraw, route, amountIn: 10n ** 18n, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] };
+  const method = family.exact.methods(input as never)[1] as any;
+  const requests = method.program.buildRequests(input as never);
+  assert.deepEqual(requests.map((r: any) => r.id), ["quote-preview-withdraw", "quote-is-killed", "quote-staker", "quote-live-supply", "quote-liquidity", "quote-pool-asset-balance"]);
+  const tmethod = (ts.exact.methods(input as never)[1] as any);
+  assert.deepEqual(requests.map((r: any) => r.data), tmethod.program.buildRequests(input as never).map((r: any) => r.data));
+  const quoted = method.program.decode({ programInput: input, initialResults: requests.map(depositReply), dependentEvidence: [] });
+  const tquoted = tmethod.program.decode({ programInput: input, initialResults: requests.map(depositReply), dependentEvidence: [] });
+  assert.equal(quoted.amountOut, tquoted.amountOut);
+  assert.equal(quoted.amountOut, PREVIEW_PER_SHARE);
+  for (const key of ["kind", "direction", "amountIn", "amountOut", "lt", "asset", "liveSupplyTokens", "liquidityTotal", "poolAssetBalance", "assetCoinIndex", "bindingFingerprint"]) {
+    assert.deepEqual((quoted.evidence as any)[key], (tquoted.evidence as any)[key], `evidence.${key}`);
+  }
+  assert.deepEqual((quoted.evidence as any).readProof.dependentEvidence, []);
+  console.log("exact(withdraw): six TS requests, amountOut/evidence equal TS, retained read proof present");
+  // deposit exact must fail closed on the framework gap (single chain proof kind per variant)
+  const depositRoute = family.routes.project({ descriptor: jDeposit }).find(r => r.direction === "deposit")!;
+  const depositInput = { descriptor: jDeposit, route: depositRoute, amountIn: 10n ** 15n, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] };
+  const depositMethod = family.exact.methods(depositInput as never)[1] as any;
+  assert.throws(() => depositMethod.program.buildRequests(depositInput as never), /per-direction chain proof/);
+  console.log("exact(deposit): fail-closed with the declared G-YB5 refusal");
+}
+
+// ---- execution + action
+const ABI = new ethers.Interface([
+  "function balanceOf(address) view returns(uint256)",
+  "function totalSupply() view returns(uint256)",
+  "function approve(address,uint256) returns(bool)",
+  "function allowance(address,address) view returns(uint256)",
+  "function balances(uint256) view returns(uint256)",
+  "function deposit(uint256,uint256,uint256) returns(uint256)",
+  "function deposit(uint256,uint256,uint256,address) returns(uint256)",
+  "function withdraw(uint256,uint256) returns(uint256)",
+  "function withdraw(uint256,uint256,address) returns(uint256)",
+]);
+function scriptParts(script: string) {
+  const bytes = ethers.getBytes(script);
+  assert.equal(bytes[0], 0x0e);
+  const amount = BigInt(ethers.hexlify(bytes.slice(1, 33)));
+  const length = bytes[33]! * 65536 + bytes[34]! * 256 + bytes[35]!;
+  const program = ethers.hexlify(bytes.slice(36, 36 + length));
+  assert.equal(program.length, 2 + length * 2);
+  return { amount, program };
+}
+function run(program: string, amount: bigint, fault?: string) {
+  const stableReserve = 2000n, assetReserve = 100n;
+  let assetBal = 5n * amount + 7n, ltBal = amount + 1000n, stableBal = 999n, supply = amount + 1005n;
+  const mutating: any[] = [];
+  let debtSeen = 0n, sharesSeen = 0n;
+  inspectRuntime(program, amount, {
+    nativeBalance: () => 7n,
+    call(call) {
+      const parsed = ABI.parseTransaction({ data: call.data });
+      if (!parsed) throw new Error("unknown call data " + call.data + " -> " + call.target);
+      if (parsed.name === "balanceOf") {
+        if (call.target.toLowerCase() === ASSET.toLowerCase()) return ethers.toBeHex(assetBal, 32);
+        if (call.target.toLowerCase() === LT.toLowerCase()) return ethers.toBeHex(ltBal, 32);
+        return ethers.toBeHex(stableBal, 32);
+      }
+      if (parsed.name === "totalSupply") return ethers.toBeHex(supply, 32);
+      if (parsed.name === "balances") return ethers.toBeHex(parsed.args[0] === 0n ? stableReserve : assetReserve, 32);
+      if (parsed.name === "allowance") return ethers.toBeHex(0n, 32);
+      if (parsed.name === "approve") { mutating.push(["approve", parsed.args[0], parsed.args[1]]); return ethers.toBeHex(1n, 32); }
+      if (parsed.name === "deposit") {
+        const assets = parsed.args[0] as bigint; debtSeen = parsed.args[1] as bigint;
+        sharesSeen = assets * 2n;
+        assetBal -= fault === "no-debit" ? 0n : assets;
+        ltBal += fault === "short-mint" ? sharesSeen - 1n : sharesSeen;
+        stableBal -= fault === "stable-drain" ? 1n : 0n;
+        mutating.push(["deposit", assets, parsed.args[1], parsed.args[2]]);
+        return ethers.toBeHex(sharesSeen, 32);
+      }
+      if (parsed.name === "withdraw") {
+        const shares = parsed.args[0] as bigint;
+        mutating.push(["withdraw", shares, parsed.args[1]]);
+        ltBal -= shares; supply -= shares; assetBal += 3n * shares;
+        return ethers.toBeHex(3n * shares, 32);
+      }
+      throw new Error("unexpected " + parsed.name);
+    },
+  });
+  return { mutating, debtSeen, sharesSeen };
+}
+{
+  const depositRoute = family.routes.project({ descriptor: jDeposit }).find(r => r.direction === "deposit")!;
+  const depositInput = { descriptor: jDeposit, route: depositRoute, executor: EXECUTOR, source: SOURCE, runtimeEvidence: [] };
+  const jLeg = family.execution.buildRuntimeLeg!(depositInput as never)! as any;
+  const tLeg = ts.execution.buildRuntimeLeg!(depositInput as never)! as any;
+  const J = run(jLeg.program, 10n ** 15n);
+  const T = run(tLeg.program, 10n ** 15n);
+  assert.deepEqual(J.mutating, T.mutating);
+  assert.equal(J.debtSeen, T.debtSeen);
+  assert.equal(J.debtSeen, 10n ** 15n * 2000n / 100n);
+  for (const fault of ["short-mint", "no-debit", "stable-drain"]) {
+    assert.throws(() => run(jLeg.program, 10n ** 15n, fault), `declarative ${fault}`);
+    assert.throws(() => run(tLeg.program, 10n ** 15n, fault), `ts ${fault}`);
+  }
+  console.log("execution(deposit): mutating calls + reserve-debt equal TS, short-mint/zero-debit rejected", J.mutating.map(m => m[0]).join(","), J.debtSeen);
+}
+{
+  const withdrawRoute = family.routes.project({ descriptor: jWithdraw })[0]!;
+  const input = { descriptor: jWithdraw, route: withdrawRoute, executor: EXECUTOR, source: SOURCE, runtimeEvidence: [] };
+  const jLeg = family.execution.buildRuntimeLeg!(input as never)! as any;
+  const tLeg = ts.execution.buildRuntimeLeg!(input as never)! as any;
+  const J = run(jLeg.program, 10n ** 18n);
+  const T = run(tLeg.program, 10n ** 18n);
+  // Recorded fail-closed deviation: the declarative runtime leg floors the
+  // output at minAmountOut=1 while TS's default runtime encodes min_assets=0.
+  assert.deepEqual(J.mutating.map(m => [m[0], m[1]]), T.mutating.map(m => [m[0], m[1]]));
+  console.log("withdraw floors", JSON.stringify(J.mutating.map(String)), JSON.stringify(T.mutating.map(String)));
+  assert.equal(J.mutating[0]![2], 1n); assert.equal(T.mutating[0]![2], 0n);
+  console.log("execution(withdraw): same call/shares, floor 1 vs TS 0 (fail-closed)");
+  const exactInput = { ...input, amountIn: 10n ** 18n };
+  const input2 = { ...exactInput, quotedAmountOut: PREVIEW_PER_SHARE, minAmountOut: PREVIEW_PER_SHARE };
+  const jMethod = family.exact.methods(exactInput as never)[1] as any;
+  const requests = jMethod.program.buildRequests(exactInput as never);
+  const quoted = jMethod.program.decode({ programInput: exactInput, initialResults: requests.map(depositReply), dependentEvidence: [] });
+  const jFragment = family.execution.buildFragment({ ...input2, exactEvidence: quoted.evidence } as never);
+  assert.deepEqual(jFragment.requirements, []);
+  const tFragment = ts.execution.buildFragment({ ...input2, exactEvidence: (ts.exact.methods(exactInput as never)[1] as any).program.decode({ programInput: exactInput, initialResults: requests.map(depositReply), dependentEvidence: [] }).evidence } as never);
+  const jNode = jFragment.nodes[0]! as any, tNode = tFragment.nodes[0]! as any;
+  assert.equal(jNode.adapterId, tNode.adapterId);
+  assert.equal(jNode.amount, tNode.amount);
+  assert.throws(() => family.execution.buildFragment({ ...input2, quotedAmountOut: 1n, exactEvidence: quoted.evidence } as never));
+  console.log("fragment(withdraw): adapter/amount equal TS, mismatched quote refused");
+  const dRoute = family.routes.project({ descriptor: jDeposit }).find(r => r.direction === "deposit")!;
+  const tDRoute = ts.routes.project({ descriptor: tDeposit }).find(r => r.direction === "deposit")!;
+  assert.deepEqual(family.execution.expectedEffects!({ descriptor: jDeposit, route: dRoute } as never), ts.execution.expectedEffects!({ descriptor: tDeposit, route: tDRoute } as never));
+  assert.deepEqual(family.execution.expectedEffects!({ descriptor: jWithdraw, route: withdrawRoute } as never), ts.execution.expectedEffects!({ descriptor: tWithdraw, route: withdrawRoute } as never));
+  console.log("expectedEffects: both directions deep-equal TS");
+}
+// actions
+{
+  const withdrawRoute = family.routes.project({ descriptor: jWithdraw })[0]!;
+  const depositRoute = family.routes.project({ descriptor: jDeposit }).find(r => r.direction === "deposit")!;
+  const jActions = family.actionAdapters.map(a => a.id);
+  assert.deepEqual(jActions, ts.actionAdapters.map(a => a.id));
+  const tsWithdraw = ts.actionAdapters[0]! as any, jsWithdraw = family.actionAdapters[0]! as any;
+  const withdrawSelector = ABI.getFunction("withdraw(uint256,uint256)")!.selector;
+  const depositSelector = ABI.getFunction("deposit(uint256,uint256,uint256)")!.selector;
+  const receiverSelector = ABI.getFunction("withdraw(uint256,uint256,address)")!.selector;
+  for (const [adapter, label] of [[jsWithdraw, "json"], [tsWithdraw, "ts"]] as const) {
+    assert.equal(adapter.matchTrace(LT, withdrawSelector), true, `${label} withdraw selector`);
+    assert.equal(adapter.matchTrace(LT, depositSelector), false, `${label} deposit not withdraw`);
+    assert.equal(adapter.matchTrace(LT, receiverSelector), false, `${label} receiver overload not matched`);
+  }
+  assert.equal((family.actionAdapters[1] as any).matchTrace(LT, depositSelector), true);
+  assert.equal((family.actionAdapters[1] as any).matchTrace(LT, withdrawSelector), false);
+  const withdrawRouteForAction = family.routes.project({ descriptor: jWithdraw })[0]!;
+  const actionInput = { descriptor: jWithdraw, route: withdrawRouteForAction, amountIn: 10n ** 18n, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] };
+  const actionMethod = family.exact.methods(actionInput as never)[1] as any;
+  const actionRequests = actionMethod.program.buildRequests(actionInput as never);
+  const actionQuote = actionMethod.program.decode({ programInput: actionInput, initialResults: actionRequests.map(depositReply), dependentEvidence: [] });
+  const actionFragment = family.execution.buildFragment({ ...actionInput, quotedAmountOut: actionQuote.amountOut, minAmountOut: actionQuote.amountOut, exactEvidence: actionQuote.evidence } as never);
+  const encoded = jsWithdraw.encode(actionFragment.nodes[0]! as never, EXECUTOR, new Uint8Array());
+  const parts = scriptParts(ethers.hexlify(encoded));
+  assert.equal(parts.amount, 10n ** 18n);
+  const actionRun = run(parts.program, parts.amount);
+  assert.deepEqual(actionRun.mutating.map(m => m[0]), ["withdraw"]);
+  assert.equal(actionRun.mutating[0]![1], 10n ** 18n);
+  assert.equal(actionRun.mutating[0]![2], actionQuote.amountOut);
+  console.log("action(withdraw): one withdraw(shares, quoted floor) call; reads only otherwise");
+}
+console.log("ALL CHECKS PASSED");

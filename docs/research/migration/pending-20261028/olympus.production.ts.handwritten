@@ -1,0 +1,32 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { olympusFamilyOwnedAction } from "../protocols/olympus-family/action.js";
+import { olympusCapture } from "../protocols/olympus-family/capture.js";
+import { olympusDiscovery } from "../protocols/olympus-family/discovery.js";
+import { olympusExact } from "../protocols/olympus-family/exact.js";
+import { olympusExecution } from "../protocols/olympus-family/execution.js";
+import { olympusIdentity } from "../protocols/olympus-family/identity.js";
+import { olympusInstance } from "../protocols/olympus-family/instance.js";
+import { olympusFamilyManifest } from "../protocols/olympus-family/manifest.js";
+import { olympusPricing } from "../protocols/olympus-family/pricing.js";
+import { olympusProtocol } from "../protocols/olympus-family/protocol.js";
+import { olympusRoutes } from "../protocols/olympus-family/routes.js";
+
+export const activation = defineFamilyActivation({
+  enabled: true,
+  envKey: "SEARCHER_FAMILY_OLYMPUS_ENABLED",
+});
+
+export const plugin = defineProtocolFamily({
+  manifest: olympusFamilyManifest,
+  capture: olympusCapture,
+  discovery: olympusDiscovery,
+  identity: olympusIdentity,
+  instance: olympusInstance,
+  routes: olympusRoutes,
+  pricing: olympusPricing,
+  exact: olympusExact,
+  execution: olympusExecution,
+  protocol: olympusProtocol,
+  actionAdapters: [olympusFamilyOwnedAction],
+});

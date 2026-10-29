@@ -11,7 +11,7 @@ import { curvePlainManifest } from "../swaps/curve-plain-family/manifest.js";
 import { curvePlainPricing } from "../swaps/curve-plain-family/pricing.js";
 import { curvePlainRoutes } from "../swaps/curve-plain-family/routes.js";
 import { curvePlainSwap } from "../swaps/curve-plain-family/swap.js";
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED" });
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED" });
 
 export const plugin = defineSwapFamily({ manifest: curvePlainManifest, capture: curvePlainCapture,
   discovery: curvePlainDiscovery, identity: curvePlainIdentity, instance: curvePlainInstance,

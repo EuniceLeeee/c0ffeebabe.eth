@@ -1,0 +1,2251 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:ondo-usdy-instant-redeem"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_ONDO_USDY_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:ondo-usdy-instant-redeem",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "ondo-usdy-redeem"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "redeem"
+      }
+    ],
+    "supportedLineages": [
+      "ondo-usdy-instant-redeem:v1"
+    ],
+    "poolAdapterIds": [
+      "ondo-usdy-redeem"
+    ],
+    "edgeAdapterIds": [
+      "ondo-usdy-redeem"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "landed-log"
+      ],
+      "candidateSources": [
+        "observed-interaction"
+      ],
+      "candidate": {
+        "kind": "ondo-usdy-redeem",
+        "addressField": "manager",
+        "fields": {
+          "manager": "address",
+          "receive": "address"
+        },
+        "key": [
+          "manager",
+          "receive"
+        ]
+      },
+      "calls": [
+        {
+          "id": "ondo-redeem-call",
+          "signature": "redeem(uint256 rwaAmount,address receivingToken,uint256 minimumTokenReceived)",
+          "fields": {
+            "manager": {
+              "from": "target"
+            },
+            "receive": {
+              "from": "argument",
+              "index": 1
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "ondo-redemption-log",
+          "signature": "Redemption(address indexed user,bytes32 indexed userId,uint256 rwaAmount,address receivingToken,uint256 receiveTokenAmount,uint256 usdValue,uint256 fee)",
+          "fields": {
+            "manager": {
+              "from": "emitter"
+            },
+            "receive": {
+              "from": "argument",
+              "index": 3
+            }
+          }
+        }
+      ],
+      "labels": [
+        "ondo-usdy-redeem",
+        "protocol:ondo-usdy-instant-redeem"
+      ],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "manager": [
+          "function redeem(uint256 rwaAmount, address receivingToken, uint256 minimumTokenReceived) returns (uint256)",
+          "function redeemPaused() view returns (bool)",
+          "function minimumRwaPrice() view returns (uint256)",
+          "function rwaToken() view returns (address)",
+          "function ondoOracle() view returns (address)",
+          "function ondoRedemptionFees() view returns (address)",
+          "function RWA_NORMALIZER() view returns (uint256)",
+          "function acceptedRedemptionTokens(address token) view returns (bool)"
+        ],
+        "oracle": [
+          "function getAssetPrice(address asset) view returns (uint256)"
+        ],
+        "fees": [
+          "function getActiveFeeConfig(address rwaToken, address stablecoin, bytes32 userID) view returns ((bool active, uint256 flatFee, uint256 bpsFee) activeFeeConfig, ((bool active, uint256 flatFee, uint256 bpsFee) feeConfig, uint8 userFeeMode, uint256 limitVolume, uint256 currentVolume, uint256 lastReset, uint256 volumeWindow) activeUserFeeConfig)",
+          "function FEE_PRECISION() view returns (uint256)"
+        ],
+        "erc20": [
+          "function decimals() view returns (uint8)"
+        ]
+      },
+      "constants": {
+        "zero32": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "rwaDecimals": 18,
+        "receiveDecimals": 6
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "base",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "complete",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "base"
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "ondo-manager-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.manager"
+                  ]
+                }
+              },
+              {
+                "id": "ondo-rwa",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.manager"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "manager",
+                    "rwaToken",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "ondo-oracle",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.manager"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "manager",
+                    "ondoOracle",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "ondo-fees",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.manager"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "manager",
+                    "ondoRedemptionFees",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "ondo-normalizer",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.manager"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "manager",
+                    "RWA_NORMALIZER",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "ondo-paused",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.manager"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "manager",
+                    "redeemPaused",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "ondo-min-price",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.manager"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "manager",
+                    "minimumRwaPrice",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "ondo-accepted",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.manager"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "manager",
+                    "acceptedRedemptionTokens",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$candidate.receive"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-manager-code"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-rwa"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-oracle"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-fees"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-normalizer"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-paused"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-min-price"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-accepted"
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              },
+              {
+                "let": "rwa",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "manager",
+                        "rwaToken",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "ondo-rwa"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "oracle",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "manager",
+                        "ondoOracle",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "ondo-oracle"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "fees",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "manager",
+                        "ondoRedemptionFees",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "ondo-fees"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "normalizer",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "manager",
+                        "RWA_NORMALIZER",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "ondo-normalizer"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "paused",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "manager",
+                    "redeemPaused",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "ondo-paused"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "minPrice",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "manager",
+                        "minimumRwaPrice",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "ondo-min-price"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "accepted",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "manager",
+                    "acceptedRedemptionTokens",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "ondo-accepted"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "not",
+                  "args": [
+                    "$paused"
+                  ]
+                },
+                "error": "ondo redeem is paused"
+              },
+              {
+                "assert": "$accepted",
+                "error": "ondo receive token not accepted"
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": "$source",
+                  "manager": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.manager"
+                    ]
+                  },
+                  "rwa": "$rwa",
+                  "receive": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.receive"
+                    ]
+                  },
+                  "oracle": "$oracle",
+                  "fees": "$fees",
+                  "normalizer": "$normalizer",
+                  "rwaDecimals": "$constants.rwaDecimals",
+                  "receiveDecimals": "$constants.receiveDecimals",
+                  "minimumRwaPrice": "$minPrice",
+                  "redeemPaused": false,
+                  "managerCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "ondo-manager-code"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "complete": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "ondo-price-rwa",
+                "kind": "eth-call",
+                "to": "$evidence.oracle",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "oracle",
+                    "getAssetPrice",
+                    [
+                      "$evidence.rwa"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "ondo-price-receive",
+                "kind": "eth-call",
+                "to": "$evidence.oracle",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "oracle",
+                    "getAssetPrice",
+                    [
+                      "$evidence.receive"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "ondo-fee-config",
+                "kind": "eth-call",
+                "to": "$evidence.fees",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "fees",
+                    "getActiveFeeConfig",
+                    [
+                      "$evidence.rwa",
+                      "$evidence.receive",
+                      "$constants.zero32"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "ondo-fee-precision",
+                "kind": "eth-call",
+                "to": "$evidence.fees",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "fees",
+                    "FEE_PRECISION",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-price-rwa"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-price-receive"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-fee-config"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "ondo-fee-precision"
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              },
+              {
+                "let": "priceRwa",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "oracle",
+                        "getAssetPrice",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "ondo-price-rwa"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "priceReceive",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "oracle",
+                        "getAssetPrice",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "ondo-price-receive"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "cfg",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "fees",
+                    "getActiveFeeConfig",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "ondo-fee-config"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "feeFlat",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$cfg",
+                        "flatFee"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "feeBps",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$cfg",
+                        "bpsFee"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "feePrecision",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "fees",
+                        "FEE_PRECISION",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "ondo-fee-precision"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "behaviorValid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "gte",
+                      "args": [
+                        "$priceRwa",
+                        "$evidence.minimumRwaPrice"
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$priceReceive",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "behaviorHash",
+                "value": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "manager": "$evidence.manager",
+                      "priceRwa": {
+                        "op": "string",
+                        "args": [
+                          "$priceRwa"
+                        ]
+                      },
+                      "priceReceive": {
+                        "op": "string",
+                        "args": [
+                          "$priceReceive"
+                        ]
+                      },
+                      "feeFlat": {
+                        "op": "string",
+                        "args": [
+                          "$feeFlat"
+                        ]
+                      },
+                      "feeBps": {
+                        "op": "string",
+                        "args": [
+                          "$feeBps"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "complete",
+                  "source": "$source",
+                  "manager": "$evidence.manager",
+                  "rwa": "$evidence.rwa",
+                  "receive": "$evidence.receive",
+                  "oracle": "$evidence.oracle",
+                  "fees": "$evidence.fees",
+                  "normalizer": "$evidence.normalizer",
+                  "rwaDecimals": "$evidence.rwaDecimals",
+                  "receiveDecimals": "$evidence.receiveDecimals",
+                  "minimumRwaPrice": "$evidence.minimumRwaPrice",
+                  "priceRwa": "$priceRwa",
+                  "priceReceive": "$priceReceive",
+                  "feeFlat": "$feeFlat",
+                  "feeBps": "$feeBps",
+                  "feePrecision": "$feePrecision",
+                  "managerCodeHash": "$evidence.managerCodeHash",
+                  "behaviorValid": "$behaviorValid",
+                  "behaviorHash": "$behaviorHash"
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$evidence"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$evidence.phase",
+                    "complete"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "ondo_redeem_unavailable",
+              "evidenceRequestIds": [
+                "ondo-complete"
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.behaviorValid"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.manager"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "ondo-usdy-instant-redeem",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.manager"
+                      ]
+                    },
+                    "evidenceHash": "$evidence.behaviorHash"
+                  }
+                ],
+                "manager": "$evidence.manager",
+                "rwa": "$evidence.rwa",
+                "receive": "$evidence.receive",
+                "oracle": "$evidence.oracle",
+                "fees": "$evidence.fees",
+                "normalizer": "$evidence.normalizer",
+                "rwaDecimals": "$evidence.rwaDecimals",
+                "receiveDecimals": "$evidence.receiveDecimals",
+                "minimumRwaPrice": "$evidence.minimumRwaPrice",
+                "redeemPaused": false,
+                "priceRwa": "$evidence.priceRwa",
+                "priceReceive": "$evidence.priceReceive",
+                "feeFlat": "$evidence.feeFlat",
+                "feeBps": "$evidence.feeBps",
+                "feePrecision": "$evidence.feePrecision",
+                "managerCodeHash": "$evidence.managerCodeHash"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        },
+        {
+          "kind": "execution-actor",
+          "role": "executor"
+        },
+        {
+          "kind": "effect-observation",
+          "effects": [
+            "token-delta",
+            "logs"
+          ]
+        }
+      ],
+      "manager": {
+        "op": "address",
+        "args": [
+          "$identity.manager"
+        ]
+      },
+      "rwa": {
+        "op": "address",
+        "args": [
+          "$identity.rwa"
+        ]
+      },
+      "receive": {
+        "op": "address",
+        "args": [
+          "$identity.receive"
+        ]
+      },
+      "oracle": {
+        "op": "address",
+        "args": [
+          "$identity.oracle"
+        ]
+      },
+      "fees": {
+        "op": "address",
+        "args": [
+          "$identity.fees"
+        ]
+      },
+      "normalizer": "$identity.normalizer",
+      "rwaDecimals": "$identity.rwaDecimals",
+      "receiveDecimals": "$identity.receiveDecimals",
+      "minimumRwaPrice": "$identity.minimumRwaPrice",
+      "feeFlat": "$identity.feeFlat",
+      "feeBps": "$identity.feeBps",
+      "feePrecision": "$identity.feePrecision",
+      "managerCodeHash": "$identity.managerCodeHash"
+    },
+    "bindingProjection": {
+      "manager": {
+        "op": "lower",
+        "args": [
+          "$descriptor.manager"
+        ]
+      },
+      "rwa": {
+        "op": "lower",
+        "args": [
+          "$descriptor.rwa"
+        ]
+      },
+      "receive": {
+        "op": "lower",
+        "args": [
+          "$descriptor.receive"
+        ]
+      },
+      "selector": "0xd8780161",
+      "normalizer": {
+        "op": "string",
+        "args": [
+          "$descriptor.normalizer"
+        ]
+      },
+      "minimumRwaPrice": {
+        "op": "string",
+        "args": [
+          "$descriptor.minimumRwaPrice"
+        ]
+      },
+      "feeFlat": {
+        "op": "string",
+        "args": [
+          "$descriptor.feeFlat"
+        ]
+      },
+      "feeBps": {
+        "op": "string",
+        "args": [
+          "$descriptor.feeBps"
+        ]
+      },
+      "feePrecision": {
+        "op": "string",
+        "args": [
+          "$descriptor.feePrecision"
+        ]
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.manager",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        "$descriptor.manager"
+      ]
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.familyId",
+          {
+            "op": "lower",
+            "args": [
+              "$descriptor.manager"
+            ]
+          }
+        ],
+        "\u001f"
+      ]
+    },
+    "directions": [
+      {
+        "id": "redeem",
+        "enabled": true,
+        "tokenIn": "$descriptor.rwa",
+        "tokenOut": "$descriptor.receive",
+        "adapterId": "ondo-usdy-redeem",
+        "executionAssets": {
+          "input": "erc20",
+          "output": "erc20"
+        },
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          "$descriptor.manager"
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "manager": "$descriptor.manager",
+      "rwa": "$descriptor.rwa",
+      "receive": "$descriptor.receive",
+      "oracle": "$descriptor.oracle",
+      "fees": "$descriptor.fees",
+      "normalizer": "$descriptor.normalizer",
+      "rwaDecimals": "$descriptor.rwaDecimals",
+      "receiveDecimals": "$descriptor.receiveDecimals",
+      "minimumRwaPrice": "$descriptor.minimumRwaPrice",
+      "feeFlat": "$descriptor.feeFlat",
+      "feeBps": "$descriptor.feeBps",
+      "feePrecision": "$descriptor.feePrecision",
+      "route": {
+        "op": "at",
+        "args": [
+          "$routes",
+          0
+        ]
+      },
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "manager": "$descriptor.manager",
+      "oracle": "$descriptor.oracle",
+      "fees": "$descriptor.fees",
+      "semantics": "ondo-usdy-instant-redeem-v1"
+    },
+    "static": {
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$draft.rwa",
+        "$draft.receive"
+      ],
+      "requests": [
+        {
+          "id": "static-rwa-decimals",
+          "kind": "eth-call",
+          "to": "$draft.rwa",
+          "data": {
+            "op": "encode",
+            "args": [
+              "erc20",
+              "decimals",
+              []
+            ]
+          },
+          "completion": "return-data"
+        },
+        {
+          "id": "static-receive-decimals",
+          "kind": "eth-call",
+          "to": "$draft.receive",
+          "data": {
+            "op": "encode",
+            "args": [
+              "erc20",
+              "decimals",
+              []
+            ]
+          },
+          "completion": "return-data"
+        }
+      ],
+      "decode": {
+        "fields": [
+          {
+            "name": "rwaDecimals",
+            "value": {
+              "op": "number",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "erc20",
+                        "decimals",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "static-rwa-decimals"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "name": "receiveDecimals",
+            "value": {
+              "op": "number",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "erc20",
+                        "decimals",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "static-receive-decimals"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "output": {
+          "rwaDecimals": "$rwaDecimals",
+          "receiveDecimals": "$receiveDecimals"
+        }
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "pow",
+      "args": [
+        {
+          "op": "uint",
+          "args": [
+            "10"
+          ]
+        },
+        "$descriptor.rwaDecimals"
+      ]
+    },
+    "exactCompatibility": {
+      "manager": {
+        "op": "lower",
+        "args": [
+          "$descriptor.manager"
+        ]
+      },
+      "executor": {
+        "op": "lower",
+        "args": [
+          "$executor"
+        ]
+      },
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "quoteSemantics": "ondo-usdy-instant-redeem-v1"
+    },
+    "mutationKinds": [
+      "log"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "ondo-usdy-instant-redeem",
+    "lineageId": "ondo-usdy-instant-redeem:v1",
+    "abi": {
+      "manager": [
+        "function redeem(uint256 rwaAmount, address receivingToken, uint256 minimumTokenReceived) returns (uint256)",
+        "function redeemPaused() view returns (bool)",
+        "function minimumRwaPrice() view returns (uint256)",
+        "function rwaToken() view returns (address)",
+        "function ondoOracle() view returns (address)",
+        "function ondoRedemptionFees() view returns (address)",
+        "function RWA_NORMALIZER() view returns (uint256)",
+        "function acceptedRedemptionTokens(address token) view returns (bool)"
+      ],
+      "oracle": [
+        "function getAssetPrice(address asset) view returns (uint256)"
+      ],
+      "fees": [
+        "function getActiveFeeConfig(address rwaToken, address stablecoin, bytes32 userID) view returns ((bool active, uint256 flatFee, uint256 bpsFee) activeFeeConfig, ((bool active, uint256 flatFee, uint256 bpsFee) feeConfig, uint8 userFeeMode, uint256 limitVolume, uint256 currentVolume, uint256 lastReset, uint256 volumeWindow) activeUserFeeConfig)",
+        "function FEE_PRECISION() view returns (uint256)"
+      ],
+      "erc20": [
+        "function decimals() view returns (uint8)"
+      ]
+    },
+    "constants": {
+      "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "custom",
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            "ondo-usdy-redeem"
+          ]
+        },
+        "error": "ondo route mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            "$descriptor.rwa"
+          ]
+        },
+        "error": "ondo route mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            "$descriptor.receive"
+          ]
+        },
+        "error": "ondo route mismatch"
+      }
+    ],
+    "inputs": [
+      "trialState",
+      "prefix"
+    ],
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.manager",
+        "$descriptor.rwa",
+        "$descriptor.receive",
+        "$descriptor.oracle",
+        "$descriptor.fees"
+      ],
+      "mutationAddresses": [
+        "$descriptor.manager",
+        "$descriptor.rwa",
+        "$descriptor.receive",
+        "$descriptor.oracle"
+      ],
+      "classifyUnavailable": {
+        "op": "if",
+        "args": [
+          {
+            "op": "defined",
+            "args": [
+              "$snapshot.unavailable"
+            ]
+          },
+          {
+            "op": "objectEntries",
+            "args": [
+              "$snapshot.unavailable"
+            ]
+          },
+          []
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "ondo-usdy-redeem",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "gte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "ondo exact input out of range"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "$constants.maxUint256"
+                ]
+              }
+            ]
+          },
+          "error": "ondo exact input out of range"
+        }
+      ],
+      "evidence": {
+        "kind": "ondo-usdy-redeem",
+        "source": "$source",
+        "manager": "$descriptor.manager",
+        "rwa": "$descriptor.rwa",
+        "receive": "$descriptor.receive",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "executor": {
+          "op": "address",
+          "args": [
+            "$executor"
+          ]
+        },
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {}
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "ondoRedeem": {
+          "model": "ondo:redeem",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "Ondo per-amount redemption quote has no sequential trial-state model in the declarative read flow",
+      "steps": [
+        {
+          "id": "terms",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "ondo-price-rwa",
+              "kind": "eth-call",
+              "to": "$descriptor.oracle",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "oracle",
+                  "getAssetPrice",
+                  [
+                    "$descriptor.rwa"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "ondo-price-receive",
+              "kind": "eth-call",
+              "to": "$descriptor.oracle",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "oracle",
+                  "getAssetPrice",
+                  [
+                    "$descriptor.receive"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "ondo-fee-config",
+              "kind": "eth-call",
+              "to": "$descriptor.fees",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "getActiveFeeConfig",
+                  [
+                    "$descriptor.rwa",
+                    "$descriptor.receive",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "ondo-fee-precision",
+              "kind": "eth-call",
+              "to": "$descriptor.fees",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "FEE_PRECISION",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "priceRwa",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "oracle",
+                      "getAssetPrice",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "ondo-price-rwa"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "priceReceive",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "oracle",
+                      "getAssetPrice",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "ondo-price-receive"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "cfg",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "fees",
+                  "getActiveFeeConfig",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "ondo-fee-config"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "feeFlat",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$cfg",
+                      "flatFee"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "feeBps",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$cfg",
+                      "bpsFee"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "feePrecision",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "fees",
+                      "FEE_PRECISION",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "ondo-fee-precision"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "op": "model",
+                "args": [
+                  "ondoRedeem",
+                  {
+                    "amount": "$amountIn",
+                    "priceRwa": "$priceRwa",
+                    "priceReceive": "$priceReceive",
+                    "normalizer": "$descriptor.normalizer",
+                    "receiveDecimals": "$descriptor.receiveDecimals",
+                    "feeFlat": "$feeFlat",
+                    "feeBps": "$feeBps",
+                    "feePrecision": "$feePrecision"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.terms"
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "terms",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "ondo-price-rwa",
+              "kind": "eth-call",
+              "to": "$descriptor.oracle",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "oracle",
+                  "getAssetPrice",
+                  [
+                    "$descriptor.rwa"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "ondo-price-receive",
+              "kind": "eth-call",
+              "to": "$descriptor.oracle",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "oracle",
+                  "getAssetPrice",
+                  [
+                    "$descriptor.receive"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "ondo-fee-config",
+              "kind": "eth-call",
+              "to": "$descriptor.fees",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "getActiveFeeConfig",
+                  [
+                    "$descriptor.rwa",
+                    "$descriptor.receive",
+                    "0x0000000000000000000000000000000000000000000000000000000000000000"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "ondo-fee-precision",
+              "kind": "eth-call",
+              "to": "$descriptor.fees",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "FEE_PRECISION",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "priceRwa",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "oracle",
+                      "getAssetPrice",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "ondo-price-rwa"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "priceReceive",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "oracle",
+                      "getAssetPrice",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "ondo-price-receive"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "cfg",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "fees",
+                  "getActiveFeeConfig",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "ondo-fee-config"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "feeFlat",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$cfg",
+                      "flatFee"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "feeBps",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$cfg",
+                      "bpsFee"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "feePrecision",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "fees",
+                      "FEE_PRECISION",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "ondo-fee-precision"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "valid",
+              "value": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gte",
+                    "args": [
+                      "$priceRwa",
+                      "$descriptor.minimumRwaPrice"
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$priceReceive",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "quote",
+              "value": {
+                "op": "if",
+                "args": [
+                  "$valid",
+                  {
+                    "op": "model",
+                    "args": [
+                      "ondoRedeem",
+                      {
+                        "amount": {
+                          "op": "pow",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "10"
+                              ]
+                            },
+                            "$descriptor.rwaDecimals"
+                          ]
+                        },
+                        "priceRwa": "$priceRwa",
+                        "priceReceive": "$priceReceive",
+                        "normalizer": "$descriptor.normalizer",
+                        "receiveDecimals": "$descriptor.receiveDecimals",
+                        "feeFlat": "$feeFlat",
+                        "feeBps": "$feeBps",
+                        "feePrecision": "$feePrecision"
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "reason",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "not",
+                    "args": [
+                      "$valid"
+                    ]
+                  },
+                  "ondo_price_below_minimum",
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$quote",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      "ondo_zero_output",
+                      ""
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "priceRwa": "$priceRwa",
+                "priceReceive": "$priceReceive",
+                "feeFlat": "$feeFlat",
+                "feeBps": "$feeBps",
+                "feePrecision": "$feePrecision",
+                "quote": "$quote",
+                "reason": "$reason"
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "merge",
+        "args": [
+          {
+            "source": "$source",
+            "priceRwa": "$steps.terms.priceRwa",
+            "priceReceive": "$steps.terms.priceReceive",
+            "feeFlat": "$steps.terms.feeFlat",
+            "feeBps": "$steps.terms.feeBps",
+            "feePrecision": "$steps.terms.feePrecision",
+            "quotes": {
+              "op": "objectFromEntries",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$steps.terms.reason",
+                        ""
+                      ]
+                    },
+                    [
+                      [
+                        "$routes.0.routeKey",
+                        {
+                          "amountIn": {
+                            "op": "pow",
+                            "args": [
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "10"
+                                ]
+                              },
+                              "$descriptor.rwaDecimals"
+                            ]
+                          },
+                          "amountOut": "$steps.terms.quote"
+                        }
+                      ]
+                    ],
+                    []
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$steps.terms.reason",
+                  ""
+                ]
+              },
+              {},
+              {
+                "unavailable": {
+                  "op": "objectFromEntries",
+                  "args": [
+                    [
+                      [
+                        "$routes.0.routeKey",
+                        "$steps.terms.reason"
+                      ]
+                    ]
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "variantFiles": []
+}

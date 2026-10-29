@@ -1,0 +1,2369 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:origin-ousd"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_ORIGIN_OUSD_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:origin-ousd",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "origin-ousd-mint"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "convert"
+      }
+    ],
+    "supportedLineages": [
+      "origin-ousd-vault"
+    ],
+    "poolAdapterIds": [
+      "origin-ousd"
+    ],
+    "edgeAdapterIds": [
+      "origin-ousd-mint"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "origin-ousd-vault",
+        "addressField": "target",
+        "fields": {
+          "target": "address"
+        },
+        "key": [
+          "target"
+        ]
+      },
+      "calls": [
+        {
+          "id": "origin-ousd-mint-call",
+          "signature": "mint(uint256)",
+          "fields": {
+            "target": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "$args.0"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [],
+      "surface": {
+        "id": "origin-ousd-vault-surface",
+        "fingerprint": "origin-ousd-vault-mint-v1",
+        "fields": {
+          "target": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "origin-ousd",
+        "protocol:origin-ousd"
+      ],
+      "nomination": "address-surface"
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "abi": {
+        "vault": [
+          "function mint(uint256 amount)",
+          "function asset() view returns (address)"
+        ],
+        "erc20": [
+          "function approve(address spender,uint256 amount) returns (bool)"
+        ]
+      },
+      "constants": {
+        "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "token": "0x2A8e1E676Ec238d8A992307B495b45B3fEAa5e86",
+        "zeroAddress": "0x0000000000000000000000000000000000000000",
+        "decimalScale": "1000000000000",
+        "sampleSmall": "1000000",
+        "sampleLarge": "10000000",
+        "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+        "proxyCodeHash": "0x42459e351d7ee0ec70d78ff7a8fab408810e97ca87324ba416acfe7708ce456e",
+        "implementationCodeHash": "0xedf6048420eebf78f63106d125288365723ca61843ce3df62c35e5106766cc40",
+        "tokenCodeHash": "0xd39af98f18b3c72b2e30db499f1b8cab8dc7deffe9db5a7db6f5a260af34e7a6"
+      },
+      "expressions": {},
+      "programs": {
+        "mintProbe": [
+          {
+            "let": "effects",
+            "value": {
+              "op": "effects",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$result",
+                    "effects"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "deltas",
+            "value": {
+              "op": "get",
+              "args": [
+                "$effects",
+                "tokenDeltas"
+              ]
+            }
+          },
+          {
+            "let": "supplies",
+            "value": {
+              "op": "get",
+              "args": [
+                "$effects",
+                "totalSupplyDeltas"
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$result",
+                    "completion"
+                  ]
+                },
+                "returned"
+              ]
+            }
+          },
+          {
+            "let": "vaultDebits",
+            "value": {
+              "op": "filter",
+              "args": [
+                "$deltas",
+                "row",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$row.token",
+                        "$asset"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$row.account",
+                        "$vault"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$vaultDebits"
+                  ]
+                },
+                1
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$vaultDebits",
+                        0
+                      ]
+                    },
+                    "delta"
+                  ]
+                },
+                "$amount"
+              ]
+            }
+          },
+          {
+            "let": "payerDebits",
+            "value": {
+              "op": "filter",
+              "args": [
+                "$deltas",
+                "row",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$row.token",
+                        "$asset"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$row.delta",
+                        {
+                          "op": "sub",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            },
+                            "$amount"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$payerDebits"
+                  ]
+                },
+                1
+              ]
+            }
+          },
+          {
+            "let": "payer",
+            "value": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$payerDebits",
+                    0
+                  ]
+                },
+                "account"
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "sameAddress",
+              "args": [
+                "$payer",
+                "$vault"
+              ]
+            }
+          },
+          {
+            "let": "minted",
+            "value": {
+              "op": "filter",
+              "args": [
+                "$deltas",
+                "row",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$row.token",
+                        "$token"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$row.account",
+                        "$payer"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$minted"
+                  ]
+                },
+                1
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$minted",
+                        0
+                      ]
+                    },
+                    "delta"
+                  ]
+                },
+                "$amountOut"
+              ]
+            }
+          },
+          {
+            "let": "supply",
+            "value": {
+              "op": "filter",
+              "args": [
+                "$supplies",
+                "row",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$row.token",
+                    "$token"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$supply"
+                  ]
+                },
+                1
+              ]
+            }
+          },
+          {
+            "return": false,
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$supply",
+                        0
+                      ]
+                    },
+                    "delta"
+                  ]
+                },
+                "$amountOut"
+              ]
+            }
+          },
+          {
+            "return": true
+          }
+        ]
+      },
+      "identity": {
+        "select": [
+          {
+            "return": "proxy",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "binding",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "proxy"
+              ]
+            }
+          },
+          {
+            "return": "behavior",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "binding"
+              ]
+            }
+          },
+          {
+            "return": "verified",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "verified"
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "proxy": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "get-storage"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-proxy-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
+              },
+              {
+                "id": "identity-implementation-slot",
+                "kind": "get-storage",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "slot": "$constants.implementationSlot"
+              },
+              {
+                "id": "identity-token-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$constants.token"
+                  ]
+                }
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "matches",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "successful",
+                          "args": [
+                            "identity-implementation-slot"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    "^0x[0-9a-fA-F]{64}$"
+                  ]
+                },
+                "error": "Origin OUSD identity implementation slot is malformed"
+              },
+              {
+                "return": {
+                  "phase": "proxy",
+                  "source": {
+                    "op": "source",
+                    "args": [
+                      "$results"
+                    ]
+                  },
+                  "proxyCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "identity-proxy-code"
+                        ]
+                      }
+                    ]
+                  },
+                  "implementation": {
+                    "op": "address",
+                    "args": [
+                      {
+                        "op": "bytes",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "successful",
+                                "args": [
+                                  "identity-implementation-slot"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          12,
+                          20
+                        ]
+                      }
+                    ]
+                  },
+                  "tokenCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "identity-token-code"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "binding": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-implementation-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.implementation"
+                  ]
+                }
+              },
+              {
+                "id": "identity-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "asset",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "successful",
+                          "args": [
+                            "identity-implementation-code"
+                          ]
+                        },
+                        "source"
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                },
+                "error": "Origin OUSD implementation code source mismatch"
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "successful",
+                          "args": [
+                            "identity-asset"
+                          ]
+                        },
+                        "source"
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                },
+                "error": "Origin OUSD vault asset source mismatch"
+              },
+              {
+                "return": {
+                  "phase": "binding",
+                  "source": "$evidence.source",
+                  "proxyCodeHash": "$evidence.proxyCodeHash",
+                  "implementation": "$evidence.implementation",
+                  "tokenCodeHash": "$evidence.tokenCodeHash",
+                  "implementationCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "identity-implementation-code"
+                        ]
+                      }
+                    ]
+                  },
+                  "asset": {
+                    "op": "address",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "vault",
+                          "asset",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "identity-asset"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "behavior": {
+            "requirements": {
+              "transports": [
+                "effect-delta-simulation"
+              ],
+              "caller": "executor",
+              "effects": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-mint:1000000",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {
+                      "kind": "executor"
+                    },
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$constants.asset"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$candidate.target"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "$constants.sampleSmall"
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.target"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "vault",
+                      "mint",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "$constants.sampleSmall"
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "address",
+                        "args": [
+                          "$constants.asset"
+                        ]
+                      },
+                      "amount": {
+                        "op": "uint",
+                        "args": [
+                          "$constants.sampleSmall"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$constants.asset"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$constants.asset"
+                      ]
+                    },
+                    "account": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$constants.token"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  }
+                ],
+                "observeTotalSupplies": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$constants.token"
+                    ]
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "total-supply-delta"
+                ]
+              },
+              {
+                "id": "identity-mint:10000000",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {
+                      "kind": "executor"
+                    },
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$constants.asset"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$candidate.target"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "$constants.sampleLarge"
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.target"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "vault",
+                      "mint",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "$constants.sampleLarge"
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "address",
+                        "args": [
+                          "$constants.asset"
+                        ]
+                      },
+                      "amount": {
+                        "op": "uint",
+                        "args": [
+                          "$constants.sampleLarge"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$constants.asset"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$constants.asset"
+                      ]
+                    },
+                    "account": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "address",
+                      "args": [
+                        "$constants.token"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  }
+                ],
+                "observeTotalSupplies": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$constants.token"
+                    ]
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "total-supply-delta"
+                ]
+              }
+            ],
+            "decode": [
+              {
+                "let": "small",
+                "value": {
+                  "op": "successful",
+                  "args": [
+                    "identity-mint:1000000"
+                  ]
+                }
+              },
+              {
+                "let": "large",
+                "value": {
+                  "op": "successful",
+                  "args": [
+                    "identity-mint:10000000"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$small",
+                        "source"
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                },
+                "error": "Origin OUSD small mint probe source mismatch"
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$large",
+                        "source"
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                },
+                "error": "Origin OUSD large mint probe source mismatch"
+              },
+              {
+                "return": {
+                  "phase": "verified",
+                  "source": "$evidence.source",
+                  "proxyCodeHash": "$evidence.proxyCodeHash",
+                  "implementation": "$evidence.implementation",
+                  "tokenCodeHash": "$evidence.tokenCodeHash",
+                  "implementationCodeHash": "$evidence.implementationCodeHash",
+                  "asset": "$evidence.asset",
+                  "behaviorValid": {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "program",
+                        "args": [
+                          "mintProbe",
+                          {
+                            "result": "$small",
+                            "amount": {
+                              "op": "uint",
+                              "args": [
+                                "$constants.sampleSmall"
+                              ]
+                            },
+                            "amountOut": {
+                              "op": "model",
+                              "args": [
+                                "mint",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "$constants.sampleSmall"
+                                  ]
+                                }
+                              ]
+                            },
+                            "asset": {
+                              "op": "address",
+                              "args": [
+                                "$constants.asset"
+                              ]
+                            },
+                            "token": {
+                              "op": "address",
+                              "args": [
+                                "$constants.token"
+                              ]
+                            },
+                            "vault": {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "op": "program",
+                        "args": [
+                          "mintProbe",
+                          {
+                            "result": "$large",
+                            "amount": {
+                              "op": "uint",
+                              "args": [
+                                "$constants.sampleLarge"
+                              ]
+                            },
+                            "amountOut": {
+                              "op": "model",
+                              "args": [
+                                "mint",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "$constants.sampleLarge"
+                                  ]
+                                }
+                              ]
+                            },
+                            "asset": {
+                              "op": "address",
+                              "args": [
+                                "$constants.asset"
+                              ]
+                            },
+                            "token": {
+                              "op": "address",
+                              "args": [
+                                "$constants.token"
+                              ]
+                            },
+                            "vault": {
+                              "op": "address",
+                              "args": [
+                                "$candidate.target"
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "behaviorProofHash": {
+                    "op": "hash",
+                    "args": [
+                      {
+                        "proxyCodeHash": "$evidence.proxyCodeHash",
+                        "implementation": {
+                          "op": "lower",
+                          "args": [
+                            "$evidence.implementation"
+                          ]
+                        },
+                        "implementationCodeHash": "$evidence.implementationCodeHash",
+                        "tokenCodeHash": "$evidence.tokenCodeHash",
+                        "asset": {
+                          "op": "lower",
+                          "args": [
+                            "$evidence.asset"
+                          ]
+                        },
+                        "probes": [
+                          {
+                            "amount": {
+                              "op": "uint",
+                              "args": [
+                                "$constants.sampleSmall"
+                              ]
+                            },
+                            "amountOut": {
+                              "op": "model",
+                              "args": [
+                                "mint",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "$constants.sampleSmall"
+                                  ]
+                                }
+                              ]
+                            },
+                            "completion": {
+                              "op": "get",
+                              "args": [
+                                "$small",
+                                "completion"
+                              ]
+                            },
+                            "effects": {
+                              "op": "effects",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$small",
+                                    "effects"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "amount": {
+                              "op": "uint",
+                              "args": [
+                                "$constants.sampleLarge"
+                              ]
+                            },
+                            "amountOut": {
+                              "op": "model",
+                              "args": [
+                                "mint",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "$constants.sampleLarge"
+                                  ]
+                                }
+                              ]
+                            },
+                            "completion": {
+                              "op": "get",
+                              "args": [
+                                "$large",
+                                "completion"
+                              ]
+                            },
+                            "effects": {
+                              "op": "effects",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$large",
+                                    "effects"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "verified": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "origin_ousd_proxy_code_mismatch",
+              "evidenceRequestIds": [
+                "identity-proxy-code"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "proxy"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$evidence.proxyCodeHash"
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$constants.proxyCodeHash"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "origin_ousd_implementation_missing",
+              "evidenceRequestIds": [
+                "identity-implementation-slot"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "proxy"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.implementation",
+                    "$constants.zeroAddress"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "origin_ousd_token_code_mismatch",
+              "evidenceRequestIds": [
+                "identity-token-code"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "proxy"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$evidence.tokenCodeHash"
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$constants.tokenCodeHash"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "proxy"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "origin_ousd_implementation_code_mismatch",
+              "evidenceRequestIds": [
+                "identity-implementation-code"
+              ]
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.implementationCodeHash"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$constants.implementationCodeHash"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "origin_ousd_asset_mismatch",
+              "evidenceRequestIds": [
+                "identity-asset"
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.asset",
+                    "$constants.asset"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "binding"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "origin_ousd_mint_behavior_not_proven"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.behaviorValid"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "origin-ousd-proxy-mint-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "proxyCodeHash": "$evidence.proxyCodeHash",
+                          "implementation": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.implementation"
+                            ]
+                          },
+                          "implementationCodeHash": "$evidence.implementationCodeHash",
+                          "tokenCodeHash": "$evidence.tokenCodeHash",
+                          "asset": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.asset"
+                            ]
+                          },
+                          "behaviorProofHash": "$evidence.behaviorProofHash",
+                          "executionVerified": true,
+                          "source": "$evidence.source"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "asset": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.asset"
+                  ]
+                },
+                "implementation": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.implementation"
+                  ]
+                },
+                "proxyCodeHash": {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.proxyCodeHash"
+                  ]
+                },
+                "implementationCodeHash": {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.implementationCodeHash"
+                  ]
+                },
+                "tokenCodeHash": {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.tokenCodeHash"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "target": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "asset": {
+        "op": "address",
+        "args": [
+          "$identity.asset"
+        ]
+      },
+      "token": {
+        "op": "address",
+        "args": [
+          "$constants.token"
+        ]
+      },
+      "decimalScale": {
+        "op": "uint",
+        "args": [
+          "$constants.decimalScale"
+        ]
+      },
+      "implementation": {
+        "op": "address",
+        "args": [
+          "$identity.implementation"
+        ]
+      },
+      "proxyCodeHash": {
+        "op": "lower",
+        "args": [
+          "$identity.proxyCodeHash"
+        ]
+      },
+      "implementationCodeHash": {
+        "op": "lower",
+        "args": [
+          "$identity.implementationCodeHash"
+        ]
+      },
+      "tokenCodeHash": {
+        "op": "lower",
+        "args": [
+          "$identity.tokenCodeHash"
+        ]
+      }
+    },
+    "bindingProjection": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "token": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.token"
+            ]
+          }
+        ]
+      },
+      "decimalScale": "$descriptor.decimalScale",
+      "proxyCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.proxyCodeHash"
+        ]
+      },
+      "implementationCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.implementationCodeHash"
+        ]
+      },
+      "tokenCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.tokenCodeHash"
+        ]
+      },
+      "mintSemantics": "origin-ousd-vault-mint-1to1-no-fee-v1"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "mint-usdc-to-ousd",
+        "enabled": true,
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.token",
+        "adapterId": "origin-ousd-mint",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "convert"
+        }
+      }
+    ],
+    "assertions": [
+      {
+        "condition": {
+          "op": "gt",
+          "args": [
+            "$descriptor.decimalScale",
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "error": "Origin OUSD descriptor decimal scale must be positive"
+      },
+      {
+        "condition": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            "$descriptor.asset"
+          ]
+        },
+        "error": "Origin OUSD route input is not the vault asset"
+      },
+      {
+        "condition": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            "$descriptor.token"
+          ]
+        },
+        "error": "Origin OUSD route output is not the pinned OUSD token"
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      },
+      {
+        "kind": "total-supply-delta",
+        "token": "$route.tokenOut",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "target": "$descriptor.target",
+      "asset": "$descriptor.asset",
+      "token": "$descriptor.token",
+      "decimalScale": "$descriptor.decimalScale",
+      "route": {
+        "op": "at",
+        "args": [
+          "$routes",
+          0
+        ]
+      },
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "token": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.token"
+            ]
+          }
+        ]
+      },
+      "mintSemantics": "origin-ousd-vault-mint-1to1-no-fee-v1"
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [
+        "$draft.target",
+        "$draft.asset",
+        "$draft.token"
+      ],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "finalizeChecks": [
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$draft.routes"
+              ]
+            },
+            1
+          ]
+        },
+        "error": "Origin OUSD pricing requires exactly one verified route"
+      },
+      {
+        "condition": {
+          "op": "sameAddress",
+          "args": [
+            "$draft.route.tokenIn",
+            "$draft.asset"
+          ]
+        },
+        "error": "Origin OUSD pricing route input is not the vault asset"
+      },
+      {
+        "condition": {
+          "op": "sameAddress",
+          "args": [
+            "$draft.route.tokenOut",
+            "$draft.token"
+          ]
+        },
+        "error": "Origin OUSD pricing route output is not the pinned OUSD token"
+      }
+    ],
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "$constants.priceSample"
+      ]
+    },
+    "exactCompatibility": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "direction": "$route.direction",
+      "quoteSemantics": "origin-ousd-vault-mint-1to1-no-fee-v1",
+      "decimalScale": "$descriptor.decimalScale",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": [
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "origin-ousd-vault-mint",
+    "lineageId": "origin-ousd-vault",
+    "abi": {
+      "vault": [
+        "function mint(uint256 amount)",
+        "function asset() view returns (address)"
+      ],
+      "erc20": [
+        "function approve(address spender,uint256 amount) returns (bool)"
+      ]
+    },
+    "constants": {
+      "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "token": "0x2A8e1E676Ec238d8A992307B495b45B3fEAa5e86",
+      "decimalScale": "1000000000000",
+      "priceSample": "1000000"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": {
+        "op": "unique",
+        "args": [
+          [
+            "$descriptor.target",
+            "$descriptor.asset",
+            "$descriptor.token"
+          ]
+        ]
+      },
+      "mutationAddresses": [
+        "$descriptor.target"
+      ],
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "defined",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$snapshot.unavailable",
+                      "$route.routeKey"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          [
+            "$route.routeKey",
+            {
+              "op": "get",
+              "args": [
+                "$snapshot.unavailable",
+                "$route.routeKey"
+              ]
+            }
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "origin-ousd-1to1-mint",
+      "requirements": {
+        "transports": []
+      },
+      "evidence": {
+        "kind": "origin-ousd-1to1-mint",
+        "source": "$source",
+        "target": "$descriptor.target",
+        "asset": "$descriptor.asset",
+        "token": "$descriptor.token",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "decimalScale": "$descriptor.decimalScale",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.target"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "or",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  "$directSettlement"
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  "$externalRecipient"
+                ]
+              }
+            ]
+          },
+          "error": "Origin OUSD mint credits the executor only"
+        }
+      ],
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.target",
+        "mode": "exact-clear"
+      },
+      "call": {
+        "target": "$descriptor.target",
+        "signature": "function mint(uint256 amount)",
+        "args": [
+          {
+            "runtime": "amountIn"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "mint": {
+          "model": "origin-ousd:mint-quote",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "origin-ousd sequential trial overlay is not modeled; the deterministic mint ratio needs no chain state, so a prefixed trial refuses instead of approximating",
+      "steps": [
+        {
+          "id": "ratio",
+          "requirements": {
+            "transports": []
+          },
+          "requests": [],
+          "decode": [
+            {
+              "return": {}
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "model",
+        "args": [
+          "mint",
+          "$amountIn"
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "asset",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-asset",
+              "kind": "eth-call",
+              "to": {
+                "op": "address",
+                "args": [
+                  "$descriptor.target"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "vault",
+                  "asset",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "asset",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "vault",
+                      "asset",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-asset"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "asset": "$asset",
+                "source": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "objectFromEntries",
+        "args": [
+          [
+            [
+              "source",
+              "$source"
+            ],
+            [
+              "unavailable",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$steps.asset.asset",
+                      "$descriptor.asset"
+                    ]
+                  },
+                  {},
+                  {
+                    "op": "objectFromEntries",
+                    "args": [
+                      [
+                        [
+                          "$descriptor.route.routeKey",
+                          "origin-ousd vault asset binding changed"
+                        ]
+                      ]
+                    ]
+                  }
+                ]
+              }
+            ],
+            [
+              "quotes",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$steps.asset.asset",
+                      "$descriptor.asset"
+                    ]
+                  },
+                  {
+                    "op": "objectFromEntries",
+                    "args": [
+                      [
+                        [
+                          "$descriptor.route.routeKey",
+                          {
+                            "amountIn": {
+                              "op": "uint",
+                              "args": [
+                                "$constants.priceSample"
+                              ]
+                            },
+                            "amountOut": {
+                              "op": "model",
+                              "args": [
+                                "mint",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "$constants.priceSample"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      ]
+                    ]
+                  },
+                  {}
+                ]
+              }
+            ]
+          ]
+        ]
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "origin-ousd-mint",
+        "lineage": "custom-protocol:origin-ousd",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function mint(uint256)"
+        }
+      ]
+    }
+  ]
+}

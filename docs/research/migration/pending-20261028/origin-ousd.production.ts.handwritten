@@ -1,0 +1,35 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { originOusdCapture } from "../protocols/origin-ousd-family/capture.js";
+import { originOusdFamilyOwnedAction } from "../protocols/origin-ousd-family/action.js";
+import { originOusdDiscovery } from "../protocols/origin-ousd-family/discovery.js";
+import { originOusdExact } from "../protocols/origin-ousd-family/exact.js";
+import { originOusdExecution } from "../protocols/origin-ousd-family/execution.js";
+import { originOusdIdentity } from "../protocols/origin-ousd-family/identity.js";
+import { originOusdInstance } from "../protocols/origin-ousd-family/instance.js";
+import { originOusdFamilyManifest } from "../protocols/origin-ousd-family/manifest.js";
+import { originOusdPricing } from "../protocols/origin-ousd-family/pricing.js";
+import { originOusdProtocol } from "../protocols/origin-ousd-family/protocol.js";
+import { originOusdRoutes } from "../protocols/origin-ousd-family/routes.js";
+
+// New Family: installed and validated by the catalog, but NOT enabled by
+// default. Live defaults are unchanged; a historical/live run must opt in with
+// SEARCHER_FAMILY_ORIGIN_OUSD_ENABLED=1.
+export const activation = defineFamilyActivation({
+  enabled: false,
+  envKey: "SEARCHER_FAMILY_ORIGIN_OUSD_ENABLED",
+});
+
+export const plugin = defineProtocolFamily({
+  manifest: originOusdFamilyManifest,
+  capture: originOusdCapture,
+  discovery: originOusdDiscovery,
+  identity: originOusdIdentity,
+  instance: originOusdInstance,
+  routes: originOusdRoutes,
+  pricing: originOusdPricing,
+  exact: originOusdExact,
+  execution: originOusdExecution,
+  protocol: originOusdProtocol,
+  actionAdapters: [originOusdFamilyOwnedAction],
+});

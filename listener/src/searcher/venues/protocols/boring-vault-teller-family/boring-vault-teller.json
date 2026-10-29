@@ -1,0 +1,1915 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:boring-vault-teller"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_BORING_VAULT_TELLER_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:boring-vault-teller",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "boring-vault-withdraw"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "redeem"
+      }
+    ],
+    "supportedLineages": [
+      "boring-vault-teller:v1"
+    ],
+    "poolAdapterIds": [
+      "boring-vault-withdraw"
+    ],
+    "edgeAdapterIds": [
+      "boring-vault-withdraw"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call"
+      ],
+      "candidateSources": [
+        "observed-interaction"
+      ],
+      "candidate": {
+        "kind": "boring-vault-withdraw",
+        "addressField": "teller",
+        "fields": {
+          "teller": "address"
+        },
+        "key": [
+          "teller"
+        ]
+      },
+      "calls": [
+        {
+          "id": "boring-vault-withdraw-call",
+          "signature": "bulkWithdraw(address,uint256,uint256,address)",
+          "fields": {
+            "teller": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [],
+      "labels": [
+        "boring-vault-teller",
+        "protocol:boring-vault-teller"
+      ],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "teller": [
+          "function vault() view returns (address)",
+          "function accountant() view returns (address)",
+          "function isPaused() view returns (bool)",
+          "function shareLockPeriod() view returns (uint64)",
+          "function isSupported(address asset) view returns (bool)"
+        ],
+        "accountant": [
+          "function vault() view returns (address)",
+          "function base() view returns (address)",
+          "function getRate() view returns (uint256)",
+          "function getRateInQuoteSafe(address quote) view returns (uint256)"
+        ],
+        "vault": [
+          "function authority() view returns (address)",
+          "function hook() view returns (address)",
+          "function decimals() view returns (uint8)"
+        ]
+      },
+      "constants": {},
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "base",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "complete",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "base"
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "boring-teller-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.teller"
+                  ]
+                }
+              },
+              {
+                "id": "boring-vault",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.teller"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "teller",
+                    "vault",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "boring-accountant",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.teller"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "teller",
+                    "accountant",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "boring-paused",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.teller"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "teller",
+                    "isPaused",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "boring-lock",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.teller"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "teller",
+                    "shareLockPeriod",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "code",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "boring-teller-code"
+                  ]
+                }
+              },
+              {
+                "let": "vault",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "teller",
+                        "vault",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "boring-vault"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "accountant",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "teller",
+                        "accountant",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "boring-accountant"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "paused",
+                "value": {
+                  "op": "bool",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "boring-paused"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "not",
+                  "args": [
+                    "$paused"
+                  ]
+                },
+                "error": "boring vault teller is paused"
+              },
+              {
+                "let": "shareLockPeriod",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "teller",
+                        "shareLockPeriod",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "boring-lock"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$results",
+                        "r",
+                        {
+                          "op": "get",
+                          "args": [
+                            "$r",
+                            "ok"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "result",
+                        "args": [
+                          "boring-teller-code"
+                        ]
+                      },
+                      "source"
+                    ]
+                  },
+                  "teller": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.teller"
+                    ]
+                  },
+                  "vault": "$vault",
+                  "accountant": "$accountant",
+                  "paused": false,
+                  "shareLockPeriod": "$shareLockPeriod",
+                  "tellerCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$code"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "complete": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "boring-vault-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.vault"
+                  ]
+                }
+              },
+              {
+                "id": "boring-accountant-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.accountant"
+                  ]
+                }
+              },
+              {
+                "id": "boring-authority",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "authority",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "boring-hook",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "hook",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "boring-accountant-vault",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.accountant"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "accountant",
+                    "vault",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "boring-base",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.accountant"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "accountant",
+                    "base",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "boring-share-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "vaultCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "boring-vault-code"
+                  ]
+                }
+              },
+              {
+                "let": "accountantCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "boring-accountant-code"
+                  ]
+                }
+              },
+              {
+                "let": "hook",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "hook",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "boring-hook"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "accountantVault",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "accountant",
+                        "vault",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "boring-accountant-vault"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "asset",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "accountant",
+                        "base",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "boring-base"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "shareDecimals",
+                "value": {
+                  "op": "number",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "vault",
+                            "decimals",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "boring-share-decimals"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$hook",
+                    "$evidence.teller"
+                  ]
+                },
+                "error": "boring vault hook is not the Teller"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$accountantVault",
+                    "$evidence.vault"
+                  ]
+                },
+                "error": "boring accountant vault mismatch"
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$shareDecimals",
+                    36
+                  ]
+                },
+                "error": "boring share decimals out of range"
+              },
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$results",
+                        "r",
+                        {
+                          "op": "get",
+                          "args": [
+                            "$r",
+                            "ok"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "complete",
+                      "source": {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "result",
+                            "args": [
+                              "boring-vault-code"
+                            ]
+                          },
+                          "source"
+                        ]
+                      },
+                      "asset": "$asset",
+                      "shareDecimals": "$shareDecimals",
+                      "paused": false,
+                      "vaultCodeHash": {
+                        "op": "codeHash",
+                        "args": [
+                          "$vaultCode"
+                        ]
+                      },
+                      "accountantCodeHash": {
+                        "op": "codeHash",
+                        "args": [
+                          "$accountantCode"
+                        ]
+                      },
+                      "behaviorValid": true,
+                      "behaviorHash": {
+                        "op": "hash",
+                        "args": [
+                          {
+                            "teller": "$evidence.teller",
+                            "vault": "$evidence.vault",
+                            "accountant": "$evidence.accountant",
+                            "asset": "$asset",
+                            "shareDecimals": {
+                              "op": "string",
+                              "args": [
+                                "$shareDecimals"
+                              ]
+                            },
+                            "hook": "$hook",
+                            "accountantVault": "$accountantVault"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "complete"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "boring_vault_withdraw_unavailable",
+              "evidenceRequestIds": [
+                "boring-complete"
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.behaviorValid"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.teller"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "boring-vault-teller",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.teller"
+                      ]
+                    },
+                    "evidenceHash": "$evidence.behaviorHash"
+                  }
+                ],
+                "teller": "$evidence.teller",
+                "vault": "$evidence.vault",
+                "accountant": "$evidence.accountant",
+                "asset": "$evidence.asset",
+                "shareDecimals": "$evidence.shareDecimals",
+                "shareLockPeriod": "$evidence.shareLockPeriod",
+                "tellerCodeHash": "$evidence.tellerCodeHash",
+                "vaultCodeHash": "$evidence.vaultCodeHash",
+                "accountantCodeHash": "$evidence.accountantCodeHash"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        },
+        {
+          "kind": "execution-actor",
+          "role": "executor"
+        },
+        {
+          "kind": "effect-observation",
+          "effects": [
+            "token-delta",
+            "logs"
+          ]
+        }
+      ],
+      "teller": {
+        "op": "address",
+        "args": [
+          "$identity.teller"
+        ]
+      },
+      "vault": {
+        "op": "address",
+        "args": [
+          "$identity.vault"
+        ]
+      },
+      "accountant": {
+        "op": "address",
+        "args": [
+          "$identity.accountant"
+        ]
+      },
+      "asset": {
+        "op": "address",
+        "args": [
+          "$identity.asset"
+        ]
+      },
+      "shareDecimals": "$identity.shareDecimals",
+      "shareLockPeriod": "$identity.shareLockPeriod",
+      "tellerCodeHash": "$identity.tellerCodeHash",
+      "vaultCodeHash": "$identity.vaultCodeHash",
+      "accountantCodeHash": "$identity.accountantCodeHash"
+    },
+    "bindingProjection": {
+      "teller": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.teller"
+            ]
+          }
+        ]
+      },
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "accountant": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.accountant"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "selector": "0x3e64ce99",
+      "shareLockPeriod": {
+        "op": "string",
+        "args": [
+          "$descriptor.shareLockPeriod"
+        ]
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.teller",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.teller"
+          ]
+        }
+      ]
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "protocol:boring-vault-teller",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.teller"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.asset"
+                ]
+              }
+            ]
+          }
+        ],
+        "\u001f"
+      ]
+    },
+    "directions": [
+      {
+        "id": "withdraw",
+        "enabled": true,
+        "tokenIn": "$descriptor.vault",
+        "tokenOut": "$descriptor.asset",
+        "adapterId": "boring-vault-withdraw",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        },
+        "executionAssets": {
+          "input": "erc20",
+          "output": "erc20"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.teller"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "teller": "$descriptor.teller",
+      "vault": "$descriptor.vault",
+      "accountant": "$descriptor.accountant",
+      "asset": "$descriptor.asset",
+      "shareDecimals": "$descriptor.shareDecimals",
+      "shareLockPeriod": "$descriptor.shareLockPeriod",
+      "tellerCodeHash": "$descriptor.tellerCodeHash",
+      "vaultCodeHash": "$descriptor.vaultCodeHash",
+      "accountantCodeHash": "$descriptor.accountantCodeHash",
+      "route": {
+        "op": "at",
+        "args": [
+          "$routes",
+          0
+        ]
+      },
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "teller": "$descriptor.teller",
+      "accountant": "$descriptor.accountant",
+      "asset": "$descriptor.asset",
+      "semantics": "boring-vault-teller-v1"
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": "$draft",
+    "sampleAmount": {
+      "op": "pow",
+      "args": [
+        10,
+        "$descriptor.shareDecimals"
+      ]
+    },
+    "exactCompatibility": {
+      "teller": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.teller"
+            ]
+          }
+        ]
+      },
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      },
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "quoteSemantics": "boring-vault-teller-v1"
+    },
+    "mutationKinds": [
+      "log"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "boring-vault-teller",
+    "lineageId": "boring-vault-teller:v1",
+    "abi": {
+      "teller": [
+        "function vault() view returns (address)",
+        "function accountant() view returns (address)",
+        "function isPaused() view returns (bool)",
+        "function shareLockPeriod() view returns (uint64)",
+        "function bulkWithdraw(address withdrawAsset, uint256 shareAmount, uint256 minAssetsOut, address receiver)"
+      ],
+      "accountant": [
+        "function getRateInQuoteSafe(address quote) view returns (uint256)"
+      ],
+      "vault": [
+        "function decimals() view returns (uint8)"
+      ]
+    },
+    "constants": {},
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "custom",
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.teller",
+        "$descriptor.vault",
+        "$descriptor.accountant",
+        "$descriptor.asset"
+      ],
+      "mutationAddresses": [
+        "$descriptor.teller",
+        "$descriptor.vault",
+        "$descriptor.asset"
+      ],
+      "classifyUnavailable": {
+        "op": "filter",
+        "args": [
+          {
+            "op": "map",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "defined",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$snapshot.quotes",
+                              "$route.routeKey"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  [
+                    "$route.routeKey",
+                    "boring_rate_unavailable"
+                  ],
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "lte",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$snapshot.quotes",
+                                  "$route.routeKey"
+                                ]
+                              },
+                              "amountOut"
+                            ]
+                          },
+                          0
+                        ]
+                      },
+                      [
+                        "$route.routeKey",
+                        "boring_zero_output"
+                      ],
+                      []
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "row",
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$row"
+                ]
+              },
+              2
+            ]
+          }
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "boring-vault-withdraw",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "gt",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "boring exact input out of range"
+        }
+      ],
+      "evidence": {
+        "kind": "boring-vault-withdraw",
+        "source": "$source",
+        "teller": "$descriptor.teller",
+        "vault": "$descriptor.vault",
+        "asset": "$descriptor.asset",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "executor": {
+          "op": "address",
+          "args": [
+            "$executor"
+          ]
+        },
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.teller",
+        "$descriptor.vault",
+        "$descriptor.asset"
+      ],
+      "call": {
+        "target": "$descriptor.teller",
+        "signature": "function bulkWithdraw(address withdrawAsset, uint256 shareAmount, uint256 minAssetsOut, address receiver)",
+        "args": [
+          "$descriptor.asset",
+          {
+            "runtime": "amountIn"
+          },
+          0,
+          "$recipient"
+        ]
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    },
+    "readPrograms": {}
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "withdrawOut": {
+          "model": "boring-vault-teller:withdraw-out",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "boring vault quotes read the accountant rate per quote; no sequential trial overlay is modeled",
+      "steps": [
+        {
+          "id": "rate",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "boring-rate",
+              "kind": "eth-call",
+              "to": "$descriptor.accountant",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "accountant",
+                  "getRateInQuoteSafe",
+                  [
+                    "$descriptor.asset"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "return": {
+                "rate": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "accountant",
+                        "getRateInQuoteSafe",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "boring-rate"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "model",
+        "args": [
+          "withdrawOut",
+          {
+            "shares": "$amountIn",
+            "rate": "$steps.rate.rate",
+            "shareDecimals": "$descriptor.shareDecimals"
+          }
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "rate",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "boring-rate",
+              "kind": "eth-call",
+              "to": "$descriptor.accountant",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "accountant",
+                  "getRateInQuoteSafe",
+                  [
+                    "$descriptor.asset"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "return": {
+                "rate": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "accountant",
+                        "getRateInQuoteSafe",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "boring-rate"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "rate": "$steps.rate.rate",
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$steps.rate.rate",
+                    0
+                  ]
+                },
+                [
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$routes",
+                            0
+                          ]
+                        },
+                        "routeKey"
+                      ]
+                    },
+                    {
+                      "amountIn": {
+                        "op": "pow",
+                        "args": [
+                          10,
+                          "$descriptor.shareDecimals"
+                        ]
+                      },
+                      "amountOut": {
+                        "op": "model",
+                        "args": [
+                          "withdrawOut",
+                          {
+                            "shares": {
+                              "op": "pow",
+                              "args": [
+                                10,
+                                "$descriptor.shareDecimals"
+                              ]
+                            },
+                            "rate": "$steps.rate.rate",
+                            "shareDecimals": "$descriptor.shareDecimals"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                ],
+                []
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "boring-vault-withdraw",
+        "lineage": "custom-protocol:boring-vault-teller:v1",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function bulkWithdraw(address,uint256,uint256,address)"
+        }
+      ]
+    }
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "BoringCandidate": {
+        "type": "object",
+        "extends": [
+          "FamilyCandidate"
+        ],
+        "fields": {
+          "candidateKind": {
+            "literal": "boring-vault-withdraw"
+          },
+          "teller": {
+            "type": "string"
+          }
+        }
+      },
+      "BoringBaseEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {
+            "literal": "base"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "teller": {
+            "type": "string"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "accountant": {
+            "type": "string"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "shareLockPeriod": {
+            "type": "bigint"
+          },
+          "tellerCodeHash": {
+            "type": "string"
+          }
+        }
+      },
+      "BoringCompleteEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {
+            "literal": "complete"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "teller": {
+            "type": "string"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "accountant": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "shareDecimals": {
+            "type": "number"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "shareLockPeriod": {
+            "type": "bigint"
+          },
+          "tellerCodeHash": {
+            "type": "string"
+          },
+          "vaultCodeHash": {
+            "type": "string"
+          },
+          "accountantCodeHash": {
+            "type": "string"
+          },
+          "behaviorValid": {
+            "type": "boolean"
+          },
+          "behaviorHash": {
+            "type": "string"
+          }
+        }
+      },
+      "BoringIdentityEvidence": {
+        "union": [
+          {
+            "ref": "BoringBaseEvidence"
+          },
+          {
+            "ref": "BoringCompleteEvidence"
+          }
+        ]
+      },
+      "BoringIdentity": {
+        "type": "object",
+        "extends": [
+          "VerifiedIdentity"
+        ],
+        "fields": {
+          "teller": {
+            "type": "string"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "accountant": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "shareDecimals": {
+            "type": "number"
+          },
+          "shareLockPeriod": {
+            "type": "bigint"
+          },
+          "tellerCodeHash": {
+            "type": "string"
+          },
+          "vaultCodeHash": {
+            "type": "string"
+          },
+          "accountantCodeHash": {
+            "type": "string"
+          }
+        }
+      },
+      "BoringDescriptor": {
+        "type": "object",
+        "extends": [
+          "CompiledInstanceDescriptor"
+        ],
+        "fields": {
+          "teller": {
+            "type": "string"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "accountant": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "shareDecimals": {
+            "type": "number"
+          },
+          "shareLockPeriod": {
+            "type": "bigint"
+          },
+          "tellerCodeHash": {
+            "type": "string"
+          },
+          "vaultCodeHash": {
+            "type": "string"
+          },
+          "accountantCodeHash": {
+            "type": "string"
+          }
+        }
+      },
+      "BoringRoute": {
+        "type": "object",
+        "extends": [
+          "FamilyRouteDescriptor"
+        ],
+        "fields": {
+          "target": {
+            "type": "string"
+          },
+          "direction": {
+            "literal": "withdraw"
+          },
+          "adapterId": {
+            "literal": "boring-vault-withdraw"
+          }
+        }
+      },
+      "BoringPricingDraft": {
+        "type": "object",
+        "fields": {
+          "instanceKey": {
+            "ref": "InstanceKey"
+          },
+          "teller": {
+            "type": "string"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "accountant": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "shareDecimals": {
+            "type": "number"
+          },
+          "shareLockPeriod": {
+            "type": "bigint"
+          },
+          "tellerCodeHash": {
+            "type": "string"
+          },
+          "vaultCodeHash": {
+            "type": "string"
+          },
+          "accountantCodeHash": {
+            "type": "string"
+          },
+          "route": {
+            "ref": "BoringRoute"
+          },
+          "routes": {
+            "array": {
+              "ref": "BoringRoute"
+            }
+          }
+        }
+      },
+      "BoringPricingStatic": {
+        "type": "object",
+        "fields": {}
+      },
+      "BoringPricingDescriptor": {
+        "type": "object",
+        "extends": [
+          "BoringPricingDraft",
+          "BoringPricingStatic"
+        ],
+        "fields": {}
+      },
+      "BoringExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {
+            "literal": "boring-vault-withdraw"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "teller": {
+            "type": "string"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "amountIn": {
+            "type": "bigint"
+          },
+          "amountOut": {
+            "type": "bigint"
+          },
+          "executor": {
+            "type": "string"
+          },
+          "bindingFingerprint": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "contracts": {
+      "candidate": "BoringCandidate",
+      "identityEvidence": "BoringIdentityEvidence",
+      "identity": "BoringIdentity",
+      "descriptor": "BoringDescriptor",
+      "route": "BoringRoute",
+      "pricingDraft": "BoringPricingDraft",
+      "pricingDescriptor": "BoringPricingDescriptor",
+      "pricingStatic": "BoringPricingStatic",
+      "exactEvidence": "BoringExactEvidence"
+    }
+  }
+}

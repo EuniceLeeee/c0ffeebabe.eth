@@ -1,0 +1,1842 @@
+{
+  "_status": "blocked",
+  "_note": "Non-deliverable draft. Do not copy to protocols/set-redemption-family/set-redemption.json and do not generate a production entry from it. It records the parts that are expressible (discovery mapping, instance projection, routes/effects) and the shape of the parts that are not (multi-asset execution, direct redeem action, legacy variant, nomination/reverse-binding channels). See set-redemption.blockers.md.",
+  "_blockers": [
+    "declarative-execution.ts:161-168 requires exactly one debit and one credit; a Set redemption credits/guards every basket component (set-redemption-family/execution.ts:74-110,134-146)",
+    "declarative-execution.ts:28-33,244-298 has static step/effect arrays only; no fan-out over $descriptor.components and no nested execSubscript program (execution.ts:16-42,93-98; direct.ts:27-64)",
+    "declarative-protocol.ts:650-671 emits one action node; it cannot add the per-output assert-balance nodes (execution.ts:134-136)",
+    "declarative-execution.ts:471-492 only encodes runtimeAmountProgram nodes; the Basic action is direct redeem calldata with empty params (action.ts:8-17; test/contract.ts:94-100)",
+    "declarative-discovery.ts:51,266-273 has one nomination discriminator and always reports reverseBinding explicitly-unsupported; the family combines address-surface and receipt-log nomination plus an implemented reverse binding (discovery.ts:6-41; nomination.ts:22-49)",
+    "declarative-discovery.ts:193,203,242-258 has no event encode/re-encode comparison; the family rejects non-canonical call/log encodings (discovery.ts:17-25; legacy.ts:47-55)"
+  ],
+  "version": 2,
+  "scope": {
+    "family": "protocol:set-redemption"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_SET_REDEMPTION_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:set-redemption",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "set-basic-redeem",
+      "set-legacy-core-redeem",
+      "set-legacy-core-issue"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "assert-balance"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "redeem"
+      },
+      {
+        "slotKind": "protocol",
+        "protocolAction": "wrap"
+      }
+    ],
+    "supportedLineages": [
+      "set-redemption:basic-issuance-0.7.6",
+      "set-redemption:legacy-core-0.5.7"
+    ],
+    "poolAdapterIds": [
+      "set-redemption"
+    ],
+    "edgeAdapterIds": [
+      "set-basic-redeem",
+      "set-legacy-core-redeem",
+      "set-legacy-core-issue"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "set-redemption",
+        "addressField": "set",
+        "fields": {
+          "set": "address",
+          "module": "address",
+          "legacyCore": "bool"
+        },
+        "key": [
+          "set",
+          "module"
+        ],
+        "optionalFields": [
+          "legacyCore"
+        ]
+      },
+      "calls": [
+        {
+          "id": "set-redeem-call",
+          "signature": "redeem(address,uint256,address)",
+          "fields": {
+            "set": {
+              "from": "argument",
+              "index": 0
+            },
+            "module": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$observation.target"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.set",
+                    "$candidate.module"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "module",
+                        "redeem",
+                        [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              1
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              2
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "legacy-issue",
+          "signature": "issue(address,uint256)",
+          "fields": {
+            "set": {
+              "from": "argument",
+              "index": 0
+            },
+            "module": {
+              "from": "target"
+            },
+            "legacyCore": {
+              "from": "literal",
+              "value": true
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$observation.target"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.set",
+                    "$candidate.module"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "core",
+                        "issue",
+                        [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              1
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "legacy-issueTo",
+          "signature": "issueTo(address,address,uint256)",
+          "fields": {
+            "set": {
+              "from": "argument",
+              "index": 1
+            },
+            "module": {
+              "from": "target"
+            },
+            "legacyCore": {
+              "from": "literal",
+              "value": true
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    2
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$observation.target"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.set",
+                    "$candidate.module"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "core",
+                        "issueTo",
+                        [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              1
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              2
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "legacy-redeem",
+          "signature": "redeem(address,uint256)",
+          "fields": {
+            "set": {
+              "from": "argument",
+              "index": 0
+            },
+            "module": {
+              "from": "target"
+            },
+            "legacyCore": {
+              "from": "literal",
+              "value": true
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$observation.target"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.set",
+                    "$candidate.module"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "core",
+                        "redeem",
+                        [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              1
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "legacy-redeemTo",
+          "signature": "redeemTo(address,address,uint256)",
+          "fields": {
+            "set": {
+              "from": "argument",
+              "index": 1
+            },
+            "module": {
+              "from": "target"
+            },
+            "legacyCore": {
+              "from": "literal",
+              "value": true
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    2
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$observation.target"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.set",
+                    "$candidate.module"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "core",
+                        "redeemTo",
+                        [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              1
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              2
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "legacy-redeemAndWithdrawTo",
+          "signature": "redeemAndWithdrawTo(address,address,uint256,uint256)",
+          "fields": {
+            "set": {
+              "from": "argument",
+              "index": 0
+            },
+            "module": {
+              "from": "target"
+            },
+            "legacyCore": {
+              "from": "literal",
+              "value": true
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    2
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$observation.target"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.set",
+                    "$candidate.module"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "core",
+                        "redeemAndWithdrawTo",
+                        [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              1
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              2
+                            ]
+                          },
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              3
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "set-redeemed",
+          "signature": "SetTokenRedeemed(address indexed setToken,address indexed redeemer,address indexed to,uint256 quantity)",
+          "fields": {
+            "set": {
+              "from": "argument",
+              "index": 0
+            },
+            "module": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    3
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$observation.address"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.set",
+                    "$candidate.module"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "legacy-SetIssued",
+          "signature": "SetIssued(address,uint256)",
+          "fields": {
+            "set": {
+              "from": "argument",
+              "index": 0
+            },
+            "module": {
+              "from": "emitter"
+            },
+            "legacyCore": {
+              "from": "literal",
+              "value": true
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$observation.address"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.set",
+                    "$candidate.module"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "legacy-SetRedeemed",
+          "signature": "SetRedeemed(address,uint256)",
+          "fields": {
+            "set": {
+              "from": "argument",
+              "index": 0
+            },
+            "module": {
+              "from": "emitter"
+            },
+            "legacyCore": {
+              "from": "literal",
+              "value": true
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$observation.address"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.set",
+                    "$candidate.module"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "labels": [
+        "protocol:set-redemption",
+        "set-redemption",
+        "set-basic-redeem",
+        "set-legacy-core-redeem",
+        "set-legacy-core-issue"
+      ],
+      "surface": {
+        "id": "set-binding",
+        "fingerprint": "set-basic-redemption-binding-v1",
+        "fields": {
+          "set": {
+            "from": "opaque",
+            "path": "set"
+          },
+          "module": {
+            "from": "opaque",
+            "path": "module"
+          }
+        },
+        "predicates": [
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  "$observation.codeHash"
+                ]
+              },
+              "0xf4498b92792be6f31f103a61ef5449d8934aa50b27688a62d723cbbeea3eae9c"
+            ]
+          },
+          {
+            "op": "sameAddress",
+            "args": [
+              "$candidate.module",
+              "$observation.address"
+            ]
+          },
+          {
+            "op": "defined",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$candidate.set"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "defined",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$candidate.module"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$candidate.set",
+                  "$candidate.module"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "nomination": "address-surface",
+      "nominationReadFlow": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "binding",
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "nom-set-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$nomination.opaque.set"
+                  ]
+                }
+              },
+              {
+                "id": "nom-module-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$nomination.opaque.module"
+                  ]
+                }
+              },
+              {
+                "id": "nom-modules",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$nomination.opaque.set"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "set",
+                    "getModules",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "set",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$nomination.opaque.set"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "module",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$nomination.opaque.module"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$module",
+                    "$address"
+                  ]
+                },
+                "error": "set-binding nomination module/address mismatch"
+              },
+              {
+                "assert": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$set",
+                        "$module"
+                      ]
+                    }
+                  ]
+                },
+                "error": "set-binding nomination set/module aliased"
+              },
+              {
+                "return": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "codeHash",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "nom-set-code"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x096df383c453967864ea5f66d0a6e454e4ca4696578f47981d2480d8d4a80b5f"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "codeHash",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "nom-module-code"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                }
+                              ]
+                            },
+                            "0xf4498b92792be6f31f103a61ef5449d8934aa50b27688a62d723cbbeea3eae9c"
+                          ]
+                        },
+                        {
+                          "op": "some",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                {
+                                  "op": "decode",
+                                  "args": [
+                                    "set",
+                                    "getModules",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "nom-modules"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                "token",
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "address",
+                                      "args": [
+                                        "$token"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "member",
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$member",
+                                "$module"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "set": "$set",
+                      "module": "$module"
+                    },
+                    null
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "result": "$steps.binding"
+      }
+    }
+  },
+  "identity": {
+    "_blocked": "Basic identity has three evidence phases (set-redemption-family/identity.ts:13-60); legacy identity has its own three phases (legacy.ts:70-133). The stages/fan-out look expressible, but they cannot be accepted as a migration while execution/action/discovery are unexpressible. Not authored here.",
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$identity.binding.set",
+          "$identity.binding.module"
+        ],
+        ":"
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$identity.binding.set",
+          "$identity.binding.module"
+        ],
+        ":"
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "join",
+        "args": [
+          [
+            "$identity.binding.set",
+            "$identity.binding.module"
+          ],
+          ":"
+        ]
+      },
+      "set": "$identity.binding.set",
+      "module": "$identity.binding.module",
+      "controller": "$identity.binding.controller",
+      "controllerCodeHash": "$identity.binding.controllerCodeHash",
+      "components": "$identity.binding.components",
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ]
+    },
+    "bindingProjection": {
+      "set": "$descriptor.set",
+      "module": "$descriptor.module",
+      "controller": "$descriptor.controller",
+      "controllerCodeHash": "$descriptor.controllerCodeHash",
+      "components": "$descriptor.components"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.module",
+    "bindingKey": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.set",
+          "$descriptor.module"
+        ],
+        ":"
+      ]
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "protocol:set-redemption",
+          {
+            "op": "join",
+            "args": [
+              [
+                "$descriptor.set",
+                "$descriptor.module"
+              ],
+              ":"
+            ]
+          },
+          "$route.direction"
+        ],
+        ":"
+      ]
+    },
+    "directions": {
+      "op": "flatMap",
+      "args": [
+        "$descriptor.components",
+        "component",
+        [
+          {
+            "id": {
+              "op": "lower",
+              "args": [
+                "$component"
+              ]
+            },
+            "enabled": true,
+            "tokenIn": "$descriptor.set",
+            "tokenOut": "$component",
+            "adapterId": "set-basic-redeem",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "redeem"
+            },
+            "fields": {
+              "component": {
+                "op": "lower",
+                "args": [
+                  "$component"
+                ]
+              }
+            }
+          }
+        ]
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": "$descriptor.set",
+      "module": "$descriptor.module"
+    },
+    "effects": {
+      "op": "concat",
+      "args": [
+        [
+          {
+            "kind": "token-delta",
+            "token": "$descriptor.set",
+            "account": "executor",
+            "direction": "decrease"
+          },
+          {
+            "kind": "total-supply-delta",
+            "token": "$descriptor.set",
+            "direction": "decrease"
+          }
+        ],
+        {
+          "op": "map",
+          "args": [
+            "$descriptor.components",
+            "token",
+            {
+              "kind": "token-delta",
+              "token": "$token",
+              "account": "executor",
+              "direction": "increase"
+            }
+          ]
+        }
+      ]
+    },
+    "_legacyIssueDirection": "The legacy variant adds one issue direction only when legacy.issuance exists and components.length === 1 (routes.ts:20-24): id <component>:issue, tokenIn component, tokenOut set, adapterId set-legacy-core-issue, taxonomy wrap. The declarative projection can express this with a conditional flatMap, but the legacy execution/action cannot be expressed, so it is not copied into this draft."
+  },
+  "pricing": {
+    "_blocked": "pricing.ts:14-37 decodes mutable state, computes capacity/midSample and per-route redemption outputs, and classifies issue/zero-output routes unavailable. The read flow and classifyUnavailable hook are expressible; this draft does not claim a validated pricing block because the family cannot be completed and the decision needs the prohibited public math changes. Do not treat this as a migrated pricing definition.",
+    "stateKey": "$route.instanceKey",
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "set": "$descriptor.set",
+      "module": "$descriptor.module",
+      "controller": "$descriptor.controller",
+      "components": "$descriptor.components",
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "set": "$descriptor.set",
+      "module": "$descriptor.module",
+      "controller": "$descriptor.controller",
+      "components": "$descriptor.components"
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "min",
+      "args": [
+        "$steps.state.supply",
+        {
+          "op": "uint",
+          "args": [
+            "1000000000000000000"
+          ]
+        }
+      ]
+    },
+    "exactCompatibility": {
+      "set": "$descriptor.set",
+      "module": "$descriptor.module",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "registry-member"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "basic-issuance-runtime-and-reciprocal-registration",
+    "lineageId": "set-redemption:basic-issuance-0.7.6",
+    "_legacyVariant": "The legacy variant is a separate child JSON with lineageId set-redemption:legacy-core-0.5.7. It is not parked because its child file would need to be referenced by variantFiles, and no faithful legacy execution/action body exists.",
+    "abi": {
+      "set": [
+        "function controller() view returns(address)",
+        "function getModules() view returns(address[])",
+        "function moduleStates(address) view returns(uint8)",
+        "function getComponents() view returns(address[])",
+        "function isLocked() view returns(bool)",
+        "function positionMultiplier() view returns(int256)",
+        "function totalSupply() view returns(uint256)",
+        "function getExternalPositionModules(address) view returns(address[])",
+        "function getDefaultPositionRealUnit(address) view returns(int256)"
+      ],
+      "module": [
+        "function controller() view returns(address)",
+        "function redeem(address,uint256,address)",
+        "event SetTokenRedeemed(address indexed setToken,address indexed redeemer,address indexed to,uint256 quantity)"
+      ],
+      "controller": [
+        "function isSet(address) view returns(bool)",
+        "function isModule(address) view returns(bool)"
+      ],
+      "token": [
+        "function balanceOf(address) view returns(uint256)",
+        "function decimals() view returns(uint8)"
+      ],
+      "core": [
+        "function vault() view returns(address)",
+        "function validSets(address) view returns(bool)",
+        "function transferProxy() view returns(address)",
+        "function operationState() view returns(uint8)",
+        "function issue(address,uint256)",
+        "function issueTo(address,address,uint256)",
+        "function redeem(address,uint256)",
+        "function redeemTo(address,address,uint256)",
+        "function redeemAndWithdrawTo(address,address,uint256,uint256)",
+        "event SetIssued(address,uint256)",
+        "event SetRedeemed(address,uint256)"
+      ],
+      "legacySet": [
+        "function factory() view returns(address)",
+        "function getComponents() view returns(address[])",
+        "function getUnits() view returns(uint256[])",
+        "function naturalUnit() view returns(uint256)",
+        "function totalSupply() view returns(uint256)",
+        "function core() view returns(address)",
+        "function vault() view returns(address)",
+        "function rebalanceState() view returns(uint8)",
+        "function entryFee() view returns(uint256)",
+        "function feeRecipient() view returns(address)"
+      ],
+      "factory": [
+        "function core() view returns(address)"
+      ],
+      "vault": [
+        "function getOwnerBalance(address,address) view returns(uint256)",
+        "function authorized(address) view returns(bool)"
+      ]
+    },
+    "constants": {
+      "setCodeHash": "0x096df383c453967864ea5f66d0a6e454e4ca4696578f47981d2480d8d4a80b5f",
+      "moduleCodeHash": "0xf4498b92792be6f31f103a61ef5449d8934aa50b27688a62d723cbbeea3eae9c",
+      "coreHash": "0x8159dc42b5019900fe368cb03886b102050d59058cda357f7575df7007389816",
+      "legacySetHash": "0x9d4668618d68fdec2838b5eae4676d5576e90dbf415f34456cbbb626ef93a961",
+      "rebalancingV3Hash": "0xd18acd8832e87c8db17449e7e8da7d0c3687826b9141f1b43f92ba8de31c2699",
+      "vaultHash": "0x53e69a2d96ca092f3333fd2f6ab8ce112100a2f5f86642c7f1cbff32389a77a0",
+      "wad": "1000000000000000000"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "pricing": {
+      "_blocked": "See pricing._blocked. The TS block is pricing.ts:12-44.",
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "get-code",
+          "eth-call"
+        ]
+      },
+      "dependencies": [],
+      "mutationAddresses": []
+    },
+    "exact": {
+      "_blocked": "exact.ts:7-39: positive path reads the same state, decodes state and selected output, rejects zero, and emits set-redemption-local-quote evidence with all component outputs; zero path returns zero outputs. The read/evidence/classify hooks exist, but the execution/action side is blocked and this draft does not claim a validated exact block.",
+      "methodId": "source-unit-floor"
+    },
+    "readPrograms": {},
+    "execution": {
+      "_blocked": "execution.ts:16-146 builds nested component-chunked runtime programs, one redeem call plus per-positive-output assert-balance nodes, and legacy issue/redeem variants. Declarative execution (v2) requires exactly one debit and one credit and emits one action node. A one-credit placeholder would be a weakened, non-deliverable program and is intentionally not included.",
+      "version": 2,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.set",
+        "$descriptor.module",
+        "$descriptor.controller"
+      ],
+      "effects": []
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "set-basic-redeem",
+        "lineage": "custom-protocol:set-redemption",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function redeem(address,uint256,address)"
+        }
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "set-legacy-core-redeem",
+        "lineage": "custom-protocol:set-redemption:legacy-core",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function redeemAndWithdrawTo(address,address,uint256,uint256)"
+        }
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "set-legacy-core-issue",
+        "lineage": "custom-protocol:set-redemption:legacy-core",
+        "edgeKind": "protocol",
+        "action": "wrap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function issue(address,uint256)"
+        }
+      ]
+    }
+  ],
+  "_legacyVariantShape": {
+    "lineageId": "set-redemption:legacy-core-0.5.7",
+    "identityPhases": [
+      "code",
+      "binding",
+      "complete"
+    ],
+    "routes": "components -> redeem; plus one issue route when legacy.issuance && components.length === 1",
+    "execution": "legacyRuntime chunks of 7 with nested execSubscript; legacyIssueRuntime exact-out; direct settlement wrapping",
+    "sourceLines": [
+      "legacy.ts:61-133",
+      "execution.ts:16-42",
+      "issuance.ts:12-51",
+      "direct.ts:27-64"
+    ]
+  }
+}

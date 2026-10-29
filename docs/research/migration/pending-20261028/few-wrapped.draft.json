@@ -1,0 +1,277 @@
+{
+  "_status": "blocked",
+  "_note": "Non-deliverable draft. Do not copy to <family>/<stem>.json or register as a production entry. See few-wrapped.blockers.md.",
+  "_blockers": [
+    "declarative-discovery.ts:51,266-273 has one nomination discriminator; family needs tx-evidence + address-surface (few-wrapped-family/discovery.ts:7,29)",
+    "declarative-simulation.ts:46-48,71-80,122-129 forbids setup preCalls/arbitrary funding and cannot derive the first executor actor; needed by few-wrapped-family/identity.ts:29 and simulation.ts:13-19",
+    "declarative-protocol.ts:263-267 rejects per-route simulation context in pricing; needed by few-wrapped-family/pricing.ts:22-32",
+    "declarative-simulation.ts:114-148 omits supply/event receipt checks required by few-wrapped-family/simulation.ts:34-63"
+  ],
+  "version": 2,
+  "scope": {"family": "protocol:few-wrapped"},
+  "production": {
+    "domain": "protocol",
+    "activation": {"enabled": false, "envKey": "SEARCHER_FAMILY_FEW_WRAPPED_ENABLED"}
+  },
+  "manifest": {
+    "familyId": "protocol:few-wrapped",
+    "domain": "protocol",
+    "ownedActionAdapterIds": ["few-wrap", "few-unwrap"],
+    "requiredInfraActionAdapterIds": ["erc20-approve"],
+    "allowedTaxonomy": [
+      {"slotKind": "protocol", "protocolAction": "wrap"},
+      {"slotKind": "protocol", "protocolAction": "unwrap"}
+    ],
+    "supportedLineages": ["few:factory-backed-wrap-v1"],
+    "poolAdapterIds": ["few-wrapped"],
+    "edgeAdapterIds": ["few-wrap", "few-unwrap"],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": ["observed-call", "landed-log", "address-surface"],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "few-wrapper",
+        "addressField": "target",
+        "fields": {"target": "address"},
+        "key": ["target"]
+      },
+      "calls": [
+        {
+          "id": "few-wrap-call",
+          "signature": "wrap(uint256)",
+          "fields": {"target": {"from": "target"}},
+          "predicates": [
+            {"op": "gte", "args": ["$args.0", {"op": "uint", "args": ["1"]}]}
+          ]
+        },
+        {
+          "id": "few-unwrap-call",
+          "signature": "unwrap(uint256)",
+          "fields": {"target": {"from": "target"}},
+          "predicates": [
+            {"op": "gte", "args": ["$args.0", {"op": "uint", "args": ["1"]}]}
+          ]
+        },
+        {
+          "id": "few-wrapTo-call",
+          "signature": "wrapTo(uint256,address)",
+          "fields": {"target": {"from": "target"}},
+          "predicates": [
+            {"op": "gte", "args": ["$args.0", {"op": "uint", "args": ["1"]}]},
+            {"op": "address", "args": ["$args.1"]}
+          ]
+        },
+        {
+          "id": "few-unwrapTo-call",
+          "signature": "unwrapTo(uint256,address)",
+          "fields": {"target": {"from": "target"}},
+          "predicates": [
+            {"op": "gte", "args": ["$args.0", {"op": "uint", "args": ["1"]}]},
+            {"op": "address", "args": ["$args.1"]}
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "few-Wrap-log",
+          "signature": "Wrap(address,uint256,address)",
+          "fields": {
+            "target": {"from": "emitter"},
+            "sender": {"from": "argument", "index": 0},
+            "amount": {"from": "argument", "index": 1},
+            "to": {"from": "argument", "index": 2}
+          },
+          "predicates": [
+            {"op": "gte", "args": ["$args.1", {"op": "uint", "args": ["1"]}]},
+            {"op": "address", "args": ["$args.0"]},
+            {"op": "address", "args": ["$args.2"]}
+          ]
+        },
+        {
+          "id": "few-Unwrap-log",
+          "signature": "Unwrap(address,uint256,address)",
+          "fields": {
+            "target": {"from": "emitter"},
+            "sender": {"from": "argument", "index": 0},
+            "amount": {"from": "argument", "index": 1},
+            "to": {"from": "argument", "index": 2}
+          },
+          "predicates": [
+            {"op": "gte", "args": ["$args.1", {"op": "uint", "args": ["1"]}]},
+            {"op": "address", "args": ["$args.0"]},
+            {"op": "address", "args": ["$args.2"]}
+          ]
+        }
+      ],
+      "labels": ["few-wrapped", "protocol:few-wrapped"],
+      "surface": {
+        "id": "few-wrapper-surface",
+        "fingerprint": "few-factory-wrapper-v1",
+        "fields": {"target": {"from": "emitter"}}
+      },
+      "nomination": "address-surface"
+    }
+  },
+  "identity": {
+    "_blocked": "two dependent effect-delta simulations with approve preCalls, explicit funding, actor reuse and 3-delta/supply/log receipt proof; see few-wrapped-family/identity.ts:29-41 and simulation.ts:13-63",
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.target"]}]}
+  },
+  "instance": {
+    "_blocked": "identity binding fields (target/asset/factory/code hashes) are owned by the same blocked simulation proof",
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]}
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+    "directions": [
+      {
+        "id": "wrap",
+        "enabled": true,
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.target",
+        "adapterId": "few-wrap",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "wrap"}
+      },
+      {
+        "id": "unwrap",
+        "enabled": true,
+        "tokenIn": "$descriptor.target",
+        "tokenOut": "$descriptor.asset",
+        "adapterId": "few-unwrap",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "unwrap"}
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]}
+    },
+    "effects": [
+      {"kind": "token-delta", "token": "$route.tokenIn", "account": "executor", "direction": "decrease"},
+      {"kind": "token-delta", "token": "$route.tokenOut", "account": "executor", "direction": "increase"},
+      {"kind": "total-supply-delta", "token": "$descriptor.target", "direction": "increase"}
+    ]
+  },
+  "pricing": {
+    "_blocked": "dependent effect simulations per direction at the computed probe amount; declarative-protocol.ts:263-267 rejects per-route simulation context",
+    "mutationKinds": ["log"]
+  },
+  "protocol": {
+    "candidateKinds": ["observed-call", "address-surface"],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "factory-wrapper-effects",
+    "lineageId": "few:factory-backed-wrap-v1",
+    "abi": {
+      "wrapper": [
+        "function factory() view returns(address)",
+        "function token() view returns(address)",
+        "function getWrappedToken(address) view returns(address)",
+        "function wrap(uint256) returns(uint256)",
+        "function unwrap(uint256) returns(uint256)",
+        "function wrapTo(uint256,address) returns(uint256)",
+        "function unwrapTo(uint256,address) returns(uint256)"
+      ],
+      "token": ["function balanceOf(address) view returns(uint256)", "function approve(address,uint256) returns(bool)"]
+    },
+    "constants": {
+      "wrapperCodeHash": "0xbe63f68c8de6e3f7cf411d9b117b931128468c36e0753fc5878fd5359f16acf5",
+      "zero": "0x0000000000000000000000000000000000000000"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "factory-child",
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {"transports": ["get-code", "eth-call"]},
+      "mutationAddresses": ["$descriptor.target", "$descriptor.asset", "$descriptor.factory"]
+    },
+    "exact": {
+      "_blocked": "few-execution-receipt uses conversionRequest with preCalls/funding; exact.ts:14"
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {"directOutput": true},
+      "protectedAddresses": ["$descriptor.target", "$descriptor.asset", "$descriptor.factory"],
+      "steps": [
+        {
+          "id": "convert",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$descriptor.target",
+            "mode": "exact-clear",
+            "amount": {"runtime": "amountIn"},
+            "when": {"op": "eq", "args": ["$route.direction", "wrap"]}
+          },
+          "call": {
+            "target": "$descriptor.target",
+            "signature": {"op": "if", "args": [
+              {"op": "eq", "args": ["$route.direction", "wrap"]},
+              "function wrap(uint256) returns (uint256)",
+              "function unwrap(uint256) returns (uint256)"
+            ]},
+            "args": [{"runtime": "amountIn"}],
+            "checks": [{"left": {"runtime": "converted"}, "operator": "eq", "right": {"runtime": "amountIn"}}],
+            "save": {"converted": 0}
+          }
+        },
+        {
+          "id": "allowance",
+          "static": true,
+          "call": {
+            "target": "$route.tokenIn",
+            "signature": "function allowance(address,address) view returns (uint256)",
+            "args": ["$executor", "$descriptor.target"],
+            "save": {"residual": 0},
+            "checks": [{"left": {"runtime": "residual"}, "operator": "eq", "right": 0}],
+            "when": {"op": "eq", "args": ["$route.direction", "wrap"]}
+          }
+        }
+      ],
+      "effects": [
+        {"kind": "debit", "token": "$route.tokenIn", "account": "$executor", "equals": {"runtime": "amountIn"}},
+        {"kind": "credit", "token": "$route.tokenOut", "account": "$recipient", "equals": {"runtime": "converted"}},
+        {"kind": "unchanged-token", "token": "$route.tokenOut", "account": "$executor", "when": "$externalRecipient"},
+        {"kind": "unchanged-token", "token": "$route.tokenIn", "account": "$recipient", "when": "$externalRecipient"},
+        {"kind": "unchanged-native"}
+      ]
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "few-wrap",
+        "lineage": "custom-protocol:few-wrapped",
+        "edgeKind": "protocol",
+        "action": "wrap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function wrap(uint256)"},
+        {"signature": "function wrapTo(uint256,address)"}
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "few-unwrap",
+        "lineage": "custom-protocol:few-wrapped",
+        "edgeKind": "protocol",
+        "action": "unwrap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function unwrap(uint256)"},
+        {"signature": "function unwrapTo(uint256,address)"}
+      ]
+    }
+  ]
+}

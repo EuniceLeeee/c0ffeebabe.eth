@@ -1,0 +1,2434 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:metafactory"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_METAFACTORY_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:metafactory",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "metafactory-compost-redeem"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "convert"
+      }
+    ],
+    "supportedLineages": [
+      "metafactory:v1-composter-pro-rata-eth-v1"
+    ],
+    "poolAdapterIds": [
+      "metafactory"
+    ],
+    "edgeAdapterIds": [
+      "metafactory-compost-redeem"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "landed-log"
+      ],
+      "candidateSources": [
+        "observed-interaction"
+      ],
+      "candidate": {
+        "kind": "metafactory-composter",
+        "addressField": "target",
+        "fields": {
+          "target": "address",
+          "observedAmount": "uint"
+        },
+        "key": [
+          "target"
+        ]
+      },
+      "calls": [
+        {
+          "id": "metafactory-compost-redeem-call",
+          "signature": "compostAndRedeem(uint256 amount,address passportRecipient)",
+          "fields": {
+            "target": {
+              "from": "target"
+            },
+            "observedAmount": {
+              "from": "argument",
+              "index": 0
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    0
+                  ]
+                },
+                0
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.target",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "metafactory-redeem-log",
+          "signature": "Redeem(address indexed user,uint256 tokensComposted,uint256 totalComposted,uint256 ethRedeemed,address passportRecipient)",
+          "fields": {
+            "target": {
+              "from": "emitter"
+            },
+            "observedAmount": {
+              "from": "argument",
+              "index": 1
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                0
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    3
+                  ]
+                },
+                0
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.target",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "labels": [
+        "metafactory",
+        "protocol:metafactory",
+        "metafactory-compost-redeem",
+        "metafactory-composter"
+      ],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "metafactory": [
+          "function robotToken() view returns (address)",
+          "function DEAD_ADDRESS() view returns (address)",
+          "function totalEthAllocated() view returns (uint256)",
+          "function circulatingSupply() view returns (uint256)",
+          "function redemptionActivated() view returns (bool)",
+          "function paused() view returns (bool)",
+          "function redemptionEndTime() view returns (uint256)",
+          "function calculateRedemptionAmount(uint256 amount) view returns (uint256)"
+        ],
+        "erc20": [
+          "function decimals() view returns (uint8)"
+        ]
+      },
+      "constants": {
+        "runtimeCodeHash": "0xbecc42fd73cba67b7be22df4d95338acc52d01101a6bddd0dccb3232d07e6485",
+        "robotCodeHash": "0xa95160f62eaa5dca87377958e157dffae85f7f0df672492b534198c3a948f13e",
+        "nativeAnchorCodeHash": "0xd0a06b12ac47863b5c7be4185c2deaad1c61557033f56c7d4ea74429cbb25e23",
+        "nativeAnchor": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "dead": "0x000000000000000000000000000000000000dEaD",
+        "zero": "0x0000000000000000000000000000000000000000"
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "composter",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "tokens",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "composter"
+              ]
+            }
+          },
+          {
+            "return": "complete",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "tokens"
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "composter": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
+              },
+              {
+                "id": "identity-robot",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "metafactory",
+                    "robotToken",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-dead",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "metafactory",
+                    "DEAD_ADDRESS",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-paused",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "metafactory",
+                    "paused",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-activated",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "metafactory",
+                    "redemptionActivated",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-total-allocated",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "metafactory",
+                    "totalEthAllocated",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-circulating-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "metafactory",
+                    "circulatingSupply",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-redemption-end",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "metafactory",
+                    "redemptionEndTime",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-code"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-robot"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-dead"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-paused"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-activated"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-total-allocated"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-circulating-supply"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-redemption-end"
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              },
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "identity-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "robot",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "metafactory",
+                        "robotToken",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-robot"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "dead",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "metafactory",
+                        "DEAD_ADDRESS",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-dead"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "paused",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "metafactory",
+                    "paused",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-paused"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "activated",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "metafactory",
+                    "redemptionActivated",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-activated"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "allocated",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "metafactory",
+                        "totalEthAllocated",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-total-allocated"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "supply",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "metafactory",
+                        "circulatingSupply",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-circulating-supply"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "redeemEnd",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "metafactory",
+                        "redemptionEndTime",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-redemption-end"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "valid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "codeHash",
+                              "args": [
+                                {
+                                  "op": "code",
+                                  "args": [
+                                    "identity-code"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "$constants.runtimeCodeHash"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$dead",
+                        "$constants.dead"
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$robot",
+                            "$candidate.target"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$robot",
+                            "$constants.zero"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$robot",
+                            "$constants.nativeAnchor"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "composter",
+                  "target": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.target"
+                    ]
+                  },
+                  "robotToken": "$robot",
+                  "deadAddress": "$dead",
+                  "paused": "$paused",
+                  "activated": "$activated",
+                  "totalEthAllocated": "$allocated",
+                  "circulatingSupply": "$supply",
+                  "redemptionEndTime": "$redeemEnd",
+                  "codeHash": "$codeHash",
+                  "valid": "$valid",
+                  "source": "$source"
+                }
+              }
+            ]
+          },
+          "tokens": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-robot-code",
+                "kind": "get-code",
+                "address": "$evidence.robotToken"
+              },
+              {
+                "id": "identity-native-anchor-code",
+                "kind": "get-code",
+                "address": "$constants.nativeAnchor"
+              },
+              {
+                "id": "identity-robot-decimals",
+                "kind": "eth-call",
+                "to": "$evidence.robotToken",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "erc20",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-robot-code"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-native-anchor-code"
+                        ]
+                      },
+                      {
+                        "op": "successful",
+                        "args": [
+                          "identity-robot-decimals"
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                },
+                "error": "standard protocol result came from a foreign source"
+              },
+              {
+                "let": "robotCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "identity-robot-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "nativeAnchorCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "identity-native-anchor-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "erc20",
+                        "decimals",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-robot-decimals"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$decimals",
+                    77
+                  ]
+                },
+                "error": "protocol token decimals exceeds uint256 scale"
+              },
+              {
+                "let": "oneToken",
+                "value": {
+                  "op": "pow",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "10"
+                      ]
+                    },
+                    "$decimals"
+                  ]
+                }
+              },
+              {
+                "let": "valid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    "$evidence.valid",
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "lower",
+                          "args": [
+                            "$robotCodeHash"
+                          ]
+                        },
+                        "$constants.robotCodeHash"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "lower",
+                          "args": [
+                            "$nativeAnchorCodeHash"
+                          ]
+                        },
+                        "$constants.nativeAnchorCodeHash"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "tokens",
+                      "oneToken": "$oneToken",
+                      "robotCodeHash": "$robotCodeHash",
+                      "nativeAnchorCodeHash": "$nativeAnchorCodeHash",
+                      "valid": "$valid"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "complete": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "metafactory-runtime-binding-mismatch",
+              "evidenceRequestIds": [
+                "identity-code",
+                "identity-robot",
+                "identity-dead",
+                "identity-paused",
+                "identity-activated",
+                "identity-total-allocated",
+                "identity-circulating-supply",
+                "identity-redemption-end"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "composter"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.valid",
+                    false
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "metafactory-token-binding-mismatch",
+              "evidenceRequestIds": [
+                "identity-robot-code",
+                "identity-native-anchor-code",
+                "identity-robot-decimals"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "tokens"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.valid",
+                    false
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "metafactory-redemption-inactive"
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "composter"
+                  ]
+                },
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        "$evidence.activated"
+                      ]
+                    },
+                    "$evidence.paused",
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.totalEthAllocated",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.circulatingSupply",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "tokens"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "metafactory-robot-decimals-unusable"
+            },
+            "when": {
+              "op": "lte",
+              "args": [
+                "$evidence.oneToken",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "metafactory-composter-runtime-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "codeHash": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.codeHash"
+                            ]
+                          },
+                          "robotToken": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.robotToken"
+                            ]
+                          },
+                          "nativeAnchor": {
+                            "op": "lower",
+                            "args": [
+                              "$constants.nativeAnchor"
+                            ]
+                          },
+                          "deadAddress": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.deadAddress"
+                            ]
+                          },
+                          "oneToken": "$evidence.oneToken",
+                          "robotCodeHash": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.robotCodeHash"
+                            ]
+                          },
+                          "nativeAnchorCodeHash": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.nativeAnchorCodeHash"
+                            ]
+                          },
+                          "payoutSemantics": "compost-pro-rata-native-eth-to-caller-v1"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "tokenIn": "$evidence.robotToken",
+                "nativeAnchor": {
+                  "op": "address",
+                  "args": [
+                    "$constants.nativeAnchor"
+                  ]
+                },
+                "deadAddress": "$evidence.deadAddress",
+                "oneToken": "$evidence.oneToken",
+                "codeHash": "$evidence.codeHash"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "target": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "tokenIn": {
+        "op": "address",
+        "args": [
+          "$identity.tokenIn"
+        ]
+      },
+      "nativeAnchor": {
+        "op": "address",
+        "args": [
+          "$identity.nativeAnchor"
+        ]
+      },
+      "deadAddress": {
+        "op": "address",
+        "args": [
+          "$identity.deadAddress"
+        ]
+      },
+      "oneToken": "$identity.oneToken",
+      "codeHash": {
+        "op": "lower",
+        "args": [
+          "$identity.codeHash"
+        ]
+      }
+    },
+    "bindingProjection": {
+      "target": {
+        "op": "lower",
+        "args": [
+          "$descriptor.target"
+        ]
+      },
+      "tokenIn": {
+        "op": "lower",
+        "args": [
+          "$descriptor.tokenIn"
+        ]
+      },
+      "nativeAnchor": {
+        "op": "lower",
+        "args": [
+          "$descriptor.nativeAnchor"
+        ]
+      },
+      "deadAddress": {
+        "op": "lower",
+        "args": [
+          "$descriptor.deadAddress"
+        ]
+      },
+      "codeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.codeHash"
+        ]
+      },
+      "payoutSemantics": "compost-pro-rata-native-eth-to-caller-v1"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        "$descriptor.target"
+      ]
+    },
+    "directions": [
+      {
+        "id": "compost-redeem",
+        "enabled": true,
+        "tokenIn": "$descriptor.tokenIn",
+        "tokenOut": "$descriptor.nativeAnchor",
+        "adapterId": "metafactory-compost-redeem",
+        "executionAssets": {
+          "input": "erc20",
+          "output": "native"
+        },
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "convert"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          "$descriptor.target"
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "route": {
+            "op": "at",
+            "args": [
+              "$routes",
+              0
+            ]
+          },
+          "routes": "$routes"
+        }
+      ]
+    },
+    "compatibility": {
+      "op": "merge",
+      "args": [
+        {
+          "target": {
+            "op": "lower",
+            "args": [
+              "$descriptor.target"
+            ]
+          },
+          "tokenIn": {
+            "op": "lower",
+            "args": [
+              "$descriptor.tokenIn"
+            ]
+          },
+          "nativeAnchor": {
+            "op": "lower",
+            "args": [
+              "$descriptor.nativeAnchor"
+            ]
+          },
+          "deadAddress": {
+            "op": "lower",
+            "args": [
+              "$descriptor.deadAddress"
+            ]
+          },
+          "codeHash": {
+            "op": "lower",
+            "args": [
+              "$descriptor.codeHash"
+            ]
+          },
+          "payoutSemantics": "compost-pro-rata-native-eth-to-caller-v1"
+        },
+        {
+          "quote": "source-pro-rata-eth-view-v1"
+        }
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": "$descriptor.oneToken",
+    "exactCompatibility": {
+      "target": {
+        "op": "lower",
+        "args": [
+          "$descriptor.target"
+        ]
+      },
+      "tokenIn": {
+        "op": "lower",
+        "args": [
+          "$descriptor.tokenIn"
+        ]
+      },
+      "nativeAnchor": {
+        "op": "lower",
+        "args": [
+          "$descriptor.nativeAnchor"
+        ]
+      },
+      "codeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.codeHash"
+        ]
+      },
+      "executor": {
+        "op": "lower",
+        "args": [
+          "$executor"
+        ]
+      },
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "quoteSemantics": "compost-pro-rata-eth-view-v1"
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "standalone-contract"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "metafactory-v1-composter",
+    "lineageId": "metafactory:v1-composter-pro-rata-eth-v1",
+    "abi": {
+      "metafactory": [
+        "function robotToken() view returns (address)",
+        "function DEAD_ADDRESS() view returns (address)",
+        "function totalEthAllocated() view returns (uint256)",
+        "function circulatingSupply() view returns (uint256)",
+        "function redemptionActivated() view returns (bool)",
+        "function paused() view returns (bool)",
+        "function redemptionEndTime() view returns (uint256)",
+        "function isRedemptionPeriodOver() view returns (bool)",
+        "function calculateRedemptionAmount(uint256 amount) view returns (uint256)",
+        "function compostAndRedeem(uint256 amount,address passportRecipient)"
+      ],
+      "erc20": [
+        "function decimals() view returns (uint8)"
+      ]
+    },
+    "constants": {
+      "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.direction",
+            "compost-redeem"
+          ]
+        },
+        "error": "metafactory route is not a verified compost redemption"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            "$descriptor.tokenIn"
+          ]
+        },
+        "error": "metafactory route is not a verified compost redemption"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            "$descriptor.nativeAnchor"
+          ]
+        },
+        "error": "metafactory route is not a verified compost redemption"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            "metafactory-compost-redeem"
+          ]
+        },
+        "error": "metafactory route is not a verified compost redemption"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$descriptor.tokenIn",
+                "$descriptor.nativeAnchor"
+              ]
+            }
+          ]
+        },
+        "error": "metafactory route is not a verified compost redemption"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$descriptor.tokenIn",
+                "$descriptor.target"
+              ]
+            }
+          ]
+        },
+        "error": "metafactory route is not a verified compost redemption"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.executionAssets.input",
+            "erc20"
+          ]
+        },
+        "error": "metafactory route is not a verified compost redemption"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.executionAssets.output",
+            "native"
+          ]
+        },
+        "error": "metafactory route is not a verified compost redemption"
+      }
+    ],
+    "inputs": [
+      "trialState",
+      "prefix"
+    ],
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.target",
+        "$descriptor.tokenIn",
+        "$descriptor.nativeAnchor"
+      ],
+      "mutationAddresses": [
+        "$descriptor.target",
+        "$descriptor.tokenIn"
+      ],
+      "classifyUnavailable": {
+        "op": "objectEntries",
+        "args": [
+          "$snapshot.unavailable"
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "metafactory-pro-rata-eth-view",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "gte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "metafactory redemption input is outside uint256 range"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "$constants.maxUint256"
+                ]
+              }
+            ]
+          },
+          "error": "metafactory redemption input is outside uint256 range"
+        },
+        {
+          "assert": {
+            "op": "or",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "defined",
+                    "args": [
+                      "$prefix"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$prefix"
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          },
+          "error": "metafactory prefix is not modelled by the pro-rata view"
+        }
+      ],
+      "retainReadEvidence": true,
+      "evidence": {
+        "kind": "metafactory-pro-rata-eth-quote",
+        "source": "$source",
+        "target": "$descriptor.target",
+        "tokenIn": "$descriptor.tokenIn",
+        "nativeAnchor": "$descriptor.nativeAnchor",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "totalEthAllocated": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            "$steps.terms.allocated"
+          ]
+        },
+        "circulatingSupply": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            "$steps.terms.supply"
+          ]
+        },
+        "executor": {
+          "op": "address",
+          "args": [
+            "$executor"
+          ]
+        },
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.target"
+      ],
+      "steps": [
+        {
+          "id": "redeem",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$descriptor.target",
+            "mode": "exact-clear"
+          },
+          "call": {
+            "target": "$descriptor.target",
+            "signature": "function compostAndRedeem(uint256,address)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              },
+              "0x0000000000000000000000000000000000000000"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "asset": "native",
+          "account": "$recipient",
+          "minimum": 1
+        }
+      ]
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "metafactoryRedeem": {
+          "model": "metafactory:pro-rata-redeem",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "steps": [
+        {
+          "id": "terms",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "exact-eth-allocated",
+              "kind": "eth-call",
+              "to": "$descriptor.target",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "metafactory",
+                  "totalEthAllocated",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "exact-circulating-supply",
+              "kind": "eth-call",
+              "to": "$descriptor.target",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "metafactory",
+                  "circulatingSupply",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "exact-amount-quote",
+              "kind": "eth-call",
+              "to": "$descriptor.target",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "metafactory",
+                  "calculateRedemptionAmount",
+                  [
+                    "$amountIn"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "allocated",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "metafactory",
+                      "totalEthAllocated",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "exact-eth-allocated"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "supply",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "metafactory",
+                      "circulatingSupply",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "exact-circulating-supply"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "chainQuote",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "metafactory",
+                      "calculateRedemptionAmount",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "exact-amount-quote"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "amountOut",
+              "value": {
+                "op": "model",
+                "args": [
+                  "metafactoryRedeem",
+                  {
+                    "amountIn": "$amountIn",
+                    "totalEthAllocated": "$allocated",
+                    "circulatingSupply": "$supply"
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  "$chainQuote",
+                  "$amountOut"
+                ]
+              },
+              "error": "metafactory chain redemption amount disagrees with the bound pro-rata rate"
+            },
+            {
+              "assert": {
+                "op": "gt",
+                "args": [
+                  "$amountOut",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "error": "metafactory zero output is not searchable"
+            },
+            {
+              "return": {
+                "allocated": "$allocated",
+                "supply": "$supply",
+                "chainQuote": "$chainQuote",
+                "amountOut": "$amountOut"
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.terms.amountOut",
+      "chainQuote": {
+        "step": "terms",
+        "requestId": "exact-amount-quote",
+        "signature": "function calculateRedemptionAmount(uint256) view returns (uint256)",
+        "amountPath": [
+          0
+        ],
+        "outputPath": [
+          0
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "terms",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-eth-allocated",
+              "kind": "eth-call",
+              "to": "$descriptor.target",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "metafactory",
+                  "totalEthAllocated",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-circulating-supply",
+              "kind": "eth-call",
+              "to": "$descriptor.target",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "metafactory",
+                  "circulatingSupply",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-amount-quote",
+              "kind": "eth-call",
+              "to": "$descriptor.target",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "metafactory",
+                  "calculateRedemptionAmount",
+                  [
+                    "$descriptor.oneToken"
+                  ]
+                ]
+              },
+              "completion": "return-data",
+              "required": false
+            }
+          ],
+          "decode": [
+            {
+              "let": "allocated",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "metafactory",
+                      "totalEthAllocated",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-eth-allocated"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "supply",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "metafactory",
+                      "circulatingSupply",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-circulating-supply"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "quoteShape",
+              "value": {
+                "op": "shape",
+                "args": [
+                  "current-amount-quote"
+                ]
+              }
+            },
+            {
+              "let": "reason",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "or",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$allocated",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$supply",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "metafactory_redemption_terms_unset",
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "ne",
+                        "args": [
+                          "$quoteShape",
+                          "returned"
+                        ]
+                      },
+                      "metafactory_redemption_quote_unavailable",
+                      ""
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "chainQuote",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$reason",
+                          ""
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$quoteShape",
+                          "returned"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "metafactory",
+                          "calculateRedemptionAmount",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "current-amount-quote"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "localQuote",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$reason",
+                      ""
+                    ]
+                  },
+                  {
+                    "op": "model",
+                    "args": [
+                      "metafactoryRedeem",
+                      {
+                        "amountIn": "$descriptor.oneToken",
+                        "totalEthAllocated": "$allocated",
+                        "circulatingSupply": "$supply"
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  "$chainQuote",
+                  "$localQuote"
+                ]
+              },
+              "error": "metafactory chain redemption amount disagrees with the bound pro-rata rate",
+              "when": {
+                "op": "eq",
+                "args": [
+                  "$reason",
+                  ""
+                ]
+              }
+            },
+            {
+              "let": "zeroReason",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$reason",
+                          ""
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$localQuote",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "metafactory_zero_output",
+                  ""
+                ]
+              }
+            },
+            {
+              "return": {
+                "allocated": "$allocated",
+                "supply": "$supply",
+                "quote": "$localQuote",
+                "reason": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$reason",
+                        ""
+                      ]
+                    },
+                    "$zeroReason",
+                    "$reason"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "totalEthAllocated": "$steps.terms.allocated",
+        "circulatingSupply": "$steps.terms.supply",
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$steps.terms.reason",
+                    ""
+                  ]
+                },
+                [
+                  [
+                    "$routes.0.routeKey",
+                    {
+                      "amountIn": "$descriptor.oneToken",
+                      "amountOut": "$steps.terms.quote"
+                    }
+                  ]
+                ],
+                []
+              ]
+            }
+          ]
+        },
+        "unavailable": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$steps.terms.reason",
+                    ""
+                  ]
+                },
+                [],
+                [
+                  [
+                    "$routes.0.routeKey",
+                    "$steps.terms.reason"
+                  ]
+                ]
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "metafactory-compost-redeem",
+        "lineage": "custom-protocol:metafactory",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function compostAndRedeem(uint256,address)"
+        }
+      ]
+    }
+  ]
+}

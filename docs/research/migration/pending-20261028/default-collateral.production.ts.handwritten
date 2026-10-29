@@ -1,0 +1,46 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { defaultCollateralFamilyManifest } from
+  "../protocols/default-collateral-family/manifest.js";
+import { defaultCollateralDiscovery } from
+  "../protocols/default-collateral-family/discovery.js";
+import { defaultCollateralIdentity } from
+  "../protocols/default-collateral-family/identity.js";
+import { defaultCollateralInstance } from
+  "../protocols/default-collateral-family/instance.js";
+import { defaultCollateralRoutes } from
+  "../protocols/default-collateral-family/routes.js";
+import { defaultCollateralPricing } from
+  "../protocols/default-collateral-family/pricing.js";
+import { defaultCollateralExact } from
+  "../protocols/default-collateral-family/exact.js";
+import { defaultCollateralExecution } from
+  "../protocols/default-collateral-family/execution.js";
+import { defaultCollateralProtocol } from
+  "../protocols/default-collateral-family/protocol.js";
+import { defaultCollateralCapture } from
+  "../protocols/default-collateral-family/capture.js";
+import { defaultCollateralFamilyOwnedAction } from
+  "../protocols/default-collateral-family/action.js";
+
+export const plugin = defineProtocolFamily({
+  manifest: defaultCollateralFamilyManifest,
+  discovery: defaultCollateralDiscovery,
+  identity: defaultCollateralIdentity,
+  instance: defaultCollateralInstance,
+  routes: defaultCollateralRoutes,
+  pricing: defaultCollateralPricing,
+  exact: defaultCollateralExact,
+  execution: defaultCollateralExecution,
+  protocol: defaultCollateralProtocol,
+  capture: defaultCollateralCapture,
+  actionAdapters: [defaultCollateralFamilyOwnedAction],
+});
+
+// Disabled by default: the live default activation is unchanged. Historical
+// single-block acceptance enables this Family explicitly with
+// SEARCHER_FAMILY_DEFAULT_COLLATERAL_ENABLED=1.
+export const activation = defineFamilyActivation({
+  enabled: false,
+  envKey: "SEARCHER_FAMILY_DEFAULT_COLLATERAL_ENABLED",
+});

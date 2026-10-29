@@ -1,0 +1,32 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../protocols/arcana-migration-family/manifest.js";
+import { arcanaMigrationDiscovery as discovery } from "../protocols/arcana-migration-family/discovery.js";
+import { arcanaMigrationIdentity as identity } from "../protocols/arcana-migration-family/identity.js";
+import { arcanaMigrationInstance as instance } from "../protocols/arcana-migration-family/instance.js";
+import { arcanaMigrationRoutes as routes } from "../protocols/arcana-migration-family/routes.js";
+import { arcanaMigrationPricing as pricing } from "../protocols/arcana-migration-family/pricing.js";
+import { arcanaMigrationExact as exact } from "../protocols/arcana-migration-family/exact.js";
+import { arcanaMigrationExecution as execution } from "../protocols/arcana-migration-family/execution.js";
+import { arcanaMigrationProtocol as protocol } from "../protocols/arcana-migration-family/protocol.js";
+import { arcanaMigrationCapture as capture } from "../protocols/arcana-migration-family/capture.js";
+import { arcanaMigrationFamilyOwnedAction } from "../protocols/arcana-migration-family/action.js";
+
+export const plugin = defineProtocolFamily({
+  manifest,
+  discovery,
+  identity,
+  instance,
+  routes,
+  pricing,
+  exact,
+  execution,
+  protocol,
+  capture,
+  actionAdapters: [arcanaMigrationFamilyOwnedAction],
+});
+
+export const activation = defineFamilyActivation({
+  enabled: true,
+  envKey: "SEARCHER_FAMILY_ARCANA_MIGRATION_ENABLED",
+});

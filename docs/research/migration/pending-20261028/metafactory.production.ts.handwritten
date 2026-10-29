@@ -1,0 +1,34 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { metafactoryFamilyOwnedAction } from "../protocols/metafactory-family/action.js";
+import { metafactoryCapture } from "../protocols/metafactory-family/capture.js";
+import { metafactoryDiscovery } from "../protocols/metafactory-family/discovery.js";
+import { metafactoryExact } from "../protocols/metafactory-family/exact.js";
+import { metafactoryExecution } from "../protocols/metafactory-family/execution.js";
+import { metafactoryIdentity } from "../protocols/metafactory-family/identity.js";
+import { metafactoryInstance } from "../protocols/metafactory-family/instance.js";
+import { metafactoryFamilyManifest } from "../protocols/metafactory-family/manifest.js";
+import { metafactoryPricing } from "../protocols/metafactory-family/pricing.js";
+import { metafactoryProtocol } from "../protocols/metafactory-family/protocol.js";
+import { metafactoryRoutes } from "../protocols/metafactory-family/routes.js";
+
+// Opt-in only: the live default stays unchanged. SEARCHER_FAMILY_METAFACTORY_ENABLED=1
+// loads the family for historical single-block Ready and explicit lanes.
+export const activation = defineFamilyActivation({
+  enabled: false,
+  envKey: "SEARCHER_FAMILY_METAFACTORY_ENABLED",
+});
+
+export const plugin = defineProtocolFamily({
+  manifest: metafactoryFamilyManifest,
+  capture: metafactoryCapture,
+  discovery: metafactoryDiscovery,
+  identity: metafactoryIdentity,
+  instance: metafactoryInstance,
+  routes: metafactoryRoutes,
+  pricing: metafactoryPricing,
+  exact: metafactoryExact,
+  execution: metafactoryExecution,
+  protocol: metafactoryProtocol,
+  actionAdapters: [metafactoryFamilyOwnedAction],
+});

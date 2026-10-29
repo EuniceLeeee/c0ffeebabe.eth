@@ -1,0 +1,15 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { manifest } from "../protocols/peapods-debond-family/manifest.js";
+import { discovery } from "../protocols/peapods-debond-family/discovery.js";
+import { identity } from "../protocols/peapods-debond-family/identity.js";
+import { instance } from "../protocols/peapods-debond-family/instance.js";
+import { routes } from "../protocols/peapods-debond-family/routes.js";
+import { pricing } from "../protocols/peapods-debond-family/pricing.js";
+import { exact } from "../protocols/peapods-debond-family/exact.js";
+import { execution } from "../protocols/peapods-debond-family/execution.js";
+import { protocol } from "../protocols/peapods-debond-family/protocol.js";
+import { capture } from "../protocols/peapods-debond-family/capture.js";
+import { action } from "../protocols/peapods-debond-family/action.js";
+export const plugin = defineProtocolFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, protocol, capture, actionAdapters: [action] });
+export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_PEAPODS_DEBOND_ENABLED" });

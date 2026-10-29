@@ -1,6 +1,17 @@
+import { arcanaAmountMathModel } from "./arcana-migration-math.js";
+import { boringWithdrawOutMathModel } from "./boring-vault-teller-math.js";
 import { compoundCTokenExchangeRateMathModel } from "./compound-ctoken-math.js";
 import { createDeclarativeMathRegistry, type DeclarativeMathModel } from "./declarative-math.js";
+import { defaultCollateralQuoteMathModel } from "./default-collateral-math.js";
+import { goldxUnitQuoteMathModel } from "./goldx-math.js";
+import { metafactoryRedeemMathModel } from "./metafactory-math.js";
+import { olympusIndexQuoteMathModel } from "./olympus-math.js";
+import { originOusdMintQuoteMathModel } from "./origin-ousd-math.js";
+import { originStethArmQuoteMathModel } from "./origin-steth-arm-math.js";
+import { peapodsDebondMathModel, peapodsRuntimeShapeMathModel } from "./peapods-math.js";
+import { psmConversionMathModel } from "./psm-math.js";
 import { selfBurnNativeWrapFeeMathModel } from "./self-burn-native-math.js";
+import { stakedUsdatEventAssetsMathModel } from "./staked-usdat-math.js";
 
 // Static, source-hashed math entries are registered here by protocol migration.
 // JSON never imports arbitrary files or executable handlers. An absent model
@@ -8,5 +19,17 @@ import { selfBurnNativeWrapFeeMathModel } from "./self-burn-native-math.js";
 const models: readonly DeclarativeMathModel[] = [
   selfBurnNativeWrapFeeMathModel,
   compoundCTokenExchangeRateMathModel,
+  goldxUnitQuoteMathModel,
+  psmConversionMathModel,
+  stakedUsdatEventAssetsMathModel,
+  peapodsRuntimeShapeMathModel,
+  peapodsDebondMathModel,
+  olympusIndexQuoteMathModel,
+  metafactoryRedeemMathModel,
+  originOusdMintQuoteMathModel,
+  originStethArmQuoteMathModel,
+  arcanaAmountMathModel,
+  boringWithdrawOutMathModel,
+  defaultCollateralQuoteMathModel,
 ];
 export const declarativeMathRegistry = createDeclarativeMathRegistry(models);

@@ -1,29 +1,11 @@
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/protocols/astra-multitoken-family/astra-multitoken.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
-import { astraMultiTokenCapture } from "../protocols/astra-multitoken-family/capture.js";
-import { astraMultiTokenFamilyOwnedAction } from "../protocols/astra-multitoken-family/action.js";
-import { astraMultiTokenDiscovery } from "../protocols/astra-multitoken-family/discovery.js";
-import { astraMultiTokenExact } from "../protocols/astra-multitoken-family/exact.js";
-import { astraMultiTokenExecution } from "../protocols/astra-multitoken-family/execution.js";
-import { astraMultiTokenIdentity } from "../protocols/astra-multitoken-family/identity.js";
-import { astraMultiTokenInstance } from "../protocols/astra-multitoken-family/instance.js";
-import { astraMultiTokenFamilyManifest } from "../protocols/astra-multitoken-family/manifest.js";
-import { astraMultiTokenPricing } from "../protocols/astra-multitoken-family/pricing.js";
-import { astraMultiTokenProtocol } from "../protocols/astra-multitoken-family/protocol.js";
-import { astraMultiTokenRoutes } from "../protocols/astra-multitoken-family/routes.js";
+import { compileDeclarativeProtocol } from "../declarative-protocol.js";
+import definition from "../protocols/astra-multitoken-family/astra-multitoken.json";
 
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED" });
+export const activation = defineFamilyActivation({"enabled":true,"envKey":"SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED"});
 
-export const plugin = defineProtocolFamily({
-  manifest: astraMultiTokenFamilyManifest,
-  capture: astraMultiTokenCapture,
-  discovery: astraMultiTokenDiscovery,
-  identity: astraMultiTokenIdentity,
-  instance: astraMultiTokenInstance,
-  routes: astraMultiTokenRoutes,
-  pricing: astraMultiTokenPricing,
-  exact: astraMultiTokenExact,
-  execution: astraMultiTokenExecution,
-  protocol: astraMultiTokenProtocol,
-  actionAdapters: [astraMultiTokenFamilyOwnedAction],
-});
+export const plugin = defineProtocolFamily(compileDeclarativeProtocol(definition, []));

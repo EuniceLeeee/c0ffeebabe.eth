@@ -1,35 +1,12 @@
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/protocols/wsteth-family/wsteth.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
-import { wstethCapture } from "../protocols/wsteth-family/capture.js";
-import {
-  wstethUnwrapFamilyOwnedAction,
-  wstethWrapFamilyOwnedAction,
-} from "../protocols/wsteth-family/action.js";
-import { wstethDiscovery } from "../protocols/wsteth-family/discovery.js";
-import { wstethExact } from "../protocols/wsteth-family/exact.js";
-import { wstethExecution } from "../protocols/wsteth-family/execution.js";
-import { wstethIdentity } from "../protocols/wsteth-family/identity.js";
-import { wstethInstance } from "../protocols/wsteth-family/instance.js";
-import { wstethFamilyManifest } from "../protocols/wsteth-family/manifest.js";
-import { wstethPricing } from "../protocols/wsteth-family/pricing.js";
-import { wstethProtocol } from "../protocols/wsteth-family/protocol.js";
-import { wstethRoutes } from "../protocols/wsteth-family/routes.js";
+import { compileDeclarativeProtocol } from "../declarative-protocol.js";
+import type { FamilyTypes } from "../../generated/declarative-family-types/wsteth.generated.js";
+import definition from "../protocols/wsteth-family/wsteth.json";
 
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_WSTETH_ENABLED" });
+export const activation = defineFamilyActivation({"enabled":true,"envKey":"SEARCHER_FAMILY_WSTETH_ENABLED"});
 
-export const plugin = defineProtocolFamily({
-  manifest: wstethFamilyManifest,
-  capture: wstethCapture,
-  discovery: wstethDiscovery,
-  identity: wstethIdentity,
-  instance: wstethInstance,
-  routes: wstethRoutes,
-  pricing: wstethPricing,
-  exact: wstethExact,
-  execution: wstethExecution,
-  protocol: wstethProtocol,
-  actionAdapters: [
-    wstethWrapFamilyOwnedAction,
-    wstethUnwrapFamilyOwnedAction,
-  ],
-});
+export const plugin = defineProtocolFamily(compileDeclarativeProtocol<FamilyTypes>(definition, []));

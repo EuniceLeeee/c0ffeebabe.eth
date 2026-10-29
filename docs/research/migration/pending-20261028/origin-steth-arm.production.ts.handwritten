@@ -1,0 +1,35 @@
+import { defineFamilyActivation } from "./activation.js";
+import { defineProtocolFamily } from "../adapter-family-plugin.js";
+import { originStethArmCapture } from "../protocols/origin-steth-arm-family/capture.js";
+import { originStethArmFamilyOwnedAction } from "../protocols/origin-steth-arm-family/action.js";
+import { originStethArmDiscovery } from "../protocols/origin-steth-arm-family/discovery.js";
+import { originStethArmExact } from "../protocols/origin-steth-arm-family/exact.js";
+import { originStethArmExecution } from "../protocols/origin-steth-arm-family/execution.js";
+import { originStethArmIdentity } from "../protocols/origin-steth-arm-family/identity.js";
+import { originStethArmInstance } from "../protocols/origin-steth-arm-family/instance.js";
+import { originStethArmFamilyManifest } from "../protocols/origin-steth-arm-family/manifest.js";
+import { originStethArmPricing } from "../protocols/origin-steth-arm-family/pricing.js";
+import { originStethArmProtocol } from "../protocols/origin-steth-arm-family/protocol.js";
+import { originStethArmRoutes } from "../protocols/origin-steth-arm-family/routes.js";
+
+// New Family: installed and validated by the catalog, but NOT enabled by
+// default. Live defaults are unchanged; a historical/live run must opt in with
+// SEARCHER_FAMILY_ORIGIN_STETH_ARM_ENABLED=1.
+export const activation = defineFamilyActivation({
+  enabled: false,
+  envKey: "SEARCHER_FAMILY_ORIGIN_STETH_ARM_ENABLED",
+});
+
+export const plugin = defineProtocolFamily({
+  manifest: originStethArmFamilyManifest,
+  capture: originStethArmCapture,
+  discovery: originStethArmDiscovery,
+  identity: originStethArmIdentity,
+  instance: originStethArmInstance,
+  routes: originStethArmRoutes,
+  pricing: originStethArmPricing,
+  exact: originStethArmExact,
+  execution: originStethArmExecution,
+  protocol: originStethArmProtocol,
+  actionAdapters: [originStethArmFamilyOwnedAction],
+});

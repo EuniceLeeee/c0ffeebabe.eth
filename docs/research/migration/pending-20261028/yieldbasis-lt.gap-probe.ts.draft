@@ -1,0 +1,83 @@
+// Evidence for the single remaining engine gap (G-YB5). Place at
+// listener/src/searcher/test/yb-gap.ts and run with:
+//   node --import tsx src/searcher/test/yb-gap.ts
+// It needs a temporary canonical copy of yieldbasis-lt.draft.json at
+// listener/src/searcher/venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json
+// plus the executionMath model registered from yieldbasis-lt-math.ts.draft.
+//
+// The draft's quoteFlow carries the withdraw direction verbatim (six TS view
+// calls, preview_withdraw chain proof). Flipping ONLY the declared chain-proof
+// kind -- and branching the same single step's requests/decode on the direction
+// -- makes the deposit direction quote exactly as TS does, while the withdraw
+// direction then fails at the same one verification call. Nothing else changes.
+import definition from "../venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json";
+import { createDeclarativeProtocolRuntime } from "../venues/declarative-protocol.js";
+import { answerFor, CANDIDATE, EXECUTOR, SOURCE } from "../venues/protocols/yieldbasis-lt-family/test/fixtures.js";
+
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+const op = (o: string, ...args: any[]) => ({ op: o, args });
+const withdrawView = clone(definition).modules.quoteFlow.steps[0];
+
+function document(kind: "view" | "effect-simulation") {
+  const doc: any = clone(definition);
+  doc.standard.exact.checks = []; // drop the draft's explicit refusal to expose the engine behaviour itself
+  const depositSim = { kind: "declarative-execution-simulation", id: "deposit-receipt",
+    amountIn: "$amountIn", protectedTokens: ["$descriptor.stablecoin"], observe: ["logs"] };
+  const isDeposit = op("expression", "isDeposit", {});
+  const isWithdraw = op("expression", "isWithdraw", {});
+  const viewDecode = (withdrawView.decode as any[]).map((stmt: any) => stmt.return !== undefined
+    ? { when: isWithdraw, return: "$amountOut" }
+    : { ...stmt, when: isWithdraw });
+  doc.modules.quoteFlow = {
+    version: 1, sourceKind: kind,
+    chainQuote: kind === "view"
+      ? { step: "quote", requestId: "quote-preview-withdraw",
+          signature: "function preview_withdraw(uint256) view returns (uint256)",
+          amountPath: [0], outputPath: [0], completion: "returned" }
+      : { step: "quote", requestId: "deposit-receipt" },
+    steps: [{ id: "quote",
+      requirements: op("if", isDeposit,
+        { transports: ["effect-delta-simulation"], caller: "executor",
+          effects: ["return-data", "revert-data", "token-delta", "native-delta", "logs"] },
+        { transports: ["eth-call"] }),
+      requests: op("if", isDeposit, [depositSim], clone(withdrawView.requests)),
+      decode: [
+        { when: isDeposit, let: "shares", value: op("programReceipt", {
+          requestId: "deposit-receipt", source: "$source", executor: "$executor",
+          tokenIn: "$route.tokenIn", tokenOut: "$route.tokenOut", amountIn: "$amountIn" }) },
+        { when: isDeposit, return: "$shares" },
+        ...viewDecode,
+      ] }],
+    result: "$steps.quote",
+  };
+  return doc;
+}
+
+for (const kind of ["view", "effect-simulation"] as const) {
+  const runtime = createDeclarativeProtocolRuntime(document(kind), []);
+  const family = runtime.definition;
+  const reply = answerFor({ deposit: true });
+  const variant = family.identity.variants[0]!;
+  let evidence: any;
+  for (let step = 0; step < 8; step++) {
+    const input = { candidate: CANDIDATE, evidence, step };
+    const decision = variant.decide(input as never);
+    if (decision.status !== "continue") break;
+    const declared = { requests: (variant.buildRequests as any)(input) };
+    evidence = variant.decode({ step: input, results: declared.requests.map(reply) } as never);
+  }
+  const identity = (variant.decide({ candidate: CANDIDATE, evidence, step: 8 } as never) as any).identity;
+  const descriptor = family.instance.finalizeDescriptor({ identity, draft: family.instance.compileDraft(identity), sharedBindings: [] } as never) as any;
+  for (const route of family.routes.project({ descriptor }) as any[]) {
+    const amountIn = route.direction === "deposit" ? 10n ** 15n : 10n ** 18n;
+    const input = { descriptor, route, amountIn, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] };
+    const method = family.exact.methods(input as never)[1] as any;
+    try {
+      const requests = method.program.buildRequests(input as never);
+      const quoted = method.program.decode({ programInput: input, initialResults: requests.map(reply), dependentEvidence: [] });
+      console.log(`sourceKind=${kind} ${route.direction}: requests=${requests.map((r: any) => r.kind).join(",")} amountOut=${quoted.amountOut}`);
+    } catch (error) {
+      console.log(`sourceKind=${kind} ${route.direction}: REFUSED ${(error as Error).message}`);
+    }
+  }
+}

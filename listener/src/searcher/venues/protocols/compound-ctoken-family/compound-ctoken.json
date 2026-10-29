@@ -1,0 +1,3522 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:compound-ctoken"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_COMPOUND_CTOKEN_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:compound-ctoken",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "compound-ctoken-redeem"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "redeem"
+      }
+    ],
+    "supportedLineages": [
+      "compound-v2:comptroller-registered-ctoken"
+    ],
+    "poolAdapterIds": [
+      "compound-ctoken"
+    ],
+    "edgeAdapterIds": [
+      "compound-ctoken-redeem"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "landed-log",
+        "address-surface"
+      ],
+      "candidateSources": [
+        "dex-token-domain",
+        "observed-interaction"
+      ],
+      "candidate": {
+        "kind": "compound-ctoken-market",
+        "addressField": "market",
+        "fields": {
+          "market": "address"
+        },
+        "key": [
+          "market"
+        ]
+      },
+      "calls": [
+        {
+          "id": "compound-ctoken-redeem-call",
+          "signature": "redeem(uint256)",
+          "fields": {
+            "market": {
+              "from": "target"
+            }
+          }
+        },
+        {
+          "id": "compound-ctoken-redeem-underlying-call",
+          "signature": "redeemUnderlying(uint256)",
+          "fields": {
+            "market": {
+              "from": "target"
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "compound-ctoken-redeem-log",
+          "signature": "Redeem(address,uint256,uint256)",
+          "fields": {
+            "market": {
+              "from": "emitter"
+            }
+          }
+        }
+      ],
+      "surface": {
+        "id": "compound-ctoken-comptroller-surface",
+        "fingerprint": "compound-v2-ctoken-comptroller-surface-v1",
+        "fields": {
+          "market": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "compound-ctoken",
+        "protocol:compound-ctoken"
+      ],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "market": [
+          "function comptroller() view returns (address)",
+          "function underlying() view returns (address)",
+          "function exchangeRateStored() view returns (uint256)",
+          "function exchangeRateCurrent() returns (uint256)",
+          "function getCash() view returns (uint256)",
+          "function totalSupply() view returns (uint256)",
+          "function decimals() view returns (uint8)",
+          "function redeem(uint256) returns (uint256)",
+          "function redeemUnderlying(uint256) returns (uint256)",
+          "event Redeem(address redeemer,uint256 redeemAmount,uint256 redeemTokens)"
+        ],
+        "comptroller": [
+          "function markets(address) view returns (bool,uint256,uint256)",
+          "function getAllMarkets() view returns (address[])"
+        ]
+      },
+      "constants": {
+        "zero": "0x0000000000000000000000000000000000000000",
+        "redeemEventTopic": "0xe5b754fb1abb7f01b499791d0b820ae3b6af3424ac1c59768edb53f4ec31a929",
+        "caller": {
+          "kind": "executor"
+        }
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$evidence"
+                      ]
+                    }
+                  ]
+                },
+                "base",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.phase",
+                        "base"
+                      ]
+                    },
+                    "registry",
+                    "active"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "market-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                }
+              },
+              {
+                "id": "market-comptroller",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "market",
+                    "comptroller",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "market-underlying",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "market",
+                    "underlying",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "market-exchange-rate-stored",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "market",
+                    "exchangeRateStored",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "market-cash",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "market",
+                    "getCash",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "market-share-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "market",
+                    "totalSupply",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "market-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "market",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "marketCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "market-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "comptrollerWord",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "market-comptroller"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "underlyingWord",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "market-underlying"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "exchangeRateStoredWord",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "market-exchange-rate-stored"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "cashWord",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "market-cash"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "shareSupplyWord",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "market-share-supply"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "decimalsWord",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "market-decimals"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "market",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                }
+              },
+              {
+                "let": "comptroller",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "market",
+                        "comptroller",
+                        "$comptrollerWord",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "underlying",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "market",
+                        "underlying",
+                        "$underlyingWord",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "exchangeRateStored",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "market",
+                    "exchangeRateStored",
+                    "$exchangeRateStoredWord",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "cash",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "market",
+                    "getCash",
+                    "$cashWord",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "shareSupply",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "market",
+                    "totalSupply",
+                    "$shareSupplyWord",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "decimalsWordValue",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "market",
+                    "decimals",
+                    "$decimalsWord",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "decimalsValid",
+                "value": {
+                  "op": "lte",
+                  "args": [
+                    "$decimalsWordValue",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "36"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    "$decimalsValid",
+                    {
+                      "op": "number",
+                      "args": [
+                        "$decimalsWordValue"
+                      ]
+                    },
+                    {
+                      "op": "number",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "rejected",
+                "value": {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$marketCode",
+                            "0x"
+                          ]
+                        },
+                        [
+                          "market-code"
+                        ],
+                        []
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "or",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$comptroller",
+                                "$constants.zero"
+                              ]
+                            },
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$comptroller",
+                                "$market"
+                              ]
+                            }
+                          ]
+                        },
+                        [
+                          "market-comptroller"
+                        ],
+                        []
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "or",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$underlying",
+                                "$constants.zero"
+                              ]
+                            },
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$underlying",
+                                "$market"
+                              ]
+                            }
+                          ]
+                        },
+                        [
+                          "market-underlying"
+                        ],
+                        []
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "lte",
+                          "args": [
+                            "$exchangeRateStored",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        [
+                          "market-exchange-rate-stored"
+                        ],
+                        []
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "not",
+                          "args": [
+                            "$decimalsValid"
+                          ]
+                        },
+                        [
+                          "market-decimals"
+                        ],
+                        []
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "evidenceSource",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "market-code"
+                        ]
+                      },
+                      {
+                        "op": "returned",
+                        "args": [
+                          "market-comptroller"
+                        ]
+                      },
+                      {
+                        "op": "returned",
+                        "args": [
+                          "market-underlying"
+                        ]
+                      },
+                      {
+                        "op": "returned",
+                        "args": [
+                          "market-exchange-rate-stored"
+                        ]
+                      },
+                      {
+                        "op": "returned",
+                        "args": [
+                          "market-cash"
+                        ]
+                      },
+                      {
+                        "op": "returned",
+                        "args": [
+                          "market-share-supply"
+                        ]
+                      },
+                      {
+                        "op": "returned",
+                        "args": [
+                          "market-decimals"
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": "$evidenceSource",
+                  "market": "$market",
+                  "marketCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$marketCode"
+                    ]
+                  },
+                  "comptroller": "$comptroller",
+                  "underlying": "$underlying",
+                  "exchangeRateStored": "$exchangeRateStored",
+                  "cash": "$cash",
+                  "shareSupply": "$shareSupply",
+                  "decimals": "$decimals",
+                  "baseValid": {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "length",
+                        "args": [
+                          "$rejected"
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "evidenceRequestIds": "$rejected"
+                }
+              }
+            ]
+          },
+          "registry": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "registry-markets",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.comptroller"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "comptroller",
+                    "markets",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$candidate.market"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "registry-all-markets",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.comptroller"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "comptroller",
+                    "getAllMarkets",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "registry-current-rate",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "market",
+                    "exchangeRateCurrent",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "registry-markets"
+                            ]
+                          },
+                          {
+                            "op": "returned",
+                            "args": [
+                              "registry-all-markets"
+                            ]
+                          },
+                          {
+                            "op": "returned",
+                            "args": [
+                              "registry-current-rate"
+                            ]
+                          }
+                        ]
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                }
+              },
+              {
+                "let": "listed",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "comptroller",
+                    "markets",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "registry-markets"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "markets",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "comptroller",
+                    "getAllMarkets",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "registry-all-markets"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "registered",
+                "value": {
+                  "op": "some",
+                  "args": [
+                    "$markets",
+                    "listedMarket",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$listedMarket",
+                        "$candidate.market"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "exchangeRateCurrent",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "market",
+                    "exchangeRateCurrent",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "registry-current-rate"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "sampleShares",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "model",
+                      "args": [
+                        "probeShares",
+                        {
+                          "operation": "probe-shares",
+                          "rate": "$exchangeRateCurrent",
+                          "cash": "$evidence.cash",
+                          "supply": "$evidence.shareSupply",
+                          "decimals": {
+                            "op": "uint",
+                            "args": [
+                              "$evidence.decimals"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "shares"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "registry",
+                      "listedInComptroller": "$listed",
+                      "registeredInAllMarkets": "$registered",
+                      "registryValid": {
+                        "op": "and",
+                        "args": [
+                          "$evidence.baseValid",
+                          "$listed",
+                          "$registered"
+                        ]
+                      },
+                      "exchangeRateCurrent": "$exchangeRateCurrent",
+                      "sampleShares": "$sampleShares"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$evidence.sampleShares",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "transports": [
+                    "effect-delta-simulation"
+                  ],
+                  "caller": "executor",
+                  "effects": [
+                    "return-data",
+                    "revert-data",
+                    "token-delta",
+                    "total-supply-delta",
+                    "logs"
+                  ]
+                },
+                {
+                  "transports": []
+                }
+              ]
+            },
+            "requests": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$evidence.sampleShares",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                [
+                  {
+                    "id": "active-redeem",
+                    "kind": "effect-delta-simulation",
+                    "call": {
+                      "caller": "$constants.caller",
+                      "executionMode": "impersonated-call-frame",
+                      "to": {
+                        "op": "address",
+                        "args": [
+                          "$evidence.market"
+                        ]
+                      },
+                      "data": {
+                        "op": "encode",
+                        "args": [
+                          "market",
+                          "redeem",
+                          [
+                            "$evidence.sampleShares"
+                          ]
+                        ]
+                      }
+                    },
+                    "overrideIntent": {
+                      "caller": "$constants.caller",
+                      "tokenBalances": [
+                        {
+                          "token": {
+                            "op": "address",
+                            "args": [
+                              "$evidence.market"
+                            ]
+                          },
+                          "amount": "$evidence.sampleShares"
+                        }
+                      ]
+                    },
+                    "observeTokenBalances": [
+                      {
+                        "token": {
+                          "op": "address",
+                          "args": [
+                            "$evidence.market"
+                          ]
+                        },
+                        "account": "$constants.caller"
+                      },
+                      {
+                        "token": {
+                          "op": "address",
+                          "args": [
+                            "$evidence.underlying"
+                          ]
+                        },
+                        "account": "$constants.caller"
+                      },
+                      {
+                        "token": {
+                          "op": "address",
+                          "args": [
+                            "$evidence.underlying"
+                          ]
+                        },
+                        "account": {
+                          "op": "address",
+                          "args": [
+                            "$evidence.market"
+                          ]
+                        }
+                      }
+                    ],
+                    "observe": [
+                      "return-data",
+                      "revert-data",
+                      "token-delta",
+                      "total-supply-delta",
+                      "logs"
+                    ]
+                  }
+                ],
+                []
+              ]
+            },
+            "decode": [
+              {
+                "let": "receipt",
+                "value": {
+                  "op": "successful",
+                  "args": [
+                    "active-redeem"
+                  ]
+                }
+              },
+              {
+                "let": "activeReturned",
+                "value": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "shape",
+                      "args": [
+                        "active-redeem"
+                      ]
+                    },
+                    "returned"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$receipt",
+                        "source"
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                }
+              },
+              {
+                "let": "observed",
+                "value": {
+                  "op": "effects",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$receipt",
+                        "effects"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "deltas",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    "$observed",
+                    "tokenDeltas"
+                  ]
+                }
+              },
+              {
+                "let": "marketRows",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    "$deltas",
+                    "row",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$row.token",
+                        "$evidence.market"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "actor",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$marketRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$marketRows",
+                            0
+                          ]
+                        },
+                        "account"
+                      ]
+                    },
+                    "$evidence.market"
+                  ]
+                }
+              },
+              {
+                "let": "quote",
+                "value": {
+                  "op": "model",
+                  "args": [
+                    "redemption",
+                    {
+                      "operation": "redemption",
+                      "shares": "$evidence.sampleShares",
+                      "rate": "$evidence.exchangeRateCurrent"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "amountOut",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    "$quote",
+                    "amountOut"
+                  ]
+                }
+              },
+              {
+                "let": "inputDebit",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$marketRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$marketRows",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "sub",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            },
+                            "$evidence.sampleShares"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "actorRows",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    "$deltas",
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$row.token",
+                            "$evidence.underlying"
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$row.account",
+                            "$actor"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "marketUnderlyingRows",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    "$deltas",
+                    "row",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$row.token",
+                            "$evidence.underlying"
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$row.account",
+                            "$evidence.market"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "tokenDeltasValid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$deltas"
+                          ]
+                        },
+                        3
+                      ]
+                    },
+                    "$inputDebit",
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$actor",
+                            "$evidence.market"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$actor",
+                            "$evidence.underlying"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$actorRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$actorRows",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        "$amountOut"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$marketUnderlyingRows"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$marketUnderlyingRows",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "sub",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            },
+                            "$amountOut"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "supply",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    "$observed",
+                    "totalSupplyDeltas"
+                  ]
+                }
+              },
+              {
+                "let": "supplyValid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$supply"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$supply",
+                                0
+                              ]
+                            },
+                            "token"
+                          ]
+                        },
+                        "$evidence.market"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$supply",
+                                0
+                              ]
+                            },
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "sub",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            },
+                            "$evidence.sampleShares"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "redeemLogs",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observed",
+                        "logs"
+                      ]
+                    },
+                    "log",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$log.address",
+                            "$evidence.market"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$log",
+                                        "topics"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                }
+                              ]
+                            },
+                            "$constants.redeemEventTopic"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "eventValid",
+                "value": {
+                  "op": "event",
+                  "args": [
+                    {
+                      "abi": "market",
+                      "result": "$receipt",
+                      "address": "$evidence.market",
+                      "name": "Redeem",
+                      "fields": {
+                        "redeemer": {
+                          "op": "address",
+                          "args": [
+                            "$actor"
+                          ]
+                        },
+                        "redeemTokens": "$evidence.sampleShares",
+                        "redeemAmount": "$amountOut"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "returnCodeValid",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    "$activeReturned",
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "market",
+                            "redeem",
+                            {
+                              "op": "get",
+                              "args": [
+                                "$receipt",
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    false
+                  ]
+                }
+              },
+              {
+                "let": "redemptionPathLive",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    "$activeReturned",
+                    "$evidence.registryValid",
+                    "$returnCodeValid",
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$amountOut",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lte",
+                      "args": [
+                        "$amountOut",
+                        "$evidence.cash"
+                      ]
+                    },
+                    "$tokenDeltasValid",
+                    "$supplyValid",
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$redeemLogs"
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    "$eventValid"
+                  ]
+                }
+              },
+              {
+                "let": "probeUnderlying",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    "$redemptionPathLive",
+                    "$amountOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "probeActor",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    "$redemptionPathLive",
+                    "$actor",
+                    "$constants.zero"
+                  ]
+                }
+              },
+              {
+                "let": "behaviorProofHash",
+                "value": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "market": {
+                        "op": "lower",
+                        "args": [
+                          "$evidence.market"
+                        ]
+                      },
+                      "source": "$evidence.source",
+                      "exchangeRateCurrent": {
+                        "op": "string",
+                        "args": [
+                          "$evidence.exchangeRateCurrent"
+                        ]
+                      },
+                      "sampleShares": {
+                        "op": "string",
+                        "args": [
+                          "$evidence.sampleShares"
+                        ]
+                      },
+                      "cash": {
+                        "op": "string",
+                        "args": [
+                          "$evidence.cash"
+                        ]
+                      },
+                      "shareSupply": {
+                        "op": "string",
+                        "args": [
+                          "$evidence.shareSupply"
+                        ]
+                      },
+                      "probeUnderlying": {
+                        "op": "string",
+                        "args": [
+                          "$probeUnderlying"
+                        ]
+                      },
+                      "probeActor": "$probeActor",
+                      "completion": {
+                        "op": "get",
+                        "args": [
+                          "$receipt",
+                          "completion"
+                        ]
+                      },
+                      "returnData": {
+                        "op": "coalesce",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$receipt",
+                              "data"
+                            ]
+                          },
+                          "0x"
+                        ]
+                      },
+                      "effects": "$observed",
+                      "redemptionPathLive": "$redemptionPathLive"
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "active",
+                      "probeUnderlying": "$probeUnderlying",
+                      "probeActor": "$probeActor",
+                      "redemptionPathLive": "$redemptionPathLive",
+                      "behaviorProofHash": "$behaviorProofHash"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            },
+            "return": {
+              "status": "continue"
+            }
+          },
+          {
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.market",
+                    "$candidate.market"
+                  ]
+                }
+              ]
+            },
+            "return": {
+              "status": "invalid-program",
+              "reasonCode": "foreign-compound-ctoken-candidate"
+            }
+          },
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "base"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    "$evidence.baseValid"
+                  ]
+                }
+              ]
+            },
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "compound_ctoken_surfaces_failed",
+              "evidenceRequestIds": "$evidence.evidenceRequestIds"
+            }
+          },
+          {
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "base"
+              ]
+            },
+            "return": {
+              "status": "continue"
+            }
+          },
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "registry"
+                  ]
+                },
+                "$evidence.registryValid",
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.sampleShares",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "return": {
+              "status": "retryable",
+              "reasonCode": "compound_ctoken_no_positive_liquid_probe"
+            }
+          },
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "registry"
+                  ]
+                },
+                "$evidence.registryValid"
+              ]
+            },
+            "return": {
+              "status": "continue"
+            }
+          },
+          {
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "registry"
+              ]
+            },
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": {
+                "op": "if",
+                "args": [
+                  "$evidence.listedInComptroller",
+                  "compound_ctoken_not_enumerated_by_comptroller",
+                  "compound_ctoken_not_listed_by_comptroller"
+                ]
+              },
+              "evidenceRequestIds": [
+                "registry-markets",
+                "registry-all-markets"
+              ]
+            }
+          },
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "active"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    "$evidence.redemptionPathLive"
+                  ]
+                }
+              ]
+            },
+            "return": {
+              "status": "retryable",
+              "reasonCode": "compound_ctoken_redemption_not_proven"
+            }
+          },
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    "$evidence.phase",
+                    "base"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$evidence.phase",
+                    "registry"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$evidence.phase",
+                    "active"
+                  ]
+                }
+              ]
+            },
+            "return": {
+              "status": "retryable",
+              "reasonCode": "compound_ctoken_redemption_not_proven"
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.market"
+                  ]
+                },
+                "comptroller": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.comptroller"
+                  ]
+                },
+                "underlying": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.underlying"
+                  ]
+                },
+                "decimals": "$evidence.decimals",
+                "redemptionPathVerified": true,
+                "facts": {
+                  "market": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.market"
+                    ]
+                  },
+                  "comptroller": {
+                    "op": "address",
+                    "args": [
+                      "$evidence.comptroller"
+                    ]
+                  },
+                  "underlying": {
+                    "op": "address",
+                    "args": [
+                      "$evidence.underlying"
+                    ]
+                  },
+                  "exchangeRateStored": "$evidence.exchangeRateStored",
+                  "cash": "$evidence.cash",
+                  "shareSupply": "$evidence.shareSupply",
+                  "decimals": "$evidence.decimals",
+                  "listedInComptroller": "$evidence.listedInComptroller",
+                  "registeredInAllMarkets": "$evidence.registeredInAllMarkets"
+                },
+                "provenance": [
+                  {
+                    "kind": "comptroller-registry-and-positive-redeem-effects",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.comptroller"
+                      ]
+                    },
+                    "evidenceHash": "$evidence.behaviorProofHash"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "market": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "comptroller": {
+        "op": "address",
+        "args": [
+          "$identity.comptroller"
+        ]
+      },
+      "underlying": {
+        "op": "address",
+        "args": [
+          "$identity.underlying"
+        ]
+      },
+      "share": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "decimals": "$identity.decimals",
+      "redemptionPathVerified": "$identity.redemptionPathVerified"
+    },
+    "bindingProjection": {
+      "market": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.market"
+            ]
+          }
+        ]
+      },
+      "comptroller": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.comptroller"
+            ]
+          }
+        ]
+      },
+      "underlying": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.underlying"
+            ]
+          }
+        ]
+      },
+      "share": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.share"
+            ]
+          }
+        ]
+      },
+      "decimals": "$descriptor.decimals",
+      "redemptionPath": "comptroller-registered-redeem"
+    }
+  },
+  "routes": {
+    "target": {
+      "op": "address",
+      "args": [
+        "$descriptor.market"
+      ]
+    },
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.market"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "redeem",
+        "enabled": "$descriptor.redemptionPathVerified",
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$descriptor.share"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$descriptor.underlying"
+          ]
+        },
+        "adapterId": "compound-ctoken-redeem",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.market"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      },
+      {
+        "kind": "total-supply-delta",
+        "token": "$route.tokenIn",
+        "direction": "decrease"
+      }
+    ],
+    "assertions": [
+      {
+        "condition": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$descriptor.underlying",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            }
+          ]
+        },
+        "error": "compound cToken underlying cannot be the zero address"
+      },
+      {
+        "condition": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$descriptor.share",
+                "$descriptor.underlying"
+              ]
+            }
+          ]
+        },
+        "error": "compound cToken share and underlying must be distinct"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "market": {
+        "op": "address",
+        "args": [
+          "$descriptor.market"
+        ]
+      },
+      "comptroller": {
+        "op": "address",
+        "args": [
+          "$descriptor.comptroller"
+        ]
+      },
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "market": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.market"
+            ]
+          }
+        ]
+      },
+      "comptroller": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.comptroller"
+            ]
+          }
+        ]
+      },
+      "underlying": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.underlying"
+            ]
+          }
+        ]
+      },
+      "share": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.share"
+            ]
+          }
+        ]
+      },
+      "decimals": "$descriptor.decimals"
+    },
+    "static": {
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": {
+        "op": "unique",
+        "args": [
+          {
+            "op": "concat",
+            "args": [
+              [
+                "$draft.market",
+                "$draft.comptroller"
+              ],
+              {
+                "op": "map",
+                "args": [
+                  "$draft.routes",
+                  "route",
+                  "$route.tokenIn"
+                ]
+              },
+              {
+                "op": "map",
+                "args": [
+                  "$draft.routes",
+                  "route",
+                  "$route.tokenOut"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "requests": [
+        {
+          "id": "static-share-decimals",
+          "kind": "eth-call",
+          "to": "$draft.market",
+          "data": {
+            "op": "encode",
+            "args": [
+              "market",
+              "decimals",
+              []
+            ]
+          },
+          "completion": "return-data"
+        }
+      ],
+      "decode": {
+        "fields": [
+          {
+            "name": "decimals",
+            "value": {
+              "op": "word",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "static-share-decimals"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            },
+            "checks": [
+              {
+                "condition": {
+                  "op": "lte",
+                  "args": [
+                    "$decimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "36"
+                      ]
+                    }
+                  ]
+                },
+                "error": "compound cToken share decimals exceed the family bound"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "oneShare": {
+            "op": "pow",
+            "args": [
+              "10",
+              "$decimals"
+            ]
+          }
+        }
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": "$descriptor.oneShare",
+    "exactCompatibility": {
+      "market": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.market"
+            ]
+          }
+        ]
+      },
+      "underlying": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.underlying"
+            ]
+          }
+        ]
+      },
+      "share": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.share"
+            ]
+          }
+        ]
+      },
+      "direction": "$route.direction",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": [
+      "log"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface",
+      "standalone-contract"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "comptroller-registered-ctoken",
+    "lineageId": "compound-v2:comptroller-registered-ctoken",
+    "abi": {
+      "market": [
+        "function comptroller() view returns (address)",
+        "function underlying() view returns (address)",
+        "function exchangeRateStored() view returns (uint256)",
+        "function exchangeRateCurrent() returns (uint256)",
+        "function getCash() view returns (uint256)",
+        "function totalSupply() view returns (uint256)",
+        "function decimals() view returns (uint8)",
+        "function redeem(uint256) returns (uint256)",
+        "function redeemUnderlying(uint256) returns (uint256)",
+        "event Redeem(address redeemer,uint256 redeemAmount,uint256 redeemTokens)"
+      ],
+      "comptroller": [
+        "function markets(address) view returns (bool,uint256,uint256)",
+        "function getAllMarkets() view returns (address[])"
+      ]
+    },
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "redeemEventTopic": "0xe5b754fb1abb7f01b499791d0b820ae3b6af3424ac1c59768edb53f4ec31a929",
+      "caller": {
+        "kind": "executor"
+      }
+    },
+    "expressions": {},
+    "match": {},
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": {
+        "op": "unique",
+        "args": [
+          {
+            "op": "concat",
+            "args": [
+              [
+                "$descriptor.market",
+                "$descriptor.comptroller"
+              ],
+              {
+                "op": "map",
+                "args": [
+                  "$routes",
+                  "route",
+                  "$route.tokenIn"
+                ]
+              },
+              {
+                "op": "map",
+                "args": [
+                  "$routes",
+                  "route",
+                  "$route.tokenOut"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "mutationAddresses": [
+        "$descriptor.market"
+      ]
+    },
+    "exact": {
+      "methodId": "compound-ctoken-exchange-rate",
+      "requirements": {
+        "transports": []
+      },
+      "retainReadEvidence": true,
+      "evidence": {
+        "kind": "compound-ctoken-exchange-rate",
+        "source": "$source",
+        "market": {
+          "op": "address",
+          "args": [
+            "$descriptor.market"
+          ]
+        },
+        "direction": "redeem",
+        "bindingFingerprint": "$route.bindingRef.fingerprint",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "exchangeRate": "$steps.rate.exchangeRate",
+        "rateSource": "exchange-rate-current"
+      },
+      "zeroEvidence": {
+        "kind": "compound-ctoken-exchange-rate",
+        "source": "$source",
+        "market": {
+          "op": "address",
+          "args": [
+            "$descriptor.market"
+          ]
+        },
+        "direction": "redeem",
+        "bindingFingerprint": "$route.bindingRef.fingerprint",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "exchangeRate": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "rateSource": "local-zero"
+      },
+      "checks": [
+        {
+          "condition": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  {
+                    "op": "coalesce",
+                    "args": [
+                      "$prefix",
+                      []
+                    ]
+                  }
+                ]
+              },
+              0
+            ]
+          },
+          "error": "Compound cToken local model cannot consume a prefix; shared EVM prefix required"
+        },
+        {
+          "condition": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                ]
+              }
+            ]
+          },
+          "error": "compound cToken exact input is outside uint256 range"
+        }
+      ],
+      "outputChecks": [
+        {
+          "condition": {
+            "op": "or",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "defined",
+                    "args": [
+                      "$minAmountOut"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$minAmountOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lte",
+                    "args": [
+                      "$minAmountOut",
+                      "$amountOut"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "Compound cToken minimum underlying out cannot exceed the quoted output"
+        }
+      ]
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.market",
+        "$descriptor.underlying"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "not",
+            "args": [
+              "$externalRecipient"
+            ]
+          },
+          "error": "compound cToken redeem pays the executor; an external recipient is unsupported"
+        }
+      ],
+      "steps": [
+        {
+          "id": "redeem",
+          "call": {
+            "target": "$descriptor.market",
+            "signature": "function redeem(uint256) returns (uint256)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              }
+            ],
+            "save": {
+              "redeemCode": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "redeemCode"
+                },
+                "operator": "eq",
+                "right": 0
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "supply",
+          "token": "$descriptor.market",
+          "direction": "decrease",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        }
+      ]
+    },
+    "inputs": [
+      "prefix",
+      "minAmountOut"
+    ]
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "compound-ctoken-redeem",
+        "lineage": "custom-protocol:compound-ctoken",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function redeem(uint256)"
+        }
+      ]
+    }
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "CompoundCTokenCandidate": {
+        "type": "object",
+        "extends": [
+          "FamilyCandidate"
+        ],
+        "fields": {
+          "candidateKind": {
+            "literal": "compound-ctoken-market"
+          },
+          "market": {
+            "type": "string"
+          }
+        }
+      },
+      "CompoundCTokenEvidenceFields": {
+        "type": "object",
+        "fields": {
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "market": {
+            "type": "string"
+          },
+          "marketCodeHash": {
+            "type": "string"
+          },
+          "comptroller": {
+            "type": "string"
+          },
+          "underlying": {
+            "type": "string"
+          },
+          "exchangeRateStored": {
+            "type": "bigint"
+          },
+          "cash": {
+            "type": "bigint"
+          },
+          "shareSupply": {
+            "type": "bigint"
+          },
+          "decimals": {
+            "type": "number"
+          },
+          "baseValid": {
+            "type": "boolean"
+          },
+          "evidenceRequestIds": {
+            "array": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CompoundCTokenRegistryFields": {
+        "type": "object",
+        "fields": {
+          "listedInComptroller": {
+            "type": "boolean"
+          },
+          "registeredInAllMarkets": {
+            "type": "boolean"
+          },
+          "registryValid": {
+            "type": "boolean"
+          },
+          "exchangeRateCurrent": {
+            "type": "bigint"
+          },
+          "sampleShares": {
+            "type": "bigint"
+          }
+        }
+      },
+      "CompoundCTokenBaseEvidence": {
+        "type": "object",
+        "extends": [
+          "CompoundCTokenEvidenceFields"
+        ],
+        "fields": {
+          "phase": {
+            "literal": "base"
+          }
+        }
+      },
+      "CompoundCTokenRegistryEvidence": {
+        "type": "object",
+        "extends": [
+          "CompoundCTokenEvidenceFields",
+          "CompoundCTokenRegistryFields"
+        ],
+        "fields": {
+          "phase": {
+            "literal": "registry"
+          }
+        }
+      },
+      "CompoundCTokenActiveEvidence": {
+        "type": "object",
+        "extends": [
+          "CompoundCTokenEvidenceFields",
+          "CompoundCTokenRegistryFields"
+        ],
+        "fields": {
+          "phase": {
+            "literal": "active"
+          },
+          "probeUnderlying": {
+            "type": "bigint"
+          },
+          "probeActor": {
+            "type": "string"
+          },
+          "redemptionPathLive": {
+            "type": "boolean"
+          },
+          "behaviorProofHash": {
+            "type": "string"
+          }
+        },
+        "optional": [
+          "probeActor"
+        ]
+      },
+      "CompoundCTokenIdentityEvidence": {
+        "union": [
+          {
+            "ref": "CompoundCTokenBaseEvidence"
+          },
+          {
+            "ref": "CompoundCTokenRegistryEvidence"
+          },
+          {
+            "ref": "CompoundCTokenActiveEvidence"
+          }
+        ]
+      },
+      "CompoundCTokenIdentityFacts": {
+        "type": "object",
+        "fields": {
+          "market": {
+            "type": "string"
+          },
+          "comptroller": {
+            "type": "string"
+          },
+          "underlying": {
+            "type": "string"
+          },
+          "exchangeRateStored": {
+            "type": "bigint"
+          },
+          "cash": {
+            "type": "bigint"
+          },
+          "shareSupply": {
+            "type": "bigint"
+          },
+          "decimals": {
+            "type": "number"
+          },
+          "listedInComptroller": {
+            "type": "boolean"
+          },
+          "registeredInAllMarkets": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CompoundCTokenIdentity": {
+        "type": "object",
+        "extends": [
+          "VerifiedIdentity"
+        ],
+        "fields": {
+          "comptroller": {
+            "type": "string"
+          },
+          "underlying": {
+            "type": "string"
+          },
+          "decimals": {
+            "type": "number"
+          },
+          "redemptionPathVerified": {
+            "type": "boolean"
+          },
+          "facts": {
+            "ref": "CompoundCTokenIdentityFacts"
+          }
+        }
+      },
+      "CompoundCTokenDescriptor": {
+        "type": "object",
+        "extends": [
+          "CompiledInstanceDescriptor"
+        ],
+        "fields": {
+          "market": {
+            "type": "string"
+          },
+          "comptroller": {
+            "type": "string"
+          },
+          "underlying": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "decimals": {
+            "type": "number"
+          },
+          "redemptionPathVerified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CompoundCTokenRoute": {
+        "type": "object",
+        "extends": [
+          "FamilyRouteDescriptor"
+        ],
+        "fields": {
+          "target": {
+            "type": "string"
+          },
+          "direction": {
+            "literal": "redeem"
+          },
+          "adapterId": {
+            "literal": "compound-ctoken-redeem"
+          }
+        }
+      },
+      "CompoundCTokenPricingDraft": {
+        "type": "object",
+        "fields": {
+          "instanceKey": {
+            "ref": "InstanceKey"
+          },
+          "market": {
+            "type": "string"
+          },
+          "comptroller": {
+            "type": "string"
+          },
+          "routes": {
+            "array": {
+              "ref": "CompoundCTokenRoute"
+            }
+          }
+        }
+      },
+      "CompoundCTokenPricingStatic": {
+        "type": "object",
+        "fields": {
+          "oneShare": {
+            "type": "bigint"
+          }
+        }
+      },
+      "CompoundCTokenPricingDescriptor": {
+        "type": "object",
+        "extends": [
+          "CompoundCTokenPricingDraft",
+          "CompoundCTokenPricingStatic"
+        ],
+        "fields": {}
+      },
+      "CompoundCTokenExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {
+            "literal": "compound-ctoken-exchange-rate"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "market": {
+            "type": "string"
+          },
+          "direction": {
+            "literal": "redeem"
+          },
+          "amountIn": {
+            "type": "bigint"
+          },
+          "amountOut": {
+            "type": "bigint"
+          },
+          "exchangeRate": {
+            "type": "bigint"
+          },
+          "rateSource": {
+            "union": [
+              {
+                "literal": "exchange-rate-current"
+              },
+              {
+                "literal": "local-zero"
+              }
+            ]
+          },
+          "bindingFingerprint": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "contracts": {
+      "candidate": "CompoundCTokenCandidate",
+      "identityEvidence": "CompoundCTokenIdentityEvidence",
+      "identity": "CompoundCTokenIdentity",
+      "descriptor": "CompoundCTokenDescriptor",
+      "route": "CompoundCTokenRoute",
+      "pricingDraft": "CompoundCTokenPricingDraft",
+      "pricingDescriptor": "CompoundCTokenPricingDescriptor",
+      "pricingStatic": "CompoundCTokenPricingStatic",
+      "exactEvidence": "CompoundCTokenExactEvidence"
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "redemption": {
+          "model": "compound-ctoken:exchange-rate",
+          "version": 1
+        },
+        "probeShares": {
+          "model": "compound-ctoken:exchange-rate",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "cToken accrual, burns and underlying transfers require shared EVM prefix execution; the declarative sequential trial-state cell is not declared, so every positive amount is quoted from exchangeRateCurrent plus the registered exchange-rate model and the real redeem remains re-proven by mandatory final simulation.",
+      "steps": [
+        {
+          "id": "rate",
+          "requirements": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "transports": []
+              },
+              {
+                "transports": [
+                  "eth-call"
+                ]
+              }
+            ]
+          },
+          "requests": [
+            {
+              "id": "quote-rate-current",
+              "kind": "eth-call",
+              "to": {
+                "op": "address",
+                "args": [
+                  "$descriptor.market"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "market",
+                  "exchangeRateCurrent",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "quote-cash",
+              "kind": "eth-call",
+              "to": {
+                "op": "address",
+                "args": [
+                  "$descriptor.market"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "market",
+                  "getCash",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "rate",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "market",
+                  "exchangeRateCurrent",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "quote-rate-current"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "gt",
+                "args": [
+                  "$rate",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "error": "Compound cToken exchange rate is not positive"
+            },
+            {
+              "let": "cash",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "market",
+                  "getCash",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "quote-cash"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "quote",
+              "value": {
+                "op": "model",
+                "args": [
+                  "redemption",
+                  {
+                    "operation": "redemption",
+                    "shares": "$amountIn",
+                    "rate": "$rate"
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "gt",
+                "args": [
+                  "$quote.amountOut",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "error": "Compound cToken quote produced no underlying output"
+            },
+            {
+              "assert": {
+                "op": "lte",
+                "args": [
+                  "$quote.amountOut",
+                  "$cash"
+                ]
+              },
+              "error": "Compound cToken market cash cannot cover the requested underlying out"
+            },
+            {
+              "return": {
+                "amountOut": "$quote.amountOut",
+                "exchangeRate": "$rate",
+                "cash": "$cash"
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "get",
+        "args": [
+          "$steps.rate",
+          "amountOut"
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "rate",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-rate-stored",
+              "kind": "eth-call",
+              "to": {
+                "op": "address",
+                "args": [
+                  "$descriptor.market"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "market",
+                  "exchangeRateStored",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "rate",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "market",
+                  "exchangeRateStored",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-rate-stored"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "gt",
+                "args": [
+                  "$rate",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "error": "compound_ctoken_exchange_rate_not_positive"
+            },
+            {
+              "let": "quote",
+              "value": {
+                "op": "model",
+                "args": [
+                  "redemption",
+                  {
+                    "operation": "redemption",
+                    "shares": "$descriptor.oneShare",
+                    "rate": "$rate"
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "gt",
+                "args": [
+                  "$quote.amountOut",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "error": "compound_ctoken_quote_unavailable: declarative pricing cannot classify an unavailable route, so it fails closed instead of quoting"
+            },
+            {
+              "return": {
+                "amountOut": "$quote.amountOut"
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$routes",
+                "route",
+                [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "routeKey"
+                    ]
+                  },
+                  {
+                    "amountIn": "$descriptor.oneShare",
+                    "amountOut": "$steps.rate.amountOut"
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,3779 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:default-collateral"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_DEFAULT_COLLATERAL_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:default-collateral",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "default-collateral-withdraw"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "convert"
+      }
+    ],
+    "supportedLineages": [
+      "default-collateral:share-vault-v1"
+    ],
+    "poolAdapterIds": [
+      "default-collateral"
+    ],
+    "edgeAdapterIds": [
+      "default-collateral-withdraw"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "landed-log",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "default-collateral-share-vault",
+        "addressField": "vault",
+        "fields": {
+          "vault": "address"
+        },
+        "key": [
+          "vault"
+        ]
+      },
+      "calls": [
+        {
+          "id": "default-collateral-withdraw-call",
+          "signature": "withdraw(address,uint256)",
+          "fields": {
+            "vault": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                0
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "defaultCollateral",
+                        "withdraw",
+                        [
+                          "$args.0",
+                          "$args.1"
+                        ]
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "default-collateral-withdraw-log",
+          "signature": "Withdraw(address indexed receiver,address indexed owner,uint256 amount)",
+          "fields": {
+            "vault": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
+                },
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "surface": {
+        "id": "default-collateral-surface",
+        "fingerprint": "default-collateral-share-vault-v1",
+        "fields": {
+          "vault": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "default-collateral",
+        "protocol:default-collateral"
+      ],
+      "nomination": "address-surface"
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "definition": {
+      "version": 1,
+      "abi": {
+        "defaultCollateral": [
+          "function asset() view returns (address)",
+          "function decimals() view returns (uint8)",
+          "function totalSupply() view returns (uint256)",
+          "function balanceOf(address account) view returns (uint256)",
+          "function withdraw(address receiver, uint256 shares)",
+          "event Withdraw(address indexed receiver,address indexed owner,uint256 amount)",
+          "event Transfer(address indexed from,address indexed to,uint256 value)"
+        ],
+        "erc20": [
+          "function balanceOf(address account) view returns (uint256)"
+        ]
+      },
+      "constants": {
+        "zero": "0x0000000000000000000000000000000000000000",
+        "sample": "1000000000000000000",
+        "probeReceiver": "0x0000000000000000000000000000000000000001"
+      },
+      "expressions": {
+        "behaviorSample": {
+          "op": "if",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                "$evidence.totalSupply",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1000000000000000000"
+              ]
+            },
+            {
+              "op": "div",
+              "args": [
+                "$evidence.totalSupply",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1000"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "identity": {
+        "select": [
+          {
+            "return": "base",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "surface",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "base"
+              ]
+            }
+          },
+          {
+            "return": "active",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "surface"
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "base-share-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                }
+              },
+              {
+                "id": "base-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "defaultCollateral",
+                    "asset",
+                    []
+                  ]
+                },
+                "completion": "return-or-revert-data"
+              },
+              {
+                "id": "base-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "defaultCollateral",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-or-revert-data"
+              },
+              {
+                "id": "base-total-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "defaultCollateral",
+                    "totalSupply",
+                    []
+                  ]
+                },
+                "completion": "return-or-revert-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "code",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "base-share-code"
+                  ]
+                }
+              },
+              {
+                "let": "codeLower",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    "$code"
+                  ]
+                }
+              },
+              {
+                "let": "shareCodeHash",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        "$code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "cloneShape",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$codeLower"
+                          ]
+                        },
+                        92
+                      ]
+                    },
+                    {
+                      "op": "matches",
+                      "args": [
+                        "$codeLower",
+                        "^0x363d3d373d3d3d363d73[0-9a-f]{40}5af43d82803e903d91602b57fd5bf3$"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "implementation",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    "$cloneShape",
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            "$codeLower",
+                            10,
+                            20
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "address",
+                      "args": [
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "emptyAssetHash",
+                "value": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "asset": {
+                        "op": "address",
+                        "args": [
+                          "$constants.zero"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$results",
+                        "r",
+                        {
+                          "op": "get",
+                          "args": [
+                            "$r",
+                            "ok"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "assetShape",
+                "value": {
+                  "op": "shape",
+                  "args": [
+                    "base-asset"
+                  ]
+                }
+              },
+              {
+                "let": "decimalsShape",
+                "value": {
+                  "op": "shape",
+                  "args": [
+                    "base-decimals"
+                  ]
+                }
+              },
+              {
+                "let": "supplyShape",
+                "value": {
+                  "op": "shape",
+                  "args": [
+                    "base-total-supply"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": "$source",
+                  "vault": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.vault"
+                    ]
+                  },
+                  "shareCodeHash": "$shareCodeHash",
+                  "implementation": "$implementation",
+                  "asset": {
+                    "op": "address",
+                    "args": [
+                      "$constants.zero"
+                    ]
+                  },
+                  "assetCodeHash": "$emptyAssetHash",
+                  "decimals": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "totalSupply": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "shareIsClone": false,
+                  "baseValid": false,
+                  "evidenceRequestIds": [
+                    "base-share-code"
+                  ]
+                },
+                "when": {
+                  "op": "not",
+                  "args": [
+                    "$cloneShape"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": "$source",
+                  "vault": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.vault"
+                    ]
+                  },
+                  "shareCodeHash": "$shareCodeHash",
+                  "implementation": "$implementation",
+                  "asset": {
+                    "op": "address",
+                    "args": [
+                      "$constants.zero"
+                    ]
+                  },
+                  "assetCodeHash": "$emptyAssetHash",
+                  "decimals": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "totalSupply": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "shareIsClone": true,
+                  "baseValid": false,
+                  "evidenceRequestIds": [
+                    "base-asset",
+                    "base-decimals",
+                    "base-total-supply"
+                  ]
+                },
+                "when": {
+                  "op": "ne",
+                  "args": [
+                    "$assetShape",
+                    "returned"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": "$source",
+                  "vault": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.vault"
+                    ]
+                  },
+                  "shareCodeHash": "$shareCodeHash",
+                  "implementation": "$implementation",
+                  "asset": {
+                    "op": "address",
+                    "args": [
+                      "$constants.zero"
+                    ]
+                  },
+                  "assetCodeHash": "$emptyAssetHash",
+                  "decimals": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "totalSupply": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "shareIsClone": true,
+                  "baseValid": false,
+                  "evidenceRequestIds": [
+                    "base-decimals"
+                  ]
+                },
+                "when": {
+                  "op": "ne",
+                  "args": [
+                    "$decimalsShape",
+                    "returned"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": "$source",
+                  "vault": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.vault"
+                    ]
+                  },
+                  "shareCodeHash": "$shareCodeHash",
+                  "implementation": "$implementation",
+                  "asset": {
+                    "op": "address",
+                    "args": [
+                      "$constants.zero"
+                    ]
+                  },
+                  "assetCodeHash": "$emptyAssetHash",
+                  "decimals": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "totalSupply": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "shareIsClone": true,
+                  "baseValid": false,
+                  "evidenceRequestIds": [
+                    "base-total-supply"
+                  ]
+                },
+                "when": {
+                  "op": "ne",
+                  "args": [
+                    "$supplyShape",
+                    "returned"
+                  ]
+                }
+              },
+              {
+                "let": "asset",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "defaultCollateral",
+                        "asset",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "base-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "defaultCollateral",
+                        "decimals",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "base-decimals"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "totalSupply",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "defaultCollateral",
+                        "totalSupply",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "base-total-supply"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "baseValid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$decimals",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "18"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$totalSupply",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$asset",
+                            {
+                              "op": "address",
+                              "args": [
+                                "$constants.zero"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$asset",
+                            {
+                              "op": "address",
+                              "args": [
+                                "$candidate.vault"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": "$source",
+                  "vault": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.vault"
+                    ]
+                  },
+                  "shareCodeHash": "$shareCodeHash",
+                  "implementation": "$implementation",
+                  "asset": "$asset",
+                  "assetCodeHash": "$emptyAssetHash",
+                  "decimals": "$decimals",
+                  "totalSupply": "$totalSupply",
+                  "shareIsClone": true,
+                  "baseValid": "$baseValid"
+                },
+                "when": "$baseValid"
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": "$source",
+                  "vault": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.vault"
+                    ]
+                  },
+                  "shareCodeHash": "$shareCodeHash",
+                  "implementation": "$implementation",
+                  "asset": "$asset",
+                  "assetCodeHash": "$emptyAssetHash",
+                  "decimals": "$decimals",
+                  "totalSupply": "$totalSupply",
+                  "shareIsClone": true,
+                  "baseValid": false,
+                  "evidenceRequestIds": [
+                    "base-asset"
+                  ]
+                }
+              }
+            ]
+          },
+          "surface": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "surface-implementation-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.implementation"
+                  ]
+                }
+              },
+              {
+                "id": "surface-asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.asset"
+                  ]
+                }
+              },
+              {
+                "id": "surface-backing",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.asset"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "erc20",
+                    "balanceOf",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$evidence.vault"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-or-revert-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "every",
+                  "args": [
+                    "$results",
+                    "r",
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "not",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$r",
+                                "ok"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "assertSource",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$r",
+                                "source"
+                              ]
+                            },
+                            "$evidence.source"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "implementationCodeHash",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        {
+                          "op": "code",
+                          "args": [
+                            "surface-implementation-code"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "assetCodeHash",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        {
+                          "op": "code",
+                          "args": [
+                            "surface-asset-code"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "backingShape",
+                "value": {
+                  "op": "shape",
+                  "args": [
+                    "surface-backing"
+                  ]
+                }
+              },
+              {
+                "let": "backing",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$backingShape",
+                        "returned"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "erc20",
+                            "balanceOf",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "surface-backing"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "surfaceValid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$backingShape",
+                        "returned"
+                      ]
+                    },
+                    "$evidence.baseValid",
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$implementationCodeHash",
+                        "0x9d653c832fd3da8d30d3a6b558924a39d0bbb0c08859ee9594f648b0159c9986"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$assetCodeHash",
+                        "0x6bec2bf64f7e824109f6ed55f77dd7665801d6195e461666ad6a5342a9f6daf5"
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$backing",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "surface",
+                      "implementationCodeHash": "$implementationCodeHash",
+                      "assetCodeHash": "$assetCodeHash",
+                      "backing": "$backing",
+                      "surfaceValid": "$surfaceValid",
+                      "invariantProven": {
+                        "op": "and",
+                        "args": [
+                          "$surfaceValid",
+                          {
+                            "op": "eq",
+                            "args": [
+                              "$backing",
+                              "$evidence.totalSupply"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "transports": [
+                "effect-delta-simulation"
+              ],
+              "caller": "executor",
+              "effects": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta",
+                "logs"
+              ]
+            },
+            "requests": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "behaviorSample",
+                        {}
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                [
+                  {
+                    "id": "active-withdraw",
+                    "required": false,
+                    "kind": "effect-delta-simulation",
+                    "call": {
+                      "caller": {
+                        "kind": "executor"
+                      },
+                      "executionMode": "impersonated-call-frame",
+                      "to": {
+                        "op": "address",
+                        "args": [
+                          "$evidence.vault"
+                        ]
+                      },
+                      "data": {
+                        "op": "encode",
+                        "args": [
+                          "defaultCollateral",
+                          "withdraw",
+                          [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$constants.probeReceiver"
+                              ]
+                            },
+                            {
+                              "op": "expression",
+                              "args": [
+                                "behaviorSample",
+                                {}
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    },
+                    "overrideIntent": {
+                      "caller": {
+                        "kind": "executor"
+                      },
+                      "tokenBalances": [
+                        {
+                          "token": {
+                            "op": "address",
+                            "args": [
+                              "$evidence.vault"
+                            ]
+                          },
+                          "amount": {
+                            "op": "expression",
+                            "args": [
+                              "behaviorSample",
+                              {}
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "observeTokenBalances": [
+                      {
+                        "token": {
+                          "op": "address",
+                          "args": [
+                            "$evidence.asset"
+                          ]
+                        },
+                        "account": {
+                          "op": "address",
+                          "args": [
+                            "$constants.probeReceiver"
+                          ]
+                        }
+                      },
+                      {
+                        "token": {
+                          "op": "address",
+                          "args": [
+                            "$evidence.asset"
+                          ]
+                        },
+                        "account": {
+                          "kind": "executor"
+                        }
+                      }
+                    ],
+                    "observe": [
+                      "return-data",
+                      "revert-data",
+                      "token-delta",
+                      "total-supply-delta",
+                      "logs"
+                    ]
+                  }
+                ],
+                []
+              ]
+            },
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "every",
+                  "args": [
+                    "$results",
+                    "r",
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "not",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$r",
+                                "ok"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "assertSource",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$r",
+                                "source"
+                              ]
+                            },
+                            "$evidence.source"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "sample",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "behaviorSample",
+                    {}
+                  ]
+                }
+              },
+              {
+                "let": "result",
+                "value": {
+                  "op": "result",
+                  "args": [
+                    "active-withdraw"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "defined",
+                  "args": [
+                    "$result"
+                  ]
+                },
+                "error": "default-collateral behavior result is missing"
+              },
+              {
+                "evaluate": {
+                  "op": "requestFailure",
+                  "args": [
+                    "$result"
+                  ]
+                },
+                "when": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$result",
+                        "ok"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "effects",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    "$result",
+                    "effects"
+                  ]
+                }
+              },
+              {
+                "let": "tokenDeltas",
+                "value": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$effects",
+                        "tokenDeltas"
+                      ]
+                    },
+                    []
+                  ]
+                }
+              },
+              {
+                "let": "supplyRows",
+                "value": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$effects",
+                        "totalSupplyDeltas"
+                      ]
+                    },
+                    []
+                  ]
+                }
+              },
+              {
+                "let": "receiptRow",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$tokenDeltas",
+                        "row",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$row",
+                                    "token"
+                                  ]
+                                },
+                                "$evidence.asset"
+                              ]
+                            },
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$row",
+                                    "account"
+                                  ]
+                                },
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$constants.probeReceiver"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "assetReceipt",
+                "value": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$receiptRow",
+                        "delta"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "supplyRow",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$supplyRows",
+                        "row",
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "token"
+                              ]
+                            },
+                            "$evidence.vault"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "supplyBurn",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$supplyRow"
+                      ]
+                    },
+                    {
+                      "op": "sub",
+                      "args": [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$supplyRow",
+                            "delta"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "burnedShareLogs",
+                "value": {
+                  "op": "event",
+                  "args": [
+                    {
+                      "result": "$result",
+                      "abi": "defaultCollateral",
+                      "address": {
+                        "op": "address",
+                        "args": [
+                          "$evidence.vault"
+                        ]
+                      },
+                      "name": "Transfer",
+                      "fields": {
+                        "to": {
+                          "op": "address",
+                          "args": [
+                            "$constants.zero"
+                          ]
+                        },
+                        "value": "$sample"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "withdrawLogs",
+                "value": {
+                  "op": "event",
+                  "args": [
+                    {
+                      "result": "$result",
+                      "abi": "defaultCollateral",
+                      "address": {
+                        "op": "address",
+                        "args": [
+                          "$evidence.vault"
+                        ]
+                      },
+                      "name": "Withdraw",
+                      "fields": {
+                        "receiver": {
+                          "op": "address",
+                          "args": [
+                            "$constants.probeReceiver"
+                          ]
+                        },
+                        "amount": "$sample"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "behaviorValid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "shape",
+                          "args": [
+                            "active-withdraw"
+                          ]
+                        },
+                        "returned"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$sample",
+                        "$assetReceipt"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$sample",
+                        "$supplyBurn"
+                      ]
+                    },
+                    "$burnedShareLogs",
+                    "$withdrawLogs"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "active",
+                      "sampleShares": "$sample",
+                      "shareBurn": "$supplyBurn",
+                      "assetReceipt": "$assetReceipt",
+                      "supplyBurn": "$supplyBurn",
+                      "behaviorValid": "$behaviorValid",
+                      "behaviorProofHash": {
+                        "op": "hash",
+                        "args": [
+                          {
+                            "phase": "default-collateral-eip1167-one-to-one-proof",
+                            "vault": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$evidence.vault"
+                                  ]
+                                }
+                              ]
+                            },
+                            "shareCodeHash": "$evidence.shareCodeHash",
+                            "implementation": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$evidence.implementation"
+                                  ]
+                                }
+                              ]
+                            },
+                            "implementationCodeHash": "$evidence.implementationCodeHash",
+                            "asset": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$evidence.asset"
+                                  ]
+                                }
+                              ]
+                            },
+                            "assetCodeHash": "$evidence.assetCodeHash",
+                            "decimals": "$evidence.decimals",
+                            "totalSupply": "$evidence.totalSupply",
+                            "backing": "$evidence.backing",
+                            "invariantProven": "$evidence.invariantProven",
+                            "sample": "$sample",
+                            "shareBurn": "$supplyBurn",
+                            "assetReceipt": "$assetReceipt",
+                            "supplyBurn": "$supplyBurn",
+                            "behaviorValid": "$behaviorValid",
+                            "source": {
+                              "op": "merge",
+                              "args": [
+                                "$evidence.source"
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "default_collateral_not_eip1167_clone",
+              "evidenceRequestIds": [
+                "base-share-code"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "base"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    "$evidence.shareIsClone"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "default_collateral_asset_unavailable",
+              "evidenceRequestIds": [
+                "base-asset"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.phase",
+                        "base"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.phase",
+                        "surface"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.asset",
+                    {
+                      "op": "address",
+                      "args": [
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "default_collateral_asset_aliases_vault",
+              "evidenceRequestIds": [
+                "base-asset"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.phase",
+                        "base"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.phase",
+                        "surface"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.asset",
+                    "$evidence.vault"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "default_collateral_decimals_mismatch",
+              "evidenceRequestIds": [
+                "base-decimals"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.phase",
+                        "base"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.phase",
+                        "surface"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$evidence.decimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "18"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "default_collateral_supply_empty",
+              "evidenceRequestIds": [
+                "base-total-supply"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.phase",
+                        "base"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$evidence.phase",
+                        "surface"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.totalSupply",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "base"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "default_collateral_implementation_code_mismatch",
+              "evidenceRequestIds": [
+                "surface-implementation-code"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "surface"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$evidence.implementationCodeHash"
+                      ]
+                    },
+                    "0x9d653c832fd3da8d30d3a6b558924a39d0bbb0c08859ee9594f648b0159c9986"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "default_collateral_share_code_mismatch",
+              "evidenceRequestIds": [
+                "base-share-code"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "surface"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$evidence.shareCodeHash"
+                      ]
+                    },
+                    "0xcfc9ad23342291d06388db77b16a3f705c6f1bbefa8a5d45bcc74809c5092468"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "default_collateral_asset_code_mismatch",
+              "evidenceRequestIds": [
+                "surface-asset-code"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "surface"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$evidence.assetCodeHash"
+                      ]
+                    },
+                    "0x6bec2bf64f7e824109f6ed55f77dd7665801d6195e461666ad6a5342a9f6daf5"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "default_collateral_backing_unavailable"
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "surface"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.backing",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "default_collateral_backing_not_one_to_one"
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "surface"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    "$evidence.invariantProven"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "surface"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "default_collateral_withdraw_behavior_not_proven"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.behaviorValid"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "default_collateral_backing_not_one_to_one"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.invariantProven"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.vault"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "default-collateral-eip1167-one-to-one-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.vault"
+                      ]
+                    },
+                    "evidenceHash": "$evidence.behaviorProofHash"
+                  }
+                ],
+                "vault": "$evidence.vault",
+                "share": "$evidence.vault",
+                "asset": "$evidence.asset",
+                "implementation": "$evidence.implementation",
+                "shareCodeHash": {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.shareCodeHash"
+                  ]
+                },
+                "implementationCodeHash": {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.implementationCodeHash"
+                  ]
+                },
+                "assetCodeHash": {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.assetCodeHash"
+                  ]
+                },
+                "decimals": "$evidence.decimals",
+                "oneToOne": {
+                  "op": "and",
+                  "args": [
+                    "$evidence.behaviorValid",
+                    "$evidence.invariantProven"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "vault": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "share": {
+        "op": "address",
+        "args": [
+          "$identity.share"
+        ]
+      },
+      "asset": {
+        "op": "address",
+        "args": [
+          "$identity.asset"
+        ]
+      },
+      "implementation": {
+        "op": "address",
+        "args": [
+          "$identity.implementation"
+        ]
+      },
+      "shareCodeHash": {
+        "op": "lower",
+        "args": [
+          "$identity.shareCodeHash"
+        ]
+      },
+      "implementationCodeHash": {
+        "op": "lower",
+        "args": [
+          "$identity.implementationCodeHash"
+        ]
+      },
+      "assetCodeHash": {
+        "op": "lower",
+        "args": [
+          "$identity.assetCodeHash"
+        ]
+      },
+      "decimals": "$identity.decimals"
+    },
+    "bindingProjection": {
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "share": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.share"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "implementation": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.implementation"
+            ]
+          }
+        ]
+      },
+      "shareCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.shareCodeHash"
+        ]
+      },
+      "implementationCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.implementationCodeHash"
+        ]
+      },
+      "assetCodeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.assetCodeHash"
+        ]
+      },
+      "decimals": "$descriptor.decimals",
+      "rateModel": "default-collateral-one-to-one-v1",
+      "feeBps": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.vault",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.vault"
+          ]
+        }
+      ]
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "protocol:default-collateral",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.vault"
+                ]
+              }
+            ]
+          },
+          "default-collateral:redeem"
+        ],
+        "\u001f"
+      ]
+    },
+    "directions": [
+      {
+        "id": "redeem",
+        "enabled": true,
+        "tokenIn": "$descriptor.share",
+        "tokenOut": "$descriptor.asset",
+        "adapterId": "default-collateral-withdraw",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "convert"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "vault": "$descriptor.vault",
+      "share": "$descriptor.share",
+      "asset": "$descriptor.asset",
+      "implementation": "$descriptor.implementation",
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "share": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.share"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "rateModel": "default-collateral-one-to-one-v1",
+      "feeBps": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      }
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": "$draft",
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1000000000000000000"
+      ]
+    },
+    "exactCompatibility": {
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$route.target"
+            ]
+          }
+        ]
+      },
+      "share": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.share"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "quoteSemantics": "default-collateral-one-to-one-v1",
+      "feeBps": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "implementationCodeHash": "$descriptor.implementationCodeHash"
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "default-collateral-eip1167-one-to-one",
+    "lineageId": "default-collateral:share-vault-v1",
+    "abi": {
+      "defaultCollateral": [
+        "function asset() view returns (address)",
+        "function decimals() view returns (uint8)",
+        "function totalSupply() view returns (uint256)",
+        "function balanceOf(address account) view returns (uint256)",
+        "function withdraw(address receiver, uint256 shares)",
+        "event Withdraw(address indexed receiver,address indexed owner,uint256 amount)",
+        "event Transfer(address indexed from,address indexed to,uint256 value)"
+      ],
+      "erc20": [
+        "function balanceOf(address account) view returns (uint256)"
+      ]
+    },
+    "constants": {
+      "sample": "1000000000000000000"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.vault",
+        "$descriptor.asset",
+        "$descriptor.implementation"
+      ],
+      "mutationAddresses": [
+        "$descriptor.vault",
+        "$descriptor.asset"
+      ],
+      "classifyUnavailable": {
+        "op": "filter",
+        "args": [
+          {
+            "op": "map",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "defined",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$snapshot.unavailable",
+                          "$route.routeKey"
+                        ]
+                      }
+                    ]
+                  },
+                  [
+                    "$route.routeKey",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$snapshot.unavailable",
+                        "$route.routeKey"
+                      ]
+                    }
+                  ],
+                  []
+                ]
+              }
+            ]
+          },
+          "row",
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$row"
+                ]
+              },
+              2
+            ]
+          }
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "default-collateral-backing-quote",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "retainReadEvidence": true,
+      "evidence": {
+        "kind": "default-collateral-one-to-one",
+        "source": "$source",
+        "vault": "$descriptor.vault",
+        "share": "$descriptor.share",
+        "asset": "$descriptor.asset",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "totalSupply": "$steps.quote.totalSupply",
+        "backing": "$steps.quote.backing",
+        "feeBps": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "zeroEvidence": {
+        "kind": "default-collateral-one-to-one",
+        "source": "$source",
+        "vault": "$descriptor.vault",
+        "share": "$descriptor.share",
+        "asset": "$descriptor.asset",
+        "amountIn": "$amountIn",
+        "amountOut": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "totalSupply": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "backing": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "feeBps": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.vault",
+        "$descriptor.asset",
+        "$descriptor.implementation"
+      ],
+      "preflight": [
+        {
+          "target": "$descriptor.vault",
+          "signature": "function asset() view returns (address)",
+          "args": [],
+          "save": {
+            "assetWord": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "assetWord"
+              },
+              "operator": "eq",
+              "right": "$descriptor.asset"
+            }
+          ]
+        }
+      ],
+      "call": {
+        "target": "$descriptor.vault",
+        "signature": "function withdraw(address receiver, uint256 shares)",
+        "args": [
+          "$recipient",
+          {
+            "runtime": "amountIn"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        }
+      ]
+    },
+    "assertions": [
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$descriptor.asset",
+            "0xf951E335afb289353dc249e82926178EaC7DEd78"
+          ]
+        },
+        "error": "default-collateral identity asset is not the verified swETH deployment"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.decimals",
+            {
+              "op": "uint",
+              "args": [
+                "18"
+              ]
+            }
+          ]
+        },
+        "error": "default-collateral identity decimals are not 18"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$descriptor.share",
+            "$descriptor.vault"
+          ]
+        },
+        "error": "default-collateral share token is not the vault"
+      }
+    ]
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "defaultCollateralQuote": {
+          "model": "default-collateral:quote",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "default-collateral quotes read the vault supply/backing pair per quote; no sequential trial overlay is modeled",
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "exact-asset",
+              "kind": "eth-call",
+              "to": "$descriptor.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "defaultCollateral",
+                  "asset",
+                  []
+                ]
+              },
+              "completion": "return-or-revert-data"
+            },
+            {
+              "id": "exact-total-supply",
+              "kind": "eth-call",
+              "to": "$descriptor.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "defaultCollateral",
+                  "totalSupply",
+                  []
+                ]
+              },
+              "completion": "return-or-revert-data"
+            },
+            {
+              "id": "exact-backing",
+              "kind": "eth-call",
+              "to": "$descriptor.asset",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "erc20",
+                  "balanceOf",
+                  [
+                    "$descriptor.vault"
+                  ]
+                ]
+              },
+              "completion": "return-or-revert-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "asset",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "defaultCollateral",
+                      "asset",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "exact-asset"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "sameAddress",
+                "args": [
+                  "$asset",
+                  "$descriptor.asset"
+                ]
+              },
+              "error": "default-collateral exact asset() does not match the verified descriptor"
+            },
+            {
+              "let": "totalSupply",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "defaultCollateral",
+                      "totalSupply",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "exact-total-supply"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "backing",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "erc20",
+                      "balanceOf",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "exact-backing"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "totalSupply": "$totalSupply",
+                "backing": "$backing"
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "model",
+        "args": [
+          "defaultCollateralQuote",
+          {
+            "amountIn": "$amountIn",
+            "totalSupply": "$steps.quote.totalSupply",
+            "backing": "$steps.quote.backing"
+          }
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-asset",
+              "kind": "eth-call",
+              "to": "$descriptor.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "defaultCollateral",
+                  "asset",
+                  []
+                ]
+              },
+              "completion": "return-or-revert-data"
+            },
+            {
+              "id": "current-total-supply",
+              "kind": "eth-call",
+              "to": "$descriptor.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "defaultCollateral",
+                  "totalSupply",
+                  []
+                ]
+              },
+              "completion": "return-or-revert-data"
+            },
+            {
+              "id": "current-backing",
+              "kind": "eth-call",
+              "to": "$descriptor.asset",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "erc20",
+                  "balanceOf",
+                  [
+                    "$descriptor.vault"
+                  ]
+                ]
+              },
+              "completion": "return-or-revert-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "viewsReturned",
+              "value": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "shape",
+                        "args": [
+                          "current-asset"
+                        ]
+                      },
+                      "returned"
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "shape",
+                        "args": [
+                          "current-total-supply"
+                        ]
+                      },
+                      "returned"
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "shape",
+                        "args": [
+                          "current-backing"
+                        ]
+                      },
+                      "returned"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "viewsReturned": false
+              },
+              "when": {
+                "op": "not",
+                "args": [
+                  "$viewsReturned"
+                ]
+              }
+            },
+            {
+              "let": "asset",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "defaultCollateral",
+                      "asset",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-asset"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "totalSupply",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "defaultCollateral",
+                      "totalSupply",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-total-supply"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "backing",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "erc20",
+                      "balanceOf",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-backing"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "viewsReturned": true,
+                "assetOk": false,
+                "totalSupply": "$totalSupply",
+                "backing": "$backing"
+              },
+              "when": {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$asset",
+                      "$descriptor.asset"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "attempt": [
+                {
+                  "let": "amountOut",
+                  "value": {
+                    "op": "model",
+                    "args": [
+                      "defaultCollateralQuote",
+                      {
+                        "amountIn": {
+                          "op": "uint",
+                          "args": [
+                            "$constants.sample"
+                          ]
+                        },
+                        "totalSupply": "$totalSupply",
+                        "backing": "$backing"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "return": {
+                    "viewsReturned": true,
+                    "assetOk": true,
+                    "quoted": true,
+                    "totalSupply": "$totalSupply",
+                    "backing": "$backing",
+                    "amountOut": "$amountOut"
+                  }
+                }
+              ],
+              "catch": [
+                {
+                  "return": {
+                    "viewsReturned": true,
+                    "assetOk": true,
+                    "quoted": false,
+                    "totalSupply": "$totalSupply",
+                    "backing": "$backing",
+                    "reason": "$error.message"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "totalSupply": {
+          "op": "if",
+          "args": [
+            "$steps.quote.viewsReturned",
+            "$steps.quote.totalSupply",
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "backing": {
+          "op": "if",
+          "args": [
+            "$steps.quote.viewsReturned",
+            "$steps.quote.backing",
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "feeBps": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    "$steps.quote.viewsReturned",
+                    "$steps.quote.assetOk",
+                    "$steps.quote.quoted"
+                  ]
+                },
+                [
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$routes",
+                            0
+                          ]
+                        },
+                        "routeKey"
+                      ]
+                    },
+                    {
+                      "amountIn": {
+                        "op": "uint",
+                        "args": [
+                          "$constants.sample"
+                        ]
+                      },
+                      "amountOut": "$steps.quote.amountOut"
+                    }
+                  ]
+                ],
+                []
+              ]
+            }
+          ]
+        },
+        "unavailable": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    "$steps.quote.viewsReturned",
+                    "$steps.quote.assetOk",
+                    "$steps.quote.quoted"
+                  ]
+                },
+                [],
+                [
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$routes",
+                            0
+                          ]
+                        },
+                        "routeKey"
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "not",
+                          "args": [
+                            "$steps.quote.viewsReturned"
+                          ]
+                        },
+                        "default-collateral vault views are unavailable",
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "not",
+                              "args": [
+                                "$steps.quote.assetOk"
+                              ]
+                            },
+                            "default-collateral asset() changed at the quote block",
+                            "$steps.quote.reason"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "default-collateral-withdraw",
+        "lineage": "custom-protocol:default-collateral",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function withdraw(address,uint256)"
+        }
+      ]
+    }
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "DefaultCollateralCandidate": {
+        "type": "object",
+        "extends": [
+          "FamilyCandidate"
+        ],
+        "fields": {
+          "candidateKind": {
+            "literal": "default-collateral-share-vault"
+          },
+          "vault": {
+            "type": "string"
+          }
+        }
+      },
+      "DefaultCollateralBaseEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {
+            "literal": "base"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "shareCodeHash": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "assetCodeHash": {
+            "type": "string"
+          },
+          "decimals": {
+            "type": "bigint"
+          },
+          "totalSupply": {
+            "type": "bigint"
+          },
+          "shareIsClone": {
+            "type": "boolean"
+          },
+          "baseValid": {
+            "type": "boolean"
+          },
+          "evidenceRequestIds": {
+            "array": {
+              "type": "string"
+            }
+          }
+        },
+        "optional": [
+          "evidenceRequestIds"
+        ]
+      },
+      "DefaultCollateralSurfaceEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {
+            "literal": "surface"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "shareCodeHash": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "assetCodeHash": {
+            "type": "string"
+          },
+          "decimals": {
+            "type": "bigint"
+          },
+          "totalSupply": {
+            "type": "bigint"
+          },
+          "shareIsClone": {
+            "type": "boolean"
+          },
+          "baseValid": {
+            "type": "boolean"
+          },
+          "implementationCodeHash": {
+            "type": "string"
+          },
+          "backing": {
+            "type": "bigint"
+          },
+          "surfaceValid": {
+            "type": "boolean"
+          },
+          "invariantProven": {
+            "type": "boolean"
+          },
+          "evidenceRequestIds": {
+            "array": {
+              "type": "string"
+            }
+          }
+        },
+        "optional": [
+          "evidenceRequestIds"
+        ]
+      },
+      "DefaultCollateralActiveEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {
+            "literal": "active"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "shareCodeHash": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "assetCodeHash": {
+            "type": "string"
+          },
+          "decimals": {
+            "type": "bigint"
+          },
+          "totalSupply": {
+            "type": "bigint"
+          },
+          "shareIsClone": {
+            "type": "boolean"
+          },
+          "baseValid": {
+            "type": "boolean"
+          },
+          "implementationCodeHash": {
+            "type": "string"
+          },
+          "backing": {
+            "type": "bigint"
+          },
+          "surfaceValid": {
+            "type": "boolean"
+          },
+          "invariantProven": {
+            "type": "boolean"
+          },
+          "sampleShares": {
+            "type": "bigint"
+          },
+          "shareBurn": {
+            "type": "bigint"
+          },
+          "assetReceipt": {
+            "type": "bigint"
+          },
+          "supplyBurn": {
+            "type": "bigint"
+          },
+          "behaviorValid": {
+            "type": "boolean"
+          },
+          "behaviorProofHash": {
+            "type": "string"
+          }
+        }
+      },
+      "DefaultCollateralIdentityEvidence": {
+        "union": [
+          {
+            "ref": "DefaultCollateralBaseEvidence"
+          },
+          {
+            "ref": "DefaultCollateralSurfaceEvidence"
+          },
+          {
+            "ref": "DefaultCollateralActiveEvidence"
+          }
+        ]
+      },
+      "DefaultCollateralIdentity": {
+        "type": "object",
+        "extends": [
+          "VerifiedIdentity"
+        ],
+        "fields": {
+          "vault": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "shareCodeHash": {
+            "type": "string"
+          },
+          "implementationCodeHash": {
+            "type": "string"
+          },
+          "assetCodeHash": {
+            "type": "string"
+          },
+          "decimals": {
+            "type": "bigint"
+          },
+          "oneToOne": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DefaultCollateralDescriptor": {
+        "type": "object",
+        "extends": [
+          "CompiledInstanceDescriptor"
+        ],
+        "fields": {
+          "vault": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "shareCodeHash": {
+            "type": "string"
+          },
+          "implementationCodeHash": {
+            "type": "string"
+          },
+          "assetCodeHash": {
+            "type": "string"
+          },
+          "decimals": {
+            "type": "bigint"
+          }
+        }
+      },
+      "DefaultCollateralRoute": {
+        "type": "object",
+        "extends": [
+          "FamilyRouteDescriptor"
+        ],
+        "fields": {
+          "target": {
+            "type": "string"
+          },
+          "direction": {
+            "literal": "redeem"
+          },
+          "adapterId": {
+            "literal": "default-collateral-withdraw"
+          }
+        }
+      },
+      "DefaultCollateralPricingDraft": {
+        "type": "object",
+        "fields": {
+          "instanceKey": {
+            "ref": "InstanceKey"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "routes": {
+            "array": {
+              "ref": "DefaultCollateralRoute"
+            }
+          }
+        }
+      },
+      "DefaultCollateralPricingStatic": {
+        "type": "object",
+        "fields": {}
+      },
+      "DefaultCollateralPricingDescriptor": {
+        "type": "object",
+        "extends": [
+          "DefaultCollateralPricingDraft",
+          "DefaultCollateralPricingStatic"
+        ],
+        "fields": {}
+      },
+      "DefaultCollateralExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {
+            "literal": "default-collateral-one-to-one"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "amountIn": {
+            "type": "bigint"
+          },
+          "amountOut": {
+            "type": "bigint"
+          },
+          "totalSupply": {
+            "type": "bigint"
+          },
+          "backing": {
+            "type": "bigint"
+          },
+          "feeBps": {
+            "type": "bigint"
+          },
+          "bindingFingerprint": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "contracts": {
+      "candidate": "DefaultCollateralCandidate",
+      "identityEvidence": "DefaultCollateralIdentityEvidence",
+      "identity": "DefaultCollateralIdentity",
+      "descriptor": "DefaultCollateralDescriptor",
+      "route": "DefaultCollateralRoute",
+      "pricingDraft": "DefaultCollateralPricingDraft",
+      "pricingDescriptor": "DefaultCollateralPricingDescriptor",
+      "pricingStatic": "DefaultCollateralPricingStatic",
+      "exactEvidence": "DefaultCollateralExactEvidence"
+    }
+  }
+}

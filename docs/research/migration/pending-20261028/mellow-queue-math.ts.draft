@@ -1,0 +1,59 @@
+import type { DeclarativeMathModel } from "./declarative-math.js";
+
+// Pure transcription of mellow-queue-family/math.ts. The queue pulls assets at
+// the oracle-reported D18 price and applies the D6 penalty before shares;
+// redemption applies the penalty to shares and converts back at the same price.
+// No fee/slippage term is invented: SyncQueue fee shares are not modeled here.
+const D6 = 1_000_000n;
+const D18 = 1_000_000_000_000_000_000n;
+const MAX_UINT256 = (1n << 256n) - 1n;
+
+type QuoteInput = {
+  readonly amountIn: bigint;
+  readonly priceD18: bigint;
+  readonly penaltyD6: bigint;
+  readonly deposit: boolean;
+};
+
+function quote(input: QuoteInput): bigint {
+  const { amountIn, priceD18, penaltyD6 } = input;
+  if (amountIn <= 0n || amountIn > MAX_UINT256) throw new Error("mellow queue quote amount must be positive uint256");
+  if (priceD18 <= 0n) throw new Error("mellow price must be positive");
+  if (penaltyD6 > 500_000n) throw new Error("mellow penalty out of range");
+  if (input.deposit) {
+    return (amountIn * priceD18 * (D6 - penaltyD6)) / D6 / D18;
+  }
+  const netShares = (amountIn * (D6 - penaltyD6)) / D6;
+  const assets = (netShares * D18) / priceD18;
+  if (assets <= 0n) throw new Error("mellow redeem output zero");
+  return assets;
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype;
+}
+
+export const mellowQueueQuoteMathModel: DeclarativeMathModel = {
+  id: "mellow-queue:sync-quote",
+  version: 1,
+  validateInput(value) {
+    if (!record(value)) throw new Error("mellow quote input must be a record");
+    const keys = Object.keys(value).sort();
+    if (keys.join(",") !== ["amountIn", "deposit", "penaltyD6", "priceD18"].join(","))
+      throw new Error("mellow quote input has missing or unknown fields");
+    if (typeof value.amountIn !== "bigint" || typeof value.priceD18 !== "bigint" ||
+        typeof value.penaltyD6 !== "bigint" || typeof value.deposit !== "boolean")
+      throw new Error("mellow quote input types");
+    if (value.amountIn < 0n || value.amountIn > MAX_UINT256 || value.priceD18 < 0n ||
+        value.priceD18 > MAX_UINT256 || value.penaltyD6 < 0n || value.penaltyD6 > MAX_UINT256)
+      throw new Error("mellow quote input bounds");
+  },
+  evaluate(value) {
+    return quote(value as QuoteInput);
+  },
+  validateOutput(value) {
+    if (typeof value !== "bigint" || value < 0n || value > MAX_UINT256)
+      throw new Error("mellow quote output must be uint256");
+  },
+};

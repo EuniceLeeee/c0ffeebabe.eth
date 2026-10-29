@@ -1,204 +1,172 @@
-# protocol:yieldbasis-lt — blocked (engine gaps)
+# protocol:yieldbasis-lt — still blocked, one gap left (G-YB5)
 
-Verdict: **blocked**. A faithful `yieldbasis-lt.json` cannot be authored with the current public
-engine. The family has two routed directions and the deposit direction cannot be expressed; dropping it
-would narrow behavior, so no canonical JSON was written.
+Verdict: **blocked**, but the previous three blockers are gone. Framework `6876fef0` (§6
+`declarative-execution-simulation` / `programReceipt` / `simulationActor`, execution `math` /
+`executionMath`) closed G-YB1/G-YB2/G-YB3: the **deposit direction is now expressible end to end**
+(identity 4th-round guarded program proof, program-receipt exact quote, reserve-derived debt in the
+VM). What remains is a **per-direction module** problem: one descriptor must be served by exactly one
+declarative variant, but `quoteFlow.sourceKind`/`chainQuote` is declared once per variant, while this
+family needs a **view** proof for withdraw (`preview_withdraw`) and an **effect-simulation** proof for
+deposit (executor-program receipt). Everything else compiles and matches the TS family byte for byte
+(identity/descriptor/route/pricing) or behaviourally (execution/action).
 
-Parked artifact: `yieldbasis-lt.draft.json` — **not** a deliverable. It covers the withdraw direction
-only and is validated in memory against the live TS family (byte-identical identity/descriptor/route on
-the withdraw branch). It exists to prove which half is expressible and to localise the gap.
+Parked artifacts (all **not** deliverables):
 
-Policy: JSON-only migration; public framework TS untouched; no generator run; no math-model file added
-(the one sanctioned registry would not help — see G-YB3).
+- `yieldbasis-lt.draft.json` — maximum expressible declaration: **both** directions in one variant;
+  withdraw exact fully faithful; deposit identity/execution/pricing/route faithful; deposit exact
+  **fails closed** with `Yield Basis deposit exact requires a per-direction chain proof (framework gap
+  G-YB5)`. 2399 lines, `protocol-json-v2`.
+- `yieldbasis-lt-math.ts.draft` — the `executionMath` model (`yieldbasis-lt:deposit-debt@1`), to be
+  registered append-only in `declarative-runtime-math-models.ts` when the JSON lands.
+- `yieldbasis-lt.harness.ts.draft` — the validation harness that produced the results below
+  (temporary copy at `listener/src/searcher/test/yb-harness.ts`; run with `node --import tsx`).
+- `yieldbasis-lt.gap-probe.ts.draft` — the two-configuration probe that isolates G-YB5.
 
-## 1. Source facts
+Policy unchanged: JSON-only migration, public framework TS/tests untouched, no production generator
+run, no live/Ready/VM work. A temporary canonical copy of the draft was rendered into
+`production-families/yieldbasis-lt.production.ts` to run the family suite; the tree was then restored
+(only the four parked docs differ).
 
-- The family owns two actions/directions: `yieldbasis-lt-withdraw` (burn LT shares → `ASSET_TOKEN`) and
-  `yieldbasis-lt-deposit` (spend `ASSET_TOKEN`, LT pulls the debt stablecoin from its AMM)
-  (`yieldbasis-lt-family/manifest.ts:31-50`, `routes.ts:29-61`).
-- The deposit route is projected only when `descriptor.depositPathVerified === true`
-  (`routes.ts:53`). That flag is set only by the fourth identity round
-  (`identity.ts:279-280`), i.e. the guarded-program proof.
-- The deposit identity is a four-round programme (base → binding → active → deposit-program); the
-  family's own test pins the round count and the fact that a raw mint is *not* the proof
-  (`test/deposit-production.test.ts:9-30`, `:26` "raw mint is not executor proof").
-- Deposit Exact is one `effect-delta-simulation` request whose call is
-  `executionMode: "executor-program"` with no pre-calls (`deposit-exact.ts:21-37`;
-  pinned by `test/deposit-production.test.ts:49-51`).
-- Deposit execution is a BotVM program that derives the debt from the bound pool's *current* reserves
-  inside the transaction and then asserts input/mint/inventory/native/event invariants
-  (`deposit.ts:161-201`, `:117-128`).
+## 1. What the new framework now makes expressible (validated)
 
-## 2. Gaps (file:line)
+Every item below was checked against the live TS family (`plugin` from
+`production-families/yieldbasis-lt.production.js`) with the same synthetic fixtures
+(`yieldbasis-lt-family/test/fixtures.ts`).
 
-### G-YB1. Identity cannot issue the guarded execution-program proof
+| Capability | Result |
+| --- | --- |
+| `renderDeclarativeProductionEntry` | `protocol-json-v2`, family `protocol:yieldbasis-lt`, both owned action ids |
+| `createDeclarativeProtocolRuntime` / `defineProtocolFamily` | compiles; `math=undefined`, `executionMath=compiled`, `quoteFlow=compiled`, `pricingFlow=undefined`, `trialState=undefined` |
+| discovery | 4 call patterns, 2 events, LevAMM surface, `candidateKey`, `txSeedNominations` — all equal TS |
+| identity, withdraw branch | `base → binding → active`, 3 rounds, **deep-equals** the TS identity object (facts + `evidenceHash`) |
+| identity, deposit branch | **4 rounds** (`rounds[3] === ["active-deposit-program"]`), `depositPathVerified:true`; **deep-equals** TS, including `depositProgramProof` (`4907b2b1…`) and the reserve-derived `depositProbeDebt` |
+| identity, guarded program reverted | TS behaviour reproduced: withdrawal admitted, `depositPathVerified:false`, proof hash still published, deposit route withheld; deep-equals TS |
+| descriptor / routes / graph | both descriptors deep-equal TS; routes `["withdraw"]` vs `["withdraw","deposit"]`; `projectGraph` deep-equal |
+| pricing | draft, static evidence, finalized descriptor, current requests+snapshot, mids, dependencies and both compatibility projections deep-equal TS (deposit NAV via `pricePerShare`, withdraw via `preview_withdraw(1e18)`) |
+| exact, withdraw | the **same six TS requests and calldata**; `amountOut 1005642419965475619`; every evidence field equals TS, **now including `liveSupplyTokens` / `liquidityTotal` / `poolAssetBalance`** (the old G4 loss is closed by `exact.retainReadEvidence` + `$steps`), plus the retained read proof |
+| exact, deposit | **blocked** — see §2 |
+| execution, deposit | same mutating call sequence as TS (`approve,approve,deposit,approve`), `debt = assets * balances(0) / balances(1) = 20000000000000000` computed in the VM by `yieldbasis-lt:deposit-debt@1`; `short-mint`, `no-debit` and `stable-drain` are rejected by both the JSON program and the TS program |
+| execution, withdraw | same call and shares as TS; runtime floor `1` vs TS `0` (recorded deviation) |
+| fragment / expectedEffects / action | withdraw fragment adapter+amount equal TS, mismatched quote refused; `expectedEffects` deep-equal for both directions; the withdraw action emits exactly one `withdraw(shares, quotedFloor)` call (all other calls static) |
+| family suite with a temporary rendered entry | **39/42** pass; the 3 failures are the two recorded program-byte deviations and the G-YB5 deposit exact (§4) |
 
-The fourth identity round is the request built by
-`depositProgramSimulation("active-deposit-program", …)`
-(`identity.ts:174-177`, `deposit.ts:105-115`): an `effect-delta-simulation` whose
-`call.data` is `buildSubscriptCalldata(runtimeProgramScript(depositProgram(...).bytes(), assets))`
-(`deposit.ts:110`, `botvm-program-entry.ts:8-13`), i.e. the exact bytes of the family's runtime
-program.
+## 2. G-YB5. One exact-quote proof kind per variant, two directions per descriptor
 
-The declarative identity can only return literal request data evaluated from JSON
-(`declarative-identity.ts:95-110`; the request expression is plain data) and is compiled with only
-the `math` value models (`declarative-protocol.ts:202-219`). It has no access to the compiled
-execution program, and the strict transport rejects any non-program calldata:
+`select()` requires a descriptor to match **exactly one** variant
+(`declarative-protocol.ts:181-185`) and every capability resolves that variant from the descriptor
+alone (`routes.project` `:214-217`, `exact.methods` `:531-533`, `pricing` `:420-445`,
+`execution.buildRuntimeLeg` `:641-648`). A second declarative variant cannot take over one direction:
+declarative identity variants report `applies: () => true` (`declarative-identity.ts:105`) and the
+runtime admits the first variant that verifies (`adapter-family-runtime.ts:3604-3625`), so the **root**
+variant's 4-round identity decides `depositPathVerified` and therefore which routes the descriptor
+projects. The root variant must serve both directions.
 
-- `revm-strict-simulation-transport.ts:249-254`: for `executor-program` it requires
-  `caller.kind === "executor"`, `from === to`, executor runtime code, no pre-calls and then calls
-  `assertSubscriptCalldata(data)`.
-- `adapter-request-program.ts:1407-1412`: the same authority constraints at declaration time.
-- The identity environment has no executor/actor root (`declarative-identity.ts:24,41`; roots are
-  `candidate/evidence/results/profile/constants/missing/index/error`), so an identity stage cannot even
-  name the executor address that `executor-program` must target. Reproduced:
-  `unknown declarative reference $executor`.
+Inside that one variant the quote module is singular:
 
-Reproduced refusals (temporary harness, deleted after the run):
+- one `quoteFlow` is read per variant (`declarative-protocol.ts:140`,
+  `declarative-protocol-modules.ts:68-77`) with **one** `sourceKind`, and `decodeExact` verifies
+  exactly **one** declared `chainQuote` (`declarative-protocol.ts:618-623`);
+- a `view` proof only accepts an `eth-call` with ABI amount paths
+  (`declarative-quote-proof.ts:91-104`), while an `effect-simulation` proof only accepts a returned
+  token-delta simulation (`:106-108`);
+- the ordered request rounds are also variant-level (`declarative-read-flow.ts:50-66`): round 0 of the
+  exact quote is step 0's request list (`declarative-protocol.ts:578-580`), and the deposit quote must
+  be **one** `executor-program` request with id `deposit-receipt` (`deposit-exact.ts:21-37`) while the
+  withdraw quote must be the **six** preview/capacity calls (`exact.ts:64-101`).
 
-- identity stage request with `executionMode: "executor-program"` and normal `deposit(...)` calldata →
-  the declarative identity accepts the shape, the transport data check fails:
-  `invalid executor program entry`.
-- identity stage that addresses the executor → `unknown declarative reference $executor`.
+The deposit receipt itself cannot move to the legacy `readPrograms.quote` path either: `programReceipt`
+consumes the issuer's observed request/result pairs (`declarative-values.ts:128-140`), which only
+read-flow and identity decodes bind (`declarative-read-flow.ts:115`, `declarative-identity.ts:111`);
+the legacy exact decode environment has no `requests` (`declarative-protocol.ts:605-611`).
 
-Required engine change: a declarative identity request kind that names the protocol runtime's own
-compiled execution program — e.g. `{"kind":"declarative-execution-simulation","direction":"deposit",
-"observe":[…]}` compiled by `createDeclarativeProtocolRuntime` through the same `executionProgram()`
-used by `buildRuntimeLeg`/`buildFragment` (`declarative-protocol.ts:502-507`) into
-`{kind:"effect-delta-simulation", call:{caller:{kind:"executor"}, executionMode:"executor-program",
-to:<executor>, data: buildSubscriptCalldata(program bytes)}, overrideIntent:{caller:{kind:"executor"}},
-observe:[…]}` — plus binding the executor address into identity stage environments.
+Reproduced two ways with the real family JSON (`yieldbasis-lt.gap-probe.ts.draft`, one step, requests
+branched on the direction, everything else identical):
 
-### G-YB2. Deposit Exact cannot quote the program it will execute
+```
+sourceKind=view              withdraw: requests=eth-call×6                        amountOut=1005642419965475619
+sourceKind=view              deposit : REFUSED read-flow proof request is missing
+sourceKind=effect-simulation withdraw: REFUSED read-flow proof request is missing
+sourceKind=effect-simulation deposit : requests=effect-delta-simulation          amountOut=2000000000000000
+```
 
-`depositExactProgram` is one `effect-delta-simulation` request built by
-`depositProgramSimulation("deposit-receipt", …)` (`deposit-exact.ts:21-37`) and decoded by
-`decodeDepositProgramReceipt` (`deposit.ts:117-128`), which requires `result.data === "0x"`
-(`deposit.ts:123`) and the executor's LT share-delta row for the mint (`deposit.ts:124-127`).
+That is: **each direction quotes exactly as TS does, and the only thing that cannot vary per direction
+is the declared chain proof.** A first, cruder reproduction against the erc4626 fixture surfaced the
+same pair as `chain quote proof transport or completion mismatch` (view proof observing the simulation)
+and `chain quote proof requires returned token effect simulation` (effect proof observing an eth-call).
 
-A declarative `quoteFlow` can only enumerate JSON request data
-(`declarative-protocol.ts:439-458`, `declarative-read-flow.ts:103-110`). An impersonated-call-frame
-substitute is a *different* call path (direct `deposit`, no `execSubscript`, no program guards) and
-would be exactly what the family rejects (`deposit.ts:73-77` "Raw policy diagnostic ONLY, not proof
-that the executor's guarded program can execute"; `test/deposit-production.test.ts:49-51`). The
-effect-simulation quote proof also only re-checks the executor's route-token deltas
-(`declarative-quote-proof.ts:106-117`), not the program receipt.
+Consequence for the declaration: with `sourceKind:"view"` (the parked draft) the deposit route would be
+served by the withdraw flow, so the draft refuses it explicitly in `exact.checks`
+(`Yield Basis deposit exact requires a per-direction chain proof (framework gap G-YB5)`). Without that
+guard the engine still refuses, at `verifyDeclarativeQuoteChain` — the failure is fail-closed, never a
+wrong amount.
 
-Required engine change: allow a `quoteFlow` step (and its `chainQuote` proof) to reference the compiled
-execution program as the effect simulation, with a program-receipt decode (`data === "0x"` + token
-delta + optional `event` assertion).
+### Minimal engine change that closes it
 
-### G-YB3. Deposit execution needs on-chain reserve-derived debt (executionMath)
+Let the exact quote's proof/step program be selected per direction, e.g.:
 
-`depositProgram` computes `debt = assets * balances(0) / balances(1)` *inside* the VM
-(`deposit.ts:169-174`) and then checks the mint against the observed LT delta and the stable/native
-inventory (`deposit.ts:175-199`). Declarative v2 execution supports math steps, but only through a
-registered **runtime math** model:
+1. `exact.quoteFlows: { withdraw: <declarative-read-flow>, deposit: <declarative-read-flow> }` (or
+   `modules.quoteFlow.directions`), selected by `$route.direction` at
+   `declarative-protocol.ts:531-533/578-580/618-623`; **or**
+2. `chainQuote`/`sourceKind` allowed to be a per-direction map, with `quoteProofSteps` resolving it from
+   the invocation's direction (`declarative-quote-proof.ts:122-139`).
 
-- `declarative-execution.ts:251-267`, and failing at `:255` with
-  `runtime math module is undefined` when no `executionMath` block is bound (reproduced).
-- The runtime math registry is empty (`declarative-runtime-math-models.ts:5`) and is a different
-  registry from the sanctioned `declarative-math-models.ts:8-11`.
-- The task authorises at most one math-model file plus one entry in `declarative-math-models.ts`;
-  a `math`-module model cannot back an execution step (`declarative-protocol.ts:502-507` binds
-  `executionMath` only), and a model that emitted request/program bytes would put ABI, authorisation
-  and call ordering into a math function, which the design forbids
-  (`docs/research/design/protocol-json-module-evolution-20261028.md:39`).
+Option 1 also removes the second-order deviation in §3.1 (a withdraw leg would stop carrying the
+deposit reserve reads). Nothing else is missing: identity, routes, discovery, pricing, execution,
+action and the withdraw quote are already expressible.
 
-Required engine change: let execution `math` steps bind the arithmetic-only `math` registry models with
-declared inputs/outputs (mul/div), or sanction a runtime-math registry entry. Independent of G-YB1/G-YB2,
-this blocks the deposit *execution* program.
+## 3. Recorded deviations of the parked draft (all fail-closed)
 
-### G-YB4. Minor execution-side differences (recorded, not independently blocking)
+1. **Withdraw runtime/quoted program carries the deposit reserve reads.** Because one variant serves
+   both directions and `execution.steps` is a fixed list (`declarative-execution.ts:244-250`, a step's
+   call cannot be skipped or `when`-gated, `:271`), the withdraw program performs
+   `cryptopool.balances(0)`, `balances(1)` and one in-register math step before its `withdraw` call.
+   These are read-only and the math inputs are pinned to `1` for withdraw, so the call sequence and
+   amounts are unchanged (verified); the bytes and gas differ. A per-direction execution module would
+   remove this the same way as G-YB5.
+2. **Withdraw runtime floor `1` vs TS `0`.** The declarative runtime leg encodes `minAmountOut = 1`
+   (`declarative-execution.ts:458`); `execution.ts:77-88` encodes `min_assets = 0`. Stricter, already
+   recorded in the withdraw-only draft.
+3. **Program bytes differ from the TS emitters** (effect captures and the two reserve reads above), so
+   `test/recipient.test.ts` byte comparisons fail; the mutating call sequence, debt, guards and
+   rollback-style rejections match (validated with the bytecode interpreter).
+4. **`exact.retainReadEvidence` adds `readProof` to the withdraw evidence** so that
+   `liveSupplyTokens`/`liquidityTotal`/`poolAssetBalance` can be published and re-verified by
+   `buildFragment` (`declarative-protocol.ts:655-661`). Every TS field keeps its value; the object gains
+   the retained proof.
+5. **`buildDependentProgram` is present** on the exact method (framework-wide for flow-backed quotes),
+   so `deposit-production.test.ts:47` and `contract.ts:265` differ from TS.
+6. **Raw deposit probe effects are not re-verified in the identity.** `simulationActor` still requires
+   the unique `-amountIn` input debit, the returned mint must be positive, and the guarded
+   `programReceipt` (exact token scope, native/extra-token conservation, `data === "0x"`), the
+   raw/program mint equality and the `Deposit` event are all enforced. The TS `verifyDepositEffects`
+   checks on the raw diagnostic probe (`deposit.ts:130-154`) are not repeated; its own comment calls
+   that path "Raw policy diagnostic ONLY, not proof" (`deposit.ts:73-77`).
+7. **`approval.verifyAllowance` semantics**: TS additionally re-reads `allowance == 0` after cleanup
+   (`deposit.ts:195-196`); the declarative `exact-clear` approval clears and bool-checks the same three
+   `approve` calls but does not re-read the allowance. Recorded before as G-YB4, still fail-closed.
 
-- Declarative execution emits balance/supply/native captures only (`declarative-execution.ts:40-47`,
-  `:388-394`); there is no log/event assertion in a runtime program. TS checks the `Deposit` event only
-  in the *simulation receipt* (`deposit.ts:144-150`), so an effect-simulation receipt decode with the
-  `event` value op would cover it — not a blocker by itself.
-- `approval.verifyAllowance` checks `allowance == amount` before the call
-  (`declarative-execution.ts:216-218`); TS checks `allowance == 0` after the exact-clear cleanup
-  (`deposit.ts:195-196`). Fail-closed difference, not a blocker.
+## 4. Family suite with a temporary rendered entry
 
-## 3. What would unblock (minimal engine change)
+`renderDeclarativeProductionEntry` + `node --import tsx --test
+src/searcher/venues/protocols/yieldbasis-lt-family/test/*.test.ts` → **42 tests, 39 pass, 3 fail**:
 
-1. Declarative identity stage request kind for the protocol's own compiled execution program
-   (`declarative-execution-simulation`), with the executor actor available to identity stage/request
-   values (closes G-YB1).
-2. The same request kind usable as a `quoteFlow` step with `sourceKind: "effect-simulation"`, plus a
-   program-receipt decode contract (`data === "0x"`, executor token delta, optional event) (closes G-YB2).
-3. Execution `math` steps able to bind arithmetic-only models registered in
-   `declarative-math-models.ts` (inputs → outputs), so reserve-derived debt is expressible without a
-   second registry (closes G-YB3).
+- `deposit Exact is one guarded request; quoted action and runtime use production emitter` — G-YB5 plus
+  deviation 5 (`buildDependentProgram`).
+- `withdraw keeps default and quoted bytes; direct construction is amount/quote free` and
+  `deposit keeps default and quoted bytes; direct construction is amount/quote free` — deviation 3.
 
-Until then the family stays on its TS implementation. No TS extension was added: a math model alone
-cannot close 1 or 2, and adding only 3 would still leave the deposit proof and quote unexpressible.
+The remaining 39 (identity round budget and program-proof requirement, deposit behaviour, historical
+dual/ready observers, recipient observers, probe report, reserve/receipt contracts) pass against the
+rendered JSON entry.
 
-## 4. Draft scope and validated results (withdraw branch)
+Restored afterwards: the temporary canonical JSON, the temporary math registration and the rendered
+production entry were removed; `listener/node_modules/.bin/tsc -p listener/tsconfig.live.json --noEmit`
+→ exit 0.
 
-`yieldbasis-lt.draft.json`:
+## 5. Verdict
 
-- discovery: all four call patterns (2-arg/3-arg withdraw, 3-arg/4-arg deposit), both events, the
-  LevAMM surface, `tx-evidence` nomination.
-- identity: `base → binding → active → verified`; LT getters, LevAMM/pool mutual reference, live
-  withdrawal preview; `decide` reproduces TS reason codes
-  (`foreign-yieldbasis-lt-candidate`, `yieldbasis_lt_binding_surfaces_failed`,
-  `yieldbasis_lt_amm_lt_contract_mismatch`, `yieldbasis_lt_cryptopool_coin_binding_failed`,
-  `yieldbasis_lt_asset_decimals_invalid`, `yieldbasis_lt_killed`,
-  `yieldbasis_lt_redemption_path_inactive`).
-- Only the withdraw direction is declared (`routes.directions: [withdraw]`, `depositPathVerified:false`,
-  `depositPath:null`). The deposit action adapter remains declared (the manifest owns both actions) but
-  no deposit route is projected.
-- pricing static/current (`preview_withdraw`), exact withdraw quote with capacity/remainder/killed
-  checks and a `preview_withdraw` chain-quote proof, execution v2 withdraw (2-arg, or 3-arg with
-  `$recipient` for a direct-output settlement), both action adapters.
-- `modules`: `quoteFlow` + `pricingFlow` compiled; `math`/`executionMath`/`trialState` undefined.
-
-In-memory verification performed (temporary harness in `listener/src/searcher/test/`, deleted afterwards;
-no generator run, nothing written under `venues/`):
-
-- `renderDeclarativeProductionEntry` at the hypothetical canonical path
-  `listener/src/searcher/venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json` — `protocol-json-v2`,
-  family `protocol:yieldbasis-lt`.
-- `createDeclarativeProtocolRuntime` + `defineProtocolFamily`; discovery candidate decode for
-  call/log/address-surface observations; `candidateKey` = lower LT.
-- Identity over the same fixture as the TS family: JSON `identity` object **deep-equals** the TS
-  `identity` object (facts, provenance `evidenceHash`, `behaviorProofHash`), and the compiled
-  `descriptor` **deep-equals** the TS descriptor.
-- Route + graph projection deep-equal TS; route key
-  `protocol:yieldbasis-lt\u001f<lt>\u001fwithdraw`.
-- Pricing static evidence (`oneShare`/`oneAsset`), current snapshot and mid equal TS; dependency set and
-  both compatibility projections deep-equal TS.
-- Exact withdraw: request ids
-  `quote-preview-withdraw,quote-is-killed,quote-staker,quote-live-supply,quote-liquidity,quote-pool-asset-balance`;
-  amount out equals TS; evidence differs only by the three flow intermediates the engine cannot carry
-  (`liveSupplyTokens`, `liquidityTotal`, `poolAssetBalance` — gap G4 in
-  `protocol-json-gap-register-20261028.md:23-25`).
-- Execution: quoted fragment program + action encode + runtime leg + direct-output settlement leg +
-  `expectedEffects` equal TS; stale exact evidence / wrong state key / oversize shares throw.
-- `npx tsc -p listener/tsconfig.live.json --noEmit` → exit 0 (no TS changed).
-
-## 5. Recorded deviations of the withdraw branch (if it were migrated)
-
-1. Exact evidence cannot carry `liveSupplyTokens` / `liquidityTotal` / `poolAssetBalance`
-   (engine gap G4). The quote denies on those checks but cannot re-publish them as evidence.
-2. The quoted fragment is an `execSubscript` re-entrant program (`params.runtimeAmountProgram`), not the
-   TS direct `withdraw(shares,minAssets)` calldata; both call the same protocol function. Framework-wide
-   v2 behavior (also used by compound/eigenpie).
-3. Runtime legs fix `minAmountOut = 1` (`declarative-execution.ts:458`), where TS encodes `min_assets=0`
-   for the default runtime withdraw (`execution.ts:77-88`). Fail-closed (the central flow still requires
-   a positive observed credit delta).
-4. Discovery nomination for retained candidates without a tx hash (TS `nomination.ts:122-165`) has no
-   declarative hook; only the generic `tx-evidence` nomination exists (same deviation recorded for
-   compound/eigenpie).
-5. Action trace matching stays the TS set (2-arg `withdraw`, 3-arg `deposit`). The declared
-   settlement execution can emit the 3-arg `withdraw(uint256,uint256,address)`, which the TS action also
-   encodes but does not trace-match; parity retained, not widened.
-6. `depositProbe*` facts are fixed at `0`/`false`/`null` because the draft never reaches the deposit
-   branch; this is exactly what TS emits when `depositAssets == 0`, and it is why the draft is
-   *not* a faithful replacement for live instances (they all have a positive deposit probe).
-
-## 6. Verdict
-
-Skip per migration policy (no public TS changes, no narrowing). The withdraw direction is ready as JSON
-and the draft can be promoted the moment G-YB1/G-YB2/G-YB3 close; until then
-`protocol:yieldbasis-lt` stays on its typed TS family.
+The family stays on its TS implementation. The deposit direction is no longer the blocker: it compiles,
+proves, prices and executes from JSON, and its exact quote is one declarative-execution-simulation away
+from TS parity. What is missing is one generic hook — **per-direction selection of the exact quote
+program/proof** (and, for full byte parity, of `execution.steps`). Do not ship the draft as-is: it would
+drop the deposit exact quote, and shipping the mirror configuration would drop the withdraw one.
