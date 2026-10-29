@@ -1,29 +1,12 @@
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/protocols/ethertoken-native-redeem-family/ethertoken-native-redeem.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
-import { etherTokenNativeRedeemCapture } from "../protocols/ethertoken-native-redeem-family/capture.js";
-import { etherTokenNativeRedeemFamilyOwnedAction } from "../protocols/ethertoken-native-redeem-family/action.js";
-import { etherTokenNativeRedeemDiscovery } from "../protocols/ethertoken-native-redeem-family/discovery.js";
-import { etherTokenNativeRedeemExact } from "../protocols/ethertoken-native-redeem-family/exact.js";
-import { etherTokenNativeRedeemExecution } from "../protocols/ethertoken-native-redeem-family/execution.js";
-import { etherTokenNativeRedeemIdentity } from "../protocols/ethertoken-native-redeem-family/identity.js";
-import { etherTokenNativeRedeemInstance } from "../protocols/ethertoken-native-redeem-family/instance.js";
-import { etherTokenNativeRedeemFamilyManifest } from "../protocols/ethertoken-native-redeem-family/manifest.js";
-import { etherTokenNativeRedeemPricing } from "../protocols/ethertoken-native-redeem-family/pricing.js";
-import { etherTokenNativeRedeemProtocol } from "../protocols/ethertoken-native-redeem-family/protocol.js";
-import { etherTokenNativeRedeemRoutes } from "../protocols/ethertoken-native-redeem-family/routes.js";
+import { compileDeclarativeProtocol } from "../declarative-protocol.js";
+import type { FamilyTypes } from "../../generated/declarative-family-types/ethertoken-native-redeem.generated.js";
+import definition from "../protocols/ethertoken-native-redeem-family/ethertoken-native-redeem.json";
 
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED" });
+export const activation = defineFamilyActivation({"enabled":true,"envKey":"SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED"});
 
-export const plugin = defineProtocolFamily({
-  manifest: etherTokenNativeRedeemFamilyManifest,
-  capture: etherTokenNativeRedeemCapture,
-  discovery: etherTokenNativeRedeemDiscovery,
-  identity: etherTokenNativeRedeemIdentity,
-  instance: etherTokenNativeRedeemInstance,
-  routes: etherTokenNativeRedeemRoutes,
-  pricing: etherTokenNativeRedeemPricing,
-  exact: etherTokenNativeRedeemExact,
-  execution: etherTokenNativeRedeemExecution,
-  protocol: etherTokenNativeRedeemProtocol,
-  actionAdapters: [etherTokenNativeRedeemFamilyOwnedAction],
-});
+export const plugin = defineProtocolFamily(compileDeclarativeProtocol<FamilyTypes>(definition, []));

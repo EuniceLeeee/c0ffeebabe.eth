@@ -1,0 +1,1632 @@
+{
+  "version": 2,
+  "scope": {"family": "protocol:astra-multitoken"},
+  "production": {
+    "domain": "protocol",
+    "activation": {"enabled": true, "envKey": "SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED"}
+  },
+  "manifest": {
+    "familyId": "protocol:astra-multitoken",
+    "domain": "protocol",
+    "ownedActionAdapterIds": ["astra-multitoken-change"],
+    "requiredInfraActionAdapterIds": ["erc20-approve"],
+    "allowedTaxonomy": [{"slotKind": "protocol", "protocolAction": "convert"}],
+    "supportedLineages": ["astra-multitoken:observed-active-registry"],
+    "poolAdapterIds": ["astra-multitoken"],
+    "edgeAdapterIds": ["astra-multitoken-change"],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": ["observed-call", "landed-log"],
+      "candidateSources": ["observed-interaction"],
+      "candidate": {
+        "kind": "astra-multitoken-contract",
+        "addressField": "target",
+        "fields": {
+          "target": "address",
+          "actor": "address",
+          "tokenIn": "address",
+          "tokenOut": "address",
+          "amountIn": "uint",
+          "minAmountOut": "uint",
+          "sourceKind": "string"
+        },
+        "key": ["target", "sourceKind", "actor", "tokenIn", "tokenOut", "amountIn", "minAmountOut"]
+      },
+      "calls": [
+        {
+          "id": "astra-multitoken-change-call",
+          "signature": "change(address,address,uint256,uint256)",
+          "fields": {
+            "target": {"from": "target"},
+            "actor": {"from": "sender"},
+            "tokenIn": {"from": "argument", "index": 0},
+            "tokenOut": {"from": "argument", "index": 1},
+            "amountIn": {"from": "argument", "index": 2},
+            "minAmountOut": {"from": "argument", "index": 3},
+            "sourceKind": {"from": "literal", "value": "observed-change-call"}
+          },
+          "predicates": [
+            {"op": "gt", "args": [{"op": "at", "args": ["$args", 2]}, {"op": "uint", "args": ["0"]}]},
+            {
+              "op": "not",
+              "args": [{
+                "op": "sameAddress",
+                "args": [{"op": "at", "args": ["$args", 0]}, {"op": "at", "args": ["$args", 1]}]
+              }]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "astra-multitoken-change-log",
+          "signature": "Change(address indexed fromToken,address indexed toToken,address indexed changer,uint256 amount,uint256 returnAmount)",
+          "fields": {
+            "target": {"from": "emitter"},
+            "actor": {"from": "argument", "index": 2},
+            "tokenIn": {"from": "argument", "index": 0},
+            "tokenOut": {"from": "argument", "index": 1},
+            "amountIn": {"from": "argument", "index": 3},
+            "minAmountOut": {"from": "argument", "index": 4},
+            "sourceKind": {"from": "literal", "value": "change-log"}
+          },
+          "predicates": [
+            {"op": "gt", "args": [{"op": "at", "args": ["$args", 3]}, {"op": "uint", "args": ["0"]}]},
+            {"op": "gt", "args": [{"op": "at", "args": ["$args", 4]}, {"op": "uint", "args": ["0"]}]},
+            {
+              "op": "not",
+              "args": [{
+                "op": "sameAddress",
+                "args": [{"op": "at", "args": ["$args", 0]}, {"op": "at", "args": ["$args", 1]}]
+              }]
+            }
+          ]
+        }
+      ],
+      "labels": ["astra-multitoken", "protocol:astra-multitoken"],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "inputs": ["id", "deltas", "token", "account", "delta"],
+      "abi": {
+        "astra": [
+          "function supportsInterface(bytes4 interfaceId) view returns (bool)",
+          "function tokensCount() view returns (uint256)",
+          "function tokens(uint256 index) view returns (address)",
+          "function weights(address token) view returns (uint256)",
+          "function changesEnabled() view returns (bool)",
+          "function inLendingMode() view returns (uint256)",
+          "function changeFee() view returns (uint256)",
+          "function TOTAL_PERCRENTS() view returns (uint256)",
+          "function getReturn(address fromToken,address toToken,uint256 amount) view returns (uint256)",
+          "function change(address fromToken,address toToken,uint256 amount,uint256 minReturn) returns (uint256)",
+          "event Change(address indexed fromToken,address indexed toToken,address indexed changer,uint256 amount,uint256 returnAmount)"
+        ],
+        "token": [
+          "function approve(address spender,uint256 amount) returns (bool)"
+        ]
+      },
+      "constants": {
+        "primaryInterfaceId": "0x81624e24",
+        "baseInterfaceId": "0xd5c368b6",
+        "maxTokens": 32
+      },
+      "expressions": {
+        "optionalBool": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {"op": "get", "args": [{"op": "successful", "args": ["$id"]}, "completion"]},
+                "returned"
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "matches",
+                  "args": [
+                    {"op": "get", "args": [{"op": "successful", "args": ["$id"]}, "data"]},
+                    "^0x[0-9a-fA-F]{64}$"
+                  ]
+                },
+                {"op": "bool", "args": [{"op": "get", "args": [{"op": "successful", "args": ["$id"]}, "data"]}]},
+                null
+              ]
+            },
+            null
+          ]
+        },
+        "optionalUint": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {"op": "get", "args": [{"op": "successful", "args": ["$id"]}, "completion"]},
+                "returned"
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "matches",
+                  "args": [
+                    {"op": "get", "args": [{"op": "successful", "args": ["$id"]}, "data"]},
+                    "^0x[0-9a-fA-F]{64}$"
+                  ]
+                },
+                {"op": "word", "args": [{"op": "get", "args": [{"op": "successful", "args": ["$id"]}, "data"]}]},
+                null
+              ]
+            },
+            null
+          ]
+        },
+        "deltaIs": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [{
+                    "op": "filter",
+                    "args": ["$deltas", "d", {
+                      "op": "and",
+                      "args": [
+                        {"op": "sameAddress", "args": ["$d.token", "$token"]},
+                        {"op": "sameAddress", "args": ["$d.account", "$account"]}
+                      ]
+                    }]
+                  }]
+                },
+                1
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [{
+                    "op": "at",
+                    "args": [{
+                      "op": "filter",
+                      "args": ["$deltas", "d", {
+                        "op": "and",
+                        "args": [
+                          {"op": "sameAddress", "args": ["$d.token", "$token"]},
+                          {"op": "sameAddress", "args": ["$d.account", "$account"]}
+                        ]
+                      }]
+                    }, 0]
+                  }, "delta"]
+                },
+                "$delta"
+              ]
+            }
+          ]
+        }
+      },
+      "identity": {
+        "select": [
+          {
+            "return": {
+              "op": "if",
+              "args": [
+                {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]},
+                "surface",
+                {
+                  "op": "if",
+                  "args": [
+                    {"op": "eq", "args": ["$evidence.phase", "surface"]},
+                    "registry",
+                    "active"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "surface": {
+            "requirements": {"transports": ["get-code", "eth-call"]},
+            "requests": [
+              {
+                "id": "surface-target-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$candidate.target"]}
+              },
+              {
+                "id": "surface-primary-interface",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.target"]},
+                "data": {
+                  "op": "encode",
+                  "args": ["astra", "supportsInterface", ["$constants.primaryInterfaceId"]]
+                },
+                "completion": "return-or-revert-data"
+              },
+              {
+                "id": "surface-base-interface",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.target"]},
+                "data": {
+                  "op": "encode",
+                  "args": ["astra", "supportsInterface", ["$constants.baseInterfaceId"]]
+                },
+                "completion": "return-or-revert-data"
+              },
+              {
+                "id": "surface-lending-mode",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.target"]},
+                "data": {"op": "encode", "args": ["astra", "inLendingMode", []]},
+                "completion": "return-or-revert-data"
+              },
+              {
+                "id": "surface-token-count",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.target"]},
+                "data": {"op": "encode", "args": ["astra", "tokensCount", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "surface-changes-enabled",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.target"]},
+                "data": {"op": "encode", "args": ["astra", "changesEnabled", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "surface-change-fee",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.target"]},
+                "data": {"op": "encode", "args": ["astra", "changeFee", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "surface-total-percents",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.target"]},
+                "data": {"op": "encode", "args": ["astra", "TOTAL_PERCRENTS", []]},
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [{
+                    "op": "map",
+                    "args": [
+                      [
+                        "surface-target-code",
+                        "surface-primary-interface",
+                        "surface-base-interface",
+                        "surface-lending-mode",
+                        "surface-token-count",
+                        "surface-changes-enabled",
+                        "surface-change-fee",
+                        "surface-total-percents"
+                      ],
+                      "id",
+                      {"op": "successful", "args": ["$id"]}
+                    ]
+                  }]
+                }
+              },
+              {
+                "let": "primary",
+                "value": {"op": "expression", "args": ["optionalBool", {"id": "surface-primary-interface"}]}
+              },
+              {
+                "let": "base",
+                "value": {"op": "expression", "args": ["optionalBool", {"id": "surface-base-interface"}]}
+              },
+              {
+                "assert": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {"op": "eq", "args": ["$primary", true]},
+                        {"op": "eq", "args": ["$base", true]}
+                      ]
+                    },
+                    {
+                      "op": "and",
+                      "args": [
+                        {"op": "not", "args": [{"op": "defined", "args": ["$primary"]}]},
+                        {"op": "not", "args": [{"op": "defined", "args": ["$base"]}]}
+                      ]
+                    }
+                  ]
+                },
+                "error": "astra-multitoken identity surface is not supported"
+              },
+              {
+                "let": "interfaceMode",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {"op": "eq", "args": ["$primary", true]},
+                    "erc165",
+                    "legacy-abi"
+                  ]
+                }
+              },
+              {
+                "let": "tokenCount",
+                "value": {
+                  "op": "number",
+                  "args": [{
+                    "op": "word",
+                    "args": [{"op": "get", "args": [{"op": "returned", "args": ["surface-token-count"]}, "data"]}]
+                  }]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {"op": "gte", "args": ["$tokenCount", 2]},
+                    {"op": "lte", "args": ["$tokenCount", "$constants.maxTokens"]}
+                  ]
+                },
+                "error": "astra-multitoken identity surface is not supported"
+              },
+              {
+                "let": "changesEnabled",
+                "value": {
+                  "op": "bool",
+                  "args": [{"op": "get", "args": [{"op": "returned", "args": ["surface-changes-enabled"]}, "data"]}]
+                }
+              },
+              {
+                "assert": {"op": "eq", "args": ["$changesEnabled", true]},
+                "error": "astra-multitoken identity surface is not supported"
+              },
+              {
+                "let": "changeFee",
+                "value": {
+                  "op": "word",
+                  "args": [{"op": "get", "args": [{"op": "returned", "args": ["surface-change-fee"]}, "data"]}]
+                }
+              },
+              {
+                "let": "totalPercents",
+                "value": {
+                  "op": "word",
+                  "args": [{"op": "get", "args": [{"op": "returned", "args": ["surface-total-percents"]}, "data"]}]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {"op": "gt", "args": ["$totalPercents", {"op": "uint", "args": ["0"]}]},
+                    {"op": "lte", "args": ["$changeFee", "$totalPercents"]}
+                  ]
+                },
+                "error": "astra-multitoken identity surface is not supported"
+              },
+              {
+                "let": "inLendingMode",
+                "value": {"op": "expression", "args": ["optionalUint", {"id": "surface-lending-mode"}]}
+              },
+              {
+                "return": {
+                  "phase": "surface",
+                  "target": {"op": "address", "args": ["$candidate.target"]},
+                  "interfaceMode": "$interfaceMode",
+                  "tokenCount": "$tokenCount",
+                  "changesEnabled": true,
+                  "totalPercents": "$totalPercents",
+                  "changeFee": "$changeFee",
+                  "inLendingMode": "$inLendingMode"
+                }
+              }
+            ]
+          },
+          "registry": {
+            "requirements": {"transports": ["eth-call"]},
+            "requests": {
+              "op": "flatMap",
+              "args": [
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                  16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
+                "i",
+                {
+                  "op": "if",
+                  "args": [
+                    {"op": "lt", "args": ["$i", "$evidence.tokenCount"]},
+                    [{
+                      "id": {"op": "join", "args": [["registry-token:", "$i"], ""]},
+                      "kind": "eth-call",
+                      "to": {"op": "address", "args": ["$evidence.target"]},
+                      "data": {"op": "encode", "args": ["astra", "tokens", ["$i"]]},
+                      "completion": "return-data"
+                    }],
+                    []
+                  ]
+                }
+              ]
+            },
+            "decode": [
+              {
+                "let": "tokens",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                          16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
+                        "i",
+                        {
+                          "op": "if",
+                          "args": [
+                            {"op": "lt", "args": ["$i", "$evidence.tokenCount"]},
+                            {
+                              "op": "addressWord",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [{
+                                    "op": "returned",
+                                    "args": [{"op": "join", "args": [["registry-token:", "$i"], ""]}]
+                                  }, "data"]
+                                },
+                                {
+                                  "malformed": "astra-multitoken registry contains duplicate, zero, or invalid tokens",
+                                  "zero": "astra-multitoken registry contains duplicate, zero, or invalid tokens"
+                                }
+                              ]
+                            },
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "t",
+                    {"op": "defined", "args": ["$t"]}
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [{"op": "length", "args": ["$tokens"]}, "$evidence.tokenCount"]
+                },
+                "error": "astra-multitoken identity surface is not supported"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {"op": "length", "args": [{"op": "unique", "args": ["$tokens"]}]},
+                    {"op": "length", "args": ["$tokens"]}
+                  ]
+                },
+                "error": "astra-multitoken registry contains duplicate, zero, or invalid tokens"
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {"op": "some", "args": ["$tokens", "t", {"op": "sameAddress", "args": ["$t", "$candidate.tokenIn"]}]},
+                    {"op": "some", "args": ["$tokens", "t", {"op": "sameAddress", "args": ["$t", "$candidate.tokenOut"]}]},
+                    {"op": "not", "args": [{"op": "sameAddress", "args": ["$candidate.tokenIn", "$candidate.tokenOut"]}]}
+                  ]
+                },
+                "error": "astra-multitoken observed pair is not bound by the current token registry"
+              },
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [{
+                    "op": "map",
+                    "args": [
+                      {
+                        "op": "filter",
+                        "args": [
+                          [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+                            16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31],
+                          "i",
+                          {"op": "lt", "args": ["$i", "$evidence.tokenCount"]}
+                        ]
+                      },
+                      "i",
+                      {"op": "successful", "args": [{"op": "join", "args": [["registry-token:", "$i"], ""]}]}
+                    ]
+                  }]
+                }
+              },
+              {
+                "return": {
+                  "phase": "registry",
+                  "target": "$evidence.target",
+                  "interfaceMode": "$evidence.interfaceMode",
+                  "tokens": "$tokens",
+                  "tokenCount": "$evidence.tokenCount",
+                  "changesEnabled": true,
+                  "totalPercents": "$evidence.totalPercents",
+                  "changeFee": "$evidence.changeFee",
+                  "inLendingMode": "$evidence.inLendingMode"
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "transports": ["eth-call", "get-code", "effect-delta-simulation"],
+              "caller": "observed-sender",
+              "effects": ["return-data", "token-delta", "logs"]
+            },
+            "requests": {
+              "op": "concat",
+              "args": [
+                {
+                  "op": "flatMap",
+                  "args": [
+                    "$evidence.tokens",
+                    "token",
+                    [
+                      {
+                        "id": {"op": "join", "args": [["registry-weight:", "$index"], ""]},
+                        "kind": "eth-call",
+                        "to": {"op": "address", "args": ["$evidence.target"]},
+                        "data": {"op": "encode", "args": ["astra", "weights", ["$token"]]},
+                        "completion": "return-data"
+                      },
+                      {
+                        "id": {"op": "join", "args": [["registry-token-code:", "$index"], ""]},
+                        "kind": "get-code",
+                        "address": "$token"
+                      }
+                    ]
+                  ]
+                },
+                [
+                  {
+                    "id": "behavior-zero-quote",
+                    "kind": "eth-call",
+                    "to": {"op": "address", "args": ["$evidence.target"]},
+                    "data": {
+                      "op": "encode",
+                      "args": ["astra", "getReturn", [
+                        {"op": "at", "args": ["$evidence.tokens", 0]},
+                        {"op": "at", "args": ["$evidence.tokens", 1]},
+                        {"op": "uint", "args": ["0"]}
+                      ]]
+                    },
+                    "completion": "return-data"
+                  },
+                  {
+                    "id": "behavior-active-quote",
+                    "kind": "eth-call",
+                    "to": {"op": "address", "args": ["$evidence.target"]},
+                    "data": {
+                      "op": "encode",
+                      "args": ["astra", "getReturn", [
+                        "$candidate.tokenIn",
+                        "$candidate.tokenOut",
+                        "$candidate.amountIn"
+                      ]]
+                    },
+                    "completion": "return-data"
+                  },
+                  {
+                    "id": "behavior-active-change",
+                    "kind": "effect-delta-simulation",
+                    "preCalls": [
+                      {
+                        "caller": {"kind": "observed-sender"},
+                        "to": {"op": "address", "args": ["$candidate.tokenIn"]},
+                        "data": {
+                          "op": "encode",
+                          "args": ["token", "approve", [
+                            {"op": "address", "args": ["$evidence.target"]},
+                            {"op": "uint", "args": ["0"]}
+                          ]]
+                        }
+                      },
+                      {
+                        "caller": {"kind": "observed-sender"},
+                        "to": {"op": "address", "args": ["$candidate.tokenIn"]},
+                        "data": {
+                          "op": "encode",
+                          "args": ["token", "approve", [
+                            {"op": "address", "args": ["$evidence.target"]},
+                            "$candidate.amountIn"
+                          ]]
+                        }
+                      }
+                    ],
+                    "call": {
+                      "caller": {"kind": "observed-sender"},
+                      "executionMode": "impersonated-call-frame",
+                      "to": {"op": "address", "args": ["$evidence.target"]},
+                      "data": {
+                        "op": "encode",
+                        "args": ["astra", "change", [
+                          "$candidate.tokenIn",
+                          "$candidate.tokenOut",
+                          "$candidate.amountIn",
+                          {"op": "uint", "args": ["0"]}
+                        ]]
+                      }
+                    },
+                    "observeTokenBalances": [
+                      {"token": "$candidate.tokenIn", "account": {"kind": "observed-sender"}},
+                      {"token": "$candidate.tokenIn", "account": {"op": "address", "args": ["$evidence.target"]}},
+                      {"token": "$candidate.tokenOut", "account": {"kind": "observed-sender"}},
+                      {"token": "$candidate.tokenOut", "account": {"op": "address", "args": ["$evidence.target"]}}
+                    ],
+                    "overrideIntent": {
+                      "caller": {"kind": "observed-sender"},
+                      "tokenBalances": [{"token": "$candidate.tokenIn", "amount": "$candidate.amountIn"}]
+                    },
+                    "observe": ["return-data", "token-delta", "logs"]
+                  }
+                ]
+              ]
+            },
+            "decode": [
+              {
+                "let": "tokenWeights",
+                "value": {
+                  "op": "map",
+                  "args": [
+                    "$evidence.tokens",
+                    "token",
+                    {
+                      "token": "$token",
+                      "weight": {
+                        "op": "word",
+                        "args": [{
+                          "op": "get",
+                          "args": [{
+                            "op": "returned",
+                            "args": [{"op": "join", "args": [["registry-weight:", "$index"], ""]}]
+                          }, "data"]
+                        }]
+                      },
+                      "codeHash": {
+                        "op": "codeHash",
+                        "args": [{"op": "code", "args": [{"op": "join", "args": [["registry-token-code:", "$index"], ""]}]}]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": ["$tokenWeights", "w", {"op": "gt", "args": ["$w.weight", {"op": "uint", "args": ["0"]}]}]
+                },
+                "error": "astra-multitoken registry contains a nonpositive weight or non-contract token"
+              },
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [{
+                    "op": "map",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "op": "map",
+                            "args": ["$evidence.tokens", "t", {"op": "join", "args": [["registry-weight:", "$index"], ""]}]
+                          },
+                          {
+                            "op": "map",
+                            "args": ["$evidence.tokens", "t", {"op": "join", "args": [["registry-token-code:", "$index"], ""]}]
+                          },
+                          ["behavior-zero-quote", "behavior-active-quote", "behavior-active-change"]
+                        ]
+                      },
+                      "id",
+                      {"op": "successful", "args": ["$id"]}
+                    ]
+                  }]
+                }
+              },
+              {
+                "let": "zeroQuote",
+                "value": {
+                  "op": "word",
+                  "args": [{"op": "get", "args": [{"op": "returned", "args": ["behavior-zero-quote"]}, "data"]}]
+                }
+              },
+              {
+                "let": "activeAmountOut",
+                "value": {
+                  "op": "word",
+                  "args": [{"op": "get", "args": [{"op": "returned", "args": ["behavior-active-quote"]}, "data"]}]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {"op": "eq", "args": ["$zeroQuote", {"op": "uint", "args": ["0"]}]},
+                    {"op": "gt", "args": ["$activeAmountOut", {"op": "uint", "args": ["0"]}]}
+                  ]
+                },
+                "error": "astra-multitoken getReturn behavior proof failed"
+              },
+              {
+                "let": "activeChange",
+                "value": {"op": "successful", "args": ["behavior-active-change"]}
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [{"op": "get", "args": ["$activeChange", "completion"]}, "returned"]
+                },
+                "error": "astra-multitoken getReturn behavior proof failed"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {"op": "word", "args": [{"op": "get", "args": ["$activeChange", "data"]}]},
+                    "$activeAmountOut"
+                  ]
+                },
+                "error": "astra-multitoken active change effect proof failed"
+              },
+              {
+                "let": "observed",
+                "value": {"op": "effects", "args": [{"op": "get", "args": ["$activeChange", "effects"]}]}
+              },
+              {
+                "assert": {
+                  "op": "expression",
+                  "args": ["deltaIs", {
+                    "deltas": "$observed.tokenDeltas",
+                    "token": "$candidate.tokenIn",
+                    "account": "$candidate.actor",
+                    "delta": {"op": "sub", "args": [{"op": "uint", "args": ["0"]}, "$candidate.amountIn"]}
+                  }]
+                },
+                "error": "astra-multitoken active change effect proof failed"
+              },
+              {
+                "assert": {
+                  "op": "expression",
+                  "args": ["deltaIs", {
+                    "deltas": "$observed.tokenDeltas",
+                    "token": "$candidate.tokenIn",
+                    "account": {"op": "address", "args": ["$evidence.target"]},
+                    "delta": "$candidate.amountIn"
+                  }]
+                },
+                "error": "astra-multitoken active change effect proof failed"
+              },
+              {
+                "assert": {
+                  "op": "expression",
+                  "args": ["deltaIs", {
+                    "deltas": "$observed.tokenDeltas",
+                    "token": "$candidate.tokenOut",
+                    "account": "$candidate.actor",
+                    "delta": "$activeAmountOut"
+                  }]
+                },
+                "error": "astra-multitoken active change effect proof failed"
+              },
+              {
+                "assert": {
+                  "op": "expression",
+                  "args": ["deltaIs", {
+                    "deltas": "$observed.tokenDeltas",
+                    "token": "$candidate.tokenOut",
+                    "account": {"op": "address", "args": ["$evidence.target"]},
+                    "delta": {"op": "sub", "args": [{"op": "uint", "args": ["0"]}, "$activeAmountOut"]}
+                  }]
+                },
+                "error": "astra-multitoken active change effect proof failed"
+              },
+              {
+                "assert": {
+                  "op": "event",
+                  "args": [{
+                    "abi": "astra",
+                    "result": "$activeChange",
+                    "address": {"op": "address", "args": ["$evidence.target"]},
+                    "name": "Change",
+                    "fields": {
+                      "fromToken": "$candidate.tokenIn",
+                      "toToken": "$candidate.tokenOut",
+                      "changer": "$candidate.actor",
+                      "amount": "$candidate.amountIn",
+                      "returnAmount": "$activeAmountOut"
+                    }
+                  }]
+                },
+                "error": "astra-multitoken active change effect proof failed"
+              },
+              {
+                "let": "activeSource",
+                "value": {"op": "get", "args": ["$activeChange", "source"]}
+              },
+              {
+                "let": "behaviorProofHash",
+                "value": {
+                  "op": "hash",
+                  "args": [{
+                    "target": {"op": "address", "args": ["$evidence.target"]},
+                    "candidate": {
+                      "actor": "$candidate.actor",
+                      "tokenIn": "$candidate.tokenIn",
+                      "tokenOut": "$candidate.tokenOut",
+                      "amountIn": "$candidate.amountIn"
+                    },
+                    "activeAmountOut": "$activeAmountOut",
+                    "tokenWeights": "$tokenWeights",
+                    "source": {
+                      "number": {"op": "get", "args": ["$activeSource", "number"]},
+                      "hash": {"op": "get", "args": ["$activeSource", "hash"]},
+                      "generation": {"op": "get", "args": ["$activeSource", "generation"]}
+                    }
+                  }]
+                }
+              },
+              {
+                "return": {
+                  "phase": "active-behavior",
+                  "target": {"op": "address", "args": ["$evidence.target"]},
+                  "interfaceMode": "$evidence.interfaceMode",
+                  "tokens": "$evidence.tokens",
+                  "tokenWeights": "$tokenWeights",
+                  "changesEnabled": true,
+                  "totalPercents": "$evidence.totalPercents",
+                  "changeFee": "$evidence.changeFee",
+                  "inLendingMode": "$evidence.inLendingMode",
+                  "activeAmountOut": "$activeAmountOut",
+                  "behaviorProofHash": "$behaviorProofHash",
+                  "probeTokenIn": "$candidate.tokenIn",
+                  "probeTokenOut": "$candidate.tokenOut"
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]},
+            "return": {"status": "continue"}
+          },
+          {
+            "when": {"op": "not", "args": [{"op": "eq", "args": ["$evidence.phase", "active-behavior"]}]},
+            "return": {"status": "continue"}
+          },
+          {
+            "let": "registryBinding",
+            "value": {
+              "registryContract": "$evidence.target",
+              "tokens": "$evidence.tokens",
+              "tokenWeights": "$evidence.tokenWeights"
+            }
+          },
+          {
+            "let": "behaviorBinding",
+            "value": {
+              "interfaceMode": "$evidence.interfaceMode",
+              "changesEnabled": true,
+              "totalPercents": "$evidence.totalPercents",
+              "changeFee": "$evidence.changeFee",
+              "inLendingMode": "$evidence.inLendingMode",
+              "activeProof": "registry-bound-effect-delta"
+            }
+          },
+          {
+            "let": "evidenceHash",
+            "value": {
+              "op": "hash",
+              "args": [{
+                "registryBinding": "$registryBinding",
+                "behaviorBinding": "$behaviorBinding",
+                "behaviorProofHash": "$evidence.behaviorProofHash"
+              }]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {"op": "address", "args": ["$evidence.target"]},
+                "provenance": [{
+                  "kind": "observed-active-registry-proof",
+                  "subject": {"op": "address", "args": ["$evidence.target"]},
+                  "evidenceHash": "$evidenceHash"
+                }],
+                "facts": {
+                  "target": {"op": "address", "args": ["$evidence.target"]},
+                  "registryBinding": "$registryBinding",
+                  "behaviorBinding": "$behaviorBinding",
+                  "probeTokenIn": {"op": "address", "args": ["$evidence.probeTokenIn"]},
+                  "probeTokenOut": {"op": "address", "args": ["$evidence.probeTokenOut"]}
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "memoReuse": "recheck-identity",
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]}
+  },
+  "instance": {
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {"op": "lower", "args": [{"op": "address", "args": ["$identity.facts.target"]}]},
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {"kind": "source-state", "freshness": "pinned-block"},
+        {"kind": "execution-actor", "role": "executor"},
+        {"kind": "quote-completion", "mode": "return-data"},
+        {"kind": "effect-observation", "effects": ["token-delta", "logs"]}
+      ],
+      "target": {"op": "address", "args": ["$identity.facts.target"]},
+      "registryBinding": "$identity.facts.registryBinding",
+      "behaviorBinding": "$identity.facts.behaviorBinding",
+      "probeTokenIn": {"op": "address", "args": ["$identity.facts.probeTokenIn"]},
+      "probeTokenOut": {"op": "address", "args": ["$identity.facts.probeTokenOut"]}
+    },
+    "bindingProjection": {
+      "target": "$descriptor.target",
+      "registryBinding": {
+        "registryContract": "$descriptor.registryBinding.registryContract",
+        "tokens": "$descriptor.registryBinding.tokens",
+        "tokenWeights": {
+          "op": "map",
+          "args": ["$descriptor.registryBinding.tokenWeights", "w", {
+            "token": "$w.token",
+            "weight": "$w.weight",
+            "codeHash": "$w.codeHash"
+          }]
+        }
+      },
+      "behaviorBinding": {
+        "interfaceMode": "$descriptor.behaviorBinding.interfaceMode",
+        "changesEnabled": "$descriptor.behaviorBinding.changesEnabled",
+        "totalPercents": "$descriptor.behaviorBinding.totalPercents",
+        "changeFee": "$descriptor.behaviorBinding.changeFee",
+        "inLendingMode": "$descriptor.behaviorBinding.inLendingMode",
+        "activeProof": "$descriptor.behaviorBinding.activeProof"
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+    "directions": [
+      {
+        "id": "observed-pair",
+        "enabled": true,
+        "tokenIn": "$descriptor.probeTokenIn",
+        "tokenOut": "$descriptor.probeTokenOut",
+        "adapterId": "astra-multitoken-change",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "convert"},
+        "executionAssets": {"input": "erc20", "output": "erc20"}
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]}
+    },
+    "effects": [
+      {"kind": "token-delta", "token": "$route.tokenIn", "account": "executor", "direction": "decrease"},
+      {"kind": "token-delta", "token": "$route.tokenIn", "account": "route-target", "direction": "increase"},
+      {"kind": "token-delta", "token": "$route.tokenOut", "account": "route-target", "direction": "decrease"},
+      {"kind": "token-delta", "token": "$route.tokenOut", "account": "executor", "direction": "increase"}
+    ],
+    "assertions": [
+      {
+        "condition": {"op": "not", "args": [{"op": "sameAddress", "args": ["$route.tokenIn", "$route.tokenOut"]}]},
+        "error": "astra-multitoken route requires a distinct pair"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "target": "$descriptor.target",
+      "tokens": "$descriptor.registryBinding.tokens",
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "routes": {
+        "op": "map",
+        "args": ["$routes", "r", {
+          "routeKey": "$r.routeKey",
+          "target": {"op": "lower", "args": [{"op": "address", "args": ["$r.target"]}]},
+          "tokenIn": {"op": "lower", "args": [{"op": "address", "args": ["$r.tokenIn"]}]},
+          "tokenOut": {"op": "lower", "args": [{"op": "address", "args": ["$r.tokenOut"]}]}
+        }]
+      }
+    },
+    "static": {
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": {"op": "concat", "args": ["$draft.tokens", ["$draft.target"]]},
+      "requests": {
+        "op": "map",
+        "args": ["$draft.tokens", "t", {
+          "id": {"op": "join", "args": [["static-token-decimals:", "$index"], ""]},
+          "kind": "eth-call",
+          "to": {"op": "address", "args": ["$t"]},
+          "data": {"op": "encode", "args": ["token", "decimals", []]},
+          "completion": "return-data"
+        }]
+      },
+      "decode": {
+        "fields": [
+          {
+            "name": "decimals",
+            "value": {
+              "op": "map",
+              "args": ["$programInput.tokens", "t", {
+                "op": "number",
+                "args": [{
+                  "op": "word",
+                  "args": [{
+                    "op": "get",
+                    "args": [{
+                      "op": "returned",
+                      "args": [{"op": "join", "args": [["static-token-decimals:", "$index"], ""]}]
+                    }, "data"]
+                  }]
+                }]
+              }]
+            },
+            "checks": [{
+              "condition": {
+                "op": "every",
+                "args": ["$decimals", "d", {
+                  "op": "and",
+                  "args": [
+                    {"op": "gte", "args": ["$d", 0]},
+                    {"op": "lte", "args": ["$d", 36]}
+                  ]
+                }]
+              },
+              "error": "astra-multitoken token decimals are invalid"
+            }]
+          },
+          {
+            "name": "oneTokens",
+            "value": {
+              "op": "objectFromEntries",
+              "args": [{
+                "op": "map",
+                "args": ["$programInput.tokens", "t", [
+                  {"op": "lower", "args": [{"op": "address", "args": ["$t"]}]},
+                  {"op": "pow", "args": [10, {"op": "at", "args": ["$decimals", "$index"]}]}
+                ]]
+              }]
+            }
+          }
+        ],
+        "output": {"oneTokens": "$oneTokens"}
+      }
+    },
+    "finalize": {"op": "merge", "args": ["$draft", "$staticEvidence"]},
+    "sampleAmount": {
+      "op": "get",
+      "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$route.tokenIn"]}]
+    },
+    "exactCompatibility": {
+      "target": "$descriptor.target",
+      "tokenIn": "$route.tokenIn",
+      "tokenOut": "$route.tokenOut",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": ["log"]
+  },
+  "protocol": {"candidateKinds": ["observed-call"], "activeBehaviorProof": "required"},
+  "standard": {
+    "id": "observed-active-registry",
+    "lineageId": "astra-multitoken:observed-active-registry",
+    "abi": {
+      "astra": [
+        "function getReturn(address fromToken,address toToken,uint256 amount) view returns (uint256)",
+        "function change(address fromToken,address toToken,uint256 amount,uint256 minReturn) returns (uint256)"
+      ],
+      "token": [
+        "function decimals() view returns (uint8)",
+        "function approve(address spender,uint256 amount) returns (bool)"
+      ]
+    },
+    "constants": {
+      "changeTopic": "0x24cee3d6b5651a987362aa6216b9d34a39212f0f1967dfd48c2c3a4fc3c576dc"
+    },
+    "expressions": {},
+    "match": {},
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {"transports": []},
+      "dependencies": {"op": "concat", "args": ["$descriptor.registryBinding.tokens", ["$descriptor.target"]]},
+      "mutationAddresses": ["$descriptor.target"],
+      "mutationPredicate": {
+        "op": "eq",
+        "args": [
+          {"op": "lower", "args": [{"op": "at", "args": [{"op": "get", "args": ["$observation", "topics"]}, 0]}]},
+          "$constants.changeTopic"
+        ]
+      },
+      "finalizeChecks": [{
+        "condition": {
+          "op": "every",
+          "args": ["$descriptor.routes", "r", {
+            "op": "and",
+            "args": [
+              {"op": "defined", "args": [{"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]}]},
+              {"op": "gt", "args": [
+                {"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]},
+                {"op": "uint", "args": ["0"]}
+              ]}
+            ]
+          }]
+        },
+        "error": "astra-multitoken pricing decimals binding mismatch"
+      }]
+    },
+    "exact": {
+      "methodId": "astra-multitoken-get-return",
+      "requirements": {"transports": []},
+      "protectedAddresses": ["$descriptor.target"],
+      "evidence": {
+        "kind": "astra-multitoken-get-return",
+        "source": "$source",
+        "target": "$descriptor.target",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {"directOutput": true},
+      "protectedAddresses": ["$descriptor.target"],
+      "steps": [
+        {
+          "id": "change",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$descriptor.target",
+            "mode": "exact-clear"
+          },
+          "call": {
+            "target": "$descriptor.target",
+            "signature": "function change(address,address,uint256,uint256) returns (uint256)",
+            "args": [
+              "$route.tokenIn",
+              "$route.tokenOut",
+              {"runtime": "amountIn"},
+              "$minAmountOut"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {"runtime": "amountIn"}
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {
+            "transports": {
+              "op": "if",
+              "args": [
+                {"op": "gt", "args": ["$amountIn", {"op": "uint", "args": ["0"]}]},
+                ["eth-call"],
+                []
+              ]
+            }
+          },
+          "requests": [{
+            "id": "exact-get-return",
+            "kind": "eth-call",
+            "to": {"op": "address", "args": ["$descriptor.target"]},
+            "data": {
+              "op": "encode",
+              "args": ["astra", "getReturn", ["$route.tokenIn", "$route.tokenOut", "$amountIn"]]
+            },
+            "completion": "return-data"
+          }],
+          "decode": [
+            {
+              "let": "amountOut",
+              "value": {
+                "op": "word",
+                "args": [{"op": "get", "args": [{"op": "returned", "args": ["exact-get-return"]}, "data"]}]
+              }
+            },
+            {
+              "assert": {"op": "gt", "args": ["$amountOut", {"op": "uint", "args": ["0"]}]},
+              "error": "astra-multitoken exact quote returned no output"
+            },
+            {"return": "$amountOut"}
+          ]
+        }
+      ],
+      "result": "$steps.quote",
+      "chainQuote": {
+        "step": "quote",
+        "requestId": "exact-get-return",
+        "signature": "function getReturn(address,address,uint256) returns (uint256)",
+        "amountPath": [2],
+        "outputPath": [0],
+        "completion": "returned"
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "q0",
+          "requirements": {"transports": ["eth-call"]},
+          "requests": {
+            "op": "map",
+            "args": [
+              {"op": "filter", "args": ["$routes", "r", {"op": "lt", "args": ["$index", 248]}]},
+              "r",
+              {
+                "id": {"op": "join", "args": [["current-get-return:", "$r.tokenIn", ":", "$r.tokenOut"], ""]},
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$descriptor.target"]},
+                "data": {
+                  "op": "encode",
+                  "args": ["astra", "getReturn", [
+                    "$r.tokenIn",
+                    "$r.tokenOut",
+                    {"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]}
+                  ]]
+                },
+                "completion": "return-data"
+              }
+            ]
+          },
+          "decode": [
+            {
+              "let": "subset",
+              "value": {"op": "filter", "args": ["$routes", "r", {"op": "lt", "args": ["$index", 248]}]}
+            },
+            {
+              "let": "quotes",
+              "value": {
+                "op": "objectFromEntries",
+                "args": [{
+                  "op": "map",
+                  "args": ["$subset", "r", [
+                    "$r.routeKey",
+                    {
+                      "amountIn": {"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]},
+                      "amountOut": {
+                        "op": "word",
+                        "args": [{
+                          "op": "get",
+                          "args": [{
+                            "op": "returned",
+                            "args": [{"op": "join", "args": [["current-get-return:", "$r.tokenIn", ":", "$r.tokenOut"], ""]}]
+                          }, "data"]
+                        }]
+                      }
+                    }
+                  ]]
+                }]
+              }
+            },
+            {
+              "assert": {
+                "op": "every",
+                "args": [{"op": "objectEntries", "args": ["$quotes"]}, "e", {
+                  "op": "gt",
+                  "args": [{"op": "get", "args": [{"op": "at", "args": ["$e", 1]}, "amountOut"]}, {"op": "uint", "args": ["0"]}]
+                }]
+              },
+              "error": "astra_multitoken_quote_unavailable"
+            },
+            {"return": {"quotes": "$quotes"}}
+          ]
+        },
+        {
+          "id": "q1",
+          "requirements": {
+            "transports": {
+              "op": "if",
+              "args": [
+                {"op": "gt", "args": [{"op": "length", "args": ["$routes"]}, 248]},
+                ["eth-call"],
+                []
+              ]
+            }
+          },
+          "requests": {
+            "op": "map",
+            "args": [
+              {"op": "filter", "args": ["$routes", "r", {
+                "op": "and",
+                "args": [
+                  {"op": "gte", "args": ["$index", 248]},
+                  {"op": "lt", "args": ["$index", 496]}
+                ]
+              }]},
+              "r",
+              {
+                "id": {"op": "join", "args": [["current-get-return:", "$r.tokenIn", ":", "$r.tokenOut"], ""]},
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$descriptor.target"]},
+                "data": {
+                  "op": "encode",
+                  "args": ["astra", "getReturn", [
+                    "$r.tokenIn",
+                    "$r.tokenOut",
+                    {"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]}
+                  ]]
+                },
+                "completion": "return-data"
+              }
+            ]
+          },
+          "decode": [
+            {
+              "let": "subset",
+              "value": {"op": "filter", "args": ["$routes", "r", {
+                "op": "and",
+                "args": [
+                  {"op": "gte", "args": ["$index", 248]},
+                  {"op": "lt", "args": ["$index", 496]}
+                ]
+              }]}
+            },
+            {
+              "let": "quotes",
+              "value": {
+                "op": "objectFromEntries",
+                "args": [{
+                  "op": "map",
+                  "args": ["$subset", "r", [
+                    "$r.routeKey",
+                    {
+                      "amountIn": {"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]},
+                      "amountOut": {
+                        "op": "word",
+                        "args": [{
+                          "op": "get",
+                          "args": [{
+                            "op": "returned",
+                            "args": [{"op": "join", "args": [["current-get-return:", "$r.tokenIn", ":", "$r.tokenOut"], ""]}]
+                          }, "data"]
+                        }]
+                      }
+                    }
+                  ]]
+                }]
+              }
+            },
+            {"return": {"quotes": "$quotes"}}
+          ]
+        },
+        {
+          "id": "q2",
+          "requirements": {
+            "transports": {
+              "op": "if",
+              "args": [
+                {"op": "gt", "args": [{"op": "length", "args": ["$routes"]}, 496]},
+                ["eth-call"],
+                []
+              ]
+            }
+          },
+          "requests": {
+            "op": "map",
+            "args": [
+              {"op": "filter", "args": ["$routes", "r", {
+                "op": "and",
+                "args": [
+                  {"op": "gte", "args": ["$index", 496]},
+                  {"op": "lt", "args": ["$index", 744]}
+                ]
+              }]},
+              "r",
+              {
+                "id": {"op": "join", "args": [["current-get-return:", "$r.tokenIn", ":", "$r.tokenOut"], ""]},
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$descriptor.target"]},
+                "data": {
+                  "op": "encode",
+                  "args": ["astra", "getReturn", [
+                    "$r.tokenIn",
+                    "$r.tokenOut",
+                    {"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]}
+                  ]]
+                },
+                "completion": "return-data"
+              }
+            ]
+          },
+          "decode": [
+            {
+              "let": "subset",
+              "value": {"op": "filter", "args": ["$routes", "r", {
+                "op": "and",
+                "args": [
+                  {"op": "gte", "args": ["$index", 496]},
+                  {"op": "lt", "args": ["$index", 744]}
+                ]
+              }]}
+            },
+            {
+              "let": "quotes",
+              "value": {
+                "op": "objectFromEntries",
+                "args": [{
+                  "op": "map",
+                  "args": ["$subset", "r", [
+                    "$r.routeKey",
+                    {
+                      "amountIn": {"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]},
+                      "amountOut": {
+                        "op": "word",
+                        "args": [{
+                          "op": "get",
+                          "args": [{
+                            "op": "returned",
+                            "args": [{"op": "join", "args": [["current-get-return:", "$r.tokenIn", ":", "$r.tokenOut"], ""]}]
+                          }, "data"]
+                        }]
+                      }
+                    }
+                  ]]
+                }]
+              }
+            },
+            {"return": {"quotes": "$quotes"}}
+          ]
+        },
+        {
+          "id": "q3",
+          "requirements": {
+            "transports": {
+              "op": "if",
+              "args": [
+                {"op": "gt", "args": [{"op": "length", "args": ["$routes"]}, 744]},
+                ["eth-call"],
+                []
+              ]
+            }
+          },
+          "requests": {
+            "op": "map",
+            "args": [
+              {"op": "filter", "args": ["$routes", "r", {"op": "gte", "args": ["$index", 744]}]},
+              "r",
+              {
+                "id": {"op": "join", "args": [["current-get-return:", "$r.tokenIn", ":", "$r.tokenOut"], ""]},
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$descriptor.target"]},
+                "data": {
+                  "op": "encode",
+                  "args": ["astra", "getReturn", [
+                    "$r.tokenIn",
+                    "$r.tokenOut",
+                    {"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]}
+                  ]]
+                },
+                "completion": "return-data"
+              }
+            ]
+          },
+          "decode": [
+            {
+              "let": "subset",
+              "value": {"op": "filter", "args": ["$routes", "r", {"op": "gte", "args": ["$index", 744]}]}
+            },
+            {
+              "let": "quotes",
+              "value": {
+                "op": "objectFromEntries",
+                "args": [{
+                  "op": "map",
+                  "args": ["$subset", "r", [
+                    "$r.routeKey",
+                    {
+                      "amountIn": {"op": "get", "args": ["$descriptor.oneTokens", {"op": "lower", "args": ["$r.tokenIn"]}]},
+                      "amountOut": {
+                        "op": "word",
+                        "args": [{
+                          "op": "get",
+                          "args": [{
+                            "op": "returned",
+                            "args": [{"op": "join", "args": [["current-get-return:", "$r.tokenIn", ":", "$r.tokenOut"], ""]}]
+                          }, "data"]
+                        }]
+                      }
+                    }
+                  ]]
+                }]
+              }
+            },
+            {"return": {"quotes": "$quotes"}}
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "quotes": {
+          "op": "merge",
+          "args": [
+            {"op": "get", "args": ["$steps.q0", "quotes"]},
+            {"op": "get", "args": ["$steps.q1", "quotes"]},
+            {"op": "get", "args": ["$steps.q2", "quotes"]},
+            {"op": "get", "args": ["$steps.q3", "quotes"]}
+          ]
+        }
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "astra-multitoken-change",
+        "lineage": "custom-protocol:astra-multitoken",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function change(address,address,uint256,uint256)"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1069 @@
+{
+  "version": 2,
+  "scope": {"family": "protocol:eigenpie"},
+  "production": {
+    "domain": "protocol",
+    "activation": {"enabled": true, "envKey": "SEARCHER_FAMILY_EIGENPIE_ENABLED"}
+  },
+  "manifest": {
+    "familyId": "protocol:eigenpie",
+    "domain": "protocol",
+    "ownedActionAdapterIds": ["eigenpie-deposit-asset"],
+    "requiredInfraActionAdapterIds": ["erc20-approve"],
+    "allowedTaxonomy": [
+      {"slotKind": "protocol", "protocolAction": "wrap"}
+    ],
+    "supportedLineages": ["eigenpie:observed-active-pair"],
+    "poolAdapterIds": ["eigenpie-deposit-router"],
+    "edgeAdapterIds": ["eigenpie-deposit-asset"],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": ["observed-call", "landed-log"],
+      "candidateSources": ["observed-interaction"],
+      "candidate": {
+        "kind": "eigenpie-deposit-pair",
+        "addressField": "target",
+        "fields": {
+          "target": "address",
+          "actor": "address",
+          "tokenIn": "address",
+          "amountIn": "uint",
+          "minAmountOut": "uint",
+          "observedAmountOut": "uint",
+          "hasObservedAmountOut": "bool"
+        },
+        "key": ["target", "tokenIn"]
+      },
+      "calls": [
+        {
+          "id": "eigenpie-deposit-asset-call",
+          "signature": "function depositAsset(address asset,uint256 depositAmount,uint256 minRec,address referral)",
+          "fields": {
+            "target": {"from": "target"},
+            "actor": {"from": "sender"},
+            "tokenIn": {"from": "argument", "index": 0},
+            "amountIn": {"from": "argument", "index": 1},
+            "minAmountOut": {"from": "argument", "index": 2},
+            "observedAmountOut": {"from": "literal", "value": "0"},
+            "hasObservedAmountOut": {"from": "literal", "value": false}
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {"op": "at", "args": ["$args", 1]},
+                {"op": "uint", "args": ["0"]}
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {"op": "sameAddress", "args": ["$candidate.tokenIn", "0x0000000000000000000000000000000000000000"]}
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "eigenpie-asset-deposit-log",
+          "signature": "event AssetDeposit(address indexed depositor,address indexed asset,uint256 depositAmount,address indexed referral,uint256 mintedAmount,bool isPreDeposit)",
+          "fields": {
+            "target": {"from": "emitter"},
+            "actor": {"from": "argument", "index": 0},
+            "tokenIn": {"from": "argument", "index": 1},
+            "amountIn": {"from": "argument", "index": 2},
+            "minAmountOut": {"from": "argument", "index": 4},
+            "observedAmountOut": {"from": "argument", "index": 4},
+            "hasObservedAmountOut": {"from": "literal", "value": true}
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {"op": "at", "args": ["$args", 2]},
+                {"op": "uint", "args": ["0"]}
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {"op": "at", "args": ["$args", 4]},
+                {"op": "uint", "args": ["0"]}
+              ]
+            },
+            {"op": "not", "args": [{"op": "at", "args": ["$args", 5]}]}
+          ]
+        }
+      ],
+      "labels": ["eigenpie", "protocol:eigenpie", "eigenpie-deposit-router"],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "identity": {
+        "select": [
+          {
+            "return": {
+              "op": "if",
+              "args": [
+                {"op": "defined", "args": ["$evidence"]},
+                "active",
+                "base"
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {"transports": ["get-code", "eth-call"]},
+            "requests": [
+              {
+                "id": "identity-target-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$candidate.target"]}
+              },
+              {
+                "id": "identity-asset-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$candidate.tokenIn"]}
+              },
+              {
+                "id": "identity-quote",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.target"]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "eigenpie",
+                    "getMLRTAmountToMint",
+                    [
+                      {"op": "address", "args": ["$candidate.tokenIn"]},
+                      "$candidate.amountIn"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {"op": "result", "args": ["identity-target-code"]},
+                      {"op": "result", "args": ["identity-asset-code"]},
+                      {"op": "result", "args": ["identity-quote"]}
+                    ]
+                  ]
+                }
+              },
+              {
+                "let": "targetCode",
+                "value": {"op": "code", "args": ["identity-target-code"]}
+              },
+              {
+                "let": "assetCode",
+                "value": {"op": "code", "args": ["identity-asset-code"]}
+              },
+              {
+                "let": "quotedAmountOut",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "eigenpie",
+                    "getMLRTAmountToMint",
+                    {
+                      "op": "get",
+                      "args": [
+                        {"op": "returned", "args": ["identity-quote"]},
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "quotedReceipt",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "eigenpie",
+                        "getMLRTAmountToMint",
+                        {
+                          "op": "get",
+                          "args": [
+                            {"op": "returned", "args": ["identity-quote"]},
+                            "data"
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "quote",
+                  "targetCodeHash": {"op": "codeHash", "args": ["$targetCode"]},
+                  "tokenInCodeHash": {"op": "codeHash", "args": ["$assetCode"]},
+                  "target": {"op": "address", "args": ["$candidate.target"]},
+                  "actor": {"op": "address", "args": ["$candidate.actor"]},
+                  "tokenIn": {"op": "address", "args": ["$candidate.tokenIn"]},
+                  "tokenOut": "$quotedReceipt",
+                  "amountIn": "$candidate.amountIn",
+                  "amountOut": "$quotedAmountOut"
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "transports": ["get-code", "effect-delta-simulation"],
+              "caller": "observed-sender",
+              "effects": ["return-data", "token-delta", "total-supply-delta", "logs"]
+            },
+            "requests": [
+              {
+                "id": "identity-receipt-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$evidence.tokenOut"]}
+              },
+              {
+                "id": "identity-active-deposit",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {"kind": "observed-sender"},
+                    "to": {"op": "address", "args": ["$evidence.tokenIn"]},
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "token",
+                        "approve",
+                        [
+                          {"op": "address", "args": ["$evidence.target"]},
+                          "$evidence.amountIn"
+                        ]
+                      ]
+                    }
+                  },
+                  {
+                    "caller": {"kind": "observed-sender"},
+                    "to": {"op": "address", "args": ["$evidence.target"]},
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "eigenpie",
+                        "depositAsset",
+                        [
+                          {"op": "address", "args": ["$evidence.tokenIn"]},
+                          "$evidence.amountIn",
+                          "$evidence.amountOut",
+                          "$constants.referral"
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {"kind": "observed-sender"},
+                  "executionMode": "impersonated-call-frame",
+                  "to": {"op": "address", "args": ["$evidence.tokenOut"]},
+                  "data": {"op": "encode", "args": ["token", "totalSupply", []]}
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {"op": "address", "args": ["$evidence.tokenIn"]},
+                    "account": {"kind": "observed-sender"}
+                  },
+                  {
+                    "token": {"op": "address", "args": ["$evidence.tokenOut"]},
+                    "account": {"kind": "observed-sender"}
+                  }
+                ],
+                "overrideIntent": {
+                  "caller": {"kind": "observed-sender"},
+                  "tokenBalances": [
+                    {
+                      "token": {"op": "address", "args": ["$evidence.tokenIn"]},
+                      "amount": "$evidence.amountIn"
+                    }
+                  ]
+                },
+                "observe": ["return-data", "token-delta", "total-supply-delta", "logs"]
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {"op": "result", "args": ["identity-receipt-code"]},
+                      {"op": "result", "args": ["identity-active-deposit"]}
+                    ]
+                  ]
+                }
+              },
+              {
+                "let": "receiptCode",
+                "value": {"op": "code", "args": ["identity-receipt-code"]}
+              },
+              {
+                "let": "simulation",
+                "value": {"op": "successful", "args": ["identity-active-deposit"]}
+              },
+              {
+                "let": "spent",
+                "value": {
+                  "op": "tokenDelta",
+                  "args": [
+                    {
+                      "result": "$simulation",
+                      "token": "$evidence.tokenIn",
+                      "account": "$evidence.actor",
+                      "direction": "decrease",
+                      "amount": "$evidence.amountIn"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "received",
+                "value": {
+                  "op": "tokenDelta",
+                  "args": [
+                    {
+                      "result": "$simulation",
+                      "token": "$evidence.tokenOut",
+                      "account": "$evidence.actor",
+                      "direction": "increase",
+                      "amount": "$evidence.amountOut"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "minted",
+                "value": {
+                  "op": "supplyDelta",
+                  "args": [
+                    {
+                      "result": "$simulation",
+                      "token": "$evidence.tokenOut",
+                      "direction": "increase",
+                      "amount": "$evidence.amountOut"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "depositLog",
+                "value": {
+                  "op": "event",
+                  "args": [
+                    {
+                      "result": "$simulation",
+                      "abi": "eigenpie",
+                      "address": {"op": "address", "args": ["$evidence.target"]},
+                      "name": "AssetDeposit",
+                      "fields": {
+                        "depositor": {"op": "address", "args": ["$evidence.actor"]},
+                        "asset": {"op": "address", "args": ["$evidence.tokenIn"]},
+                        "depositAmount": "$evidence.amountIn",
+                        "mintedAmount": "$evidence.amountOut",
+                        "isPreDeposit": false
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "behaviorValid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {"op": "get", "args": ["$simulation", "completion"]},
+                        "returned"
+                      ]
+                    },
+                    "$spent",
+                    "$received",
+                    "$minted",
+                    "$depositLog"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "active",
+                      "tokenOutCodeHash": {"op": "codeHash", "args": ["$receiptCode"]},
+                      "behaviorProofHash": {
+                        "op": "hash",
+                        "args": [
+                          {
+                            "request": "depositAsset",
+                            "target": {"op": "address", "args": ["$evidence.target"]},
+                            "actor": {"op": "address", "args": ["$evidence.actor"]},
+                            "tokenIn": {"op": "address", "args": ["$evidence.tokenIn"]},
+                            "tokenOut": {"op": "address", "args": ["$evidence.tokenOut"]},
+                            "amountIn": "$evidence.amountIn",
+                            "amountOut": "$evidence.amountOut",
+                            "effects": {
+                              "op": "effects",
+                              "args": [{"op": "get", "args": ["$simulation", "effects"]}]
+                            }
+                          }
+                        ]
+                      },
+                      "active": "$behaviorValid"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]},
+            "return": {"status": "continue"}
+          },
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {"op": "eq", "args": ["$evidence.phase", "quote"]},
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {"op": "gt", "args": ["$evidence.amountOut", {"op": "uint", "args": ["0"]}]},
+                        {
+                          "op": "not",
+                          "args": [
+                            {"op": "sameAddress", "args": ["$evidence.tokenIn", "$evidence.tokenOut"]}
+                          ]
+                        },
+                        {"op": "gte", "args": ["$evidence.amountOut", "$candidate.minAmountOut"]},
+                        {
+                          "op": "or",
+                          "args": [
+                            {"op": "eq", "args": ["$candidate.hasObservedAmountOut", false]},
+                            {"op": "eq", "args": ["$evidence.amountOut", "$candidate.observedAmountOut"]}
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "eigenpie_quote_binding_failed",
+              "evidenceRequestIds": ["identity-active-deposit", "observed-active-pair"]
+            }
+          },
+          {
+            "when": {"op": "eq", "args": ["$evidence.phase", "quote"]},
+            "return": {"status": "continue"}
+          },
+          {
+            "when": {"op": "not", "args": ["$evidence.active"]},
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "eigenpie_active_deposit_failed",
+              "evidenceRequestIds": ["identity-active-deposit"]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "join",
+                  "args": [
+                    [
+                      {"op": "lower", "args": [{"op": "address", "args": ["$evidence.target"]}]},
+                      {"op": "lower", "args": [{"op": "address", "args": ["$evidence.tokenIn"]}]},
+                      {"op": "lower", "args": [{"op": "address", "args": ["$evidence.tokenOut"]}]}
+                    ],
+                    ":"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "observed-active-pair-proof",
+                    "subject": {"op": "address", "args": ["$evidence.target"]},
+                    "evidenceHash": "$evidence.behaviorProofHash"
+                  }
+                ],
+                "target": {"op": "address", "args": ["$evidence.target"]},
+                "tokenIn": {"op": "address", "args": ["$evidence.tokenIn"]},
+                "tokenOut": {"op": "address", "args": ["$evidence.tokenOut"]},
+                "sampleAmountIn": "$evidence.amountIn"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": "$identity.subject"
+  },
+  "instance": {
+    "key": "$identity.subject",
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": "$identity.subject",
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [{"kind": "source-state", "freshness": "pinned-block"}],
+      "target": {"op": "address", "args": ["$identity.target"]},
+      "asset": {"op": "address", "args": ["$identity.tokenIn"]},
+      "receipt": {"op": "address", "args": ["$identity.tokenOut"]},
+      "sampleAmountIn": "$identity.sampleAmountIn"
+    },
+    "bindingProjection": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
+      "receipt": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.receipt"]}]},
+      "execution": "depositAsset(asset,amount,minOut,zero-referral)"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": "$descriptor.instanceKey",
+    "directions": [
+      {
+        "id": "deposit-asset",
+        "enabled": true,
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.receipt",
+        "adapterId": "eigenpie-deposit-asset",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "wrap"}
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]}
+    },
+    "effects": [
+      {"kind": "token-delta", "token": "$route.tokenIn", "account": "executor", "direction": "decrease"},
+      {"kind": "token-delta", "token": "$route.tokenOut", "account": "executor", "direction": "increase"},
+      {"kind": "total-supply-delta", "token": "$route.tokenOut", "direction": "increase"}
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "target": "$descriptor.target",
+      "route": {"op": "at", "args": ["$routes", 0]},
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
+      "receipt": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.receipt"]}]}
+    },
+    "static": {
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": ["$draft.route.tokenIn", "$draft.route.tokenOut"],
+      "requests": [
+        {
+          "id": "static-asset-decimals",
+          "kind": "eth-call",
+          "to": "$draft.route.tokenIn",
+          "data": {"op": "encode", "args": ["token", "decimals", []]},
+          "completion": "return-data"
+        }
+      ],
+      "decode": {
+        "fields": [
+          {
+            "name": "assetDecimals",
+            "value": {
+              "op": "word",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [{"op": "returned", "args": ["static-asset-decimals"]}, "data"]
+                }
+              ]
+            },
+            "checks": [
+              {
+                "condition": {
+                  "op": "lte",
+                  "args": ["$assetDecimals", {"op": "uint", "args": ["77"]}]
+                },
+                "error": "protocol token decimals exceed uint256 scale"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "oneAsset": {"op": "pow", "args": [10, "$assetDecimals"]}
+        }
+      }
+    },
+    "finalize": {"op": "merge", "args": ["$draft", "$staticEvidence"]},
+    "sampleAmount": "$descriptor.oneAsset",
+    "exactCompatibility": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$route.tokenIn"]}]},
+      "receipt": {"op": "lower", "args": [{"op": "address", "args": ["$route.tokenOut"]}]},
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": ["log", "call"]
+  },
+  "protocol": {"candidateKinds": ["observed-call"], "activeBehaviorProof": "required"},
+  "standard": {
+    "id": "observed-active-pair",
+    "lineageId": "eigenpie:observed-active-pair",
+    "abi": {
+      "eigenpie": [
+        "function depositAsset(address asset,uint256 depositAmount,uint256 minRec,address referral)",
+        "function getMLRTAmountToMint(address asset,uint256 amount) view returns (uint256 amountOut,address receiptToken)",
+        "event AssetDeposit(address indexed depositor,address indexed asset,uint256 depositAmount,address indexed referral,uint256 mintedAmount,bool isPreDeposit)"
+      ],
+      "token": [
+        "function approve(address spender,uint256 amount) returns (bool)",
+        "function totalSupply() view returns (uint256)",
+        "function decimals() view returns (uint8)"
+      ]
+    },
+    "constants": {
+      "referral": "0x0000000000000000000000000000000000000000"
+    },
+    "expressions": {},
+    "match": {},
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": ["$descriptor.target", "$descriptor.route.tokenIn", "$descriptor.route.tokenOut"],
+      "mutationAddresses": ["$descriptor.target"]
+    },
+    "exact": {
+      "methodId": "get-mlrt-amount-to-mint",
+      "requirements": {"transports": ["eth-call"]},
+      "evidence": {
+        "kind": "eigenpie-pair-quote",
+        "source": "$source",
+        "target": {"op": "address", "args": ["$descriptor.target"]},
+        "tokenIn": {"op": "address", "args": ["$route.tokenIn"]},
+        "tokenOut": {"op": "address", "args": ["$route.tokenOut"]},
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {"directOutput": false},
+      "protectedAddresses": ["$descriptor.target", "$descriptor.asset", "$descriptor.receipt"],
+      "contextChecks": [
+        {
+          "condition": {"op": "not", "args": ["$externalRecipient"]},
+          "error": "eigenpie deposit mints to the executor; an external recipient is unsupported"
+        }
+      ],
+      "steps": [
+        {
+          "id": "deposit",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$descriptor.target",
+            "mode": "exact-clear"
+          },
+          "call": {
+            "target": "$descriptor.target",
+            "signature": "function depositAsset(address asset,uint256 depositAmount,uint256 minRec,address referral)",
+            "args": [
+              "$route.tokenIn",
+              {"runtime": "amountIn"},
+              "$minAmountOut",
+              "$constants.referral"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {"runtime": "amountIn"}
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "supply",
+          "token": "$route.tokenOut",
+          "direction": "increase",
+          "minimum": 1
+        }
+      ]
+    }
+  },
+  "modules": {
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {"transports": ["eth-call"]},
+          "requests": [
+            {
+              "id": "quote-mlrt",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.target"]},
+              "data": {
+                "op": "encode",
+                "args": [
+                  "eigenpie",
+                  "getMLRTAmountToMint",
+                  [
+                    {"op": "address", "args": ["$route.tokenIn"]},
+                    "$amountIn"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "amountOut",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "eigenpie",
+                  "getMLRTAmountToMint",
+                  {
+                    "op": "get",
+                    "args": [{"op": "returned", "args": ["quote-mlrt"]}, "data"]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "receipt",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "eigenpie",
+                      "getMLRTAmountToMint",
+                      {
+                        "op": "get",
+                        "args": [{"op": "returned", "args": ["quote-mlrt"]}, "data"]
+                      },
+                      1
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {"op": "sameAddress", "args": ["$receipt", "$route.tokenOut"]},
+              "error": "Eigenpie exact quote returned an incompatible receipt"
+            },
+            {
+              "assert": {"op": "gt", "args": ["$amountOut", {"op": "uint", "args": ["0"]}]},
+              "error": "Eigenpie exact quote returned no output"
+            },
+            {"return": "$amountOut"}
+          ]
+        }
+      ],
+      "result": "$steps.quote",
+      "chainQuote": {
+        "step": "quote",
+        "requestId": "quote-mlrt",
+        "signature": "function getMLRTAmountToMint(address asset,uint256 amount) view returns (uint256 amountOut,address receiptToken)",
+        "amountPath": [1],
+        "outputPath": [0],
+        "completion": "returned"
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {"transports": ["eth-call"]},
+          "requests": [
+            {
+              "id": "current-mlrt-quote",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.target"]},
+              "data": {
+                "op": "encode",
+                "args": [
+                  "eigenpie",
+                  "getMLRTAmountToMint",
+                  [
+                    {"op": "address", "args": ["$descriptor.route.tokenIn"]},
+                    "$descriptor.oneAsset"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "amountOut",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "eigenpie",
+                  "getMLRTAmountToMint",
+                  {
+                    "op": "get",
+                    "args": [{"op": "returned", "args": ["current-mlrt-quote"]}, "data"]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "receipt",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "eigenpie",
+                      "getMLRTAmountToMint",
+                      {
+                        "op": "get",
+                        "args": [{"op": "returned", "args": ["current-mlrt-quote"]}, "data"]
+                      },
+                      1
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {"op": "sameAddress", "args": ["$receipt", "$descriptor.route.tokenOut"]},
+              "error": "Eigenpie current quote receipt token drifted"
+            },
+            {
+              "assert": {"op": "gt", "args": ["$amountOut", {"op": "uint", "args": ["0"]}]},
+              "error": "Eigenpie current quote returned no output"
+            },
+            {"return": {"amountOut": "$amountOut"}}
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$routes",
+                "route",
+                [
+                  {"op": "get", "args": ["$route", "routeKey"]},
+                  {
+                    "amountIn": "$descriptor.oneAsset",
+                    "amountOut": "$steps.quote.amountOut"
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "eigenpie-deposit-asset",
+        "lineage": "eigenpie",
+        "edgeKind": "protocol",
+        "action": "deposit",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function depositAsset(address,uint256,uint256,address)"}
+      ]
+    }
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "EigenpieCandidate": {
+        "type": "object",
+        "extends": ["FamilyCandidate"],
+        "fields": {
+          "candidateKind": {"literal": "eigenpie-deposit-pair"},
+          "target": {"type": "string"},
+          "actor": {"type": "string"},
+          "tokenIn": {"type": "string"},
+          "amountIn": {"type": "bigint"},
+          "minAmountOut": {"type": "bigint"},
+          "observedAmountOut": {"type": "bigint"},
+          "hasObservedAmountOut": {"type": "boolean"}
+        }
+      },
+      "EigenpieQuoteEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {"literal": "quote"},
+          "targetCodeHash": {"type": "string"},
+          "tokenInCodeHash": {"type": "string"},
+          "target": {"type": "string"},
+          "actor": {"type": "string"},
+          "tokenIn": {"type": "string"},
+          "tokenOut": {"type": "string"},
+          "amountIn": {"type": "bigint"},
+          "amountOut": {"type": "bigint"}
+        }
+      },
+      "EigenpieActiveEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {"literal": "active"},
+          "targetCodeHash": {"type": "string"},
+          "tokenInCodeHash": {"type": "string"},
+          "tokenOutCodeHash": {"type": "string"},
+          "target": {"type": "string"},
+          "actor": {"type": "string"},
+          "tokenIn": {"type": "string"},
+          "tokenOut": {"type": "string"},
+          "amountIn": {"type": "bigint"},
+          "amountOut": {"type": "bigint"},
+          "behaviorProofHash": {"type": "string"},
+          "active": {"type": "boolean"}
+        }
+      },
+      "EigenpieIdentityEvidence": {
+        "union": [
+          {"ref": "EigenpieQuoteEvidence"},
+          {"ref": "EigenpieActiveEvidence"}
+        ]
+      },
+      "EigenpieIdentity": {
+        "type": "object",
+        "extends": ["VerifiedIdentity"],
+        "fields": {
+          "target": {"type": "string"},
+          "tokenIn": {"type": "string"},
+          "tokenOut": {"type": "string"},
+          "sampleAmountIn": {"type": "bigint"}
+        }
+      },
+      "EigenpieDescriptor": {
+        "type": "object",
+        "extends": ["CompiledInstanceDescriptor"],
+        "fields": {
+          "target": {"type": "string"},
+          "asset": {"type": "string"},
+          "receipt": {"type": "string"},
+          "sampleAmountIn": {"type": "bigint"}
+        }
+      },
+      "EigenpieRoute": {
+        "type": "object",
+        "extends": ["FamilyRouteDescriptor"],
+        "fields": {
+          "target": {"type": "string"},
+          "direction": {"literal": "deposit-asset"},
+          "adapterId": {"literal": "eigenpie-deposit-asset"}
+        }
+      },
+      "EigenpiePricingDraft": {
+        "type": "object",
+        "fields": {
+          "instanceKey": {"ref": "InstanceKey"},
+          "target": {"type": "string"},
+          "route": {"ref": "EigenpieRoute"},
+          "routes": {
+            "array": {"ref": "EigenpieRoute"}
+          }
+        }
+      },
+      "EigenpiePricingStatic": {
+        "type": "object",
+        "fields": {
+          "oneAsset": {"type": "bigint"}
+        }
+      },
+      "EigenpiePricingDescriptor": {
+        "type": "object",
+        "extends": ["EigenpiePricingDraft", "EigenpiePricingStatic"],
+        "fields": {}
+      },
+      "EigenpieExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {"literal": "eigenpie-pair-quote"},
+          "source": {"ref": "CanonicalSource"},
+          "target": {"type": "string"},
+          "tokenIn": {"type": "string"},
+          "tokenOut": {"type": "string"},
+          "amountIn": {"type": "bigint"},
+          "amountOut": {"type": "bigint"},
+          "bindingFingerprint": {"type": "string"}
+        }
+      }
+    },
+    "contracts": {
+      "candidate": "EigenpieCandidate",
+      "identityEvidence": "EigenpieIdentityEvidence",
+      "identity": "EigenpieIdentity",
+      "descriptor": "EigenpieDescriptor",
+      "route": "EigenpieRoute",
+      "pricingDraft": "EigenpiePricingDraft",
+      "pricingDescriptor": "EigenpiePricingDescriptor",
+      "pricingStatic": "EigenpiePricingStatic",
+      "exactEvidence": "EigenpieExactEvidence"
+    }
+  }
+}

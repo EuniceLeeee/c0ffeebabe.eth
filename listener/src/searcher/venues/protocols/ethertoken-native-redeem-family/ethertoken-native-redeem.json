@@ -1,0 +1,963 @@
+{
+  "version": 2,
+  "scope": {"family": "protocol:ethertoken-native-redeem"},
+  "production": {
+    "domain": "protocol",
+    "activation": {"enabled": true, "envKey": "SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED"}
+  },
+  "manifest": {
+    "familyId": "protocol:ethertoken-native-redeem",
+    "domain": "protocol",
+    "ownedActionAdapterIds": ["ethertoken-native-redeem"],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {"slotKind": "protocol", "protocolAction": "redeem"}
+    ],
+    "supportedLineages": ["ethertoken-native:active-effect-delta-v1"],
+    "poolAdapterIds": ["ethertoken-native-redeem-token"],
+    "edgeAdapterIds": ["ethertoken-native-redeem"],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": ["observed-call"],
+      "candidateSources": ["observed-interaction"],
+      "candidate": {
+        "kind": "ethertoken-native-redeem-token",
+        "addressField": "token",
+        "fields": {"token": "address", "observedAmount": "uint"},
+        "key": ["token"]
+      },
+      "calls": [
+        {
+          "id": "ethertoken-withdraw-call",
+          "signature": "withdraw(uint256)",
+          "fields": {
+            "token": {"from": "target"},
+            "observedAmount": {"from": "argument", "index": 0}
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {"op": "at", "args": ["$args", 0]},
+                {"op": "uint", "args": ["0"]}
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {"op": "sameAddress", "args": ["$candidate.token", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"]}
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "ethertoken-destruction-log",
+          "signature": "Destruction(uint256)",
+          "fields": {
+            "token": {"from": "emitter"},
+            "observedAmount": {"from": "argument", "index": 0}
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {"op": "at", "args": ["$args", 0]},
+                {"op": "uint", "args": ["0"]}
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {"op": "sameAddress", "args": ["$candidate.token", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"]}
+              ]
+            }
+          ]
+        }
+      ],
+      "labels": ["ethertoken-native-redeem", "protocol:ethertoken-native-redeem", "ethertoken-native-redeem-token"],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "identity": {
+        "select": [
+          {
+            "return": {
+              "op": "if",
+              "args": [
+                {"op": "defined", "args": ["$evidence"]},
+                "active",
+                "base"
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {"transports": ["get-code", "eth-call"]},
+            "requests": [
+              {
+                "id": "identity-token-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$candidate.token"]}
+              },
+              {
+                "id": "identity-token-balance-surface",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.token"]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "balanceOf",
+                    [
+                      {"op": "address", "args": ["$candidate.token"]}
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-token-decimals",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.token"]},
+                "data": {
+                  "op": "encode",
+                  "args": ["token", "decimals", []]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-token-supply",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.token"]},
+                "data": {
+                  "op": "encode",
+                  "args": ["token", "totalSupply", []]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {"op": "code", "args": ["identity-token-code"]}
+              },
+              {
+                "evaluate": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {"op": "returned", "args": ["identity-token-balance-surface"]},
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {"op": "returned", "args": ["identity-token-decimals"]},
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$decimals",
+                    {"op": "uint", "args": ["77"]}
+                  ]
+                },
+                "error": "protocol token decimals exceed uint256 scale"
+              },
+              {
+                "let": "oneToken",
+                "value": {"op": "pow", "args": [10, "$decimals"]}
+              },
+              {
+                "let": "totalSupply",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {"op": "returned", "args": ["identity-token-supply"]},
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "preferred",
+                "value": {"op": "min", "args": ["$candidate.observedAmount", "$oneToken"]}
+              },
+              {
+                "let": "sampleAmount",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$totalSupply",
+                        {"op": "uint", "args": ["0"]}
+                      ]
+                    },
+                    {"op": "uint", "args": ["0"]},
+                    {"op": "min", "args": ["$preferred", "$totalSupply"]}
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "token": {"op": "address", "args": ["$candidate.token"]},
+                  "sampleAmount": "$sampleAmount",
+                  "behaviorValid": {
+                    "op": "gt",
+                    "args": [
+                      "$sampleAmount",
+                      {"op": "uint", "args": ["0"]}
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "transports": ["effect-delta-simulation"],
+              "caller": "verified-actor",
+              "effects": ["return-data", "token-delta", "native-delta", "total-supply-delta", "logs"]
+            },
+            "requests": [
+              {
+                "id": "identity-active-withdraw",
+                "kind": "effect-delta-simulation",
+                "call": {
+                  "caller": "$constants.caller",
+                  "executionMode": "impersonated-call-frame",
+                  "to": {"op": "address", "args": ["$candidate.token"]},
+                  "data": {
+                    "op": "encode",
+                    "args": ["token", "withdraw", ["$evidence.sampleAmount"]]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": "$constants.caller",
+                  "tokenBalances": [
+                    {
+                      "token": {"op": "address", "args": ["$candidate.token"]},
+                      "amount": "$evidence.sampleAmount"
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {"op": "address", "args": ["$candidate.token"]},
+                    "account": "$constants.caller"
+                  }
+                ],
+                "observe": ["return-data", "token-delta", "native-delta", "total-supply-delta", "logs"]
+              }
+            ],
+            "decode": [
+              {
+                "let": "receipt",
+                "value": {"op": "returned", "args": ["identity-active-withdraw"]}
+              },
+              {
+                "let": "observed",
+                "value": {
+                  "op": "effects",
+                  "args": [
+                    {"op": "get", "args": ["$receipt", "effects"]}
+                  ]
+                }
+              },
+              {
+                "let": "spent",
+                "value": {
+                  "op": "some",
+                  "args": [
+                    "$observed.tokenDeltas",
+                    "delta",
+                    {
+                      "op": "and",
+                      "args": [
+                        {"op": "sameAddress", "args": ["$delta.token", "$candidate.token"]},
+                        {"op": "sameAddress", "args": ["$delta.account", "$constants.probeActor"]},
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$delta.delta",
+                            {
+                              "op": "sub",
+                              "args": [
+                                {"op": "uint", "args": ["0"]},
+                                "$evidence.sampleAmount"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "burned",
+                "value": {
+                  "op": "some",
+                  "args": [
+                    "$observed.totalSupplyDeltas",
+                    "delta",
+                    {
+                      "op": "and",
+                      "args": [
+                        {"op": "sameAddress", "args": ["$delta.token", "$candidate.token"]},
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$delta.delta",
+                            {
+                              "op": "sub",
+                              "args": [
+                                {"op": "uint", "args": ["0"]},
+                                "$evidence.sampleAmount"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "actorNative",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    "$observed.nativeDeltas",
+                    "delta",
+                    {"op": "sameAddress", "args": ["$delta.account", "$constants.probeActor"]}
+                  ]
+                }
+              },
+              {
+                "let": "nativeOut",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {"op": "length", "args": ["$actorNative"]},
+                        1
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        {"op": "at", "args": ["$actorNative", 0]},
+                        "delta"
+                      ]
+                    },
+                    {"op": "uint", "args": ["0"]}
+                  ]
+                }
+              },
+              {
+                "let": "behaviorValid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    "$evidence.behaviorValid",
+                    "$spent",
+                    "$burned",
+                    {"op": "eq", "args": ["$nativeOut", "$evidence.sampleAmount"]}
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "active",
+                  "token": {"op": "address", "args": ["$candidate.token"]},
+                  "sampleAmount": "$evidence.sampleAmount",
+                  "behaviorValid": "$behaviorValid",
+                  "behaviorProofHash": {
+                    "op": "hash",
+                    "args": [
+                      {
+                        "token": {
+                          "op": "lower",
+                          "args": [
+                            {"op": "address", "args": ["$candidate.token"]}
+                          ]
+                        },
+                        "sampleAmount": "$evidence.sampleAmount",
+                        "effects": "$observed"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "when": {
+              "op": "not",
+              "args": [
+                {"op": "defined", "args": ["$evidence"]}
+              ]
+            },
+            "return": {"status": "continue"}
+          },
+          {
+            "when": {"op": "not", "args": ["$evidence.behaviorValid"]},
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "ethertoken_native_behavior_failed",
+              "evidenceRequestIds": ["identity-active-withdraw", "active-ethertoken-native-effect-proof"]
+            }
+          },
+          {
+            "when": {"op": "eq", "args": ["$evidence.phase", "base"]},
+            "return": {"status": "continue"}
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {"op": "address", "args": ["$candidate.token"]},
+                "provenance": [
+                  {
+                    "kind": "active-ethertoken-native-effect-proof",
+                    "subject": {"op": "address", "args": ["$candidate.token"]},
+                    "evidenceHash": "$evidence.behaviorProofHash"
+                  }
+                ],
+                "token": "$evidence.token"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {"op": "address", "args": ["$identity.token"]}
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {"op": "address", "args": ["$identity.token"]}
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {"op": "address", "args": ["$identity.token"]}
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {"kind": "source-state", "freshness": "pinned-block"},
+        {"kind": "execution-actor", "role": "executor"},
+        {"kind": "effect-observation", "effects": ["token-delta", "native-delta", "total-supply-delta", "logs"]}
+      ],
+      "token": {"op": "address", "args": ["$identity.token"]},
+      "nativeAnchor": {"op": "address", "args": ["$constants.nativeAnchor"]}
+    },
+    "bindingProjection": {
+      "token": {
+        "op": "lower",
+        "args": [
+          {"op": "address", "args": ["$descriptor.token"]}
+        ]
+      },
+      "nativeAnchor": {
+        "op": "lower",
+        "args": [
+          {"op": "address", "args": ["$descriptor.nativeAnchor"]}
+        ]
+      },
+      "selector": "0x2e1a7d4d",
+      "payoutSemantics": "exact-burn-equal-native-out-v1"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.token",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {"op": "address", "args": ["$descriptor.token"]}
+      ]
+    },
+    "directions": [
+      {
+        "id": "withdraw-to-native",
+        "enabled": true,
+        "tokenIn": "$descriptor.token",
+        "tokenOut": "$descriptor.nativeAnchor",
+        "adapterId": "ethertoken-native-redeem",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "redeem"},
+        "executionAssets": {"input": "erc20", "output": "native"}
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {"op": "address", "args": ["$descriptor.token"]}
+        ]
+      }
+    },
+    "effects": [
+      {"kind": "token-delta", "token": "$route.tokenIn", "account": "executor", "direction": "decrease"},
+      {"kind": "total-supply-delta", "token": "$descriptor.token", "direction": "decrease"},
+      {"kind": "token-delta", "token": "$route.tokenOut", "account": "executor", "direction": "increase"}
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "token": "$descriptor.token",
+      "nativeAnchor": "$descriptor.nativeAnchor",
+      "routes": "$routes"
+    },
+    "compatibility": {"token": "$descriptor.token", "payoutSemantics": "exact-burn-equal-native-out-v1"},
+    "static": {
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": ["$draft.token"],
+      "requests": [
+        {
+          "id": "static-token-decimals",
+          "kind": "eth-call",
+          "to": "$draft.token",
+          "data": {
+            "op": "encode",
+            "args": ["token", "decimals", []]
+          },
+          "completion": "return-data"
+        }
+      ],
+      "decode": {
+        "fields": [
+          {
+            "name": "decimals",
+            "value": {
+              "op": "word",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {"op": "returned", "args": ["static-token-decimals"]},
+                    "data"
+                  ]
+                }
+              ]
+            },
+            "checks": [
+              {
+                "condition": {
+                  "op": "lte",
+                  "args": [
+                    "$decimals",
+                    {"op": "uint", "args": ["77"]}
+                  ]
+                },
+                "error": "protocol token decimals exceed uint256 scale"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "oneToken": {"op": "pow", "args": [10, "$decimals"]}
+        }
+      }
+    },
+    "finalize": {"op": "merge", "args": ["$draft", "$staticEvidence"]},
+    "sampleAmount": "$descriptor.oneToken",
+    "exactCompatibility": {
+      "token": {
+        "op": "lower",
+        "args": [
+          {"op": "address", "args": ["$descriptor.token"]}
+        ]
+      },
+      "executor": {
+        "op": "lower",
+        "args": [
+          {"op": "address", "args": ["$executor"]}
+        ]
+      },
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "quoteSemantics": "exact-burn-equal-native-out-v1"
+    },
+    "mutationKinds": ["log"]
+  },
+  "protocol": {"candidateKinds": ["observed-call"], "activeBehaviorProof": "required"},
+  "standard": {
+    "id": "active-ethertoken-native-effect-proof",
+    "lineageId": "ethertoken-native:active-effect-delta-v1",
+    "abi": {
+      "token": [
+        "function balanceOf(address owner) view returns (uint256)",
+        "function decimals() view returns (uint8)",
+        "function totalSupply() view returns (uint256)",
+        "function withdraw(uint256 amount)"
+      ]
+    },
+    "constants": {
+      "nativeAnchor": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "probeActor": "0x000000000000000000000000000000000000e7E2",
+      "caller": {"kind": "verified-actor", "evidenceId": "ethertoken-native-probe-actor"}
+    },
+    "expressions": {},
+    "match": {},
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "custom",
+    "assertions": [
+      {
+        "condition": {
+          "op": "not",
+          "args": [
+            {"op": "sameAddress", "args": ["$descriptor.token", "$descriptor.nativeAnchor"]}
+          ]
+        },
+        "error": "ethertoken-native-redeem cannot claim canonical WETH execution"
+      }
+    ],
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": ["$descriptor.token", "$descriptor.nativeAnchor"],
+      "mutationAddresses": ["$descriptor.token"]
+    },
+    "exact": {
+      "methodId": "identity-proven-one-to-one",
+      "requirements": {"transports": []},
+      "evidence": {
+        "kind": "ethertoken-native-one-to-one",
+        "source": "$source",
+        "token": {"op": "address", "args": ["$descriptor.token"]},
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "executor": {"op": "address", "args": ["$executor"]},
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {"op": "uint", "args": ["115792089237316195423570985008687907853269984665640564039457584007913129639935"]}
+            ]
+          },
+          "error": "EtherToken native exact input is outside uint256 range"
+        }
+      ],
+      "outputChecks": [
+        {
+          "assert": {"op": "eq", "args": ["$amountOut", "$amountIn"]},
+          "error": "EtherToken native amount model is not one-to-one"
+        }
+      ]
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {"directOutput": true},
+      "protectedAddresses": ["$descriptor.token"],
+      "steps": [
+        {
+          "id": "withdraw",
+          "call": {
+            "target": "$descriptor.token",
+            "signature": "function withdraw(uint256)",
+            "args": [
+              {"runtime": "amountIn"}
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {"runtime": "amountIn"}
+        },
+        {
+          "kind": "credit",
+          "asset": "native",
+          "account": "$executor",
+          "equals": {"runtime": "amountIn"}
+        },
+        {
+          "kind": "supply",
+          "token": "$descriptor.token",
+          "direction": "decrease",
+          "equals": {"runtime": "amountIn"}
+        }
+      ]
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {}
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "EtherToken's independent amount model is the fixed 1:1 burn quote already proven by identity; the declarative sequential trial-state model is not declared, so every positive amount is quoted locally and the real withdraw remains re-proven by mandatory final simulation.",
+      "steps": [
+        {
+          "id": "amount",
+          "requirements": {"transports": []},
+          "requests": [],
+          "decode": [
+            {"return": "$amountIn"}
+          ]
+        }
+      ],
+      "result": "$steps.amount"
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "supply",
+          "requirements": {"transports": ["eth-call"]},
+          "requests": [
+            {
+              "id": "current-total-supply",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.token"]},
+              "data": {
+                "op": "encode",
+                "args": ["token", "totalSupply", []]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "totalSupply",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {"op": "returned", "args": ["current-total-supply"]},
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "gt",
+                "args": [
+                  "$totalSupply",
+                  {"op": "uint", "args": ["0"]}
+                ]
+              },
+              "error": "ethertoken_total_supply_zero: declarative pricing cannot classify an unavailable route, so it fails closed instead of quoting"
+            },
+            {
+              "assert": {"op": "gte", "args": ["$totalSupply", "$descriptor.oneToken"]},
+              "error": "ethertoken_total_supply_below_one_token: declarative pricing cannot declare a supply-capped sample amount, so it fails closed instead of over-quoting"
+            },
+            {
+              "return": {"totalSupply": "$totalSupply"}
+            }
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$routes",
+                "route",
+                [
+                  {"op": "get", "args": ["$route", "routeKey"]},
+                  {"amountIn": "$descriptor.oneToken", "amountOut": "$descriptor.oneToken"}
+                ]
+              ]
+            }
+          ]
+        },
+        "totalSupply": "$steps.supply.totalSupply"
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "ethertoken-native-redeem",
+        "lineage": "custom-protocol:ethertoken-native-redeem",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function withdraw(uint256)"}
+      ]
+    }
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "EtherTokenNativeRedeemCandidate": {
+        "type": "object",
+        "extends": ["FamilyCandidate"],
+        "fields": {
+          "candidateKind": {"literal": "ethertoken-native-redeem-token"},
+          "token": {"type": "string"},
+          "observedAmount": {"type": "bigint"}
+        }
+      },
+      "EtherTokenNativeBaseEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {"literal": "base"},
+          "token": {"type": "string"},
+          "sampleAmount": {"type": "bigint"},
+          "behaviorValid": {"type": "boolean"}
+        }
+      },
+      "EtherTokenNativeActiveEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {"literal": "active"},
+          "token": {"type": "string"},
+          "sampleAmount": {"type": "bigint"},
+          "behaviorValid": {"type": "boolean"},
+          "behaviorProofHash": {"type": "string"}
+        }
+      },
+      "EtherTokenNativeIdentityEvidence": {
+        "union": [
+          {"ref": "EtherTokenNativeBaseEvidence"},
+          {"ref": "EtherTokenNativeActiveEvidence"}
+        ]
+      },
+      "EtherTokenNativeIdentity": {
+        "type": "object",
+        "extends": ["VerifiedIdentity"],
+        "fields": {
+          "token": {"type": "string"}
+        }
+      },
+      "EtherTokenNativeDescriptor": {
+        "type": "object",
+        "extends": ["CompiledInstanceDescriptor"],
+        "fields": {
+          "token": {"type": "string"},
+          "nativeAnchor": {"type": "string"}
+        }
+      },
+      "EtherTokenNativeRoute": {
+        "type": "object",
+        "extends": ["FamilyRouteDescriptor"],
+        "fields": {
+          "target": {"type": "string"},
+          "direction": {"literal": "withdraw-to-native"},
+          "adapterId": {"literal": "ethertoken-native-redeem"}
+        }
+      },
+      "EtherTokenNativePricingDraft": {
+        "type": "object",
+        "fields": {
+          "instanceKey": {"ref": "InstanceKey"},
+          "token": {"type": "string"},
+          "nativeAnchor": {"type": "string"},
+          "routes": {
+            "array": {"ref": "EtherTokenNativeRoute"}
+          }
+        }
+      },
+      "EtherTokenNativePricingStatic": {
+        "type": "object",
+        "fields": {
+          "oneToken": {"type": "bigint"}
+        }
+      },
+      "EtherTokenNativePricingDescriptor": {
+        "type": "object",
+        "extends": ["EtherTokenNativePricingDraft", "EtherTokenNativePricingStatic"],
+        "fields": {}
+      },
+      "EtherTokenNativeExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {"literal": "ethertoken-native-one-to-one"},
+          "source": {"ref": "CanonicalSource"},
+          "token": {"type": "string"},
+          "amountIn": {"type": "bigint"},
+          "amountOut": {"type": "bigint"},
+          "executor": {"type": "string"},
+          "bindingFingerprint": {"type": "string"}
+        }
+      }
+    },
+    "contracts": {
+      "candidate": "EtherTokenNativeRedeemCandidate",
+      "identityEvidence": "EtherTokenNativeIdentityEvidence",
+      "identity": "EtherTokenNativeIdentity",
+      "descriptor": "EtherTokenNativeDescriptor",
+      "route": "EtherTokenNativeRoute",
+      "pricingDraft": "EtherTokenNativePricingDraft",
+      "pricingDescriptor": "EtherTokenNativePricingDescriptor",
+      "pricingStatic": "EtherTokenNativePricingStatic",
+      "exactEvidence": "EtherTokenNativeExactEvidence"
+    }
+  }
+}

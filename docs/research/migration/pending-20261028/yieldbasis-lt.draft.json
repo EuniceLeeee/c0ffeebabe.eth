@@ -1,0 +1,1366 @@
+{
+  "version": 2,
+  "scope": {"family": "protocol:yieldbasis-lt"},
+  "production": {
+    "domain": "protocol",
+    "activation": {"enabled": false, "envKey": "SEARCHER_FAMILY_YIELDBASIS_LT_ENABLED"}
+  },
+  "manifest": {
+    "familyId": "protocol:yieldbasis-lt",
+    "domain": "protocol",
+    "ownedActionAdapterIds": ["yieldbasis-lt-withdraw", "yieldbasis-lt-deposit"],
+    "requiredInfraActionAdapterIds": ["erc20-approve"],
+    "allowedTaxonomy": [
+      {"slotKind": "protocol", "protocolAction": "wrap"},
+      {"slotKind": "protocol", "protocolAction": "redeem"}
+    ],
+    "supportedLineages": ["yieldbasis:levamm-bound-single-asset-withdraw"],
+    "poolAdapterIds": ["yieldbasis-lt"],
+    "edgeAdapterIds": ["yieldbasis-lt-withdraw", "yieldbasis-lt-deposit"],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": ["observed-call", "landed-log", "address-surface"],
+      "candidateSources": ["dex-token-domain", "observed-interaction"],
+      "candidate": {
+        "kind": "yieldbasis-lt",
+        "addressField": "lt",
+        "fields": {"lt": "address"},
+        "key": ["lt"]
+      },
+      "calls": [
+        {
+          "id": "yieldbasis-lt-withdraw-call",
+          "signature": "function withdraw(uint256 shares,uint256 minAssets)",
+          "fields": {"lt": {"from": "target"}}
+        },
+        {
+          "id": "yieldbasis-lt-withdraw-receiver-call",
+          "signature": "function withdraw(uint256 shares,uint256 minAssets,address receiver)",
+          "fields": {"lt": {"from": "target"}}
+        },
+        {
+          "id": "yieldbasis-lt-deposit-call",
+          "signature": "function deposit(uint256 assets,uint256 debt,uint256 minShares)",
+          "fields": {"lt": {"from": "target"}}
+        },
+        {
+          "id": "yieldbasis-lt-deposit-receiver-call",
+          "signature": "function deposit(uint256 assets,uint256 debt,uint256 minShares,address receiver)",
+          "fields": {"lt": {"from": "target"}}
+        }
+      ],
+      "events": [
+        {
+          "id": "yieldbasis-lt-withdraw-log",
+          "signature": "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)",
+          "fields": {"lt": {"from": "emitter"}}
+        },
+        {
+          "id": "yieldbasis-lt-deposit-log",
+          "signature": "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+          "fields": {"lt": {"from": "emitter"}}
+        }
+      ],
+      "surface": {
+        "id": "yieldbasis-lt-levamm-surface",
+        "fingerprint": "yieldbasis-lt-levamm-surface-v1",
+        "fields": {"lt": {"from": "emitter"}}
+      },
+      "labels": ["yieldbasis-lt", "yield-basis-lt", "protocol:yieldbasis-lt"],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "identity": {
+        "select": [
+          {
+            "return": {
+              "op": "if",
+              "args": [
+                {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]},
+                "base",
+                {
+                  "op": "if",
+                  "args": [
+                    {"op": "eq", "args": ["$evidence.phase", "base"]},
+                    "binding",
+                    {
+                      "op": "if",
+                      "args": [
+                        {"op": "eq", "args": ["$evidence.phase", "binding"]},
+                        "active",
+                        "complete"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {"transports": ["get-code", "eth-call"]},
+            "requests": [
+              {
+                "id": "lt-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$candidate.lt"]}
+              },
+              {
+                "id": "lt-asset-token",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "ASSET_TOKEN", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-stablecoin",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "STABLECOIN", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-cryptopool",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "CRYPTOPOOL", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-amm",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "amm", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-agg",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "agg", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-staker",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "staker", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-admin",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "admin", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-decimals",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "decimals", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-total-supply",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "totalSupply", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-liquidity",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "liquidity", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-updated-balances",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "updated_balances", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "lt-is-killed",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.lt"]},
+                "data": {"op": "encode", "args": ["lt", "is_killed", []]},
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    [
+                      {"op": "result", "args": ["lt-code"]},
+                      {"op": "result", "args": ["lt-asset-token"]},
+                      {"op": "result", "args": ["lt-stablecoin"]},
+                      {"op": "result", "args": ["lt-cryptopool"]},
+                      {"op": "result", "args": ["lt-amm"]},
+                      {"op": "result", "args": ["lt-agg"]},
+                      {"op": "result", "args": ["lt-staker"]},
+                      {"op": "result", "args": ["lt-admin"]},
+                      {"op": "result", "args": ["lt-decimals"]},
+                      {"op": "result", "args": ["lt-total-supply"]},
+                      {"op": "result", "args": ["lt-liquidity"]},
+                      {"op": "result", "args": ["lt-updated-balances"]},
+                      {"op": "result", "args": ["lt-is-killed"]}
+                    ]
+                  ]
+                }
+              },
+              {
+                "let": "source",
+                "value": {"op": "source", "args": [
+                  [
+                    {"op": "result", "args": ["lt-code"]},
+                    {"op": "result", "args": ["lt-asset-token"]},
+                    {"op": "result", "args": ["lt-stablecoin"]},
+                    {"op": "result", "args": ["lt-cryptopool"]},
+                    {"op": "result", "args": ["lt-amm"]},
+                    {"op": "result", "args": ["lt-agg"]},
+                    {"op": "result", "args": ["lt-staker"]},
+                    {"op": "result", "args": ["lt-admin"]},
+                    {"op": "result", "args": ["lt-decimals"]},
+                    {"op": "result", "args": ["lt-total-supply"]},
+                    {"op": "result", "args": ["lt-liquidity"]},
+                    {"op": "result", "args": ["lt-updated-balances"]},
+                    {"op": "result", "args": ["lt-is-killed"]}
+                  ]
+                ]}
+              },
+              {
+                "let": "ltCode",
+                "value": {"op": "get", "args": [{"op": "returned", "args": ["lt-code"]}, "data"]}
+              },
+              {
+                "let": "asset",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["lt", "ASSET_TOKEN", {"op": "get", "args": [{"op": "returned", "args": ["lt-asset-token"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "stablecoin",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["lt", "STABLECOIN", {"op": "get", "args": [{"op": "returned", "args": ["lt-stablecoin"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "cryptopool",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["lt", "CRYPTOPOOL", {"op": "get", "args": [{"op": "returned", "args": ["lt-cryptopool"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "amm",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["lt", "amm", {"op": "get", "args": [{"op": "returned", "args": ["lt-amm"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "agg",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["lt", "agg", {"op": "get", "args": [{"op": "returned", "args": ["lt-agg"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "staker",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["lt", "staker", {"op": "get", "args": [{"op": "returned", "args": ["lt-staker"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "admin",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["lt", "admin", {"op": "get", "args": [{"op": "returned", "args": ["lt-admin"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "decimals",
+                "value": {"op": "number", "args": [{"op": "decode", "args": ["lt", "decimals", {"op": "get", "args": [{"op": "returned", "args": ["lt-decimals"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "totalSupply",
+                "value": {"op": "decode", "args": ["lt", "totalSupply", {"op": "get", "args": [{"op": "returned", "args": ["lt-total-supply"]}, "data"]}, 0]}
+              },
+              {
+                "let": "liquidityTotal",
+                "value": {"op": "at", "args": [{"op": "decodeAll", "args": ["lt", "liquidity", {"op": "get", "args": [{"op": "returned", "args": ["lt-liquidity"]}, "data"]}]}, 1]}
+              },
+              {
+                "let": "liveSupplyTokens",
+                "value": {"op": "at", "args": [{"op": "decodeAll", "args": ["lt", "updated_balances", {"op": "get", "args": [{"op": "returned", "args": ["lt-updated-balances"]}, "data"]}]}, 0]}
+              },
+              {
+                "let": "killed",
+                "value": {"op": "decode", "args": ["lt", "is_killed", {"op": "get", "args": [{"op": "returned", "args": ["lt-is-killed"]}, "data"]}, 0]}
+              },
+              {
+                "let": "codeRejected",
+                "value": {"op": "eq", "args": ["$ltCode", "0x"]}
+              },
+              {
+                "let": "zeroAddress",
+                "value": "0x0000000000000000000000000000000000000000"
+              },
+              {
+                "let": "assetRejected",
+                "value": {"op": "or", "args": [
+                  {"op": "sameAddress", "args": ["$asset", "$zeroAddress"]},
+                  {"op": "sameAddress", "args": ["$asset", "$candidate.lt"]}
+                ]}
+              },
+              {
+                "let": "stablecoinRejected",
+                "value": {"op": "or", "args": [
+                  {"op": "sameAddress", "args": ["$stablecoin", "$zeroAddress"]},
+                  {"op": "sameAddress", "args": ["$stablecoin", "$candidate.lt"]}
+                ]}
+              },
+              {
+                "let": "cryptopoolRejected",
+                "value": {"op": "or", "args": [
+                  {"op": "sameAddress", "args": ["$cryptopool", "$zeroAddress"]},
+                  {"op": "sameAddress", "args": ["$cryptopool", "$candidate.lt"]}
+                ]}
+              },
+              {
+                "let": "ammRejected",
+                "value": {"op": "or", "args": [
+                  {"op": "sameAddress", "args": ["$amm", "$zeroAddress"]},
+                  {"op": "sameAddress", "args": ["$amm", "$candidate.lt"]}
+                ]}
+              },
+              {
+                "let": "aggRejected",
+                "value": {"op": "or", "args": [
+                  {"op": "sameAddress", "args": ["$agg", "$zeroAddress"]},
+                  {"op": "sameAddress", "args": ["$agg", "$candidate.lt"]}
+                ]}
+              },
+              {
+                "let": "adminRejected",
+                "value": {"op": "or", "args": [
+                  {"op": "sameAddress", "args": ["$admin", "$zeroAddress"]},
+                  {"op": "sameAddress", "args": ["$admin", "$candidate.lt"]}
+                ]}
+              },
+              {
+                "let": "decimalsRejected",
+                "value": {"op": "or", "args": [
+                  {"op": "lte", "args": ["$decimals", 0]},
+                  {"op": "gt", "args": ["$decimals", 36]}
+                ]}
+              },
+              {
+                "let": "evidenceRequestIds",
+                "value": {"op": "concat", "args": [
+                  [],
+                  {"op": "if", "args": ["$codeRejected", ["lt-code"], []]},
+                  {"op": "if", "args": ["$assetRejected", ["lt-asset-token"], []]},
+                  {"op": "if", "args": ["$stablecoinRejected", ["lt-stablecoin"], []]},
+                  {"op": "if", "args": ["$cryptopoolRejected", ["lt-cryptopool"], []]},
+                  {"op": "if", "args": ["$ammRejected", ["lt-amm"], []]},
+                  {"op": "if", "args": ["$aggRejected", ["lt-agg"], []]},
+                  {"op": "if", "args": ["$adminRejected", ["lt-admin"], []]},
+                  {"op": "if", "args": ["$decimalsRejected", ["lt-decimals"], []]}
+                ]}
+              },
+              {
+                "let": "baseValid",
+                "value": {"op": "eq", "args": [{"op": "length", "args": ["$evidenceRequestIds"]}, 0]}
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "source": "$source",
+                  "lt": {"op": "lower", "args": ["$candidate.lt"]},
+                  "ltCodeHash": {"op": "codeHash", "args": ["$ltCode"]},
+                  "asset": "$asset",
+                  "stablecoin": "$stablecoin",
+                  "cryptopool": "$cryptopool",
+                  "amm": "$amm",
+                  "agg": "$agg",
+                  "staker": "$staker",
+                  "admin": "$admin",
+                  "decimals": "$decimals",
+                  "totalSupply": "$totalSupply",
+                  "killed": "$killed",
+                  "liquidityTotal": "$liquidityTotal",
+                  "liveSupplyTokens": "$liveSupplyTokens",
+                  "baseValid": "$baseValid",
+                  "evidenceRequestIds": "$evidenceRequestIds"
+                }
+              }
+            ]
+          },
+          "binding": {
+            "requirements": {"transports": ["eth-call"]},
+            "requests": [
+              {
+                "id": "binding-amm-lt",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.amm"]},
+                "data": {"op": "encode", "args": ["levamm", "LT_CONTRACT", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-amm-collateral",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.amm"]},
+                "data": {"op": "encode", "args": ["levamm", "COLLATERAL", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-amm-stablecoin",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.amm"]},
+                "data": {"op": "encode", "args": ["levamm", "STABLECOIN", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-pool-coin-0",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.cryptopool"]},
+                "data": {"op": "encode", "args": ["cryptopool", "coins", [0]]},
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-pool-coin-1",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.cryptopool"]},
+                "data": {"op": "encode", "args": ["cryptopool", "coins", [1]]},
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-pool-decimals",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.cryptopool"]},
+                "data": {"op": "encode", "args": ["cryptopool", "decimals", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-pool-share-supply",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.cryptopool"]},
+                "data": {"op": "encode", "args": ["cryptopool", "totalSupply", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-asset-decimals",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.asset"]},
+                "data": {"op": "encode", "args": ["token", "decimals", []]},
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "ammLtContract",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["levamm", "LT_CONTRACT", {"op": "get", "args": [{"op": "returned", "args": ["binding-amm-lt"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "ammCollateral",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["levamm", "COLLATERAL", {"op": "get", "args": [{"op": "returned", "args": ["binding-amm-collateral"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "ammStablecoin",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["levamm", "STABLECOIN", {"op": "get", "args": [{"op": "returned", "args": ["binding-amm-stablecoin"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "poolCoin0",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["cryptopool", "coins", {"op": "get", "args": [{"op": "returned", "args": ["binding-pool-coin-0"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "poolCoin1",
+                "value": {"op": "address", "args": [{"op": "decode", "args": ["cryptopool", "coins", {"op": "get", "args": [{"op": "returned", "args": ["binding-pool-coin-1"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "poolDecimals",
+                "value": {"op": "number", "args": [{"op": "decode", "args": ["cryptopool", "decimals", {"op": "get", "args": [{"op": "returned", "args": ["binding-pool-decimals"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "poolShareSupply",
+                "value": {"op": "decode", "args": ["cryptopool", "totalSupply", {"op": "get", "args": [{"op": "returned", "args": ["binding-pool-share-supply"]}, "data"]}, 0]}
+              },
+              {
+                "let": "assetDecimals",
+                "value": {"op": "number", "args": [{"op": "decode", "args": ["token", "decimals", {"op": "get", "args": [{"op": "returned", "args": ["binding-asset-decimals"]}, "data"]}, 0]}]}
+              },
+              {
+                "let": "ammBindingsValid",
+                "value": {"op": "and", "args": [
+                  {"op": "sameAddress", "args": ["$ammLtContract", "$evidence.lt"]},
+                  {"op": "sameAddress", "args": ["$ammCollateral", "$evidence.cryptopool"]},
+                  {"op": "sameAddress", "args": ["$ammStablecoin", "$evidence.stablecoin"]}
+                ]}
+              },
+              {
+                "let": "poolCoinBindingsValid",
+                "value": {"op": "and", "args": [
+                  {"op": "not", "args": [{"op": "sameAddress", "args": ["$poolCoin0", "0x0000000000000000000000000000000000000000"]}]},
+                  {"op": "not", "args": [{"op": "sameAddress", "args": ["$poolCoin1", "0x0000000000000000000000000000000000000000"]}]},
+                  {"op": "not", "args": [{"op": "sameAddress", "args": ["$poolCoin0", "$poolCoin1"]}]},
+                  {"op": "sameAddress", "args": ["$poolCoin0", "$evidence.stablecoin"]},
+                  {"op": "sameAddress", "args": ["$poolCoin1", "$evidence.asset"]},
+                  {"op": "eq", "args": ["$poolDecimals", 18]},
+                  {"op": "gt", "args": ["$poolShareSupply", {"op": "uint", "args": ["0"]}]}
+                ]}
+              },
+              {
+                "let": "assetCoinIndex",
+                "value": {"op": "if", "args": [
+                  {"op": "sameAddress", "args": ["$poolCoin1", "$evidence.asset"]},
+                  1,
+                  {"op": "if", "args": [{"op": "sameAddress", "args": ["$poolCoin0", "$evidence.asset"]}, 0, -1]}
+                ]}
+              },
+              {
+                "let": "assetDecimalsValid",
+                "value": {"op": "and", "args": [
+                  {"op": "gte", "args": ["$assetDecimals", 1]},
+                  {"op": "lte", "args": ["$assetDecimals", 36]}
+                ]}
+              },
+              {
+                "let": "bindingValid",
+                "value": {"op": "and", "args": [
+                  "$evidence.baseValid",
+                  "$ammBindingsValid",
+                  "$poolCoinBindingsValid",
+                  {"op": "gte", "args": ["$assetCoinIndex", 0]},
+                  "$assetDecimalsValid"
+                ]}
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "binding",
+                      "ammLtContract": "$ammLtContract",
+                      "ammCollateral": "$ammCollateral",
+                      "ammStablecoin": "$ammStablecoin",
+                      "poolCoin0": "$poolCoin0",
+                      "poolCoin1": "$poolCoin1",
+                      "poolDecimals": "$poolDecimals",
+                      "poolShareSupply": "$poolShareSupply",
+                      "assetDecimals": "$assetDecimals",
+                      "assetCoinIndex": "$assetCoinIndex",
+                      "ammBindingsValid": "$ammBindingsValid",
+                      "poolCoinBindingsValid": "$poolCoinBindingsValid",
+                      "bindingValid": "$bindingValid",
+                      "depositAssets": {"op": "uint", "args": ["0"]},
+                      "depositDebt": {"op": "uint", "args": ["0"]}
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {"transports": ["eth-call"]},
+            "requests": [
+              {
+                "id": "active-is-killed",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.lt"]},
+                "data": {"op": "encode", "args": ["lt", "is_killed", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "active-amm-is-killed",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.amm"]},
+                "data": {"op": "encode", "args": ["levamm", "is_killed", []]},
+                "completion": "return-data"
+              },
+              {
+                "id": "active-preview-withdraw",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$evidence.lt"]},
+                "data": {"op": "encode", "args": ["lt", "preview_withdraw", [{"op": "uint", "args": ["$constants.probeShares"]}]]},
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "killed",
+                "value": {"op": "decode", "args": ["lt", "is_killed", {"op": "get", "args": [{"op": "returned", "args": ["active-is-killed"]}, "data"]}, 0]}
+              },
+              {
+                "let": "ammKilled",
+                "value": {"op": "decode", "args": ["levamm", "is_killed", {"op": "get", "args": [{"op": "returned", "args": ["active-amm-is-killed"]}, "data"]}, 0]}
+              },
+              {
+                "let": "probeShares",
+                "value": {"op": "uint", "args": ["$constants.probeShares"]}
+              },
+              {
+                "let": "probeCryptoReceived",
+                "value": {"op": "decode", "args": ["lt", "preview_withdraw", {"op": "get", "args": [{"op": "returned", "args": ["active-preview-withdraw"]}, "data"]}, 0]}
+              },
+              {
+                "let": "redemptionPathLive",
+                "value": {"op": "and", "args": [
+                  {"op": "not", "args": ["$killed"]},
+                  {"op": "not", "args": ["$ammKilled"]},
+                  {"op": "gt", "args": ["$probeCryptoReceived", {"op": "uint", "args": ["0"]}]}
+                ]}
+              },
+              {
+                "let": "behaviorProofHash",
+                "value": {"op": "hash", "args": [
+                  {
+                    "lt": "$evidence.lt",
+                    "amm": "$evidence.amm",
+                    "cryptopool": "$evidence.cryptopool",
+                    "asset": "$evidence.asset",
+                    "stablecoin": "$evidence.stablecoin",
+                    "assetCoinIndex": "$evidence.assetCoinIndex",
+                    "liveSupplyTokens": {"op": "string", "args": ["$evidence.liveSupplyTokens"]},
+                    "liquidityTotal": {"op": "string", "args": ["$evidence.liquidityTotal"]},
+                    "killed": "$killed",
+                    "ammKilled": "$ammKilled",
+                    "probeShares": {"op": "string", "args": ["$probeShares"]},
+                    "probeCryptoReceived": {"op": "string", "args": ["$probeCryptoReceived"]},
+                    "redemptionPathLive": "$redemptionPathLive"
+                  }
+                ]}
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "active",
+                      "ammKilled": "$ammKilled",
+                      "killed": "$killed",
+                      "probeShares": "$probeShares",
+                      "probeCryptoReceived": "$probeCryptoReceived",
+                      "redemptionPathLive": "$redemptionPathLive",
+                      "behaviorProofHash": "$behaviorProofHash"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "complete": {
+            "requirements": {"transports": []},
+            "requests": [],
+            "decode": [
+              {"return": {"phase": "complete"}}
+            ]
+          }
+        },
+        "decide": [
+          {
+            "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]},
+            "return": {"status": "continue"}
+          },
+          {
+            "when": {"op": "ne", "args": [
+              {"op": "lower", "args": ["$evidence.lt"]},
+              {"op": "lower", "args": ["$candidate.lt"]}
+            ]},
+            "return": {"status": "invalid-program", "reasonCode": "foreign-yieldbasis-lt-candidate"}
+          },
+          {
+            "when": {"op": "and", "args": [
+              {"op": "eq", "args": ["$evidence.phase", "base"]},
+              "$evidence.baseValid"
+            ]},
+            "return": {"status": "continue"}
+          },
+          {
+            "when": {"op": "eq", "args": ["$evidence.phase", "base"]},
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "yieldbasis_lt_binding_surfaces_failed",
+              "evidenceRequestIds": "$evidence.evidenceRequestIds"
+            }
+          },
+          {
+            "when": {"op": "and", "args": [
+              {"op": "eq", "args": ["$evidence.phase", "binding"]},
+              "$evidence.bindingValid"
+            ]},
+            "return": {"status": "continue"}
+          },
+          {
+            "when": {"op": "and", "args": [
+              {"op": "eq", "args": ["$evidence.phase", "binding"]},
+              {"op": "not", "args": ["$evidence.ammBindingsValid"]}
+            ]},
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "yieldbasis_lt_amm_lt_contract_mismatch",
+              "evidenceRequestIds": [
+                "binding-amm-lt",
+                "binding-amm-collateral",
+                "binding-amm-stablecoin",
+                "binding-pool-coin-0",
+                "binding-pool-coin-1",
+                "binding-pool-decimals",
+                "binding-pool-share-supply",
+                "binding-asset-decimals"
+              ]
+            }
+          },
+          {
+            "when": {"op": "and", "args": [
+              {"op": "eq", "args": ["$evidence.phase", "binding"]},
+              {"op": "or", "args": [
+                {"op": "lt", "args": ["$evidence.assetCoinIndex", 0]},
+                {"op": "not", "args": ["$evidence.poolCoinBindingsValid"]}
+              ]}
+            ]},
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "yieldbasis_lt_cryptopool_coin_binding_failed",
+              "evidenceRequestIds": [
+                "binding-amm-lt",
+                "binding-amm-collateral",
+                "binding-amm-stablecoin",
+                "binding-pool-coin-0",
+                "binding-pool-coin-1",
+                "binding-pool-decimals",
+                "binding-pool-share-supply",
+                "binding-asset-decimals"
+              ]
+            }
+          },
+          {
+            "when": {"op": "eq", "args": ["$evidence.phase", "binding"]},
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "yieldbasis_lt_asset_decimals_invalid",
+              "evidenceRequestIds": ["binding-asset-decimals", "binding-pool-decimals"]
+            }
+          },
+          {
+            "when": {"op": "or", "args": ["$evidence.ammKilled", "$evidence.killed"]},
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "yieldbasis_lt_killed",
+              "evidenceRequestIds": ["active-is-killed", "active-amm-is-killed"]
+            }
+          },
+          {
+            "when": {"op": "not", "args": ["$evidence.redemptionPathLive"]},
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "yieldbasis_lt_redemption_path_inactive",
+              "evidenceRequestIds": ["active-preview-withdraw"]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": "$evidence.lt",
+                "asset": "$evidence.asset",
+                "stablecoin": "$evidence.stablecoin",
+                "cryptopool": "$evidence.cryptopool",
+                "amm": "$evidence.amm",
+                "agg": "$evidence.agg",
+                "staker": "$evidence.staker",
+                "admin": "$evidence.admin",
+                "decimals": "$evidence.decimals",
+                "assetDecimals": "$evidence.assetDecimals",
+                "assetCoinIndex": "$evidence.assetCoinIndex",
+                "redemptionPathVerified": true,
+                "depositPathVerified": false,
+                "facts": {
+                  "lt": "$evidence.lt",
+                  "asset": "$evidence.asset",
+                  "stablecoin": "$evidence.stablecoin",
+                  "cryptopool": "$evidence.cryptopool",
+                  "amm": "$evidence.amm",
+                  "agg": "$evidence.agg",
+                  "staker": "$evidence.staker",
+                  "admin": "$evidence.admin",
+                  "decimals": "$evidence.decimals",
+                  "assetDecimals": "$evidence.assetDecimals",
+                  "assetCoinIndex": "$evidence.assetCoinIndex",
+                  "totalSupply": "$evidence.totalSupply",
+                  "liveSupplyTokens": "$evidence.liveSupplyTokens",
+                  "liquidityTotal": "$evidence.liquidityTotal",
+                  "probeShares": "$evidence.probeShares",
+                  "probeCryptoReceived": "$evidence.probeCryptoReceived",
+                  "killed": "$evidence.killed",
+                  "depositPathVerified": false,
+                  "depositDebtPolicy": "pool-balanced-v1",
+                  "depositProbeAssets": {"op": "uint", "args": ["0"]},
+                  "depositProbeDebt": {"op": "uint", "args": ["0"]},
+                  "depositProbeShares": {"op": "uint", "args": ["0"]},
+                  "depositProgramProof": null
+                },
+                "provenance": [
+                  {
+                    "kind": "levamm-mutual-reference-and-live-withdraw-preview",
+                    "subject": "$evidence.amm",
+                    "evidenceHash": {"op": "hash", "args": [
+                      {
+                        "lt": "$evidence.lt",
+                        "ltCodeHash": "$evidence.ltCodeHash",
+                        "ammLtContract": "$evidence.ammLtContract",
+                        "ammCollateral": "$evidence.ammCollateral",
+                        "ammStablecoin": "$evidence.ammStablecoin",
+                        "poolCoin0": "$evidence.poolCoin0",
+                        "poolCoin1": "$evidence.poolCoin1",
+                        "assetCoinIndex": "$evidence.assetCoinIndex",
+                        "assetDecimals": "$evidence.assetDecimals",
+                        "probeShares": {"op": "string", "args": ["$evidence.probeShares"]},
+                        "probeCryptoReceived": {"op": "string", "args": ["$evidence.probeCryptoReceived"]},
+                        "behaviorProof": "$evidence.behaviorProofHash",
+                        "depositPathVerified": false,
+                        "depositDebtPolicy": "pool-balanced-v1",
+                        "depositProbeAssets": "0",
+                        "depositProbeDebt": "0",
+                        "depositProbeShares": "0",
+                        "depositProgramProof": null
+                      }
+                    ]}
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {"op": "lower", "args": ["$identity.subject"]}
+  },
+  "instance": {
+    "key": {"op": "lower", "args": ["$identity.subject"]},
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {"op": "lower", "args": ["$identity.subject"]},
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [{"kind": "source-state", "freshness": "pinned-block"}],
+      "lt": {"op": "address", "args": ["$identity.subject"]},
+      "share": {"op": "address", "args": ["$identity.subject"]},
+      "asset": {"op": "address", "args": ["$identity.asset"]},
+      "stablecoin": {"op": "address", "args": ["$identity.stablecoin"]},
+      "cryptopool": {"op": "address", "args": ["$identity.cryptopool"]},
+      "amm": {"op": "address", "args": ["$identity.amm"]},
+      "agg": {"op": "address", "args": ["$identity.agg"]},
+      "staker": {"op": "address", "args": ["$identity.staker"]},
+      "admin": {"op": "address", "args": ["$identity.admin"]},
+      "decimals": "$identity.decimals",
+      "assetDecimals": "$identity.assetDecimals",
+      "assetCoinIndex": "$identity.assetCoinIndex",
+      "redemptionPathVerified": "$identity.redemptionPathVerified",
+      "depositPathVerified": "$identity.depositPathVerified"
+    },
+    "bindingProjection": {
+      "lt": {"op": "lower", "args": ["$descriptor.lt"]},
+      "share": {"op": "lower", "args": ["$descriptor.share"]},
+      "asset": {"op": "lower", "args": ["$descriptor.asset"]},
+      "stablecoin": {"op": "lower", "args": ["$descriptor.stablecoin"]},
+      "cryptopool": {"op": "lower", "args": ["$descriptor.cryptopool"]},
+      "amm": {"op": "lower", "args": ["$descriptor.amm"]},
+      "assetCoinIndex": "$descriptor.assetCoinIndex",
+      "assetDecimals": "$descriptor.assetDecimals",
+      "redemptionPath": "levamm-bound-single-asset-withdraw",
+      "depositPath": {"op": "if", "args": ["$descriptor.depositPathVerified", "pool-balanced-v1", null]}
+    }
+  },
+  "routes": {
+    "target": "$descriptor.lt",
+    "bindingKey": {"op": "lower", "args": ["$descriptor.lt"]},
+    "directions": [
+      {
+        "id": "withdraw",
+        "enabled": "$descriptor.redemptionPathVerified",
+        "tokenIn": "$descriptor.share",
+        "tokenOut": "$descriptor.asset",
+        "adapterId": "yieldbasis-lt-withdraw",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "redeem"}
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.lt"]}]}
+    },
+    "effects": [
+      {"kind": "token-delta", "token": "$route.tokenIn", "account": "executor", "direction": "decrease"},
+      {"kind": "token-delta", "token": "$route.tokenOut", "account": "executor", "direction": "increase"},
+      {"kind": "total-supply-delta", "token": "$route.tokenIn", "direction": "decrease"}
+    ],
+    "assertions": [
+      {
+        "condition": {"op": "eq", "args": ["$descriptor.redemptionPathVerified", true]},
+        "error": "Yield Basis LT route was not reverse-binding and direction proven"
+      },
+      {
+        "condition": {"op": "sameAddress", "args": ["$descriptor.share", "$descriptor.lt"]},
+        "error": "Yield Basis LT route was not reverse-binding and direction proven"
+      },
+      {
+        "condition": {"op": "not", "args": [{"op": "sameAddress", "args": ["$descriptor.asset", "0x0000000000000000000000000000000000000000"]}]},
+        "error": "Yield Basis LT route was not reverse-binding and direction proven"
+      },
+      {
+        "condition": {"op": "not", "args": [{"op": "sameAddress", "args": ["$descriptor.share", "$descriptor.asset"]}]},
+        "error": "Yield Basis LT route was not reverse-binding and direction proven"
+      },
+      {
+        "condition": {"op": "and", "args": [
+          {"op": "gte", "args": ["$descriptor.assetCoinIndex", 0]},
+          {"op": "lte", "args": ["$descriptor.assetCoinIndex", 1]}
+        ]},
+        "error": "Yield Basis LT route was not reverse-binding and direction proven"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "lt": "$descriptor.lt",
+      "asset": "$descriptor.asset",
+      "stablecoin": "$descriptor.stablecoin",
+      "cryptopool": "$descriptor.cryptopool",
+      "amm": "$descriptor.amm",
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "lt": {"op": "lower", "args": ["$descriptor.lt"]},
+      "asset": {"op": "lower", "args": ["$descriptor.asset"]},
+      "stablecoin": {"op": "lower", "args": ["$descriptor.stablecoin"]},
+      "cryptopool": {"op": "lower", "args": ["$descriptor.cryptopool"]},
+      "amm": {"op": "lower", "args": ["$descriptor.amm"]},
+      "assetCoinIndex": "$descriptor.assetCoinIndex",
+      "decimals": "$descriptor.decimals"
+    },
+    "static": {
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": ["$draft.lt", "$draft.asset"],
+      "requests": [
+        {
+          "id": "static-share-decimals",
+          "kind": "eth-call",
+          "to": {"op": "address", "args": ["$draft.lt"]},
+          "data": {"op": "encode", "args": ["lt", "decimals", []]},
+          "completion": "return-data"
+        },
+        {
+          "id": "static-asset-decimals",
+          "kind": "eth-call",
+          "to": {"op": "address", "args": ["$draft.asset"]},
+          "data": {"op": "encode", "args": ["token", "decimals", []]},
+          "completion": "return-data"
+        }
+      ],
+      "decode": {
+        "fields": [
+          {
+            "name": "shareDecimals",
+            "value": {"op": "decode", "args": ["lt", "decimals", {"op": "get", "args": [{"op": "returned", "args": ["static-share-decimals"]}, "data"]}, 0]},
+            "checks": [
+              {
+                "condition": {"op": "lte", "args": ["$shareDecimals", {"op": "uint", "args": ["77"]}]},
+                "error": "protocol token decimals exceed uint256 scale"
+              }
+            ]
+          },
+          {
+            "name": "assetDecimals",
+            "value": {"op": "decode", "args": ["token", "decimals", {"op": "get", "args": [{"op": "returned", "args": ["static-asset-decimals"]}, "data"]}, 0]},
+            "checks": [
+              {
+                "condition": {"op": "lte", "args": ["$assetDecimals", {"op": "uint", "args": ["77"]}]},
+                "error": "protocol token decimals exceed uint256 scale"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "oneShare": {"op": "pow", "args": [10, "$shareDecimals"]},
+          "oneAsset": {"op": "pow", "args": [10, "$assetDecimals"]}
+        }
+      }
+    },
+    "finalize": {"op": "merge", "args": ["$draft", "$staticEvidence"]},
+    "sampleAmount": "$descriptor.oneShare",
+    "exactCompatibility": {
+      "lt": {"op": "lower", "args": ["$descriptor.lt"]},
+      "asset": {"op": "lower", "args": ["$descriptor.asset"]},
+      "share": {"op": "lower", "args": ["$descriptor.share"]},
+      "assetCoinIndex": "$descriptor.assetCoinIndex",
+      "direction": "$route.direction",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": ["log"]
+  },
+  "protocol": {
+    "candidateKinds": ["observed-call", "address-surface", "standalone-contract"],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "levamm-bound-single-asset-withdraw",
+    "lineageId": "yieldbasis:levamm-bound-single-asset-withdraw",
+    "abi": {
+      "lt": [
+        "function ASSET_TOKEN() view returns (address)",
+        "function STABLECOIN() view returns (address)",
+        "function CRYPTOPOOL() view returns (address)",
+        "function amm() view returns (address)",
+        "function staker() view returns (address)",
+        "function agg() view returns (address)",
+        "function admin() view returns (address)",
+        "function decimals() view returns (uint8)",
+        "function totalSupply() view returns (uint256)",
+        "function is_killed() view returns (bool)",
+        "function liquidity() view returns (int256,uint256,uint256,uint256)",
+        "function updated_balances() view returns (uint256,uint256)",
+        "function preview_withdraw(uint256) view returns (uint256)",
+        "function withdraw(uint256,uint256) returns (uint256)",
+        "function withdraw(uint256,uint256,address) returns (uint256)"
+      ],
+      "levamm": [
+        "function LT_CONTRACT() view returns (address)",
+        "function COLLATERAL() view returns (address)",
+        "function STABLECOIN() view returns (address)",
+        "function is_killed() view returns (bool)"
+      ],
+      "cryptopool": [
+        "function coins(uint256) view returns (address)",
+        "function balances(uint256) view returns (uint256)",
+        "function totalSupply() view returns (uint256)",
+        "function decimals() view returns (uint256)"
+      ],
+      "token": [
+        "function decimals() view returns (uint8)",
+        "function balanceOf(address) view returns (uint256)",
+        "function totalSupply() view returns (uint256)",
+        "function approve(address,uint256) returns (bool)"
+      ]
+    },
+    "constants": {
+      "probeShares": "1000000000000000000",
+      "minShareRemainder": "1000000"
+    },
+    "expressions": {},
+    "match": {},
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": ["$descriptor.lt", "$descriptor.asset", "$descriptor.stablecoin", "$descriptor.cryptopool", "$descriptor.amm"],
+      "mutationAddresses": ["$descriptor.lt"]
+    },
+    "exact": {
+      "methodId": "yieldbasis-lt-withdraw-preview",
+      "requirements": {"transports": ["eth-call"]},
+      "protectedAddresses": ["$descriptor.lt", "$descriptor.asset"],
+      "evidence": {
+        "kind": "yieldbasis-lt-withdraw-preview",
+        "source": "$source",
+        "lt": {"op": "address", "args": ["$descriptor.lt"]},
+        "asset": {"op": "address", "args": ["$descriptor.asset"]},
+        "direction": "withdraw",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "assetCoinIndex": "$descriptor.assetCoinIndex",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {"directOutput": true},
+      "protectedAddresses": {"op": "if", "args": [
+        "$directSettlement",
+        [
+          {"op": "address", "args": ["$descriptor.lt"]},
+          {"op": "address", "args": ["$descriptor.asset"]},
+          {"op": "address", "args": ["$descriptor.stablecoin"]},
+          {"op": "address", "args": ["$descriptor.cryptopool"]},
+          {"op": "address", "args": ["$descriptor.amm"]},
+          {"op": "address", "args": ["$descriptor.staker"]}
+        ],
+        [
+          {"op": "address", "args": ["$descriptor.lt"]},
+          {"op": "address", "args": ["$descriptor.asset"]}
+        ]
+      ]},
+      "steps": [
+        {
+          "id": "withdraw",
+          "call": {
+            "target": {"op": "address", "args": ["$descriptor.lt"]},
+            "signature": {"op": "if", "args": [
+              "$externalRecipient",
+              "function withdraw(uint256,uint256,address) returns (uint256)",
+              "function withdraw(uint256,uint256) returns (uint256)"
+            ]},
+            "args": {"op": "if", "args": [
+              "$externalRecipient",
+              [{"runtime": "amountIn"}, "$minAmountOut", "$recipient"],
+              [{"runtime": "amountIn"}, "$minAmountOut"]
+            ]},
+            "save": {"withdrawAssets": 0}
+          },
+          "effects": [
+            {
+              "kind": "credit",
+              "token": "$route.tokenOut",
+              "account": "$recipient",
+              "equals": {"runtime": "withdrawAssets"},
+              "when": "$directSettlement"
+            }
+          ]
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {"runtime": "amountIn"}
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "supply",
+          "token": "$route.tokenIn",
+          "direction": "decrease",
+          "minimum": 1
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$descriptor.stablecoin",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$descriptor.stablecoin",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        }
+      ]
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "yieldbasis-lt-withdraw",
+        "lineage": "custom-protocol:yieldbasis-lt",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function withdraw(uint256,uint256)"}
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "yieldbasis-lt-deposit",
+        "lineage": "custom-protocol:yieldbasis-lt",
+        "edgeKind": "protocol",
+        "action": "wrap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function deposit(uint256,uint256,uint256)"}
+      ]
+    }
+  ],
+  "modules": {
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {"transports": ["eth-call"]},
+          "requests": [
+            {
+              "id": "quote-preview-withdraw",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.lt"]},
+              "data": {"op": "encode", "args": ["lt", "preview_withdraw", ["$amountIn"]]},
+              "completion": "return-data"
+            },
+            {
+              "id": "quote-is-killed",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.lt"]},
+              "data": {"op": "encode", "args": ["lt", "is_killed", []]},
+              "completion": "return-data"
+            },
+            {
+              "id": "quote-staker",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.lt"]},
+              "data": {"op": "encode", "args": ["lt", "staker", []]},
+              "completion": "return-data"
+            },
+            {
+              "id": "quote-live-supply",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.lt"]},
+              "data": {"op": "encode", "args": ["lt", "updated_balances", []]},
+              "completion": "return-data"
+            },
+            {
+              "id": "quote-liquidity",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.lt"]},
+              "data": {"op": "encode", "args": ["lt", "liquidity", []]},
+              "completion": "return-data"
+            },
+            {
+              "id": "quote-pool-asset-balance",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.cryptopool"]},
+              "data": {"op": "encode", "args": ["cryptopool", "balances", ["$descriptor.assetCoinIndex"]]},
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "amountOut",
+              "value": {"op": "decode", "args": ["lt", "preview_withdraw", {"op": "get", "args": [{"op": "returned", "args": ["quote-preview-withdraw"]}, "data"]}, 0]}
+            },
+            {
+              "let": "killed",
+              "value": {"op": "decode", "args": ["lt", "is_killed", {"op": "get", "args": [{"op": "returned", "args": ["quote-is-killed"]}, "data"]}, 0]}
+            },
+            {
+              "let": "currentStaker",
+              "value": {"op": "address", "args": [{"op": "decode", "args": ["lt", "staker", {"op": "get", "args": [{"op": "returned", "args": ["quote-staker"]}, "data"]}, 0]}]}
+            },
+            {
+              "let": "supplyTokens",
+              "value": {"op": "at", "args": [{"op": "decodeAll", "args": ["lt", "updated_balances", {"op": "get", "args": [{"op": "returned", "args": ["quote-live-supply"]}, "data"]}]}, 0]}
+            },
+            {
+              "let": "liquidityTotal",
+              "value": {"op": "at", "args": [{"op": "decodeAll", "args": ["lt", "liquidity", {"op": "get", "args": [{"op": "returned", "args": ["quote-liquidity"]}, "data"]}]}, 1]}
+            },
+            {
+              "let": "poolAssetBalance",
+              "value": {"op": "decode", "args": ["cryptopool", "balances", {"op": "get", "args": [{"op": "returned", "args": ["quote-pool-asset-balance"]}, "data"]}, 0]}
+            },
+            {
+              "assert": {"op": "not", "args": [{"op": "sameAddress", "args": ["$currentStaker", "$executor"]}]},
+              "error": "Yield Basis LT withdraw to/from staker would revert"
+            },
+            {
+              "assert": {"op": "not", "args": ["$killed"]},
+              "error": "Yield Basis LT is killed; withdraw would revert (use emergency_withdraw, which this family does not route)"
+            },
+            {
+              "assert": {"op": "gt", "args": ["$amountOut", {"op": "uint", "args": ["0"]}]},
+              "error": "Yield Basis LT quote produced no crypto output"
+            },
+            {
+              "assert": {"op": "ne", "args": ["$supplyTokens", {"op": "uint", "args": ["0"]}]},
+              "error": "Yield Basis LT reports no live share supply; withdraw would revert"
+            },
+            {
+              "assert": {"op": "lte", "args": ["$amountIn", "$supplyTokens"]},
+              "error": "Yield Basis LT live supply cannot cover the requested shares"
+            },
+            {
+              "assert": {"op": "or", "args": [
+                {"op": "eq", "args": ["$supplyTokens", "$amountIn"]},
+                {"op": "gte", "args": ["$supplyTokens", {"op": "add", "args": [
+                  {"op": "uint", "args": ["$constants.minShareRemainder"]},
+                  "$amountIn"
+                ]}]}
+              ]},
+              "error": "Yield Basis LT live supply leaves less than the minimum share remainder"
+            },
+            {
+              "assert": {"op": "ne", "args": ["$liquidityTotal", {"op": "uint", "args": ["0"]}]},
+              "error": "Yield Basis LT reports zero withdrawable liquidity; not quotable"
+            },
+            {
+              "assert": {"op": "lte", "args": ["$amountOut", "$poolAssetBalance"]},
+              "error": "Yield Basis cryptopool balance cannot cover the quoted crypto out"
+            },
+            {"return": "$amountOut"}
+          ]
+        }
+      ],
+      "result": "$steps.quote",
+      "chainQuote": {
+        "step": "quote",
+        "requestId": "quote-preview-withdraw",
+        "signature": "function preview_withdraw(uint256) view returns (uint256)",
+        "amountPath": [0],
+        "outputPath": [0],
+        "completion": "returned"
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {"transports": ["eth-call"]},
+          "requests": [
+            {
+              "id": "current-preview-withdraw",
+              "kind": "eth-call",
+              "to": {"op": "address", "args": ["$descriptor.lt"]},
+              "data": {"op": "encode", "args": ["lt", "preview_withdraw", ["$descriptor.oneShare"]]},
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "amountOut",
+              "value": {"op": "decode", "args": ["lt", "preview_withdraw", {"op": "get", "args": [{"op": "returned", "args": ["current-preview-withdraw"]}, "data"]}, 0]}
+            },
+            {
+              "assert": {"op": "gt", "args": ["$amountOut", {"op": "uint", "args": ["0"]}]},
+              "error": "Yield Basis LT current quote returned no output"
+            },
+            {"return": {"amountOut": "$amountOut"}}
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$routes",
+                "route",
+                [
+                  {"op": "get", "args": ["$route", "routeKey"]},
+                  {
+                    "amountIn": "$descriptor.oneShare",
+                    "amountOut": "$steps.quote.amountOut"
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

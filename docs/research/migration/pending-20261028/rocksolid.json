@@ -1,0 +1,470 @@
+{
+  "version": 2,
+  "scope": {"family": "protocol:rocksolid"},
+  "production": {
+    "domain": "protocol",
+    "activation": {"enabled": true, "envKey": "SEARCHER_FAMILY_ROCKSOLID_ENABLED"}
+  },
+  "manifest": {
+    "familyId": "protocol:rocksolid",
+    "domain": "protocol",
+    "ownedActionAdapterIds": ["rocksolid-sync-deposit"],
+    "requiredInfraActionAdapterIds": ["erc20-approve"],
+    "allowedTaxonomy": [{"slotKind": "protocol", "protocolAction": "wrap"}],
+    "supportedLineages": ["rocksolid:active-sync-deposit"],
+    "poolAdapterIds": ["rocksolid"],
+    "edgeAdapterIds": ["rocksolid-sync-deposit"],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "sources": ["observed-call", "address-surface"],
+      "candidateSources": [],
+      "candidate": {"kind": "rocksolid-receipt", "addressField": "target"},
+      "calls": [
+        {"id": "rocksolid-sync-deposit-call", "signature": "syncDeposit(uint256,address,address)"}
+      ],
+      "events": [],
+      "surface": {"id": "rocksolid-sync-deposit-surface", "fingerprint": "rocksolid-sync-deposit-v1"},
+      "labels": ["rocksolid", "protocol:rocksolid"]
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "identity": {
+        "select": [
+          {"return": "active-sync-deposit"}
+        ],
+        "stages": {
+          "active-sync-deposit": {
+            "requirements": {"transports": ["get-code", "eth-call"]},
+            "requests": [
+              {
+                "id": "identity-code",
+                "kind": "get-code",
+                "address": {"op": "address", "args": ["$candidate.target"]}
+              },
+              {
+                "id": "identity-convert",
+                "kind": "eth-call",
+                "to": {"op": "address", "args": ["$candidate.target"]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "rocksolid",
+                    "convertToShares",
+                    [{"op": "uint", "args": ["$constants.sampleAssets"]}]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {"evaluate": {"op": "source", "args": ["$results"]}},
+              {
+                "let": "codeHash",
+                "value": {"op": "codeHash", "args": [{"op": "code", "args": ["identity-code"]}]}
+              },
+              {
+                "let": "sampleShares",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "rocksolid",
+                        "convertToShares",
+                        {"op": "get", "args": [{"op": "returned", "args": ["identity-convert"]}, "data"]},
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {"return": {"codeHash": "$codeHash", "sampleShares": "$sampleShares"}}
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {"status": "continue"},
+            "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]}
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "rocksolid_active_quote_failed",
+              "evidenceRequestIds": ["active-sync-deposit"]
+            },
+            "when": {"op": "lte", "args": ["$evidence.sampleShares", 0]}
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {"op": "address", "args": ["$candidate.target"]},
+                "provenance": [
+                  {
+                    "kind": "rocksolid-active-convert-proof",
+                    "subject": {"op": "address", "args": ["$candidate.target"]},
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {"codeHash": "$evidence.codeHash", "sampleShares": "$evidence.sampleShares"}
+                      ]
+                    }
+                  }
+                ],
+                "sampleShares": "$evidence.sampleShares"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]}
+  },
+  "instance": {
+    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [{"kind": "source-state", "freshness": "pinned-block"}],
+      "target": {"op": "address", "args": ["$identity.subject"]},
+      "asset": {"op": "address", "args": ["$constants.reth"]},
+      "receipt": {"op": "address", "args": ["$identity.subject"]}
+    },
+    "bindingProjection": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
+      "receipt": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.receipt"]}]},
+      "execution": "syncDeposit(assets,receiver,zero-referral)"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+    "directions": [
+      {
+        "id": "sync-deposit",
+        "enabled": true,
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.receipt",
+        "adapterId": "rocksolid-sync-deposit",
+        "taxonomy": {"slotKind": "protocol", "protocolAction": "wrap"}
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]}
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "target": "$descriptor.target",
+      "route": {"op": "at", "args": ["$routes", 0]},
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
+      "receipt": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.receipt"]}]}
+    },
+    "static": {
+      "requirements": {"transports": []},
+      "dependencies": [],
+      "requests": [],
+      "decode": {"fields": [], "output": {}}
+    },
+    "finalize": {"op": "merge", "args": ["$draft", "$staticEvidence"]},
+    "sampleAmount": {"op": "uint", "args": ["$constants.sampleAssets"]},
+    "exactCompatibility": {
+      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "direction": "$route.direction",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": ["call"]
+  },
+  "protocol": {
+    "candidateKinds": ["observed-call", "address-surface"],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "active-sync-deposit",
+    "lineageId": "rocksolid:active-sync-deposit",
+    "abi": {
+      "rocksolid": [
+        "function convertToShares(uint256 assets) view returns (uint256 shares)",
+        "function syncDeposit(uint256 assets,address receiver,address referral) returns (uint256 shares)"
+      ]
+    },
+    "constants": {
+      "reth": "0xae78736Cd615f374D3085123A210448E74Fc6393",
+      "sampleAssets": "1000000000000000000",
+      "referral": "0x0000000000000000000000000000000000000000"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "pricing": {
+      "mutationAddresses": ["$descriptor.target"],
+      "refreshPolicy": "on-touch",
+      "requirements": {"transports": ["eth-call"]},
+      "dependencies": [
+        "$descriptor.target",
+        "$descriptor.route.tokenIn",
+        "$descriptor.route.tokenOut"
+      ]
+    },
+    "exact": {
+      "methodId": "rocksolid-quote",
+      "requirements": {"transports": ["eth-call"]},
+      "evidence": {
+        "kind": "rocksolid-convert-to-shares",
+        "source": "$source",
+        "target": "$descriptor.target",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {
+      "quote": {
+        "requests": [
+          {
+            "id": "$requestId",
+            "kind": "eth-call",
+            "to": "$descriptor.target",
+            "data": {
+              "op": "encode",
+              "args": ["rocksolid", "convertToShares", ["$amountIn"]]
+            },
+            "completion": "return-data"
+          }
+        ],
+        "result": {
+          "op": "uint",
+          "args": [
+            {
+              "op": "decode",
+              "args": [
+                "rocksolid",
+                "convertToShares",
+                {"op": "get", "args": [{"op": "returned", "args": ["$requestId"]}, "data"]},
+                0
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "execution": {
+      "version": 1,
+      "settlement": {"directOutput": true},
+      "protectedAddresses": ["$descriptor.target"],
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.target",
+        "mode": "ensure"
+      },
+      "call": {
+        "target": "$descriptor.target",
+        "signature": "function syncDeposit(uint256 assets,address receiver,address referral) returns (uint256 shares)",
+        "args": [
+          {"runtime": "amountIn"},
+          "$executor",
+          {"op": "address", "args": ["$constants.referral"]}
+        ]
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {"runtime": "amountIn"}
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "steps": [
+        {
+          "id": "convert",
+          "requirements": {"transports": ["eth-call"]},
+          "requests": [
+            {
+              "id": "quote-convert",
+              "kind": "eth-call",
+              "to": "$descriptor.target",
+              "data": {
+                "op": "encode",
+                "args": ["rocksolid", "convertToShares", ["$amountIn"]]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "return": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "rocksolid",
+                      "convertToShares",
+                      {"op": "get", "args": [{"op": "returned", "args": ["quote-convert"]}, "data"]},
+                      0
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.convert",
+      "chainQuote": {
+        "step": "convert",
+        "requestId": "quote-convert",
+        "signature": "function convertToShares(uint256 assets) view returns (uint256 shares)",
+        "amountPath": [0],
+        "outputPath": [0],
+        "completion": "returned"
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "rocksolid-sync-deposit",
+        "lineage": "rocksolid",
+        "edgeKind": "protocol",
+        "action": "deposit",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {"signature": "function syncDeposit(uint256,address,address)"}
+      ]
+    }
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "RocksolidCandidate": {
+        "type": "object",
+        "extends": ["FamilyCandidate"],
+        "fields": {
+          "candidateKind": {"literal": "rocksolid-receipt"},
+          "target": {"type": "string"}
+        }
+      },
+      "RocksolidIdentityEvidence": {
+        "type": "object",
+        "fields": {
+          "codeHash": {"type": "string"},
+          "sampleShares": {"type": "bigint"}
+        }
+      },
+      "RocksolidIdentity": {
+        "type": "object",
+        "extends": ["VerifiedIdentity"],
+        "fields": {
+          "sampleShares": {"type": "bigint"}
+        }
+      },
+      "RocksolidDescriptor": {
+        "type": "object",
+        "extends": ["CompiledInstanceDescriptor"],
+        "fields": {
+          "target": {"type": "string"},
+          "asset": {"type": "string"},
+          "receipt": {"type": "string"}
+        }
+      },
+      "RocksolidRoute": {
+        "type": "object",
+        "extends": ["FamilyRouteDescriptor"],
+        "fields": {
+          "target": {"type": "string"},
+          "direction": {"literal": "sync-deposit"},
+          "adapterId": {"literal": "rocksolid-sync-deposit"}
+        }
+      },
+      "RocksolidPricingDraft": {
+        "type": "object",
+        "fields": {
+          "instanceKey": {"ref": "InstanceKey"},
+          "target": {"type": "string"},
+          "route": {"ref": "RocksolidRoute"},
+          "routes": {"array": {"ref": "RocksolidRoute"}}
+        }
+      },
+      "RocksolidPricingStatic": {
+        "type": "object",
+        "fields": {}
+      },
+      "RocksolidPricingDescriptor": {
+        "type": "object",
+        "extends": ["RocksolidPricingDraft", "RocksolidPricingStatic"],
+        "fields": {}
+      },
+      "RocksolidExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {"literal": "rocksolid-convert-to-shares"},
+          "source": {"ref": "CanonicalSource"},
+          "target": {"type": "string"},
+          "amountIn": {"type": "bigint"},
+          "amountOut": {"type": "bigint"},
+          "bindingFingerprint": {"type": "string"}
+        }
+      }
+    },
+    "contracts": {
+      "candidate": "RocksolidCandidate",
+      "identityEvidence": "RocksolidIdentityEvidence",
+      "identity": "RocksolidIdentity",
+      "descriptor": "RocksolidDescriptor",
+      "route": "RocksolidRoute",
+      "pricingDraft": "RocksolidPricingDraft",
+      "pricingDescriptor": "RocksolidPricingDescriptor",
+      "pricingStatic": "RocksolidPricingStatic",
+      "exactEvidence": "RocksolidExactEvidence"
+    }
+  }
+}

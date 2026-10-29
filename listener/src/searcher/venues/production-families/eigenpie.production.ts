@@ -1,35 +1,12 @@
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/protocols/eigenpie-family/eigenpie.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
-import { eigenpieCapture } from "../protocols/eigenpie-family/capture.js";
-import { eigenpieFamilyOwnedAction } from
-  "../protocols/eigenpie-family/action.js";
-import { eigenpieDiscovery } from
-  "../protocols/eigenpie-family/discovery.js";
-import { eigenpieExact } from "../protocols/eigenpie-family/exact.js";
-import { eigenpieExecution } from
-  "../protocols/eigenpie-family/execution.js";
-import { eigenpieIdentity } from
-  "../protocols/eigenpie-family/identity.js";
-import { eigenpieInstance } from
-  "../protocols/eigenpie-family/instance.js";
-import { eigenpieFamilyManifest } from
-  "../protocols/eigenpie-family/manifest.js";
-import { eigenpiePricing } from "../protocols/eigenpie-family/pricing.js";
-import { eigenpieProtocol } from "../protocols/eigenpie-family/protocol.js";
-import { eigenpieRoutes } from "../protocols/eigenpie-family/routes.js";
+import { compileDeclarativeProtocol } from "../declarative-protocol.js";
+import type { FamilyTypes } from "../../generated/declarative-family-types/eigenpie.generated.js";
+import definition from "../protocols/eigenpie-family/eigenpie.json";
 
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_EIGENPIE_ENABLED" });
+export const activation = defineFamilyActivation({"enabled":true,"envKey":"SEARCHER_FAMILY_EIGENPIE_ENABLED"});
 
-export const plugin = defineProtocolFamily({
-  manifest: eigenpieFamilyManifest,
-  capture: eigenpieCapture,
-  discovery: eigenpieDiscovery,
-  identity: eigenpieIdentity,
-  instance: eigenpieInstance,
-  routes: eigenpieRoutes,
-  pricing: eigenpiePricing,
-  exact: eigenpieExact,
-  execution: eigenpieExecution,
-  protocol: eigenpieProtocol,
-  actionAdapters: [eigenpieFamilyOwnedAction],
-});
+export const plugin = defineProtocolFamily(compileDeclarativeProtocol<FamilyTypes>(definition, []));

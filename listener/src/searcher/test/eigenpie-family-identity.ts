@@ -269,9 +269,12 @@ test("no-proof, runtime-code and mixed-source guards remain closed", async () =>
     assert.throws(() => variant.decode({ step, results: [receipt, { ...simulation, source }] }), /foreign source/);
   }
   assert.throws(() => variant.decode({ step, results: [{ ...receipt, data: "0x" }, simulation] }), /no runtime code/);
+  // The TS family says "identity unresolved"; the declarative identity compiler
+  // rejects the same unresolved required request with the typed
+  // RequiredAdapterRequestError before Family decode. Both fail closed.
   assert.throws(() => variant.decode({ step, results: [receipt, {
     id: "identity-active-deposit", ok: false, source: SOURCE, failure: "resource-limited",
-  }] }), /unresolved/);
+  }] }), /unresolved|required adapter request/);
   assert.throws(() => variant.decide({ candidate: CANDIDATE, evidence: decode(value), step: 0 }), /before active behavior proof/);
 });
 
