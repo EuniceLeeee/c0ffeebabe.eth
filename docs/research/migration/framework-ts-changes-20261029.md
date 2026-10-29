@@ -219,3 +219,50 @@ npm run family-capability-manifest:check
 node --import tsx --test src/searcher/test/declarative-*.test.ts
 # 对应 family contract/lifecycle
 ```
+
+---
+
+## 六、逐项必要性审计：协议语义 vs 当时 TS 写法
+
+判定标准：
+- **必须**：协议行为本身要求该能力，JSON 没有等价表达，去掉就是收窄/改变语义。
+- **写法**：TS 当时的编码/接口/优化选择；JSON 可换一种表达，或测试侧适配即可。
+
+### 上架族
+
+| Family | 缺口 | 判定 | 依据 / 替代 |
+|---|---|---|---|
+| badger | sequential trial / prefix 报价 | **写法（优化）** | `trial-state.ts` 只是多腿复用与前缀本地报价；单腿 exact 无需它。可声明 `localStateUnsupportedReason` fail-closed，测试改为断言“前缀回退”，核心撤资不受影响 |
+| badger | 路由地址大小写、追加 `target/direction`、运行时字节布局 | **写法** | 语义/地址等价，测试侧归一化即可 |
+| metronome-synth | `oracleVictim` 的 runtime detection（受影响边 + 价格探针刷新） | **必须** | `victim.ts:26-50` 是真实的 oracle 操纵检测/刷新触发；JSON 无对应运行时能力。其 discovery decode 本身可用 call pattern + 谓词表达（部分可 JSON） |
+| set-redemption | 一次赎回给 N 个 basket token（多 debit/credit） | **必须** | `execution.ts:16-42` 组件循环 + 每个 receipt 校验是协议语义；单 debit/credit 表达不了 |
+| set-redemption | 嵌套 subscript program | **写法** | 分片是 EVM 栈/脚本实现技巧；framework 可用 `forEach` 展开替代 |
+| set-redemption | direct Basic action 编码、reverse binding | **写法** | direct action 是编码格式；reverse binding 是发现通道之一（surface 通道仍可准入） |
+| token-conversion | BTB 资产的 opcode-walk 依赖闭包 | **写法（保守安全证明）** | 目的是证明“资产运行时不外呼”，从而安全刷新；可替代为更保守策略（未知资产每次刷新/标为高波动），不是协议数学。若接受保守刷新，可不做该模块 |
+| token-conversion | xWin 部分（Map/trial） | 已支持 | 6876fef0 §5 已支持 Map；不需要新模块 |
+
+### 未上架族（暂不改 TS，仅记录判断）
+
+| Family | 缺口 | 判定 | 依据 / 替代 |
+|---|---|---|---|
+| psv | `quoteOutput` settlement | **必须** | 结算要走 preview/quote 腿，协议语义（`runtime-quote.ts`），不是编码选择 |
+| yieldbasis-lt | 每方向 exact quote（view vs effect-simulation） | **必须** | deposit 必须执行自身 program 才能得到报价；共用一份 quoteFlow 只能二选一 |
+| ondo-usdy | raw selector `0xccee0802` helper 调用 | **必须（除非恢复 ABI）** | 实际执行字节就是该 selector+9 words；JSON 只支持 ABI 签名。若拿到 helper ABI 可改为普通调用 |
+| mellow-queue | `uint224` 运行时叶子 | **写法（编码限制）** | deposit 的 `bytes32[]` 实际是空数组（`execution.ts:25`），只有 uint224 金额需 patch；uint224 与 uint256 都是 32 字节字，加一个 bounded-uintN 叶子或带范围检查的 uint256 patch 即可 |
+| yearn-auction | 每次枚举产生多条 observation（每个 enabled auction 一条） | **必须** | 发现语义就是“枚举注册表里的多个 auction”；单对象提名会漏拍 |
+| few-wrapped | simulation 任意 setup/funding、receipt 多 delta/logs | **必须** | 其 probe 需要 approve/funding/setup 与完整 receipt；不做就无法构造真实证明 |
+| few-wrapped | 双提名通道 | **写法（冗余）** | 可只保留一条通道，但会减少发现入口（属收窄，需明确接受） |
+| curve-lp | 路由 identity（target/direction）、native fixture、stub | **写法** | legacy lineage 本身可表达；失败来自测试按 TS route 形状/字节断言 |
+| curve-lp | NG/generic 的 per-direction settlement、嵌套 fee-claim program/log 操作 | **必须（对 NG/generic）** | 这些方向的结算/费用提取是协议语义；legacy-only 可不做 |
+| token-conversion | 同 BTB opcode-walk | **写法（保守证明）** | 同上，可用保守刷新替代 |
+| psv/curve-lp/yieldbasis/ondo/mellow/yearn/few-wrapped | — | 未上架 | 按 app-run2 范围，暂不改 TS |
+
+### 结论（上架族里真正必须补的）
+
+只集中在 3 个族：
+1. **metronome-synth**：oracle-victim runtime detection；
+2. **set-redemption**：多资产 execution fan-out（其余用 `forEach`/测试适配解决）；
+3. **token-conversion**：可先不做——用保守刷新策略替代 opcode-walk（若业务接受“未知资产更频繁刷新”）。
+
+`badger` 不需要新模块：放弃 sequential trial（fail-closed）即可适配，核心撤资/报价不受影响；
+`token-migration` 已完成。
