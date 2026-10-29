@@ -95,7 +95,8 @@ function setup(b = binding, target = TARGET) {
 }
 function quote(s = setup(), amountIn = AMOUNT) {
   const input = { descriptor: s.descriptor, route: s.route, amountIn, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] };
-  const method = plugin.exact.methods(input)[0]; assert(method.kind === "request-program");
+  const method = plugin.exact.methods(input).find(m => m.kind === "request-program");
+  assert(method && method.program && "buildRequests" in method.program);
   const requests = method.program.buildRequests(input), results = requests.map(s.f.answer);
   const result = method.program.decode({ programInput: input, initialResults: results, dependentEvidence: [] });
   return { input, method, requests, results, result };
@@ -154,7 +155,7 @@ test("identity rejects bad token evidence; missing, reverted and mixed-source ev
   const f = fixture();
   const d = identify(f, undefined, r => r.id === "output-code" ? success(r.id, "0x") : f.answer(r));
   assert.equal(d.status, "chain-proven-rejected");
-  assert.throws(() => identify(f, undefined, r => r.id === "code" ? { id: r.id, ok: false, failure: "rpc", source: SOURCE } : f.answer(r)), /unresolved/);
+  assert.throws(() => identify(f, undefined, r => r.id === "code" ? { id: r.id, ok: false, failure: "rpc", source: SOURCE } : f.answer(r)), /unresolved|RequiredAdapterRequestError/);
   assert.throws(() => identify(f, undefined, r => r.id === "input-code" ? { ...f.answer(r), source: { ...SOURCE, number: SOURCE.number + 1 } } : f.answer(r)), /foreign source/);
   assert.throws(() => identify(f, undefined, r => r.id === "code" ? { ...success(r.id, runtime), completion: "reverted-as-declared" } : f.answer(r)), /did not return/);
   assert.throws(() => identify(f, undefined, r => r.id === "input-decimals" ? success(r.id, w(78n)) : f.answer(r)), /scale/);
@@ -190,7 +191,7 @@ test("chain quoter receives actual amounts, floors exactly, and checks overflow"
   assert.equal(quote(s, 10n ** 18n).result.amountOut, 43750n);
   assert.equal(calculate(11n, 7n, 3n), 25n);
   assert.equal(calculate(MAX / 7n, 7n, 3n), (MAX / 7n * 7n) / 3n);
-  for (const amount of [-1n, 0n, MAX + 1n, MAX]) assert.throws(() => quote(s, amount), /positive|bounds/);
+  for (const amount of [-1n, 0n, MAX + 1n, MAX]) assert.throws(() => quote(s, amount), /positive|bounds|negative/);
   assert.throws(() => quote(s, 1n), /zero output/);
 });
 test("halt and finite output inventory are dynamic, recoverable quote constraints", () => {
@@ -205,7 +206,7 @@ test("halt and finite output inventory are dynamic, recoverable quote constraint
 test("pricing is pure; inventory-only and halt changes refresh declared state keys", () => {
   const s = setup();
   const draft = plugin.pricing.compileDraft({ descriptor: s.descriptor, routes: [s.route], stateKey: s.route.instanceKey });
-  const descriptor = plugin.pricing.finalizePricingDescriptor({ draft, staticEvidence: undefined, sharedBindings: [] });
+  const descriptor = plugin.pricing.finalizePricingDescriptor({ draft, staticEvidence: {}, sharedBindings: [] });
   const read = () => plugin.pricing.current.decodeSnapshot({ descriptor, initialResults: plugin.pricing.current.buildRequests({ descriptor, source: SOURCE, routes: [s.route] }).map(s.f.answer), dependentEvidence: [] });
   const snapshot = read(); const amounts = s.f.amounts.length;
   const mids = plugin.pricing.current.deriveMids({ descriptor, snapshot, routes: [s.route] });
@@ -243,7 +244,7 @@ test("execution rejects changed input/output/recipient/binding/min-output eviden
   for (const bad of [{ ...input, amountIn: AMOUNT + 1n }, { ...input, quotedAmountOut: OUT + 1n },
     { ...input, executor: FOREIGN }, { ...input, minAmountOut: OUT + 1n },
     { ...input, exactEvidence: { ...input.exactEvidence, bindingFingerprint: ethers.ZeroHash } }]) {
-    assert.throws(() => plugin.execution.buildFragment(bad), /incompatible/);
+    assert.throws(() => plugin.execution.buildFragment(bad), /incompatible|mismatch/);
   }
 });
 

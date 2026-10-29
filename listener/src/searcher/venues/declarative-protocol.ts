@@ -661,6 +661,8 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
         expected = decoded.evidence;
       } else expected = evidence({ ...input, source: e.source }, input.quotedAmountOut);
       if (e.executor !== undefined && !sameAddress(e.executor, input.executor)) throw new Error("execution actor/evidence mismatch");
+      if (input.minAmountOut !== undefined && input.minAmountOut > input.quotedAmountOut)
+        throw new Error("execution minimum/quote mismatch");
       if (input.amountIn <= 0n || input.quotedAmountOut <= 0n ||
           hashCanonical(e) !== hashCanonical(expected))
         throw new Error("execution received incompatible exact evidence");
