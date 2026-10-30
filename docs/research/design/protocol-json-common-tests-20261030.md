@@ -79,7 +79,7 @@ JSON 提供 `callPatterns`（signature、targets、candidateAddress、when、res
 
 ## 6. 一套测试，两种执行边界
 
-真实 TX 样本已集中到 `listener/src/searcher/test/fixtures/protocol-json/`：`index.json` 收录本批 18 族的 41 条来源记录，`cases/` 收录 35 份完整格式输入（13 族）。34 份来自既有资料，本轮只补齐 Astra 一笔；剩余字段由迁移窗口补数据。`check:protocol-json-samples` 自动列出待补字段，不运行样本。详细步骤、限制和分工见该目录 README；其他窗口不新增测试 TS。
+真实 TX 样本已集中到 `listener/src/searcher/test/fixtures/protocol-json/`：`index.json` 收录 24 个已迁移族＋Metronome Synth、PSV，共 26 族的 50 条 TX 来源记录；25 族已有完整 TX，wstETH 仍缺可确认的 wrap/unwrap TX。`cases/` 收录 35 份完整格式输入（13 族）。34 份来自既有资料，本轮只补齐 Astra 一笔；扩大样本范围只导入引用，剩余字段由迁移窗口补数据。样本库范围与上文公共 TS 扩展的实际启用 18 族分开，关闭族不因此上架。`check:protocol-json-samples` 自动列出待补字段，不运行样本。详细步骤、限制和分工见该目录 README；其他窗口不新增测试 TS。
 
 在 listener 目录运行：
 
@@ -149,3 +149,7 @@ RPC 配置仍使用已有 `MAINNET_RPC_URL` JSON 键，文件保持本地且不�
 公共套件在云端实际 dirty 源码快照和仅含本次修改的提交校验副本上均 **356/356** 通过；新 runner/context/facts 的严格类型检查通过，生产构建和清单生成/检查通过。新真实历史执行尚未运行。扩大运行原全域 `family-dual-execution.ts` 得到 **309/314**：缺少新增族的旧 fixture、以及 UniV3 静态报价两条旧断言，共 5 个失败；未修改基线在同样环境重现相同 5 个失败，不能称全域审计通过，也未删除或放宽这些断言。原始失败日志保存在 `logs/protocol-json-enabled-20261030/`，不入库。另一窗口只需要拉取提交、适配 JSON/数学与样本、运行上述公共入口；发现不支持的模块/真实失败交回框架窗口，不能修改公共断言或将其标成通过。
 
 Astra 示例补数先手工核对 receipt 两条实际转账，再以当前索引的 `single-transaction,flow` 能力选取 `analysis:tx-flow` 经 `tool-run` 复核；输入 `828547461981284792867` 与输出 `133175015810372` 原始单位一致，仅借输入作为新状态测试量。执行 manifest 为云端 `logs/protocol-json-enabled-20261030/sample-tool-selection.json`，SHA256 `15246f13d61df0d0d532d6fabefa25e22f876fcc5a75e24f487587237a6ed52e`。一次连接错误和一次既有 analysis 依赖失效均保留；后者以临时依赖链接运行，完成后删除，未改原依赖链接。
+
+### 样本范围补正
+
+按用户复核，之前把“app-run2 启用 18 族”误作全部样本范围，遗漏已迁移的 StakedUSDat、Arcana、BoringVault、DefaultCollateral、MetaFactory、Olympus、Origin stETH ARM、Origin OUSD 共 8 族。现已补回：前三族来自原 IMPL，其他来自既有合同测试中的实际 TX 引用/历史报告；OUSD 的缩略哈希通过 N=26185253 的区块恢复为完整哈希。来源、SHA256 和待补字段逐条写入测试目录 JSON。未导入合成块哈希、mocked effects 或历史通过标签；原 IMPL 状态及他人增量未修改。Set 的旧 TX 仍在 IMPL，但其实际关闭且未完成本批 fan-out 扩展，不混进 26 族的完成口径。

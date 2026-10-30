@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "scope": "Curated historical sample input library. Recorded historical results and case completeness are not new execution acceptance.",
+  "scope": "Curated TX inputs for all 24 migrated Protocol families plus two shared-module targets (26 total). Current production/framework enabled scope remains 18. Stored references, case completeness and prior results are not new acceptance.",
   "roots": {
     "stage": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage",
     "migrationReadOnly": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028"
@@ -20,6 +20,94 @@
     }
   ],
   "families": [
+    {
+      "familyId": "protocol:arcana-migration",
+      "samples": [
+        {
+          "id": "efa1ed163f",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0xefa1ed163fe6ce5dd40a67b5cc3d0ed43d3521cb4f1a07cb6e92bb1d5d1644de",
+          "source": {
+            "number": 26183678,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0x5b370e144d41e596033fe3dc60e1c30e6c493962",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 49,
+              "endLine": 49
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Original IMPL row reference only; its prior acceptance/replay statements are not a pass for the JSON migration or current common runner."
+          ],
+          "missing": [
+            "current lineage and source-bound actors",
+            "complete direction/amount inputs",
+            "canonical block-end receipt/header confirmation"
+          ],
+          "missingResponsibility": {
+            "current lineage and source-bound actors": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "canonical block-end receipt/header confirmation": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "ddea3ef191",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0xddea3ef19112b1d90c16b67691b97c07cdcd0c3a6ce31df73aa076f6a8178460",
+          "source": {
+            "number": 26183679,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0x5b370e144d41e596033fe3dc60e1c30e6c493962",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 50,
+              "endLine": 50
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Original IMPL row reference only; its prior acceptance/replay statements are not a pass for the JSON migration or current common runner."
+          ],
+          "missing": [
+            "current lineage and source-bound actors",
+            "complete direction/amount inputs",
+            "canonical block-end receipt/header confirmation"
+          ],
+          "missingResponsibility": {
+            "current lineage and source-bound actors": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "canonical block-end receipt/header confirmation": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": false,
+        "sharedModuleTarget": false
+      }
+    },
     {
       "familyId": "protocol:astra-multitoken",
       "samples": [
@@ -93,7 +181,12 @@
         }
       ],
       "missing": [],
-      "completeCases": 1
+      "completeCases": 1,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:badger-sett-withdraw",
@@ -182,7 +275,264 @@
         }
       ],
       "missing": [],
-      "completeCases": 1
+      "completeCases": 1,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:boring-vault-teller",
+      "samples": [
+        {
+          "id": "0bff8c156d",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x0bff8c156d526f052998a5f27e25ec44493d71818189226a53888e3826648b80",
+          "source": {
+            "number": 26184075,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0x63b2b0528376d1b34ed8c9ff61bd67ab2c8c2bb0",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 51,
+              "endLine": 51
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Original IMPL row reference only; its prior acceptance/replay statements are not a pass for the JSON migration or current common runner."
+          ],
+          "missing": [
+            "current lineage and source-bound actors",
+            "complete direction/amount inputs",
+            "canonical block-end receipt/header confirmation"
+          ],
+          "missingResponsibility": {
+            "current lineage and source-bound actors": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "canonical block-end receipt/header confirmation": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": false,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:compound-ctoken",
+      "samples": [
+        {
+          "id": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "classification": "real-historical-evidence",
+          "variant": "compound-v2:comptroller-registered-ctoken",
+          "directions": [
+            "redeem"
+          ],
+          "transactionHash": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
+          "source": {
+            "number": 25944463,
+            "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+          "lineageId": "compound-v2:comptroller-registered-ctoken",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
+          "amounts": [
+            {
+              "direction": "redeem",
+              "label": "production-reference",
+              "tokenIn": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "amountIn": "20453524572",
+              "recordedAmountOut": "5179510",
+              "amountScope": "input-only-reference-at-block-end"
+            },
+            {
+              "direction": "redeem",
+              "label": "original-burned-shares",
+              "tokenIn": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "amountIn": "16895162987",
+              "recordedAmountOut": "4278414",
+              "amountScope": "input-only-reference-at-block-end"
+            }
+          ],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/compound-reference-acceptance-20261009.json",
+              "sha256": "aad6f1e5803a724fea3004fa6ab57c2abc5a7f21bd0ea8c8f8bdeca995b12b5f",
+              "jsonPointer": "/samples/0",
+              "line": 51,
+              "endLine": 61
+            },
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/compound-reference-acceptance-20261009.json",
+              "sha256": "aad6f1e5803a724fea3004fa6ab57c2abc5a7f21bd0ea8c8f8bdeca995b12b5f",
+              "jsonPointer": "/stateAndEnvironment",
+              "line": 10,
+              "endLine": 16
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+              "sha256": "47e3ba4b683f53da0823f423b00a879a8f5ddd2eb2572baebda88e9ff7dda97b",
+              "line": 16,
+              "endLine": 18
+            }
+          ],
+          "casePath": "cases/compound-ctoken--0x39aa39c021dfbae8fac545936693ac917d5e7563.json",
+          "limitations": [],
+          "missing": [],
+          "missingResponsibility": {}
+        },
+        {
+          "id": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "classification": "real-historical-evidence",
+          "variant": "compound-v2:comptroller-registered-ctoken",
+          "directions": [
+            "redeem"
+          ],
+          "transactionHash": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
+          "source": {
+            "number": 25944463,
+            "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+          "lineageId": "compound-v2:comptroller-registered-ctoken",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
+          "amounts": [
+            {
+              "direction": "redeem",
+              "label": "production-reference",
+              "tokenIn": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+              "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+              "amountIn": "20576236020",
+              "recordedAmountOut": "5158309426899040893",
+              "amountScope": "input-only-reference-at-block-end"
+            },
+            {
+              "direction": "redeem",
+              "label": "original-burned-shares",
+              "tokenIn": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+              "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+              "amountIn": "17733672807",
+              "recordedAmountOut": "4445699958193387588",
+              "amountScope": "input-only-reference-at-block-end"
+            }
+          ],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/compound-reference-acceptance-20261009.json",
+              "sha256": "aad6f1e5803a724fea3004fa6ab57c2abc5a7f21bd0ea8c8f8bdeca995b12b5f",
+              "jsonPointer": "/samples/1",
+              "line": 62,
+              "endLine": 72
+            },
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/compound-reference-acceptance-20261009.json",
+              "sha256": "aad6f1e5803a724fea3004fa6ab57c2abc5a7f21bd0ea8c8f8bdeca995b12b5f",
+              "jsonPointer": "/stateAndEnvironment",
+              "line": 10,
+              "endLine": 16
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
+              "sha256": "47e3ba4b683f53da0823f423b00a879a8f5ddd2eb2572baebda88e9ff7dda97b",
+              "line": 16,
+              "endLine": 18
+            }
+          ],
+          "casePath": "cases/compound-ctoken--0x5d3a536e4d6dbd6114cc1ead35777bab948e3643.json",
+          "limitations": [],
+          "missing": [],
+          "missingResponsibility": {}
+        }
+      ],
+      "missing": [],
+      "completeCases": 2,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:default-collateral",
+      "samples": [
+        {
+          "id": "ad88c7f614",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [
+            "DC_swETH-to-swETH"
+          ],
+          "transactionHash": "0xad88c7f614ac27fa1707e224a2276d1f1b12f8cffe9a4443f1fa3fa2cf209833",
+          "source": {
+            "number": 26244778,
+            "hash": "0x4d8e7ee76e1d7ce145a752ae4185056d13c83f3b1de57fffe0a1282ef8c39646"
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0x38b86004842d3fa4596f0b7a0b53de90745ab654",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/default-collateral-family/test/contract.ts",
+              "sha256": "5605ddb6367f0f468f59bbdb7f73b8575a0cbfe3740548ccaa16717c051962b5",
+              "line": 60,
+              "endLine": 67
+            },
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/default-collateral-family/test/contract.ts",
+              "sha256": "5605ddb6367f0f468f59bbdb7f73b8575a0cbfe3740548ccaa16717c051962b5",
+              "line": 767,
+              "endLine": 778
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Existing real TX reference and block pin from test comments; mocked contract-test effects are excluded. Recover actual leg data before making a runnable case."
+          ],
+          "missing": [
+            "current lineage and source-bound actors",
+            "complete direction/amount inputs",
+            "canonical block-end receipt/header confirmation"
+          ],
+          "missingResponsibility": {
+            "current lineage and source-bound actors": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "canonical block-end receipt/header confirmation": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": false,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:eigenpie",
@@ -235,212 +585,12 @@
         }
       ],
       "missing": [],
-      "completeCases": 0
-    },
-    {
-      "familyId": "protocol:erc4626-silo-redeem",
-      "samples": [
-        {
-          "id": "junior",
-          "classification": "real-historical-evidence",
-          "variant": "erc4626-silo:observed-payout-active-proof",
-          "directions": [
-            "silo-redeem"
-          ],
-          "transactionHash": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
-          "source": {
-            "number": 26130609,
-            "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
-          },
-          "stateScope": "canonical-block-end",
-          "instanceKey": "0xc58d044404d8b14e953c115e67823784dea53d8f:0x9d39a5de30e57443bff2a8307a4256c8797a3497",
-          "lineageId": "erc4626-silo:observed-payout-active-proof",
-          "actors": {
-            "executor": "0x1000000000000000000000000000000000000002",
-            "owner": "0x1000000000000000000000000000000000000001"
-          },
-          "amounts": [
-            {
-              "direction": "silo-redeem",
-              "label": "spliced-production-input-only",
-              "tokenIn": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
-              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
-              "amountIn": "4756507777847000000",
-              "recordedQuoteOut": "4103065183867850621",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
-                "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
-                "jsonPointer": "/samples/0",
-                "line": 4,
-                "endLine": 2561
-              }
-            },
-            {
-              "direction": "silo-redeem",
-              "label": "original-burned-shares-at-N",
-              "tokenIn": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
-              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
-              "amountIn": "3774740356452332000000",
-              "recordedQuoteOut": "3256171640638212334590",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
-                "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
-                "jsonPointer": "/samples/1",
-                "line": 2562,
-                "endLine": 5119
-              }
-            },
-            {
-              "direction": "silo-redeem",
-              "label": "twice-original-burned-shares-at-N",
-              "tokenIn": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
-              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
-              "amountIn": "7549480712904664000000",
-              "recordedQuoteOut": "6512343281276424669180",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
-                "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
-                "jsonPointer": "/samples/2",
-                "line": 5120,
-                "endLine": 7677
-              }
-            }
-          ],
-          "provenance": [
-            {
-              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
-              "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
-              "jsonPointer": "/source",
-              "line": 7775,
-              "endLine": 7779
-            },
-            {
-              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
-              "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
-              "jsonPointer": "/actors",
-              "line": 7786,
-              "endLine": 7789
-            },
-            {
-              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
-              "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
-              "jsonPointer": "/admission",
-              "line": 7832,
-              "endLine": 7852
-            }
-          ],
-          "casePath": "cases/erc4626-silo-redeem--junior.json",
-          "limitations": [
-            "Saved historical execution evidence; fresh current-source revalidation is still required. No expected output is copied into the executable case."
-          ],
-          "missing": [],
-          "missingResponsibility": {}
-        },
-        {
-          "id": "senior",
-          "classification": "real-historical-evidence",
-          "variant": "erc4626-silo:observed-payout-active-proof",
-          "directions": [
-            "silo-redeem"
-          ],
-          "transactionHash": "0xf391d02add5e6cbbd98836d9eacdb66de3e5d76ef3874134145a6563a126ee86",
-          "source": {
-            "number": 25462190,
-            "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
-          },
-          "stateScope": "canonical-block-end",
-          "instanceKey": "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003:0x9d39a5de30e57443bff2a8307a4256c8797a3497",
-          "lineageId": "erc4626-silo:observed-payout-active-proof",
-          "actors": {
-            "executor": "0x1000000000000000000000000000000000000002",
-            "owner": "0x1000000000000000000000000000000000000001"
-          },
-          "amounts": [
-            {
-              "direction": "silo-redeem",
-              "label": "spliced-production-input-only",
-              "tokenIn": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
-              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
-              "amountIn": "4967302987351000000",
-              "recordedQuoteOut": "4114280978444144340",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
-                "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
-                "jsonPointer": "/samples/0",
-                "line": 4,
-                "endLine": 2561
-              }
-            },
-            {
-              "direction": "silo-redeem",
-              "label": "original-burned-shares-at-N",
-              "tokenIn": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
-              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
-              "amountIn": "934460889828731878592",
-              "recordedQuoteOut": "773988354226130246923",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
-                "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
-                "jsonPointer": "/samples/1",
-                "line": 2562,
-                "endLine": 5119
-              }
-            },
-            {
-              "direction": "silo-redeem",
-              "label": "twice-original-burned-shares-at-N",
-              "tokenIn": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
-              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
-              "amountIn": "1868921779657463757184",
-              "recordedQuoteOut": "1547976708452260493845",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
-                "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
-                "jsonPointer": "/samples/2",
-                "line": 5120,
-                "endLine": 7677
-              }
-            }
-          ],
-          "provenance": [
-            {
-              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
-              "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
-              "jsonPointer": "/source",
-              "line": 7775,
-              "endLine": 7779
-            },
-            {
-              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
-              "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
-              "jsonPointer": "/actors",
-              "line": 7786,
-              "endLine": 7789
-            },
-            {
-              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
-              "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
-              "jsonPointer": "/admission",
-              "line": 7832,
-              "endLine": 7852
-            }
-          ],
-          "casePath": "cases/erc4626-silo-redeem--senior.json",
-          "limitations": [
-            "Saved historical execution evidence; fresh current-source revalidation is still required. No expected output is copied into the executable case."
-          ],
-          "missing": [],
-          "missingResponsibility": {}
-        }
-      ],
-      "missing": [],
-      "completeCases": 2
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:erc4626",
@@ -4570,7 +4720,222 @@
         }
       ],
       "missing": [],
-      "completeCases": 19
+      "completeCases": 19,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:erc4626-silo-redeem",
+      "samples": [
+        {
+          "id": "junior",
+          "classification": "real-historical-evidence",
+          "variant": "erc4626-silo:observed-payout-active-proof",
+          "directions": [
+            "silo-redeem"
+          ],
+          "transactionHash": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
+          "source": {
+            "number": 26130609,
+            "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0xc58d044404d8b14e953c115e67823784dea53d8f:0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "lineageId": "erc4626-silo:observed-payout-active-proof",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
+          "amounts": [
+            {
+              "direction": "silo-redeem",
+              "label": "spliced-production-input-only",
+              "tokenIn": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+              "amountIn": "4756507777847000000",
+              "recordedQuoteOut": "4103065183867850621",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+                "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
+                "jsonPointer": "/samples/0",
+                "line": 4,
+                "endLine": 2561
+              }
+            },
+            {
+              "direction": "silo-redeem",
+              "label": "original-burned-shares-at-N",
+              "tokenIn": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+              "amountIn": "3774740356452332000000",
+              "recordedQuoteOut": "3256171640638212334590",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+                "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
+                "jsonPointer": "/samples/1",
+                "line": 2562,
+                "endLine": 5119
+              }
+            },
+            {
+              "direction": "silo-redeem",
+              "label": "twice-original-burned-shares-at-N",
+              "tokenIn": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+              "amountIn": "7549480712904664000000",
+              "recordedQuoteOut": "6512343281276424669180",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+                "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
+                "jsonPointer": "/samples/2",
+                "line": 5120,
+                "endLine": 7677
+              }
+            }
+          ],
+          "provenance": [
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+              "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
+              "jsonPointer": "/source",
+              "line": 7775,
+              "endLine": 7779
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+              "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
+              "jsonPointer": "/actors",
+              "line": 7786,
+              "endLine": 7789
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-junior.json",
+              "sha256": "3f597df7141551823c6c2e5deb2f91c0e4a8f0a199c7e0e853e9f15c44eee47a",
+              "jsonPointer": "/admission",
+              "line": 7832,
+              "endLine": 7852
+            }
+          ],
+          "casePath": "cases/erc4626-silo-redeem--junior.json",
+          "limitations": [
+            "Saved historical execution evidence; fresh current-source revalidation is still required. No expected output is copied into the executable case."
+          ],
+          "missing": [],
+          "missingResponsibility": {}
+        },
+        {
+          "id": "senior",
+          "classification": "real-historical-evidence",
+          "variant": "erc4626-silo:observed-payout-active-proof",
+          "directions": [
+            "silo-redeem"
+          ],
+          "transactionHash": "0xf391d02add5e6cbbd98836d9eacdb66de3e5d76ef3874134145a6563a126ee86",
+          "source": {
+            "number": 25462190,
+            "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003:0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+          "lineageId": "erc4626-silo:observed-payout-active-proof",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
+          "amounts": [
+            {
+              "direction": "silo-redeem",
+              "label": "spliced-production-input-only",
+              "tokenIn": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
+              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+              "amountIn": "4967302987351000000",
+              "recordedQuoteOut": "4114280978444144340",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
+                "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
+                "jsonPointer": "/samples/0",
+                "line": 4,
+                "endLine": 2561
+              }
+            },
+            {
+              "direction": "silo-redeem",
+              "label": "original-burned-shares-at-N",
+              "tokenIn": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
+              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+              "amountIn": "934460889828731878592",
+              "recordedQuoteOut": "773988354226130246923",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
+                "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
+                "jsonPointer": "/samples/1",
+                "line": 2562,
+                "endLine": 5119
+              }
+            },
+            {
+              "direction": "silo-redeem",
+              "label": "twice-original-burned-shares-at-N",
+              "tokenIn": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
+              "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+              "amountIn": "1868921779657463757184",
+              "recordedQuoteOut": "1547976708452260493845",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
+                "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
+                "jsonPointer": "/samples/2",
+                "line": 5120,
+                "endLine": 7677
+              }
+            }
+          ],
+          "provenance": [
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
+              "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
+              "jsonPointer": "/source",
+              "line": 7775,
+              "endLine": 7779
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
+              "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
+              "jsonPointer": "/actors",
+              "line": 7786,
+              "endLine": 7789
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/silo76/evidence09/direct08-senior.json",
+              "sha256": "71cdd9a22e5ef0130a8aefc800875aae869e8d7b7771cec05815fc99cd4f6abd",
+              "jsonPointer": "/admission",
+              "line": 7832,
+              "endLine": 7852
+            }
+          ],
+          "casePath": "cases/erc4626-silo-redeem--senior.json",
+          "limitations": [
+            "Saved historical execution evidence; fresh current-source revalidation is still required. No expected output is copied into the executable case."
+          ],
+          "missing": [],
+          "missingResponsibility": {}
+        }
+      ],
+      "missing": [],
+      "completeCases": 2,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:ethertoken-native-redeem",
@@ -4643,7 +5008,12 @@
         }
       ],
       "missing": [],
-      "completeCases": 1
+      "completeCases": 1,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:goldx",
@@ -4698,7 +5068,64 @@
         }
       ],
       "missing": [],
-      "completeCases": 0
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:metafactory",
+      "samples": [
+        {
+          "id": "bc7223c28f",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [
+            "ROBOT-to-native-ETH"
+          ],
+          "transactionHash": "0xbc7223c28f592b70fd17b8ff9522efc244a1cffb2c73aec9a0dd4c1b820a0af7",
+          "source": {
+            "number": 26244712,
+            "hash": "0x437e273550182b05f4d656e3afe50b9b665e828984b217838cf1a0d7abbd13a5"
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0x585aba689bf7293fe66e9fded9eec9d0e732b180",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/metafactory-stage/metafactory-20261022.json",
+              "sha256": "80bf127e21e001160e2e8958b18431a1eb3c9b30e82d5ab1662dc0ceb120fc51",
+              "line": 1,
+              "endLine": 138
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Existing report reference. Native ETH is the actual output; WETH is a graph anchor. Do not replace native observations with WETH transfers. No current case or execution pass imported."
+          ],
+          "missing": [
+            "current lineage and source-bound actors",
+            "complete direction/amount inputs",
+            "canonical block-end receipt/header confirmation"
+          ],
+          "missingResponsibility": {
+            "current lineage and source-bound actors": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "canonical block-end receipt/header confirmation": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": false,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:metronome-hgusdc",
@@ -4757,7 +5184,12 @@
         }
       ],
       "missing": [],
-      "completeCases": 0
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:metronome-synth",
@@ -4809,7 +5241,339 @@
         }
       ],
       "missing": [],
-      "completeCases": 0
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": false,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": true
+      }
+    },
+    {
+      "familyId": "protocol:olympus",
+      "samples": [
+        {
+          "id": "28c9e5f8b4",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [
+            "gOHM-to-OHM"
+          ],
+          "transactionHash": "0x28c9e5f8b41db8e2a0b5653b0a48520307bcafe95d1edf993f6f15e1ea904696",
+          "source": {
+            "number": 26184922,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0xb63cac384247597756545b500253ff8e607a8020",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/olympus-family/test/contract.ts",
+              "sha256": "0358ac89a3c8bfb283dbe6a377f0096203ce3f0577c3f1a7402a662f158e3eb2",
+              "line": 30,
+              "endLine": 43
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Landed TX referenced by existing contract test. The test uses ethers.id(\"olympus-proof-fixture\") for source hash and mocked effects; do not import that synthetic hash/effect as historical evidence."
+          ],
+          "missing": [
+            "current lineage and source-bound actors",
+            "complete direction/amount inputs",
+            "canonical block-end receipt/header confirmation"
+          ],
+          "missingResponsibility": {
+            "current lineage and source-bound actors": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "canonical block-end receipt/header confirmation": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": false,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:origin-ousd",
+      "samples": [
+        {
+          "id": "ab27e7006f",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [
+            "USDC-to-OUSD"
+          ],
+          "transactionHash": "0xab27e7006f6d2471e6f2d037cdc8e2ecbf6848f65d79c54a43c3bf145cbba13a",
+          "source": {
+            "number": 26185253,
+            "hash": "0xdd643ebc4407cddccee0ae6e7f5e9d34f8978fde5340d24aaacc39849ad91a2f"
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0xe75d77b1865ae93c7eaa3040b038d7aa7bc02f70",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/origin-ousd-family/codec.ts",
+              "sha256": "f4258983634d16e703573fc50bf654b1f585774c067c7fa86347275a9c78c94f",
+              "line": 9,
+              "endLine": 20
+            },
+            {
+              "file": "/opt/mev-cloud/family-runtime-20261007/logs/protocol-json-enabled-20261030/sample-scope-origin-block.json",
+              "sha256": "ca9dc5733474a6357a0f4f84f7495e7ccb71b31bea047f2adaf9bbf9bd4d62d5",
+              "jsonPointer": "/result/transactions[hash=0xab27e7006f6d2471e6f2d037cdc8e2ecbf6848f65d79c54a43c3bf145cbba13a]",
+              "line": 1,
+              "endLine": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Full TX hash recovered from canonical block 26185253, matching the old source reference 0xab27e700…13a. Block membership is established; receipt success, protocol-leg data, current lineage/actors and historical acceptance remain for the migration window."
+          ],
+          "missing": [
+            "current lineage and source-bound actors",
+            "complete direction/amount inputs",
+            "canonical block-end receipt/header confirmation"
+          ],
+          "missingResponsibility": {
+            "current lineage and source-bound actors": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "canonical block-end receipt/header confirmation": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": false,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:origin-steth-arm",
+      "samples": [
+        {
+          "id": "1b6545dd23",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [
+            "stETH-to-WETH"
+          ],
+          "transactionHash": "0x1b6545dd23d993366e41175eaefbd993e740752d4c92ee8a1b473a7d43f40f5c",
+          "source": {
+            "number": 26244681,
+            "hash": "0xead5583a63d04578dfd01b4d82a3c423b13aeb40a520cec84370b4bbfb4a77a3"
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0x85b78aca6deae198fbf201c82daf6ca21942acc6",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/gap6-20261022/priors/1b6545dd23/receipt.json",
+              "sha256": "bcc8f50f58d0cf3146984c336ef055a6b6bcafcaeee35b49f10ffd3844e22205",
+              "line": 1,
+              "endLine": 144
+            },
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/gap6-20261022/sub/c-sub3/route.json",
+              "sha256": "804f61d8b994eca43e94c6d8d2660083a69cc1ae40d9f0115cfe031bb7652bea",
+              "line": 181,
+              "endLine": 220
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Existing successful receipt reference; use the current definition to confirm instance address and route. Original full TX includes an excess-skim outside this single protocol-leg acceptance scope."
+          ],
+          "missing": [
+            "current lineage and source-bound actors",
+            "complete direction/amount inputs",
+            "canonical block-end receipt/header confirmation"
+          ],
+          "missingResponsibility": {
+            "current lineage and source-bound actors": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "canonical block-end receipt/header confirmation": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": false,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:peapods-debond",
+      "samples": [
+        {
+          "id": "historical-dual",
+          "classification": "real-historical-evidence",
+          "variant": "peapods:weighted-single-asset-v1",
+          "directions": [
+            "debond"
+          ],
+          "transactionHash": "0xb71237be54af5987a37dc5b9fdab19c3b39dae5d0803c3e4237a8b9d4f22b01d",
+          "source": {
+            "number": 26152716,
+            "hash": "0x0c80d557cb71bdb448a893597f138dd7c6ec530b04fd7b1136a266877c647c5b"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+          "lineageId": "peapods:weighted-single-asset-v1",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
+          "amounts": [
+            {
+              "direction": "debond",
+              "label": "production-effective",
+              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+              "amountIn": "1907361111151028811545",
+              "recordedAmountOut": "1869213888928008235314",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
+                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
+                "jsonPointer": "/sameStateExecution/samples/0",
+                "line": 688,
+                "endLine": 695
+              }
+            },
+            {
+              "direction": "debond",
+              "label": "original-input-at-N-end",
+              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+              "amountIn": "11759600366451075559109",
+              "recordedAmountOut": "11524408359122054047926",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
+                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
+                "jsonPointer": "/sameStateExecution/samples/1",
+                "line": 696,
+                "endLine": 703
+              }
+            },
+            {
+              "direction": "debond",
+              "label": "one-token-control",
+              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+              "amountIn": "1000000000000000000",
+              "recordedAmountOut": "979999999999999999",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
+                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
+                "jsonPointer": "/sameStateExecution/samples/2",
+                "line": 704,
+                "endLine": 711
+              }
+            },
+            {
+              "direction": "debond",
+              "label": "below-98-percent-exemption",
+              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+              "amountIn": "2484306419094140914753082",
+              "recordedAmountOut": "2434620290712258096458020",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
+                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
+                "jsonPointer": "/sameStateExecution/samples/3",
+                "line": 712,
+                "endLine": 719
+              }
+            },
+            {
+              "direction": "debond",
+              "label": "at-98-percent-exemption",
+              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+              "amountIn": "2484306419094140914753083",
+              "recordedAmountOut": "2484306419094140914753083",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
+                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
+                "jsonPointer": "/sameStateExecution/samples/4",
+                "line": 720,
+                "endLine": 727
+              }
+            },
+            {
+              "direction": "debond",
+              "label": "full-supply",
+              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+              "amountIn": "2535006550096062157911310",
+              "recordedAmountOut": "2535006550096062157911311",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
+                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
+                "jsonPointer": "/sameStateExecution/samples/5",
+                "line": 728,
+                "endLine": 735
+              }
+            }
+          ],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
+              "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
+              "jsonPointer": "/naturalReady",
+              "line": 558,
+              "endLine": 609
+            },
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
+              "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
+              "jsonPointer": "/sameStateExecution",
+              "line": 667,
+              "endLine": 759
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
+              "sha256": "01ca4dd3da5fdcf5001eb50f4564a468f2f47118fba0acf7585b3bdf6e44e222",
+              "line": 4,
+              "endLine": 4
+            }
+          ],
+          "casePath": "cases/peapods-debond--historical-dual.json",
+          "limitations": [
+            "Original receipt output is not used as expected block-end output."
+          ],
+          "missing": [],
+          "missingResponsibility": {}
+        }
+      ],
+      "missing": [],
+      "completeCases": 1,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:psm",
@@ -5189,7 +5953,203 @@
         }
       ],
       "missing": [],
-      "completeCases": 1
+      "completeCases": 1,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:psv",
+      "samples": [
+        {
+          "id": "historical-dual",
+          "classification": "real-historical-evidence",
+          "variant": "psv:uups-exact-input-v1",
+          "directions": [
+            "buy-gem",
+            "sell-gem"
+          ],
+          "transactionHash": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+          "source": {
+            "number": 26152596,
+            "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+          "lineageId": "psv:uups-exact-input-v1",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
+          "amounts": [
+            {
+              "direction": "sell-gem",
+              "label": "production-effective",
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "amountIn": "4969763",
+              "recordedAmountOut": "4969763",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+                "jsonPointer": "/sameStateExecution/samples/0",
+                "line": 426,
+                "endLine": 436
+              }
+            },
+            {
+              "direction": "sell-gem",
+              "label": "original-size-at-N-end",
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "amountIn": "7361655916",
+              "recordedAmountOut": "7361655916",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+                "jsonPointer": "/sameStateExecution/samples/1",
+                "line": 437,
+                "endLine": 447
+              }
+            },
+            {
+              "direction": "sell-gem",
+              "label": "one-token-control",
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "amountIn": "1000000",
+              "recordedAmountOut": "1000000",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+                "jsonPointer": "/sameStateExecution/samples/2",
+                "line": 448,
+                "endLine": 458
+              }
+            },
+            {
+              "direction": "sell-gem",
+              "label": "one-raw-control",
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "amountIn": "1",
+              "recordedAmountOut": "1",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+                "jsonPointer": "/sameStateExecution/samples/3",
+                "line": 459,
+                "endLine": 469
+              }
+            },
+            {
+              "direction": "buy-gem",
+              "label": "production-effective",
+              "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "amountIn": "4969763",
+              "recordedAmountOut": "4969763",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+                "jsonPointer": "/sameStateExecution/samples/4",
+                "line": 470,
+                "endLine": 480
+              }
+            },
+            {
+              "direction": "buy-gem",
+              "label": "original-size-at-N-end",
+              "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "amountIn": "7361655916",
+              "recordedAmountOut": "7361655916",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+                "jsonPointer": "/sameStateExecution/samples/5",
+                "line": 481,
+                "endLine": 491
+              }
+            },
+            {
+              "direction": "buy-gem",
+              "label": "one-token-control",
+              "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "amountIn": "1000000",
+              "recordedAmountOut": "1000000",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+                "jsonPointer": "/sameStateExecution/samples/6",
+                "line": 492,
+                "endLine": 502
+              }
+            },
+            {
+              "direction": "buy-gem",
+              "label": "one-raw-control",
+              "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "amountIn": "1",
+              "recordedAmountOut": "1",
+              "amountScope": "historical-test-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+                "jsonPointer": "/sameStateExecution/samples/7",
+                "line": 503,
+                "endLine": 513
+              }
+            }
+          ],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+              "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+              "jsonPointer": "/naturalReady",
+              "line": 179,
+              "endLine": 257
+            },
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
+              "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
+              "jsonPointer": "/sameStateExecution",
+              "line": 396,
+              "endLine": 539
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/venues/protocols/psv-family/manifest.ts",
+              "sha256": "3c866910bd9dacc7db5b6752cf752838a12e44b259a16a6ddd4659d104573ab5",
+              "line": 4,
+              "endLine": 4
+            }
+          ],
+          "casePath": "cases/psv--historical-dual.json",
+          "limitations": [
+            "Original receipt output is not used as expected block-end output."
+          ],
+          "missing": [],
+          "missingResponsibility": {}
+        }
+      ],
+      "missing": [],
+      "completeCases": 1,
+      "scope": {
+        "migratedJsonPresent": false,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": true
+      }
     },
     {
       "familyId": "protocol:rocksolid",
@@ -5326,7 +6286,12 @@
         }
       ],
       "missing": [],
-      "completeCases": 1
+      "completeCases": 1,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:self-burn-native",
@@ -5436,7 +6401,62 @@
         }
       ],
       "missing": [],
-      "completeCases": 1
+      "completeCases": 1,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
+    },
+    {
+      "familyId": "protocol:staked-usdat",
+      "samples": [
+        {
+          "id": "63fb77b723",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+          "source": {
+            "number": 25462190,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 18,
+              "endLine": 18
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Original IMPL row reference only; its prior acceptance/replay statements are not a pass for the JSON migration or current common runner."
+          ],
+          "missing": [
+            "current lineage and source-bound actors",
+            "complete direction/amount inputs",
+            "canonical block-end receipt/header confirmation"
+          ],
+          "missingResponsibility": {
+            "current lineage and source-bound actors": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "canonical block-end receipt/header confirmation": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": false,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:token-conversion",
@@ -5726,7 +6746,12 @@
         }
       ],
       "missing": [],
-      "completeCases": 3
+      "completeCases": 3,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:token-migration",
@@ -5817,517 +6842,256 @@
         }
       ],
       "missing": [],
-      "completeCases": 1
+      "completeCases": 1,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     },
     {
       "familyId": "protocol:wsteth",
       "samples": [],
       "missing": [
-        "No real conversion TX located in the bounded source/report inventory; source scanning is not proof that none exists."
+        "No confirmed wrap/unwrap transaction found in the original IMPL table or bounded existing sample/test records. Token presence in an unrelated swap or synthetic rate probe is not a protocol-leg sample. Continue historical sample lookup; ask user only if no real transaction can be recovered."
       ],
-      "completeCases": 0
-    },
-    {
-      "familyId": "protocol:compound-ctoken",
-      "samples": [
-        {
-          "id": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
-          "classification": "real-historical-evidence",
-          "variant": "compound-v2:comptroller-registered-ctoken",
-          "directions": [
-            "redeem"
-          ],
-          "transactionHash": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
-          "source": {
-            "number": 25944463,
-            "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316"
-          },
-          "stateScope": "canonical-block-end",
-          "instanceKey": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
-          "lineageId": "compound-v2:comptroller-registered-ctoken",
-          "actors": {
-            "executor": "0x1000000000000000000000000000000000000002",
-            "owner": "0x1000000000000000000000000000000000000001"
-          },
-          "amounts": [
-            {
-              "direction": "redeem",
-              "label": "production-reference",
-              "tokenIn": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
-              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "amountIn": "20453524572",
-              "recordedAmountOut": "5179510",
-              "amountScope": "input-only-reference-at-block-end"
-            },
-            {
-              "direction": "redeem",
-              "label": "original-burned-shares",
-              "tokenIn": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
-              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "amountIn": "16895162987",
-              "recordedAmountOut": "4278414",
-              "amountScope": "input-only-reference-at-block-end"
-            }
-          ],
-          "provenance": [
-            {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/compound-reference-acceptance-20261009.json",
-              "sha256": "aad6f1e5803a724fea3004fa6ab57c2abc5a7f21bd0ea8c8f8bdeca995b12b5f",
-              "jsonPointer": "/samples/0",
-              "line": 51,
-              "endLine": 61
-            },
-            {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/compound-reference-acceptance-20261009.json",
-              "sha256": "aad6f1e5803a724fea3004fa6ab57c2abc5a7f21bd0ea8c8f8bdeca995b12b5f",
-              "jsonPointer": "/stateAndEnvironment",
-              "line": 10,
-              "endLine": 16
-            },
-            {
-              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
-              "sha256": "47e3ba4b683f53da0823f423b00a879a8f5ddd2eb2572baebda88e9ff7dda97b",
-              "line": 16,
-              "endLine": 18
-            }
-          ],
-          "casePath": "cases/compound-ctoken--0x39aa39c021dfbae8fac545936693ac917d5e7563.json",
-          "limitations": [],
-          "missing": [],
-          "missingResponsibility": {}
-        },
-        {
-          "id": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
-          "classification": "real-historical-evidence",
-          "variant": "compound-v2:comptroller-registered-ctoken",
-          "directions": [
-            "redeem"
-          ],
-          "transactionHash": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
-          "source": {
-            "number": 25944463,
-            "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316"
-          },
-          "stateScope": "canonical-block-end",
-          "instanceKey": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
-          "lineageId": "compound-v2:comptroller-registered-ctoken",
-          "actors": {
-            "executor": "0x1000000000000000000000000000000000000002",
-            "owner": "0x1000000000000000000000000000000000000001"
-          },
-          "amounts": [
-            {
-              "direction": "redeem",
-              "label": "production-reference",
-              "tokenIn": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
-              "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
-              "amountIn": "20576236020",
-              "recordedAmountOut": "5158309426899040893",
-              "amountScope": "input-only-reference-at-block-end"
-            },
-            {
-              "direction": "redeem",
-              "label": "original-burned-shares",
-              "tokenIn": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
-              "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
-              "amountIn": "17733672807",
-              "recordedAmountOut": "4445699958193387588",
-              "amountScope": "input-only-reference-at-block-end"
-            }
-          ],
-          "provenance": [
-            {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/compound-reference-acceptance-20261009.json",
-              "sha256": "aad6f1e5803a724fea3004fa6ab57c2abc5a7f21bd0ea8c8f8bdeca995b12b5f",
-              "jsonPointer": "/samples/1",
-              "line": 62,
-              "endLine": 72
-            },
-            {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/compound-reference-acceptance-20261009.json",
-              "sha256": "aad6f1e5803a724fea3004fa6ab57c2abc5a7f21bd0ea8c8f8bdeca995b12b5f",
-              "jsonPointer": "/stateAndEnvironment",
-              "line": 10,
-              "endLine": 16
-            },
-            {
-              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/venues/protocols/compound-ctoken-family/manifest.ts",
-              "sha256": "47e3ba4b683f53da0823f423b00a879a8f5ddd2eb2572baebda88e9ff7dda97b",
-              "line": 16,
-              "endLine": 18
-            }
-          ],
-          "casePath": "cases/compound-ctoken--0x5d3a536e4d6dbd6114cc1ead35777bab948e3643.json",
-          "limitations": [],
-          "missing": [],
-          "missingResponsibility": {}
-        }
-      ],
-      "missing": [],
-      "completeCases": 2
-    },
-    {
-      "familyId": "protocol:peapods-debond",
-      "samples": [
-        {
-          "id": "historical-dual",
-          "classification": "real-historical-evidence",
-          "variant": "peapods:weighted-single-asset-v1",
-          "directions": [
-            "debond"
-          ],
-          "transactionHash": "0xb71237be54af5987a37dc5b9fdab19c3b39dae5d0803c3e4237a8b9d4f22b01d",
-          "source": {
-            "number": 26152716,
-            "hash": "0x0c80d557cb71bdb448a893597f138dd7c6ec530b04fd7b1136a266877c647c5b"
-          },
-          "stateScope": "canonical-block-end",
-          "instanceKey": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
-          "lineageId": "peapods:weighted-single-asset-v1",
-          "actors": {
-            "executor": "0x1000000000000000000000000000000000000002",
-            "owner": "0x1000000000000000000000000000000000000001"
-          },
-          "amounts": [
-            {
-              "direction": "debond",
-              "label": "production-effective",
-              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
-              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
-              "amountIn": "1907361111151028811545",
-              "recordedAmountOut": "1869213888928008235314",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
-                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
-                "jsonPointer": "/sameStateExecution/samples/0",
-                "line": 688,
-                "endLine": 695
-              }
-            },
-            {
-              "direction": "debond",
-              "label": "original-input-at-N-end",
-              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
-              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
-              "amountIn": "11759600366451075559109",
-              "recordedAmountOut": "11524408359122054047926",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
-                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
-                "jsonPointer": "/sameStateExecution/samples/1",
-                "line": 696,
-                "endLine": 703
-              }
-            },
-            {
-              "direction": "debond",
-              "label": "one-token-control",
-              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
-              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
-              "amountIn": "1000000000000000000",
-              "recordedAmountOut": "979999999999999999",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
-                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
-                "jsonPointer": "/sameStateExecution/samples/2",
-                "line": 704,
-                "endLine": 711
-              }
-            },
-            {
-              "direction": "debond",
-              "label": "below-98-percent-exemption",
-              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
-              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
-              "amountIn": "2484306419094140914753082",
-              "recordedAmountOut": "2434620290712258096458020",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
-                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
-                "jsonPointer": "/sameStateExecution/samples/3",
-                "line": 712,
-                "endLine": 719
-              }
-            },
-            {
-              "direction": "debond",
-              "label": "at-98-percent-exemption",
-              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
-              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
-              "amountIn": "2484306419094140914753083",
-              "recordedAmountOut": "2484306419094140914753083",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
-                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
-                "jsonPointer": "/sameStateExecution/samples/4",
-                "line": 720,
-                "endLine": 727
-              }
-            },
-            {
-              "direction": "debond",
-              "label": "full-supply",
-              "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
-              "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
-              "amountIn": "2535006550096062157911310",
-              "recordedAmountOut": "2535006550096062157911311",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
-                "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
-                "jsonPointer": "/sameStateExecution/samples/5",
-                "line": 728,
-                "endLine": 735
-              }
-            }
-          ],
-          "provenance": [
-            {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
-              "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
-              "jsonPointer": "/naturalReady",
-              "line": 558,
-              "endLine": 609
-            },
-            {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/peapods-debond-correctness-20261010.json",
-              "sha256": "39e2baa77627c738bb41075a67408cdc90323debeba0d6bb2fb8a4ef812107ed",
-              "jsonPointer": "/sameStateExecution",
-              "line": 667,
-              "endLine": 759
-            },
-            {
-              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/venues/protocols/peapods-debond-family/manifest.ts",
-              "sha256": "01ca4dd3da5fdcf5001eb50f4564a468f2f47118fba0acf7585b3bdf6e44e222",
-              "line": 4,
-              "endLine": 4
-            }
-          ],
-          "casePath": "cases/peapods-debond--historical-dual.json",
-          "limitations": [
-            "Original receipt output is not used as expected block-end output."
-          ],
-          "missing": [],
-          "missingResponsibility": {}
-        }
-      ],
-      "missing": [],
-      "completeCases": 1
-    },
-    {
-      "familyId": "protocol:psv",
-      "samples": [
-        {
-          "id": "historical-dual",
-          "classification": "real-historical-evidence",
-          "variant": "psv:uups-exact-input-v1",
-          "directions": [
-            "buy-gem",
-            "sell-gem"
-          ],
-          "transactionHash": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
-          "source": {
-            "number": 26152596,
-            "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
-          },
-          "stateScope": "canonical-block-end",
-          "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
-          "lineageId": "psv:uups-exact-input-v1",
-          "actors": {
-            "executor": "0x1000000000000000000000000000000000000002",
-            "owner": "0x1000000000000000000000000000000000000001"
-          },
-          "amounts": [
-            {
-              "direction": "sell-gem",
-              "label": "production-effective",
-              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
-              "amountIn": "4969763",
-              "recordedAmountOut": "4969763",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-                "jsonPointer": "/sameStateExecution/samples/0",
-                "line": 426,
-                "endLine": 436
-              }
-            },
-            {
-              "direction": "sell-gem",
-              "label": "original-size-at-N-end",
-              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
-              "amountIn": "7361655916",
-              "recordedAmountOut": "7361655916",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-                "jsonPointer": "/sameStateExecution/samples/1",
-                "line": 437,
-                "endLine": 447
-              }
-            },
-            {
-              "direction": "sell-gem",
-              "label": "one-token-control",
-              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
-              "amountIn": "1000000",
-              "recordedAmountOut": "1000000",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-                "jsonPointer": "/sameStateExecution/samples/2",
-                "line": 448,
-                "endLine": 458
-              }
-            },
-            {
-              "direction": "sell-gem",
-              "label": "one-raw-control",
-              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
-              "amountIn": "1",
-              "recordedAmountOut": "1",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-                "jsonPointer": "/sameStateExecution/samples/3",
-                "line": 459,
-                "endLine": 469
-              }
-            },
-            {
-              "direction": "buy-gem",
-              "label": "production-effective",
-              "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
-              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "amountIn": "4969763",
-              "recordedAmountOut": "4969763",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-                "jsonPointer": "/sameStateExecution/samples/4",
-                "line": 470,
-                "endLine": 480
-              }
-            },
-            {
-              "direction": "buy-gem",
-              "label": "original-size-at-N-end",
-              "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
-              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "amountIn": "7361655916",
-              "recordedAmountOut": "7361655916",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-                "jsonPointer": "/sameStateExecution/samples/5",
-                "line": 481,
-                "endLine": 491
-              }
-            },
-            {
-              "direction": "buy-gem",
-              "label": "one-token-control",
-              "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
-              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "amountIn": "1000000",
-              "recordedAmountOut": "1000000",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-                "jsonPointer": "/sameStateExecution/samples/6",
-                "line": 492,
-                "endLine": 502
-              }
-            },
-            {
-              "direction": "buy-gem",
-              "label": "one-raw-control",
-              "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
-              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-              "amountIn": "1",
-              "recordedAmountOut": "1",
-              "amountScope": "historical-test-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-                "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-                "jsonPointer": "/sameStateExecution/samples/7",
-                "line": 503,
-                "endLine": 513
-              }
-            }
-          ],
-          "provenance": [
-            {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-              "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-              "jsonPointer": "/naturalReady",
-              "line": 179,
-              "endLine": 257
-            },
-            {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/psv-correctness-20261010.json",
-              "sha256": "130517745eab7a3f31da89328237d3163122f17fe626a91c12aa8f3620a43417",
-              "jsonPointer": "/sameStateExecution",
-              "line": 396,
-              "endLine": 539
-            },
-            {
-              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/venues/protocols/psv-family/manifest.ts",
-              "sha256": "3c866910bd9dacc7db5b6752cf752838a12e44b259a16a6ddd4659d104573ab5",
-              "line": 4,
-              "endLine": 4
-            }
-          ],
-          "casePath": "cases/psv--historical-dual.json",
-          "limitations": [
-            "Original receipt output is not used as expected block-end output."
-          ],
-          "missing": [],
-          "missingResponsibility": {}
-        }
-      ],
-      "missing": [],
-      "completeCases": 1
+      "completeCases": 0,
+      "scope": {
+        "migratedJsonPresent": true,
+        "appRun2Enabled": true,
+        "sharedModuleTarget": false
+      }
     }
   ],
   "scopeReference": {
-    "run": "live-2026-10-30T03-10-36-590Z-68a6c8af",
-    "rule": "app-run2 enabled Protocol families; Set disabled, PSV enabled",
+    "rule": "Sample inventory: 24 migrated Protocol families plus current framework targets Metronome Synth and PSV. Sample storage does not enable a Family or expand shared TS work.",
     "familyIds": [
+      "protocol:arcana-migration",
       "protocol:astra-multitoken",
       "protocol:badger-sett-withdraw",
+      "protocol:boring-vault-teller",
+      "protocol:compound-ctoken",
+      "protocol:default-collateral",
       "protocol:eigenpie",
-      "protocol:erc4626-silo-redeem",
       "protocol:erc4626",
+      "protocol:erc4626-silo-redeem",
       "protocol:ethertoken-native-redeem",
       "protocol:goldx",
+      "protocol:metafactory",
       "protocol:metronome-hgusdc",
       "protocol:metronome-synth",
+      "protocol:olympus",
+      "protocol:origin-ousd",
+      "protocol:origin-steth-arm",
+      "protocol:peapods-debond",
+      "protocol:psm",
+      "protocol:psv",
+      "protocol:rocksolid",
+      "protocol:self-burn-native",
+      "protocol:staked-usdat",
+      "protocol:token-conversion",
+      "protocol:token-migration",
+      "protocol:wsteth"
+    ],
+    "migratedFamilyIds": [
+      "protocol:arcana-migration",
+      "protocol:astra-multitoken",
+      "protocol:badger-sett-withdraw",
+      "protocol:boring-vault-teller",
+      "protocol:compound-ctoken",
+      "protocol:default-collateral",
+      "protocol:eigenpie",
+      "protocol:erc4626",
+      "protocol:erc4626-silo-redeem",
+      "protocol:ethertoken-native-redeem",
+      "protocol:goldx",
+      "protocol:metafactory",
+      "protocol:metronome-hgusdc",
+      "protocol:olympus",
+      "protocol:origin-ousd",
+      "protocol:origin-steth-arm",
+      "protocol:peapods-debond",
       "protocol:psm",
       "protocol:rocksolid",
       "protocol:self-burn-native",
+      "protocol:staked-usdat",
       "protocol:token-conversion",
       "protocol:token-migration",
-      "protocol:wsteth",
-      "protocol:compound-ctoken",
-      "protocol:peapods-debond",
+      "protocol:wsteth"
+    ],
+    "frameworkTargets": [
+      "protocol:metronome-synth",
       "protocol:psv"
+    ],
+    "frameworkScope": {
+      "run": "live-2026-10-30T03-10-36-590Z-68a6c8af",
+      "rule": "app-run2 enabled Protocol families; Set disabled, PSV enabled",
+      "familyIds": [
+        "protocol:astra-multitoken",
+        "protocol:badger-sett-withdraw",
+        "protocol:eigenpie",
+        "protocol:erc4626-silo-redeem",
+        "protocol:erc4626",
+        "protocol:ethertoken-native-redeem",
+        "protocol:goldx",
+        "protocol:metronome-hgusdc",
+        "protocol:metronome-synth",
+        "protocol:psm",
+        "protocol:rocksolid",
+        "protocol:self-burn-native",
+        "protocol:token-conversion",
+        "protocol:token-migration",
+        "protocol:wsteth",
+        "protocol:compound-ctoken",
+        "protocol:peapods-debond",
+        "protocol:psv"
+      ]
+    },
+    "migrationDefinitionSources": [
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/arcana-migration-family/arcana-migration.json",
+        "sha256": "e3c8b8b6127e02efbb0ef8a9ed8afe497bc215280f73cb72e23fb56fcff46929",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/astra-multitoken-family/astra-multitoken.json",
+        "sha256": "35d857bfce9a65dbd5892542d4416cc107f7554f59e7c9f3fb50cab0d43975ca",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/badger-sett-withdraw-family/badger-sett-withdraw.json",
+        "sha256": "7225723a579e7fe2e0192f39d3379eb9ed0a48b6eed8c5ab42fcb830050a37b4",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/boring-vault-teller-family/boring-vault-teller.json",
+        "sha256": "68b0fc44ad4c6d10e452cd565966b595b57775b69314d938fa7da45da189b78d",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/compound-ctoken-family/compound-ctoken.json",
+        "sha256": "59ac42e1a46c54558e5207b852bd681386f386b762e6fe7a666a7807c578977a",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/default-collateral-family/default-collateral.json",
+        "sha256": "9636c17c22a83db988b5bc7c233c71554ff6230f71439e97862806067094e585",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/eigenpie-family/eigenpie.json",
+        "sha256": "841c3ab752daf755a6386f00eec517779b953a2a4d242245dd4bd878cd3c030b",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+        "sha256": "533142a332c895942bc52706134e2741994ba0aedf893ff5a0fe954ed28cfdc4",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/erc4626-silo-redeem.json",
+        "sha256": "a40df3f1c100ec6c1fd98c12814e2c80a6d404c22c3243317469bfb17e235355",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/ethertoken-native-redeem-family/ethertoken-native-redeem.json",
+        "sha256": "3fa8363e77474747aec852a426fd3a908edf067392bb8c444e4164d38bbcb866",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/goldx-family/goldx.json",
+        "sha256": "9b7983ef8b1ee164acca77400d643199988d7b3713c57a825122b4d51f487fd1",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/metafactory-family/metafactory.json",
+        "sha256": "a169153e8da597f0a402e5def414a22568537843b52578037a302637eb5b2c42",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/metronome-hgusdc-family/metronome-hgusdc.json",
+        "sha256": "d81d90c0fb98ed92114b48fee5f93181f57b45da6e868e6ac5893e756a607557",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/olympus-family/olympus.json",
+        "sha256": "a8ec86919c93459e632b144a11c3170480e6614670756fdb6dacebbea030590d",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/origin-ousd-family/origin-ousd.json",
+        "sha256": "dbbb0170989dbeaa9949ea67dfce12c931c000a1d3d230c51d20e26d5560c626",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/origin-steth-arm-family/origin-steth-arm.json",
+        "sha256": "3eaa45957f6aca8ace79a0a97cbc4320d836fc2b8770017d6151e1d26d583c88",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/peapods-debond-family/peapods-debond.json",
+        "sha256": "2747788b4b530298e435274ddae91d983b6888352357787e636f08b5ee716bc0",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/psm-family/psm.json",
+        "sha256": "a1d296805170332584ae95a5b3d91b917d9a9e83dcd93d59c2ae1e1d98b77477",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/rocksolid-family/rocksolid.json",
+        "sha256": "f24d18909f83bb69c8583c8f9026b220e34860d17d681a42cf3b3573ee023e87",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/self-burn-native-family/self-burn-native.json",
+        "sha256": "0fbd03ede6d778d40bf4697d87870e37e4a43596f1bb5b8ccf1d910796fbba18",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/staked-usdat-family/staked-usdat.json",
+        "sha256": "b5cd3748d4d90039425e9f9924507c58e49e425358e39a066f383db189d1e14d",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/token-conversion-family/token-conversion.json",
+        "sha256": "9c0dfe58009533a9908a6b7e6b682ef15057f479e017d3280083d6e4ec4af041",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/token-migration-family/token-migration.json",
+        "sha256": "af20480c1013ee2c78c795ff4a53b32369b27aa8a4ae3e30191cb965f7466329",
+        "line": 1,
+        "endLine": 1
+      },
+      {
+        "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/venues/protocols/wsteth-family/wsteth.json",
+        "sha256": "0631f14298d6ce7b69cd4af6ab62d120a917d49c7c541d9249db04b9562a307c",
+        "line": 1,
+        "endLine": 1
+      }
     ]
   }
 }
