@@ -68,8 +68,12 @@ retryable / materialization / resource-limited
 ```
 
 已排除 scope（同块加入 univ2/univ3 后其他族 verified，metronome 仍 retryable）。
-需要：strict lifecycle 失败时输出具体 stage/request/结果（或一个 debug 开关），
-以便区分 identity decode 错误、action adapter 缺失或 transport 限制。
+
+进一步定位：failure 在 `universe-rebuild-production.ts:1329-1345`——identity 已被接受
+（`result.accepted[0]` 存在），但 `publication`/`instances` 为空，所以 stage=materialization；
+`failureCode` 在这条分支被硬编码为 `resource-limited`，掩盖了真实原因（routes/pricing/descriptor 投影失败）。
+需要：publication 为空时输出各段（instance/routes/pricing/exact）的具体拒绝原因，而不是统一
+`resource-limited`；这样才能区分 identity 之后的投影失败与 transport 限制。
 
 ## 备注
 
