@@ -1,0 +1,26 @@
+import { buildDeclarativeExecutionProgram } from "../src/searcher/venues/declarative-execution.js";
+const values = { evaluate(value: any, env: Record<string, any>): any {
+  if (typeof value === "string" && value.startsWith("$")) return value.slice(1).split(".").reduce((v, key) => v?.[key], env);
+  if (Array.isArray(value)) return value.map(item => values.evaluate(item, env));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, values.evaluate(item, env)]));
+  return value; } };
+// Same shape as univ3: the callback must pay an invocation-dependent token.
+const d: any = { version: 2, settlement: { directOutput: true },
+  protectedAddresses: [{ op: "get", args: ["$descriptor", "pool"] }],
+  steps: [{ id: "swap", frame: {
+    call: { target: { op: "get", args: ["$descriptor", "pool"] },
+      signature: "function swap(address,bool,int256,uint160,bytes)", args: ["$recipient", true, { runtime: "amountIn" }, "0"], dataArgument: 4 },
+    callback: { signature: "function uniswapV3SwapCallback(int256,int256,bytes)", dataArgument: 2,
+      captures: { capital: { runtime: "amountIn" } },
+      arguments: [{ index: 0, name: "debt", encoding: "positive", maximum: { runtime: "capital" } },
+        { index: 1, name: "credit", encoding: "negative", minimum: 1 }],
+      steps: [{ id: "pay", call: { target: { op: "get", args: ["$route", "tokenIn"] },
+        signature: "function transfer(address,uint256) returns(bool)", args: [{ op: "get", args: ["$descriptor", "pool"] }, { runtime: "debt" }] } }] } } }],
+  effects: [{ kind: "debit", token: { op: "get", args: ["$route", "tokenIn"] }, account: "$executor", maximum: { runtime: "amountIn" } },
+    { kind: "credit", token: { op: "get", args: ["$route", "tokenOut"] }, account: "$recipient" }] };
+try {
+  buildDeclarativeExecutionProgram(d, { descriptor: { pool: "0x3333333333333333333333333333333333333333" },
+    route: { tokenIn: "0x1111111111111111111111111111111111111111", tokenOut: "0x2222222222222222222222222222222222222222" },
+    executor: "0x6666666666666666666666666666666666666666", amountIn: 5n }, values);
+  console.log("compiled");
+} catch (error) { console.log("BLOCKED:", (error as Error).message); }

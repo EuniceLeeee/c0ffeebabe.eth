@@ -1,0 +1,361 @@
+import assert from "node:assert/strict";
+import { ethers } from "ethers";
+import { createDeclarativeSwapRuntime } from "../src/searcher/venues/declarative-swap.js";
+import definition from "../src/searcher/venues/swaps/univ3-family/univ3.json" with { type: "json" };
+import {
+  UNIV3_FACTORY_INTERFACE, UNIV3_POOL_INTERFACE, UNIV3_QUOTER_V2_INTERFACE,
+  UNIV3_TICK_LENS_INTERFACE,
+} from "../src/searcher/venues/swaps/univ3-abi.js";
+import { UNIV3_STATE_READER_INTERFACE } from "../src/searcher/venues/swaps/univ3-family/state-reader.js";
+import { UNIV3_SWAPPER_INTERFACE } from "../src/searcher/venues/swaps/univ3-family/swap-access.js";
+import { getSqrtRatioAtTick } from "../src/searcher/solver/v3-math.js";
+import { createUniV3Exact } from "../src/searcher/venues/swaps/univ3-family/exact.js";
+import { univ3StrictFamilyPlugin } from "../src/searcher/venues/swaps/univ3-family-plugin.js";
+
+const FACTORY = ethers.getAddress("0x1F98431c8aD98523631AE4a59f267346ea31F984");
+const POOL = ethers.getAddress("0x3333333333333333333333333333333333333333");
+const TOKEN0 = ethers.getAddress("0x1111111111111111111111111111111111111111");
+const TOKEN1 = ethers.getAddress("0x2222222222222222222222222222222222222222");
+const EXECUTOR = ethers.getAddress("0x6666666666666666666666666666666666666666");
+const FEE = 500n, TICK_SPACING = 1, LIQUIDITY = 1_000_000_000_000_000_000n;
+const SOURCE = Object.freeze({ number: 22_000_000, hash: `0x${"ab".repeat(32)}`, generation: 7 });
+const PROVENANCE = Object.freeze({ kind: "fixture", fingerprint: "fixture-v1" });
+const ok = (id, data) => Object.freeze({ id, ok: true, source: SOURCE, provenance: PROVENANCE, completion: "returned", data });
+const revert = id => Object.freeze({ id, ok: true, source: SOURCE, provenance: PROVENANCE, completion: "reverted-as-declared", data: "0x" });
+
+const log = (label, fn) => { try { fn(); console.log("PASS", label); } catch (error) { console.log("FAIL", label, "\n", error); process.exitCode = 1; } };
+
+const runtime = createDeclarativeSwapRuntime(definition, []);
+const plugin = runtime.definition;
+
+log("manifest/runtime compile", () => {
+  assert.equal(runtime.moduleCoverage[0].modules.every(row => row.state === "compiled" || row.state === "undefined"), true);
+  console.log("   module states", runtime.moduleCoverage[0].modules.map(row => `${row.key}:${row.state}`).join(","));
+});
+
+const created = UNIV3_FACTORY_INTERFACE.encodeEventLog(
+  UNIV3_FACTORY_INTERFACE.getEvent("PoolCreated"), [TOKEN0, TOKEN1, FEE, TICK_SPACING, POOL]);
+const candidate = plugin.discovery.decodeCandidate({
+  observation: Object.freeze({ kind: "log", source: SOURCE, address: FACTORY, topics: Object.freeze(created.topics), data: created.data }),
+  matchedPatternId: "univ3-pool-created",
+});
+log("discovery decodes pool-created", () => {
+  assert.equal(candidate.pool, POOL);
+  assert.equal(candidate.hintedFactory, FACTORY);
+  assert.equal(candidate.hintedFee, FEE);
+  assert.equal(String(candidate.hintedTickSpacing), String(TICK_SPACING));
+  assert.equal(plugin.discovery.candidateKey(candidate), POOL.toLowerCase());
+});
+
+const identityVariant = plugin.identity.variants[0];
+function identityDecision(reversePool) {
+  const initial = { candidate, evidence: undefined, step: 0 };
+  assert.deepEqual(identityVariant.decide(initial), { status: "continue" });
+  const staticEvidence = identityVariant.decode({ step: initial, results: [
+    ok("pool-factory", UNIV3_POOL_INTERFACE.encodeFunctionResult("factory", [FACTORY])),
+    ok("pool-token0", UNIV3_POOL_INTERFACE.encodeFunctionResult("token0", [TOKEN0])),
+    ok("pool-token1", UNIV3_POOL_INTERFACE.encodeFunctionResult("token1", [TOKEN1])),
+    ok("pool-fee", UNIV3_POOL_INTERFACE.encodeFunctionResult("fee", [FEE])),
+    ok("pool-tick-spacing", UNIV3_POOL_INTERFACE.encodeFunctionResult("tickSpacing", [TICK_SPACING])),
+  ] });
+  const reverseStep = { candidate, evidence: staticEvidence, step: 1 };
+  const requests = identityVariant.buildRequests(reverseStep);
+  assert.equal(requests.length, 1);
+  const evidence = identityVariant.decode({ step: reverseStep, results: [
+    reversePool === null ? revert("factory-get-pool")
+      : ok("factory-get-pool", UNIV3_FACTORY_INTERFACE.encodeFunctionResult("getPool", [reversePool])),
+  ] });
+  return { evidence, decision: identityVariant.decide({ candidate, evidence, step: 2 }), requests };
+}
+let identity;
+log("identity verifies reverse binding", () => {
+  const { decision, requests } = identityDecision(POOL);
+  assert.equal(decision.status, "verified");
+  identity = decision.identity;
+  assert.equal(identity.subject, POOL);
+  assert.equal(identity.facts.quoterBinding.quoter, "0x61fFE014bA17989E743c5F6cB21bF9697530B21e");
+  assert.equal(requests[0].completion, "return-or-revert-data");
+  assert.equal(requests[0].to, FACTORY);
+});
+log("identity rejects forged reverse pool", () => {
+  assert.deepEqual(identityDecision(ethers.getAddress("0x44" + "44".repeat(19))).decision, {
+    status: "chain-proven-rejected", reasonCode: "factory_reverse_binding_failed", evidenceRequestIds: ["factory-get-pool"] });
+});
+log("identity treats pinned revert as negative evidence", () => {
+  assert.equal(identityDecision(null).decision.reasonCode, "factory_reverse_binding_failed");
+  assert.equal(identityDecision(null).evidence.reversePool, ethers.ZeroAddress);
+});
+log("identity rejects hinted mismatch", () => {
+  const forged = Object.freeze({ ...candidate, hintedToken0: TOKEN1 });
+  const initial = { candidate: forged, evidence: undefined, step: 0 };
+  const staticEvidence = identityVariant.decode({ step: initial, results: [
+    ok("pool-factory", UNIV3_POOL_INTERFACE.encodeFunctionResult("factory", [FACTORY])),
+    ok("pool-token0", UNIV3_POOL_INTERFACE.encodeFunctionResult("token0", [TOKEN0])),
+    ok("pool-token1", UNIV3_POOL_INTERFACE.encodeFunctionResult("token1", [TOKEN1])),
+    ok("pool-fee", UNIV3_POOL_INTERFACE.encodeFunctionResult("fee", [FEE])),
+    ok("pool-tick-spacing", UNIV3_POOL_INTERFACE.encodeFunctionResult("tickSpacing", [TICK_SPACING])),
+  ] });
+  const e = identityVariant.decode({ step: { candidate: forged, evidence: staticEvidence, step: 1 },
+    results: [ok("factory-get-pool", UNIV3_FACTORY_INTERFACE.encodeFunctionResult("getPool", [POOL]))] });
+  assert.equal(identityVariant.decide({ candidate: forged, evidence: e, step: 2 }).reasonCode, "candidate_static_binding_mismatch");
+});
+
+const draft = plugin.instance.compileDraft(identity);
+const descriptor = plugin.instance.finalizeDescriptor({
+  identity, draft, staticEvidence: Object.freeze({ kind: "no-is-swapper-getter", codeHash: `0x${"ab".repeat(32)}` }),
+});
+const routes = plugin.routes.project({ descriptor });
+log("routes project two directions", () => {
+  assert.equal(routes.length, 2);
+  assert.equal(routes[0].direction, "zero-for-one");
+  assert.equal(routes[0].bindingRef.bindingKey, POOL.toLowerCase());
+  void univ3StrictFamilyPlugin;
+});
+
+const pricingDraft = plugin.pricing.compileDraft({ descriptor, stateKey: descriptor.instanceKey, routes });
+const pricingDescriptor = plugin.pricing.finalizePricingDescriptor({ draft: pricingDraft, routes, stateKey: descriptor.instanceKey, staticEvidence: descriptor.swapAccess });
+const pricingInput = { descriptor: pricingDescriptor, routes, source: SOURCE };
+const slot0 = { sqrtPriceX96: getSqrtRatioAtTick(0), tick: 0, observationIndex: 2, observationCardinality: 3,
+  observationCardinalityNext: 4, feeProtocol: 0, unlocked: true };
+const pricingRequests = plugin.pricing.current.buildRequests(pricingInput);
+log("pricing reads slot0+liquidity only", () => {
+  assert.deepEqual(pricingRequests.map(r => r.id), ["current-slot0", "current-liquidity"]);
+});
+const slot0Data = (value) => UNIV3_POOL_INTERFACE.encodeFunctionResult("slot0",
+  [value.sqrtPriceX96, value.tick, value.observationIndex, value.observationCardinality, value.observationCardinalityNext, value.feeProtocol, value.unlocked]);
+const pricingInitial = [
+  ok("current-slot0", slot0Data(slot0)),
+  ok("current-liquidity", UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [LIQUIDITY])),
+];
+const pricingRounds = runPricingRounds(plugin.pricing.current, pricingInput, pricingInitial);
+const pricingSnapshot = plugin.pricing.current.decodeSnapshot({
+  descriptor: pricingDescriptor,
+  initialResults: pricingInitial,
+  dependentEvidence: pricingRounds.dependentEvidence,
+});
+const mids = plugin.pricing.current.deriveMids({ descriptor: pricingDescriptor, snapshot: pricingSnapshot, routes });
+const unavailable = plugin.pricing.current.classifyUnavailable({ descriptor: pricingDescriptor, snapshot: pricingSnapshot, routes });
+log("pricing derives mids", () => {
+  console.log("   mids", [...mids].map(([key, mid]) => [key.slice(0, 12), mid.kind, mid.mid, mid.feeBps, mid.reserveA, mid.reserveB]));
+  assert.equal(mids.size, 2);
+  assert.equal(unavailable.size, 0);
+  for (const mid of mids.values()) {
+    assert.equal(mid.feeBps, 5);
+    assert.equal(mid.depthProxy > 0, true);
+  }
+});
+log("pricing classifies inactive pool", () => {
+  const inactiveInitial = [
+    ok("current-slot0", slot0Data({ ...slot0, sqrtPriceX96: 0n })),
+    ok("current-liquidity", UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [LIQUIDITY])),
+  ];
+  const inactiveRounds = runPricingRounds(plugin.pricing.current, pricingInput, inactiveInitial);
+  const inactive = plugin.pricing.current.decodeSnapshot({
+    descriptor: pricingDescriptor, initialResults: inactiveInitial,
+    dependentEvidence: inactiveRounds.dependentEvidence,
+  });
+  assert.equal(plugin.pricing.current.deriveMids({ descriptor: pricingDescriptor, snapshot: inactive, routes }).size, 0);
+  assert.equal(plugin.pricing.current.classifyUnavailable({ descriptor: pricingDescriptor, snapshot: inactive, routes }).size, 2);
+});
+
+const exactInput = { descriptor, route: routes[0], amountIn: 10_000_000n, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [], transactionOrigin: EXECUTOR };
+const method = plugin.exact.methods(exactInput).find(entry => entry.id === "local-pool-state");
+log("exact method shape", () => {
+  assert.equal(method.stateOnlyReads, true);
+  assert.equal(typeof method.trialState?.quote, "function");
+  assert.equal(typeof exactInput.amountIn, "bigint");
+});
+
+function stateReaderFixture({ tick = 0, initializedTicks = [], liquidity = LIQUIDITY } = {}) {
+  const bitmap = new Map(), ticks = initializedTicks.map(([index, liquidityNet]) => {
+    const compressed = Math.floor(index / TICK_SPACING);
+    const word = compressed >> 8;
+    bitmap.set(word, (bitmap.get(word) ?? 0n) | (1n << BigInt(compressed & 255)));
+    return { index, value: { liquidityGross: liquidityNet < 0n ? -liquidityNet : liquidityNet === 0n ? 1n : liquidityNet,
+      liquidityNet, tickCumulativeOutside: 0n, secondsPerLiquidityOutsideX128: 0n, secondsOutside: 0, initialized: true } };
+  });
+  return { pool: POOL, blockTimestamp: 1_800_000_000n,
+    slot0: { sqrtPriceX96: getSqrtRatioAtTick(tick), tick, observationIndex: 0, observationCardinality: 1,
+      observationCardinalityNext: 1, feeProtocol: 0, unlocked: true },
+    liquidity, tickSpacing: TICK_SPACING, maxLiquidityPerTick: (1n << 128n) - 1n,
+    observation: { blockTimestamp: 1_800_000_000, tickCumulative: 0n, secondsPerLiquidityCumulativeX128: 0n, initialized: true },
+    tickBitmap: [...bitmap].map(([index, value]) => ({ index, value })), ticks };
+}
+const aggregateData = UNIV3_STATE_READER_INTERFACE.encodeFunctionResult(
+  "getFullStateWithRelativeBitmaps", [stateReaderFixture({ tick: -100, initializedTicks: [[-100, 900n], [0, -900n]] })]);
+const exactRequests = method.program.buildRequests(exactInput);
+log("exact initial request is the aggregate state read", () => {
+  assert.deepEqual(exactRequests.map(r => r.id), ["local-pool-state"]);
+  assert.equal(exactRequests[0].to, "0x9c764D2e92dA68E4CDfD784B902283A095ff8b63");
+});
+function respond(request) {
+  const id = request.id;
+  if (id === "local-pool-state") return ok(id, aggregateData);
+  if (id === "local-slot0") return ok(id, slot0Data(bigintSqrtPrice(-100)));
+  if (id === "local-liquidity") return ok(id, UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [LIQUIDITY]));
+  if (id.startsWith("local-tick-word:")) return ok(id, UNIV3_TICK_LENS_INTERFACE.encodeFunctionResult("getPopulatedTicksInWord", [[]]));
+  if (id.startsWith("univ3-swap-access:")) return ok(id, UNIV3_SWAPPER_INTERFACE.encodeFunctionResult("isSwapper", [true]));
+  if (id.startsWith("univ3-precision:")) {
+    const amountIn = BigInt(id.split(":").pop());
+    return ok(id, UNIV3_QUOTER_V2_INTERFACE.encodeFunctionResult("quoteExactInputSingle",
+      [amountIn * 9999n / 10000n, 1n << 96n, 1, 100_000n]));
+  }
+  if (id === "current-slot0") return ok(id, slot0Data(bigintSqrtPrice(0)));
+  if (id === "current-liquidity") return ok(id, UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [LIQUIDITY]));
+  throw new Error(`unexpected request ${id}`);
+}
+function runPricingRounds(program, current, initial) {
+  const dependentEvidence = [];
+  let completedRound = 0;
+  for (;;) {
+    const bound = program.buildDependentProgram({ current, completedRound, initialResults: initial, priorEvidence: dependentEvidence });
+    if (!bound) break;
+    dependentEvidence.push(bound.decode(bound.requests.map(respond)));
+    completedRound++;
+    if (completedRound > 8) throw new Error("round budget");
+  }
+  return { dependentEvidence, completedRound };
+}
+function runRounds(program, programInput, initial) {
+  const dependentEvidence = [];
+  let completedRound = 0;
+  for (;;) {
+    const bound = program.buildDependentProgram({ programInput, completedRound, initialResults: initial, priorEvidence: dependentEvidence });
+    if (!bound) break;
+    dependentEvidence.push(bound.decode(bound.requests.map(respond)));
+    completedRound++;
+    if (completedRound > 8) throw new Error("round budget");
+  }
+  return { dependentEvidence, completedRound };
+}
+const exactInitial = exactRequests.map(respond);
+log("no-getter pool needs no swap-access witness", () => {
+  const round = method.program.buildDependentProgram({ programInput: exactInput, completedRound: 0, initialResults: exactInitial, priorEvidence: [] });
+  assert.deepEqual(round.requests, []);
+});
+const swapperDescriptor = plugin.instance.finalizeDescriptor({ identity, draft: plugin.instance.compileDraft(identity),
+  staticEvidence: Object.freeze({ kind: "is-swapper", codeHash: `0x${"ef".repeat(32)}` }) });
+const swapperRoutes = plugin.routes.project({ descriptor: swapperDescriptor });
+const swapperInput = { ...exactInput, descriptor: swapperDescriptor, route: swapperRoutes[0] };
+const swapperMethod = plugin.exact.methods(swapperInput).find(entry => entry.id === "local-pool-state");
+log("swapper pool needs a source-bound isSwapper witness", () => {
+  const initial = [ok("local-pool-state", aggregateData)];
+  const round = swapperMethod.program.buildDependentProgram({ programInput: swapperInput, completedRound: 0, initialResults: initial, priorEvidence: [] });
+  assert.deepEqual(round.requests.map(r => r.id),
+    [`univ3-swap-access:${POOL.toLowerCase()}:${EXECUTOR.toLowerCase()}:${SOURCE.number}:${SOURCE.hash}:${SOURCE.generation}`]);
+  assert.equal(round.requests[0].to, POOL);
+  assert.throws(() => round.decode([ok(round.requests[0].id,
+    UNIV3_SWAPPER_INTERFACE.encodeFunctionResult("isSwapper", [false]))]), /allowed swapper/);
+});
+log("unsupported bytecode fails closed without a chain call", () => {
+  const unsupported = plugin.instance.finalizeDescriptor({ identity, draft: plugin.instance.compileDraft(identity),
+    staticEvidence: Object.freeze({ kind: "unsupported", codeHash: `0x${"12".repeat(32)}` }) });
+  const unsupportedRoutes = plugin.routes.project({ descriptor: unsupported });
+  const input = { ...exactInput, descriptor: unsupported, route: unsupportedRoutes[0] };
+  const m = plugin.exact.methods(input).find(entry => entry.id === "local-pool-state");
+  const initial = [ok("local-pool-state", aggregateData)];
+  const round = m.program.buildDependentProgram({ programInput: input, completedRound: 0, initialResults: initial, priorEvidence: [] });
+  console.log("   unsupported access round", round.requests.map(r => r.id));
+  assert.deepEqual(round.requests, []);
+  assert.throws(() => round.decode([]), /unsupported swap access capability/);
+});
+const exactRounds = runRounds(method.program, exactInput, exactInitial);
+const exactQuote = method.program.decode({
+  programInput: exactInput,
+  initialResults: exactInitial,
+  dependentEvidence: exactRounds.dependentEvidence,
+});
+log("exact local quote matches production math", () => {
+  const state = {
+    sqrtPriceX96: getSqrtRatioAtTick(-100), tick: -100, liquidity: LIQUIDITY, fee: FEE, tickSpacing: TICK_SPACING,
+    tickBitmap: new Map([[-1, 1n << 156n], [0, 1n]]), ticks: new Map([[-100, 900n], [0, -900n]]),
+  };
+  const reference = createUniV3Exact();
+  const refMethod = (reference.methods({ ...exactInput, swapAccess: undefined })).find(entry => entry.kind === "request-program");
+  const input = { ...exactInput, descriptor: { ...descriptor, swapAccess: { kind: "no-is-swapper-getter", codeHash: `0x${"ab".repeat(32)}` } } };
+  const refQuote = refMethod.program.decode({
+    programInput: input,
+    initialResults: [ok("local-pool-state", aggregateData)],
+    dependentEvidence: [],
+  });
+  console.log("   declarative", exactQuote.amountOut, "reference", refQuote.amountOut);
+  assert.equal(exactQuote.amountOut, refQuote.amountOut);
+  assert.equal(exactQuote.evidence.unavailableReason, undefined);
+  assert.equal(exactQuote.evidence.direction, "zero-for-one");
+  assert.equal(exactQuote.evidence.bindingFingerprint, routes[0].bindingRef.fingerprint);
+});
+log("zero output carries an unavailable reason", () => {
+  const zeroInput = { ...exactInput, amountIn: 1n };
+  const zeroInitial = [ok("local-pool-state", aggregateData)];
+  const zeroRounds = runRounds(method.program, zeroInput, zeroInitial);
+  const zeroQuote = method.program.decode({
+    programInput: zeroInput, initialResults: zeroInitial,
+    dependentEvidence: zeroRounds.dependentEvidence,
+  });
+  assert.equal(zeroQuote.amountOut, 0n);
+  assert.equal(typeof zeroQuote.evidence.unavailableReason, "string");
+  assert.throws(() => plugin.execution.buildFragment({ ...exactInput, quotedAmountOut: 0n, minAmountOut: 0n, exactEvidence: zeroQuote.evidence }));
+});
+
+log("trial state is conditional and bootstraps from cold state", () => {
+  const trialInput = { ...exactInput };
+  const attempt = method.trialState.quote(trialInput);
+  console.log("   cold trial attempt", attempt.status, attempt.reason ?? "");
+  assert.equal(attempt.status, "not-applicable");
+  const noAccess = { ...exactInput, descriptor: { ...descriptor, swapAccess: { kind: "no-is-swapper-getter", codeHash: `0x${"ab".repeat(32)}` } } };
+  const noAccessMethod = plugin.exact.methods(noAccess).find(entry => entry.id === "local-pool-state");
+  assert.equal(noAccessMethod.trialState.unsupportedReason, undefined);
+  const coldInput = { ...noAccess, amountIn: 10_000_000n };
+  const coldInitial = [ok("local-pool-state", aggregateData)];
+  const coldRounds = runRounds(noAccessMethod.program, coldInput, coldInitial);
+  const cold = noAccessMethod.program.decode({
+    programInput: coldInput, initialResults: coldInitial,
+    dependentEvidence: coldRounds.dependentEvidence,
+  });
+  console.log("   cold quote", cold.amountOut, "stateChanges", cold.stateChanges?.length);
+  assert.equal(cold.amountOut > 0n, true);
+  assert.equal(cold.stateChanges.length, 1);
+  assert.equal(cold.stateEffects.length, 5);
+});
+
+log("tick-lens path requests 49 words and quotes", () => {
+  const unknownFactory = ethers.getAddress("0x99" + "99".repeat(19));
+  const identity2 = { ...identity, facts: { ...identity.facts, factoryBinding: { factory: unknownFactory, reversePool: POOL, },
+    quoterBinding: { quoter: null, router: null, provenance: "unavailable" } } };
+  const descriptor2 = plugin.instance.finalizeDescriptor({ identity: identity2, draft: plugin.instance.compileDraft(identity2),
+    staticEvidence: Object.freeze({ kind: "no-is-swapper-getter", codeHash: `0x${"cd".repeat(32)}` }) });
+  const routes2 = plugin.routes.project({ descriptor: descriptor2 });
+  const input2 = { ...exactInput, descriptor: descriptor2, route: routes2[0] };
+  const method2 = plugin.exact.methods(input2).find(entry => entry.id === "local-pool-state");
+  const first = method2.program.buildRequests(input2);
+  assert.deepEqual(first.map(r => r.id), ["local-slot0", "local-liquidity"]);
+  const slot = bigintSqrtPrice(-100);
+  const initial = [
+    ok("local-slot0", slot0Data(slot)),
+    ok("local-liquidity", UNIV3_POOL_INTERFACE.encodeFunctionResult("liquidity", [LIQUIDITY])),
+  ];
+  const accessRound = method2.program.buildDependentProgram({ programInput: input2, completedRound: 0, initialResults: initial, priorEvidence: [] });
+  assert.equal(accessRound.requests.length, 0, "no-getter pool needs no access round");
+  const wordRound = method2.program.buildDependentProgram({ programInput: input2, completedRound: 1, initialResults: initial, priorEvidence: [accessRound.decode([])] });
+  assert.equal(wordRound.requests.length, 49);
+  assert.equal(wordRound.requests[0].to, "0xbfd8137f7d1516D3ea5cA83523914859ec47F573");
+  const wordResults = wordRound.requests.map(request => ok(request.id,
+    UNIV3_TICK_LENS_INTERFACE.encodeFunctionResult("getPopulatedTicksInWord", [[]])));
+  const dependentEvidence = [accessRound.decode([]), wordRound.decode(wordResults)];
+  const quote = method2.program.decode({ programInput: input2, initialResults: initial, dependentEvidence });
+  console.log("   tick-lens quote", quote.amountOut);
+  assert.equal(quote.amountOut > 0n, true);
+});
+function bigintSqrtPrice(tick) {
+  const sqrt = getSqrtRatioAtTick(tick);
+  return { sqrtPriceX96: sqrt, tick, observationIndex: 0, observationCardinality: 1, observationCardinalityNext: 1, feeProtocol: 0, unlocked: true };
+}
+
+log("execution builds a callback frame program", () => {
+  const fragment = plugin.execution.buildFragment({ ...exactInput, quotedAmountOut: exactQuote.amountOut,
+    minAmountOut: 1n, exactEvidence: exactQuote.evidence });
+  assert.equal(fragment.nodes.length, 1);
+  const program = fragment.nodes[0].params.runtimeAmountProgram;
+  assert.equal(program.startsWith("0x01"), true);
+  assert.equal(plugin.execution.expectedEffects({ route: routes[0] }).length, 4);
+});
