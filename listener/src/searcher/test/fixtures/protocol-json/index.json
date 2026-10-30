@@ -5330,7 +5330,7 @@
             {
               "file": "/opt/mev-cloud/family-runtime-20261007/logs/protocol-json-enabled-20261030/sample-scope-origin-block.json",
               "sha256": "ca9dc5733474a6357a0f4f84f7495e7ccb71b31bea047f2adaf9bbf9bd4d62d5",
-              "jsonPointer": "/result/transactions[hash=0xab27e7006f6d2471e6f2d037cdc8e2ecbf6848f65d79c54a43c3bf145cbba13a]",
+              "jsonPointer": "/result/transactions",
               "line": 1,
               "endLine": 1
             }
