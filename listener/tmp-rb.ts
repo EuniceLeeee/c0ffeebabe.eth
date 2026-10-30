@@ -1,0 +1,13 @@
+import { readFileSync, mkdirSync } from "node:fs"; import { resolve } from "node:path"; import { ethers } from "ethers";
+import { UniverseRebuildCheckpointStore } from "./src/searcher/universe-rebuild-checkpoint.js";
+import { createRebuildWiring } from "./src/searcher/universe-rebuild-production.js";
+import { rebuildUniverse } from "./src/searcher/universe-rebuild-runner.js";
+const a=new Map<string,string>();for(let i=2;i<process.argv.length;i+=2)a.set(process.argv[i]!,process.argv[i+1]!);
+const fam=a.get("--family")!.split(","),block=Number(a.get("--block")!),out=resolve(a.get("--out")!);
+const rpc=JSON.parse(readFileSync(a.get("--rpc-file")!,"utf8")).MAINNET_RPC_URL;
+const ex=ethers.getAddress(a.get("--executor")!).toLowerCase(),ow=ethers.getAddress(a.get("--owner")!).toLowerCase();
+process.env.SEARCHER_DRY_RUN="1";process.env.SEARCHER_BLOCKSCAN_SUBMIT="0";process.env.MAINNET_RPC_URL=rpc;process.env.SEARCHER_REVM_SIM_BIN=a.get("--revm-bin")!;process.env.BOTVM_ADDRESS=ex;process.env.BOTVM_OWNER=ow;
+mkdirSync(out,{recursive:true,mode:0o700});
+const w=createRebuildWiring({rpcUrl:rpc,familyIds:fam,executionIdentity:{executor:ex,transactionOrigin:ow}});
+const r=await rebuildUniverse({...w,store:new UniverseRebuildCheckpointStore({path:resolve(out,"ready.json")}),runId:`x-${block}`,observationRange:{fromBlock:block,toBlock:block},attestationConcurrency:1,log:(m:string)=>console.log(m)});
+console.log(JSON.stringify({count:r.activeInstanceKeys.length}));

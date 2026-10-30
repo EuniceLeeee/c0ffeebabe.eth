@@ -746,6 +746,17 @@
           }
         ]
       }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
     }
   },
   "instance": {
