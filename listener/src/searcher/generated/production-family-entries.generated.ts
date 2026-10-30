@@ -50,7 +50,7 @@ import * as entry47 from "../venues/production-families/staked-usdat.production.
 import * as entry48 from "../venues/production-families/token-conversion.production.js";
 import * as entry49 from "../venues/production-families/token-migration.production.js";
 import * as entry50 from "../venues/production-families/uniswap-v1.production.js";
-import * as entry51 from "../venues/production-families/univ2-standard.production.js";
+import * as entry51 from "../venues/production-families/univ2.production.js";
 import * as entry52 from "../venues/production-families/univ3-standard.production.js";
 import * as entry53 from "../venues/production-families/univ4-fee-hook.production.js";
 import * as entry54 from "../venues/production-families/univ4.production.js";
@@ -111,7 +111,7 @@ export const GENERATED_PRODUCTION_FAMILY_ENTRIES = Object.freeze([
   Object.freeze({ sourceFile: "token-conversion.production.ts", module: entry48 }),
   Object.freeze({ sourceFile: "token-migration.production.ts", module: entry49 }),
   Object.freeze({ sourceFile: "uniswap-v1.production.ts", module: entry50 }),
-  Object.freeze({ sourceFile: "univ2-standard.production.ts", module: entry51 }),
+  Object.freeze({ sourceFile: "univ2.production.ts", module: entry51 }),
   Object.freeze({ sourceFile: "univ3-standard.production.ts", module: entry52 }),
   Object.freeze({ sourceFile: "univ4-fee-hook.production.ts", module: entry53 }),
   Object.freeze({ sourceFile: "univ4.production.ts", module: entry54 }),

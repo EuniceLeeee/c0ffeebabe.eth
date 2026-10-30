@@ -16,6 +16,7 @@ import { psmConversionMathModel } from "./psm-math.js";
 import { selfBurnNativeWrapFeeMathModel } from "./self-burn-native-math.js";
 import { stakedUsdatEventAssetsMathModel } from "./staked-usdat-math.js";
 import { bearQuoteMathModel, xwinLocalStateMathModel, xwinQuoteMathModel } from "./token-conversion-math.js";
+import { univ2MathModels } from "./swaps/univ2-family/math.js";
 
 // Static, source-hashed math entries are registered here by protocol migration.
 // JSON never imports arbitrary files or executable handlers. An absent model
@@ -41,5 +42,6 @@ const models: readonly DeclarativeMathModel[] = [
   xwinQuoteMathModel,
   ...balancerV1MathModels,
   ...fluidCreditMathModels,
+  ...univ2MathModels,
 ];
 export const declarativeMathRegistry = createDeclarativeMathRegistry(models);
