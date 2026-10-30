@@ -1,0 +1,724 @@
+{
+  "format": "declarative-family-fields-v1",
+  "domain": "swap",
+  "familyId": "balancer-v1",
+  "definition": "src/searcher/venues/swaps/balancer-v1-family/balancer-v1.json",
+  "coverage": "all-projected-routes",
+  "claim": "Compiler field contract using hash-pinned recorded historical reads; observations are synthetic ABI wiring fixtures. No strict identity, EVM execution, opportunity or performance claim.",
+  "recorded": {
+    "file": "balancer-v1-fields.json",
+    "sha256": "2d71643282094f0472250c3e39ec2e17ad099f12fb55ac76ade8cc415b9a99e8"
+  },
+  "source": {
+    "number": 26138731,
+    "hash": "0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266",
+    "generation": 1
+  },
+  "candidate": {
+    "candidateKind": "balancer-v1-pool",
+    "pool": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+  },
+  "executor": "0x1000000000000000000000000000000000000001",
+  "discovery": [
+    {
+      "patternId": "balancer-v1-swapExactAmountIn",
+      "observation": {
+        "kind": "call",
+        "target": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+        "data": "0x8201aa3f0000000000000000000000001776e1f26f98b1a5df9cd347953a26dd3cb46671000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000000000000000000000000000000000000000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "expectedCandidate": {
+        "candidateKind": "balancer-v1-pool",
+        "pool": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+      }
+    },
+    {
+      "patternId": "balancer-v1-swapExactAmountIn",
+      "observation": {
+        "kind": "call",
+        "target": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+        "data": "0x8201aa3f0000000000000000000000001776e1f26f98b1a5df9cd347953a26dd3cb46671000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000000000000000000000000000000000000000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00"
+      },
+      "expectedCandidate": null
+    },
+    {
+      "patternId": "balancer-v1-swapExactAmountOut",
+      "observation": {
+        "kind": "call",
+        "target": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+        "data": "0x7c5e9ea40000000000000000000000001776e1f26f98b1a5df9cd347953a26dd3cb46671000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000000000000000000000000000000000000000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "expectedCandidate": {
+        "candidateKind": "balancer-v1-pool",
+        "pool": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+      }
+    },
+    {
+      "patternId": "balancer-v1-swapExactAmountOut",
+      "observation": {
+        "kind": "call",
+        "target": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+        "data": "0x7c5e9ea40000000000000000000000001776e1f26f98b1a5df9cd347953a26dd3cb46671000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000000000000000000000000000000000000000001ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00"
+      },
+      "expectedCandidate": null
+    },
+    {
+      "patternId": "balancer-v1-LOG_SWAP",
+      "observation": {
+        "kind": "log",
+        "address": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+        "data": "0x000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000014",
+        "topics": [
+          "0x908fb5ee8f16c6bc9bc3690973819f32a4d4b10188134543c88706e0e1d43378",
+          "0x0000000000000000000000001000000000000000000000000000000000000001",
+          "0x0000000000000000000000001776e1f26f98b1a5df9cd347953a26dd3cb46671",
+          "0x000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        ]
+      },
+      "expectedCandidate": {
+        "candidateKind": "balancer-v1-pool",
+        "pool": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+      }
+    },
+    {
+      "patternId": "balancer-v1-LOG_SWAP",
+      "observation": {
+        "kind": "log",
+        "address": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+        "data": "0x000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000001400",
+        "topics": [
+          "0x908fb5ee8f16c6bc9bc3690973819f32a4d4b10188134543c88706e0e1d43378",
+          "0x0000000000000000000000001000000000000000000000000000000000000001",
+          "0x0000000000000000000000001776e1f26f98b1a5df9cd347953a26dd3cb46671",
+          "0x000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        ]
+      },
+      "expectedCandidate": null
+    }
+  ],
+  "identity": {
+    "variantId": "factory-created-finalized-bpool",
+    "requestRounds": [
+      [
+        "pool-code",
+        "factory-code",
+        "registered"
+      ],
+      [
+        "finalized",
+        "public",
+        "tokens",
+        "fee"
+      ],
+      [
+        "weight:0",
+        "weight:1"
+      ]
+    ],
+    "rejections": [
+      {
+        "overrides": [
+          {
+            "requestId": "pool-code",
+            "result": {
+              "data": "0x"
+            }
+          }
+        ],
+        "checks": [
+          {
+            "path": [
+              "status"
+            ],
+            "equals": "chain-proven-rejected"
+          },
+          {
+            "path": [
+              "reasonCode"
+            ],
+            "equals": "no-pool-code"
+          }
+        ]
+      },
+      {
+        "overrides": [
+          {
+            "requestId": "registered",
+            "result": {
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "checks": [
+          {
+            "path": [
+              "status"
+            ],
+            "equals": "chain-proven-rejected"
+          },
+          {
+            "path": [
+              "reasonCode"
+            ],
+            "equals": "not-created-by-bfactory"
+          }
+        ]
+      },
+      {
+        "overrides": [
+          {
+            "requestId": "pool-code",
+            "result": {
+              "data": "0x6000"
+            }
+          }
+        ],
+        "checks": [
+          {
+            "path": [
+              "status"
+            ],
+            "equals": "retryable"
+          },
+          {
+            "path": [
+              "reasonCode"
+            ],
+            "equals": "unsupported-bpool-code"
+          }
+        ]
+      },
+      {
+        "overrides": [
+          {
+            "requestId": "finalized",
+            "result": {
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "checks": [
+          {
+            "path": [
+              "status"
+            ],
+            "equals": "retryable"
+          },
+          {
+            "path": [
+              "reasonCode"
+            ],
+            "equals": "bpool-not-finalized-public"
+          }
+        ]
+      },
+      {
+        "overrides": [
+          {
+            "requestId": "public",
+            "result": {
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          }
+        ],
+        "checks": [
+          {
+            "path": [
+              "status"
+            ],
+            "equals": "retryable"
+          },
+          {
+            "path": [
+              "reasonCode"
+            ],
+            "equals": "bpool-not-finalized-public"
+          }
+        ]
+      }
+    ]
+  },
+  "instance": {
+    "staticRequestIds": [],
+    "checks": [
+      {
+        "path": [
+          "familyId"
+        ],
+        "equals": "balancer-v1"
+      },
+      {
+        "path": [
+          "lineageId"
+        ],
+        "equals": "balancer-v1:finalized-bpool"
+      },
+      {
+        "path": [
+          "instanceKey"
+        ],
+        "equals": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+      }
+    ],
+    "bindingChecks": [
+      {
+        "path": [],
+        "equals": {
+          "pool": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+          "factory": "0x9424b1412450d0f8fc2255faf6046b98213b76bd",
+          "model": "balancer-v1-finalized-bpool-0.5.12",
+          "poolCodeHash": "0x974df1c33872ba8aab782be5117ff348802441590f84ed7701d734bb9c21683e",
+          "factoryCodeHash": "0xd185d385218c275c7ed71ca8430e79bcddbe8a7058d7e9fe4a1fe06b542deb2e",
+          "tokens": [
+            "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+          ],
+          "weights": [
+            {
+              "$type": "bigint",
+              "value": "25000000000000000000"
+            },
+            {
+              "$type": "bigint",
+              "value": "25000000000000000000"
+            }
+          ],
+          "swapFee": {
+            "$type": "bigint",
+            "value": "1500000000000000"
+          }
+        }
+      }
+    ]
+  },
+  "routes": [
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:0:1"
+      },
+      "checks": [
+        {
+          "path": [
+            "tokenIn"
+          ],
+          "equals": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671"
+        },
+        {
+          "path": [
+            "tokenOut"
+          ],
+          "equals": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        },
+        {
+          "path": [
+            "familyId"
+          ],
+          "equals": "balancer-v1"
+        },
+        {
+          "path": [
+            "direction"
+          ],
+          "equals": "0:1"
+        }
+      ],
+      "graphChecks": [
+        {
+          "path": [
+            "executionTarget"
+          ],
+          "equals": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+        },
+        {
+          "path": [
+            "routeActionAdapterId"
+          ],
+          "equals": "balancer-v1-swap"
+        },
+        {
+          "path": [
+            "venueIdentity"
+          ],
+          "equals": {
+            "kind": "address-pool",
+            "pool": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+          }
+        },
+        {
+          "path": [
+            "centralScoreKey"
+          ],
+          "equals": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:0:1"
+        }
+      ]
+    },
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:1:0"
+      },
+      "checks": [
+        {
+          "path": [
+            "tokenIn"
+          ],
+          "equals": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+        },
+        {
+          "path": [
+            "tokenOut"
+          ],
+          "equals": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671"
+        },
+        {
+          "path": [
+            "familyId"
+          ],
+          "equals": "balancer-v1"
+        },
+        {
+          "path": [
+            "direction"
+          ],
+          "equals": "1:0"
+        }
+      ],
+      "graphChecks": [
+        {
+          "path": [
+            "executionTarget"
+          ],
+          "equals": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+        },
+        {
+          "path": [
+            "routeActionAdapterId"
+          ],
+          "equals": "balancer-v1-swap"
+        },
+        {
+          "path": [
+            "venueIdentity"
+          ],
+          "equals": {
+            "kind": "address-pool",
+            "pool": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+          }
+        },
+        {
+          "path": [
+            "centralScoreKey"
+          ],
+          "equals": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:1:0"
+        }
+      ]
+    }
+  ],
+  "pricing": [
+    {
+      "stateKey": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+      "staticRequestIds": [],
+      "requestRounds": [
+        [
+          "balance:0",
+          "balance:1"
+        ]
+      ],
+      "snapshotChecks": [
+        {
+          "path": [
+            "source"
+          ],
+          "equals": {
+            "number": 26138731,
+            "hash": "0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266",
+            "generation": 1
+          }
+        },
+        {
+          "path": [
+            "balances"
+          ],
+          "equals": [
+            {
+              "$type": "bigint",
+              "value": "3977002336923035358366"
+            },
+            {
+              "$type": "bigint",
+              "value": "25534126627311451752"
+            }
+          ]
+        }
+      ],
+      "mids": [
+        {
+          "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:0:1",
+          "checks": [
+            {
+              "path": [
+                "kind"
+              ],
+              "equals": "external-swap"
+            },
+            {
+              "path": [
+                "mid"
+              ],
+              "equals": 0.006410814799041918
+            },
+            {
+              "path": [
+                "edges",
+                0,
+                "adapterId"
+              ],
+              "equals": "balancer-v1-swap"
+            },
+            {
+              "path": [
+                "edges",
+                0,
+                "tokenIn"
+              ],
+              "equals": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671"
+            },
+            {
+              "path": [
+                "edges",
+                0,
+                "tokenOut"
+              ],
+              "equals": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+            }
+          ]
+        },
+        {
+          "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:1:0",
+          "checks": [
+            {
+              "path": [
+                "kind"
+              ],
+              "equals": "external-swap"
+            },
+            {
+              "path": [
+                "mid"
+              ],
+              "equals": 155.518803966853
+            },
+            {
+              "path": [
+                "edges",
+                0,
+                "adapterId"
+              ],
+              "equals": "balancer-v1-swap"
+            },
+            {
+              "path": [
+                "edges",
+                0,
+                "tokenIn"
+              ],
+              "equals": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+            },
+            {
+              "path": [
+                "edges",
+                0,
+                "tokenOut"
+              ],
+              "equals": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671"
+            }
+          ]
+        }
+      ],
+      "unavailable": [],
+      "refreshPolicy": "on-touch",
+      "dependencies": [
+        "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d"
+      ]
+    }
+  ],
+  "quotes": [
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:0:1"
+      },
+      "methodId": "balancer-v1-chain-exact-in",
+      "amountIn": "1",
+      "throws": "output|spendable"
+    },
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:0:1"
+      },
+      "methodId": "balancer-v1-chain-exact-in",
+      "amountIn": "1313743479005274328",
+      "amountOut": "8419389089414328",
+      "minAmountOut": "8419389089414328",
+      "requestRounds": [
+        [
+          "balance:0",
+          "balance:1"
+        ],
+        [
+          "amount-out"
+        ]
+      ],
+      "runtime": "supported",
+      "runtimeChecks": [
+        {
+          "path": [
+            "actionAdapterId"
+          ],
+          "equals": "balancer-v1-swap"
+        }
+      ]
+    },
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:0:1"
+      },
+      "methodId": "balancer-v1-chain-exact-in",
+      "amountIn": "13137434790052743280",
+      "amountOut": "83944778251914043",
+      "minAmountOut": "83944778251914043",
+      "requestRounds": [
+        [
+          "balance:0",
+          "balance:1"
+        ],
+        [
+          "amount-out"
+        ]
+      ],
+      "runtime": "supported",
+      "runtimeChecks": [
+        {
+          "path": [
+            "actionAdapterId"
+          ],
+          "equals": "balancer-v1-swap"
+        }
+      ]
+    },
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:0:1"
+      },
+      "methodId": "balancer-v1-chain-exact-in",
+      "amountIn": "1988501168461517679183",
+      "amountOut": "8502859909078033863",
+      "minAmountOut": "8502859909078033863",
+      "requestRounds": [
+        [
+          "balance:0",
+          "balance:1"
+        ],
+        [
+          "amount-out"
+        ]
+      ],
+      "runtime": "supported",
+      "runtimeChecks": [
+        {
+          "path": [
+            "actionAdapterId"
+          ],
+          "equals": "balancer-v1-swap"
+        }
+      ]
+    },
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:1:0"
+      },
+      "methodId": "balancer-v1-chain-exact-in",
+      "amountIn": "1",
+      "throws": "output|spendable"
+    },
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:1:0"
+      },
+      "methodId": "balancer-v1-chain-exact-in",
+      "amountIn": "8444695829171278",
+      "amountOut": "1312875449799276467",
+      "minAmountOut": "1312875449799276467",
+      "requestRounds": [
+        [
+          "balance:0",
+          "balance:1"
+        ],
+        [
+          "amount-out"
+        ]
+      ],
+      "runtime": "supported",
+      "runtimeChecks": [
+        {
+          "path": [
+            "actionAdapterId"
+          ],
+          "equals": "balancer-v1-swap"
+        }
+      ]
+    },
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:1:0"
+      },
+      "methodId": "balancer-v1-chain-exact-in",
+      "amountIn": "84446958291712780",
+      "amountOut": "13089863837450593311",
+      "minAmountOut": "13089863837450593311",
+      "requestRounds": [
+        [
+          "balance:0",
+          "balance:1"
+        ],
+        [
+          "amount-out"
+        ]
+      ],
+      "runtime": "supported",
+      "runtimeChecks": [
+        {
+          "path": [
+            "actionAdapterId"
+          ],
+          "equals": "balancer-v1-swap"
+        }
+      ]
+    },
+    {
+      "select": {
+        "routeKey": "balancer-v1:0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d:1:0"
+      },
+      "methodId": "balancer-v1-chain-exact-in",
+      "amountIn": "12767063313655725876",
+      "amountOut": "1324341115030065299146",
+      "minAmountOut": "1324341115030065299146",
+      "requestRounds": [
+        [
+          "balance:0",
+          "balance:1"
+        ],
+        [
+          "amount-out"
+        ]
+      ],
+      "runtime": "supported",
+      "runtimeChecks": [
+        {
+          "path": [
+            "actionAdapterId"
+          ],
+          "equals": "balancer-v1-swap"
+        }
+      ]
+    }
+  ]
+}

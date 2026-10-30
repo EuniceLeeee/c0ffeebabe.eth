@@ -202,7 +202,11 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
         const index = (p.fields[field] as Extract<FieldSource, { from: "argument" }>).index;
         return { index, type: fn.inputs[index]!.format("sighash"), name: field };
       }) };
-    return { declaration: p, pattern, decode: (o: Extract<UnifiedObservation, { kind: "call" }>) => Array.from(abi.decodeFunctionData(fn, o.data)) };
+    return { declaration: p, pattern, decode: (o: Extract<UnifiedObservation, { kind: "call" }>) => {
+      const args = abi.decodeFunctionData(fn, o.data);
+      if (abi.encodeFunctionData(fn, args).toLowerCase() !== o.data.toLowerCase()) throw new Error("noncanonical discovery calldata");
+      return Array.from(args);
+    } };
   });
   const events = d.events.map(p => {
     shape(p, ["id", "signature", "fields"], ["predicates", "nominationOnly"], "event pattern");
@@ -212,7 +216,13 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
     if (p.nominationOnly) { shape(p.fields, [], [], "nomination-only fields"); if (p.predicates !== undefined) throw new Error("nomination-only patterns cannot assert candidate predicates"); }
     else { validateMap(p.fields, "log", event.inputs.length); validatePredicates(p.predicates); }
     return { declaration: p, pattern: { id: p.id, topic: event.topicHash as `0x${string}`, signature: event.format("sighash") },
-      decode: (o: Extract<UnifiedObservation, { kind: "log" }>) => Array.from(abi.decodeEventLog(event, o.data, [...o.topics])) };
+      decode: (o: Extract<UnifiedObservation, { kind: "log" }>) => {
+        const args = abi.decodeEventLog(event, o.data, [...o.topics]);
+        const encoded = abi.encodeEventLog(event, args);
+        if (encoded.data.toLowerCase() !== o.data.toLowerCase() || encoded.topics.length !== o.topics.length ||
+            encoded.topics.some((topic, i) => topic.toLowerCase() !== o.topics[i].toLowerCase())) throw new Error("noncanonical discovery event");
+        return Array.from(args);
+      } };
   });
   if (d.surface) {
     shape(d.surface, ["id", "fingerprint", "fields"], ["predicates"], "surface");

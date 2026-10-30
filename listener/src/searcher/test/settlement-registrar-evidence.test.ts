@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import { evidenceFailures, type FamilyReview } from "./family-settlement-review.js";
 import { explicitSettlementAssertionFailures, isLegacySettlementRegistrarEvidence,
@@ -103,31 +106,109 @@ test("other historical evidence formats retain their existing contract without n
   }
 });
 
-test("retired registrars fail before external artifact reads, RPC or registry writes", () => {
-  const guard = `
+const registrarFiles = ["settlement-register-family.ts", "settlement-register-boring.ts"];
+const loader = import.meta.resolve("tsx");
+const dependencyRoot = realpathSync(join(dirname(fileURLToPath(loader)), "../.."));
+function registrarGuard(directory: string, project: string): string {
+  // Only the CLI/imported evidence source and the loader's package/config
+  // metadata are bootstrap inputs. A cloud checkout is not an artifact read.
+  const allowedFiles = [join(project, "tsconfig.json"), join(realpathSync(project), "tsconfig.json")];
+  // macOS temp directories have /var and /private/var spellings; Node may use
+  // either canonical source URL while importing the same explicitly pinned file.
+  for (const sourceDir of new Set([directory, realpathSync(directory)])) {
+    allowedFiles.push(...[...registrarFiles, "settlement-registrar-evidence.ts"].map(file => join(sourceDir, file)));
+    for (let current = sourceDir;; current = dirname(current)) {
+      allowedFiles.push(join(current, "package.json"));
+      if (dirname(current) === current) break;
+    }
+  }
+  return `
     import fs from 'node:fs';
     import net from 'node:net';
+    import { resolve, sep } from 'node:path';
+    import { fileURLToPath } from 'node:url';
     import { syncBuiltinESMExports } from 'node:module';
+    const sources = new Set(${JSON.stringify(allowedFiles)});
+    const dependencies = ${JSON.stringify(dependencyRoot)} + sep;
     const forbidden = () => { throw Error('FORBIDDEN_REGISTRAR_SIDE_EFFECT'); };
-    for (const key of ['readFileSync', 'writeFileSync', 'readdirSync']) {
-      const original = fs[key];
-      fs[key] = function(path, ...args) {
-        const value = String(path);
-        if (value.includes('/opt/mev-cloud/') || value === '/tmp/ds-rpc.json') forbidden();
-        return original.call(this, path, ...args);
-      };
-    }
+    const read = path => {
+      if (typeof path === 'number') forbidden();
+      const value = resolve(path instanceof URL ? fileURLToPath(path) : String(path));
+      const dependency = value.startsWith(dependencies) &&
+        (/\\.(?:cjs|mjs|js)$/.test(value) || value.endsWith(sep + 'package.json'));
+      if (!sources.has(value) && !dependency) forbidden();
+    };
+    const wrap = (owner, key, check) => {
+      const original = owner[key];
+      owner[key] = function(...args) { check(...args); return original.apply(this, args); };
+    };
+    for (const key of ['readFileSync', 'readFile', 'createReadStream']) wrap(fs, key, read);
+    wrap(fs.promises, 'readFile', read);
+    const open = (path, flags) => {
+      if (!(flags === 'r' || flags === 0)) forbidden();
+      read(path);
+    };
+    wrap(fs, 'openSync', open); wrap(fs, 'open', open); wrap(fs.promises, 'open', open);
+    for (const key of ['writeFileSync', 'writeFile', 'appendFileSync', 'appendFile', 'createWriteStream',
+      'copyFileSync', 'copyFile', 'renameSync', 'rename', 'rmSync', 'rm', 'mkdirSync', 'mkdir',
+      'unlinkSync', 'unlink', 'readdirSync', 'readdir']) if (fs[key]) fs[key] = forbidden;
+    for (const key of ['writeFile', 'appendFile', 'copyFile', 'rename', 'rm', 'mkdir', 'unlink', 'readdir'])
+      fs.promises[key] = forbidden;
     net.Socket.prototype.connect = forbidden;
     globalThis.fetch = forbidden;
     syncBuiltinESMExports();
   `;
-  for (const file of ["settlement-register-family.ts", "settlement-register-boring.ts"]) {
-    const result = spawnSync(process.execPath, ["--import", import.meta.resolve("tsx"),
-      "--import", "data:text/javascript," + encodeURIComponent(guard),
-      fileURLToPath(new URL(file, import.meta.url)), "fixture", "missing-lane", "v1", "none", "yes"],
-    { encoding: "utf8", env: { ...process.env, TSX_DISABLE_CACHE: "1" }, timeout: 15000 });
+}
+function runGuarded(guard: string, args: string[], cwd: string) {
+  return spawnSync(process.execPath, ["--import", loader,
+    "--import", "data:text/javascript," + encodeURIComponent(guard), ...args],
+  { cwd, encoding: "utf8", env: { ...process.env, TSX_DISABLE_CACHE: "1", TSX_TSCONFIG_PATH: join(cwd, "tsconfig.json") }, timeout: 15000 });
+}
+function assertRetired(directory: string, project: string) {
+  for (const file of registrarFiles) {
+    const result = runGuarded(registrarGuard(directory, project), [join(directory, file), "fixture", "missing-lane", "v1", "none", "yes"], project);
     assert.equal(result.error, undefined); assert.equal(result.status, 1);
     assert.match(result.stderr, /Settlement registrar disabled/);
     assert.doesNotMatch(result.stderr, /FORBIDDEN_REGISTRAR_SIDE_EFFECT/);
   }
+}
+
+test("retired registrars fail before external artifact reads, RPC or registry writes", () => {
+  assertRetired(dirname(fileURLToPath(import.meta.url)), fileURLToPath(new URL("../../../", import.meta.url)));
+});
+
+test("cloud-path bootstrap still runs the real retired CLI while artifact/config/write/network operations remain denied", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "registrar-bootstrap-"));
+  // This reproduces the old substring guard on every host, without writing /opt.
+  const project = join(scratch, "opt/mev-cloud/fixture/listener"), directory = join(project, "src/searcher/test");
+  try {
+    mkdirSync(directory, { recursive: true });
+    for (const file of [...registrarFiles, "settlement-registrar-evidence.ts"])
+      copyFileSync(fileURLToPath(new URL(file, import.meta.url)), join(directory, file));
+    writeFileSync(join(project, "package.json"), '{"type":"module"}');
+    writeFileSync(join(project, "tsconfig.json"), '{"compilerOptions":{"target":"ES2022","module":"Node16"}}');
+    assertRetired(directory, project);
+    const artifact = join(project, "saved-artifact.json");
+    writeFileSync(artifact, '{"evidence":"must not read"}');
+    const guard = registrarGuard(directory, project);
+    for (const operation of [
+      `fs.readFileSync(${JSON.stringify(artifact)});`,
+      `await fs.promises.readFile(${JSON.stringify(artifact)});`,
+      `fs.readFileSync('/tmp/ds-rpc.json');`,
+      `fs.readFileSync('/opt/mev-cloud/other-workspace/config.json');`,
+      `fs.writeFileSync(${JSON.stringify(artifact)}, 'changed');`,
+      `fs.writeFileSync(${JSON.stringify(join(directory, registrarFiles[0]!))}, 'changed');`,
+      `await fs.promises.writeFile(${JSON.stringify(artifact)}, 'changed');`,
+      `fs.openSync(${JSON.stringify(artifact)}, 'r+');`,
+      `fs.readdirSync(${JSON.stringify(project)});`,
+      `await fetch('http://127.0.0.1:1');`,
+      `new net.Socket().connect(1, '127.0.0.1');`,
+    ]) {
+      const result = runGuarded(guard, ["--input-type=module", "--eval", `import fs from 'node:fs'; import net from 'node:net'; ${operation}`], project);
+      assert.equal(result.error, undefined); assert.equal(result.status, 1);
+      assert.match(result.stderr, /FORBIDDEN_REGISTRAR_SIDE_EFFECT/, operation);
+    }
+    assert.equal(readFileSync(artifact, "utf8"), '{"evidence":"must not read"}');
+    assert.equal(readFileSync(join(directory, registrarFiles[0]!), "utf8"), readFileSync(fileURLToPath(new URL(registrarFiles[0]!, import.meta.url)), "utf8"));
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
 });

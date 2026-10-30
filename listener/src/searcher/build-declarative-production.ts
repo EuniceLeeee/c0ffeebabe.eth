@@ -1,3 +1,4 @@
+import { ROOT_ONLY_FAMILY_MODULES } from "./venues/declarative-family-modules.js";
 import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
 import { FAMILY_CAPABILITY_APPLICABILITY, type FamilyDomain } from "./venues/adapter-family-plugin.js";
@@ -15,7 +16,7 @@ type Declaration = {
   readonly actionAdapters: readonly Binding[];
 };
 export interface DeclarativeProductionEntry {
-  readonly format: "bindings-v1" | "protocol-json-v2";
+  readonly format: "bindings-v1" | "protocol-json-v2" | "swap-json-v2" | "credit-json-v2";
   readonly definitionFile: string;
   readonly entryFile: string;
   readonly familyId: string;
@@ -73,8 +74,8 @@ function variantDeclaration(child: Record<string, any>): void {
   // resolve inherited capabilities in the common production compiler.
   if (Object.hasOwn(child, "modules")) {
     protocolModuleCatalog().read(child.modules);
-    if (Object.hasOwn(child.modules, "oracleVictim"))
-      throw new Error("oracleVictim is a root-only module; variants cannot override it");
+    if (ROOT_ONLY_FAMILY_MODULES.some(key => Object.hasOwn(child.modules, key)))
+      throw new Error("oracleVictim/instanceEvidence/executionProjection is a root-only module; variants cannot override it");
   }
   if (!Object.hasOwn(child, "admission")) {
     object(child.identity, "variant identity"); // Existing expanded v2 declarations.
@@ -104,14 +105,18 @@ function uniqueIds(value: unknown, label: string): readonly string[] {
   return value;
 }
 
-function renderProtocolEntry(input: {
+function renderDataFamilyEntry(input: {
   root: string; sourceRoot: string; definitionFile: string; entryFile: string;
   doc: Record<string, any>; activation: Record<string, any>;
 }): DeclarativeProductionEntry {
   const { root, sourceRoot, definitionFile, entryFile, doc, activation } = input;
   dataOnly(doc);
+  const domain = doc.production.domain as "protocol" | "swap" | "credit";
+  if (!["protocol", "swap", "credit"].includes(domain)) throw new Error("unsupported declarative v2 domain");
+  const suffix = domain === "swap" ? "Swap" : domain === "credit" ? "Credit" : "Protocol";
+  const constructor = `define${suffix}Family`, compile = `compileDeclarative${suffix}`;
   const required = ["version", "scope", "production", "manifest", "discovery", "identity", "instance", "routes",
-    "pricing", "protocol", "standard", "actionAdapters", "variantFiles"];
+    "pricing", domain, "standard", "actionAdapters", "variantFiles"];
   keys(doc, [...required, ...(Object.hasOwn(doc, "types") ? ["types"] : []), ...(Object.hasOwn(doc, "modules") ? ["modules"] : [])], "declarative protocol");
   const modules = readProtocolModules(doc.modules, doc.standard.modules);
   if (doc.standard.execution && Object.hasOwn(doc.standard.execution, "quoteOutput"))
@@ -124,11 +129,10 @@ function renderProtocolEntry(input: {
     keys(contracts, ["candidate", "identity", "descriptor", "route", "pricingDraft", "pricingDescriptor", "pricingStatic", "exactEvidence",
       ...(Object.hasOwn(contracts, "identityEvidence") ? ["identityEvidence"] : [])], "protocol type contracts");
   }
-  if (doc.production.domain !== "protocol") throw new Error("declarative v2 supports protocol domain only");
-  for (const key of ["manifest", "discovery", "identity", "instance", "routes", "pricing", "protocol", "standard"])
+  for (const key of ["manifest", "discovery", "identity", "instance", "routes", "pricing", domain, "standard"])
     object(doc[key], `${key} declaration`);
   const manifest = doc.manifest;
-  if (manifest.familyId !== doc.scope.family || manifest.domain !== "protocol")
+  if (manifest.familyId !== doc.scope.family || manifest.domain !== domain)
     throw new Error("JSON Family/domain disagrees with its semantic manifest");
   const ownedActionAdapterIds = uniqueIds(manifest.ownedActionAdapterIds, "owned action IDs");
   uniqueIds(manifest.requiredInfraActionAdapterIds, "infrastructure action IDs");
@@ -149,7 +153,7 @@ function renderProtocolEntry(input: {
   uniqueIds(actions, "action descriptor IDs");
   if (JSON.stringify([...actions].sort()) !== JSON.stringify([...ownedActionAdapterIds].sort()))
     throw new Error("declared actions disagree with manifest owned actions");
-  if (Object.hasOwn(doc.protocol, "oracleVictim")) throw new Error("oracleVictim must be declared in the root modules block");
+  if (domain === "protocol" && Object.hasOwn(doc.protocol, "oracleVictim")) throw new Error("oracleVictim must be declared in the root modules block");
   if (!Array.isArray(doc.variantFiles) || doc.variantFiles.some((name: unknown) =>
     typeof name !== "string" || !/^\.\/[a-z0-9][a-z0-9-]*\.json$/.test(name)))
     throw new Error("variants must be same-directory static JSON references");
@@ -157,7 +161,7 @@ function renderProtocolEntry(input: {
   if (childFiles.includes(definitionFile) || new Set(childFiles).size !== childFiles.length)
     throw new Error("duplicate or cyclic child JSON reference");
   if (lineages.length !== childFiles.length + 1) throw new Error("variant references do not cover declared lineages");
-  const compiler = resolve(root, "src/searcher/venues/declarative-protocol.ts");
+  const compiler = resolve(root, `src/searcher/venues/declarative-${domain}.ts`);
   const relativeImport = (file: string) => {
     localPath(sourceRoot, file);
     const path = relative(dirname(entryFile), file).split(sep).join("/");
@@ -168,16 +172,16 @@ function renderProtocolEntry(input: {
   const source = [MARKER, `// Definition: ${localPath(root, definitionFile)}`,
     '// Regenerate with: npm run family-capability-manifest:generate',
     'import { defineFamilyActivation } from "./activation.js";',
-    'import { defineProtocolFamily } from "../adapter-family-plugin.js";',
-    `import { compileDeclarativeProtocol } from ${JSON.stringify(relativeImport(compiler).replace(/\.ts$/, ".js"))};`,
+    `import { ${constructor} } from "../adapter-family-plugin.js";`,
+    `import { ${compile} } from ${JSON.stringify(relativeImport(compiler).replace(/\.ts$/, ".js"))};`,
     ...(typesFile ? [`import type { FamilyTypes } from ${JSON.stringify(relativeImport(typesFile).replace(/\.ts$/, ".js"))};`] : []),
     `import definition from ${JSON.stringify(relativeImport(definitionFile))};`,
     ...childFiles.map((file: string, index: number) => `import child${index} from ${JSON.stringify(relativeImport(file))};`),
     "", `export const activation = defineFamilyActivation(${JSON.stringify(activation)});`, "",
-    `export const plugin = defineProtocolFamily(compileDeclarativeProtocol${typesFile ? "<FamilyTypes>" : ""}(definition, [${childFiles.map((_file: string, index: number) => `child${index}`).join(", ")}]));`, "",
+    `export const plugin = ${constructor}(${compile}${typesFile ? "<FamilyTypes>" : ""}(definition, [${childFiles.map((_file: string, index: number) => `child${index}`).join(", ")}]));`, "",
   ].join("\n");
-  return Object.freeze({ format: "protocol-json-v2", definitionFile, entryFile, familyId: doc.scope.family,
-    domain: "protocol", source, childFiles: Object.freeze(childFiles), ownedActionAdapterIds: Object.freeze([...ownedActionAdapterIds]),
+  return Object.freeze({ format: `${domain}-json-v2` as DeclarativeProductionEntry["format"], definitionFile, entryFile, familyId: doc.scope.family,
+    domain, source, childFiles: Object.freeze(childFiles), ownedActionAdapterIds: Object.freeze([...ownedActionAdapterIds]),
     declaresOracleVictim: modules.get("oracleVictim") !== undefined,
     ...(typesFile ? { typesFile } : {}),
     dependencyFiles: Object.freeze([definitionFile, ...childFiles, compiler, resolve(root, "src/searcher/build-declarative-production.ts"),
@@ -205,7 +209,7 @@ export function renderDeclarativeProductionEntry(input: {
       !/^SEARCHER_FAMILY_[A-Z0-9_]+_ENABLED$/.test(activation.envKey)) throw new Error("invalid production activation");
   const entryFile = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root), `${stem}.production.ts`);
   localPath(sourceRoot, entryFile);
-  if (doc.version === 2) return renderProtocolEntry({ root, sourceRoot, definitionFile, entryFile, doc, activation });
+  if (doc.version === 2) return renderDataFamilyEntry({ root, sourceRoot, definitionFile, entryFile, doc, activation });
   const slots = FAMILY_CAPABILITY_APPLICABILITY[domain];
   const allowed = ["version", "scope", "production", ...Object.keys(slots)];
   if (Object.keys(doc).some(key => !allowed.includes(key))) throw new Error("unknown Family definition block");
@@ -303,7 +307,7 @@ export async function syncDeclarativeProductionEntries(input: {
       if (!Object.hasOwn(object(document, "Family definition"), "production")) continue;
       const entry = renderDeclarativeProductionEntry({ rootDirectory: root, productionDirectory, definitionFile, document });
       if (entries.has(entry.entryFile) || familyIds.has(entry.familyId)) throw new Error("duplicate declarative production entry or Family ID");
-      if (entry.format === "protocol-json-v2") {
+      if (entry.format !== "bindings-v1") {
         const ids = new Set<string>([document.standard.id]), lineages = new Set<string>([document.standard.lineageId]);
         const childTypes: unknown[] = [];
         for (const childFile of entry.childFiles) {

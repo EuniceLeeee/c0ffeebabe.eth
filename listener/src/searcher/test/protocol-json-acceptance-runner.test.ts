@@ -17,7 +17,7 @@ import { familyId, lineageId } from "../venues/adapter-family-identifiers.js";
 import { bindFamilyOwnedAction } from "../venues/family-owned-action.js";
 import { FAMILY_CAPABILITY_NAMES, FamilyCapabilityCatalog, capabilityManifestHash } from "../venues/family-capability-catalog.js";
 import { hashCanonical } from "../venues/canonical-value.js";
-import { acceptanceConstructionGuard, directQuoteReceiptProgram, runProtocolJsonAcceptance } from "./protocol-json-acceptance.js";
+import { acceptanceConstructionGuard, directQuoteReceiptProgram, selectAcceptanceRoute, runProtocolJsonAcceptance } from "./protocol-json-acceptance.js";
 import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
 import { inspectRuntime } from "./runtime-program-testkit.js";
 
@@ -27,6 +27,17 @@ const source = { number: 100, hash: toBeHex(100, 32), generation: 1 };
 const sample = () => parseProtocolJsonAcceptanceCase({ version: 1, familyId: "protocol:fixture", lineageId: "fixture:standard",
   instanceKey: "fixture-instance", source: { number: source.number, hash: source.hash }, executor, owner,
   trials: [{ id: "forward", tokenIn, tokenOut, amountIn: "17" }] });
+
+test("route selection disambiguates existing directions and rejects missing or conflicting bindings", () => {
+  const routes = [{ routeKey: "a", tokenIn, tokenOut }, { routeKey: "b", tokenIn, tokenOut },
+    { routeKey: "reverse", tokenIn: tokenOut, tokenOut: tokenIn }];
+  assert.throws(() => selectAcceptanceRoute(routes, { tokenIn, tokenOut }), /naturally admitted/);
+  assert.equal(selectAcceptanceRoute(routes, { tokenIn, tokenOut, routeKey: "b" }), routes[1]);
+  assert.equal(selectAcceptanceRoute(routes.slice(0, 1), { tokenIn, tokenOut }), routes[0]);
+  for (const routeKey of ["missing", "reverse"])
+    assert.throws(() => selectAcceptanceRoute(routes, { tokenIn, tokenOut, routeKey }), /naturally admitted/);
+  assert.throws(() => selectAcceptanceRoute([routes[0]!, routes[0]!], { tokenIn, tokenOut, routeKey: "a" }), /naturally admitted/);
+});
 
 test("construction exposes only caller/source authority and never obtains an I/O handle", () => {
   let ioReads = 0;
@@ -272,6 +283,9 @@ test("real issuer and central runtime feed quote and both encodings into indepen
   await runProtocolJsonAcceptance(fixture.sample, fixture.context, report);
   assert.equal(report.result, "pass", report.samples.map((row: any) => row.error ?? "").join("; "));
   assert.equal(fixture.simulations.length, 6); assert.equal(report.samples[0].executions.length, 6);
+  assert.equal(report.coverage.scope, "one-admitted-instance");
+  assert.equal(report.coverage.sampledRoutes, 1); assert.equal(report.coverage.executedRoutes, 1);
+  assert.equal(report.coverage.domain, "protocol");
   assert.deepEqual(report.runtimeConstruction, { runtimeBuilds: 1, exact: 1, quoted: 1, forbiddenDuringRuntimeBuild: 0 });
   assert.deepEqual(report.samples[0].executions.map((row: any) => row.facts.classification),
     ["executed-as-quoted", "observed-revert", "observed-revert", "executed-as-quoted", "observed-revert", "observed-revert"]);
@@ -284,7 +298,8 @@ test("common runner retains effect failures and never promotes missing runtime o
     assert.equal(report.result, "incomplete-or-failed", JSON.stringify(options));
     if ("missingRuntime" in options) { assert.equal(fixture.simulations.length, 0); assert.equal(report.runtimeConstruction.exact, 0); }
     if ("unsampledRoute" in options) { assert.equal(report.samples[0].result, "pass"); assert.equal(report.coverage.unsampledRoutes.length, 1); }
-    if ("fault" in options) { assert.equal(report.samples[0].executions[0].facts.passed, false); assert(report.samples[0].error); }
+    if ("fault" in options) { assert.equal(report.samples[0].executions[0].facts.passed, false); assert(report.samples[0].error);
+      assert.equal(report.coverage.sampledRoutes, 1); assert.equal(report.coverage.executedRoutes, 0); }
   }
 });
 
@@ -294,6 +309,8 @@ test("case source, actor and identity must agree before execution; copying a han
     { ...fixture.context, source: { ...source, hash: toBeHex(999, 32) } },
     { ...fixture.context, executor: owner },
     { ...fixture.context, owner: executor },
+    { ...fixture.context, family: { ...fixture.context.family, plugin: { ...fixture.context.family.plugin,
+      manifest: { ...fixture.context.family.plugin.manifest, domain: "swap" } } } },
     { ...fixture.context, instance: { ...fixture.context.instance, instanceKey: "wrong-instance" } },
   ]) await assert.rejects(runProtocolJsonAcceptance(fixture.sample, context, {}));
   assert.equal(fixture.simulations.length, 0);

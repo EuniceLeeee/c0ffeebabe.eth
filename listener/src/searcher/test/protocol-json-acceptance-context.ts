@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import { loadBotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
 import type { AdapterWorkControl } from "../adapter-work-intent.js";
+import { acceptanceFamilyDomain, type AcceptanceFamilyDomain } from "./protocol-json-acceptance-facts.js";
 import type { PreparedFamilyInstance } from "../venues/adapter-family-runtime.js";
 
 const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -22,6 +23,7 @@ export interface ProtocolJsonAcceptanceContextInput {
   readonly rpcFile: string;
   readonly revmBin: string;
   readonly familyId: string;
+  readonly domain?: AcceptanceFamilyDomain;
   readonly instanceKey: string;
   readonly source: { readonly number: number; readonly hash: string };
   readonly chainId?: number;
@@ -37,7 +39,7 @@ export function validateAcceptanceContextInput(input: ProtocolJsonAcceptanceCont
   assert(input && typeof input === "object", "acceptance context input required");
   for (const path of [input.readyPath, input.rpcFile, input.revmBin, ...(input.inputPaths ?? [])])
     assert(typeof path === "string" && isAbsolute(path), "acceptance input paths must be absolute");
-  assert(typeof input.familyId === "string" && input.familyId.trim() === input.familyId && input.familyId.length > 0, "family required");
+  acceptanceFamilyDomain(input.familyId, input.domain);
   assert(typeof input.instanceKey === "string" && input.instanceKey.trim() === input.instanceKey && input.instanceKey.length > 0, "instance required");
   assert(input.source && Number.isSafeInteger(input.source.number) && input.source.number >= 0 && bytes32(input.source.hash), "invalid source anchor");
   assert(Number.isSafeInteger(input.chainId ?? 1) && (input.chainId ?? 1) > 0, "invalid chain id");
@@ -203,7 +205,8 @@ export async function openProtocolJsonAcceptanceContext(input: ProtocolJsonAccep
     const { ready, graph } = resolveStrictReadyRuntime(envelope.readyGeneration), source = Object.freeze({ ...ready.cutoff });
     assert.equal(source.number, input.source.number); assert(same(source.hash, input.source.hash), "Ready source differs from case");
     const family = asPricedFamily(catalog.forStrictFamily(input.familyId as never));
-    assert.equal(family.plugin.manifest.domain, "protocol", "acceptance context only admits active Protocol families");
+    assert.equal(family.plugin.manifest.domain, acceptanceFamilyDomain(input.familyId, input.domain),
+      "acceptance domain differs from the installed Family manifest");
     const memos = activeReadyMemos(envelope).filter(memo => memo.familyId === input.familyId &&
       (ethers.isAddress(memo.instanceKey) && ethers.isAddress(input.instanceKey) ? same(memo.instanceKey, input.instanceKey) : memo.instanceKey === input.instanceKey));
     assert.equal(memos.length, 1, "Ready must contain exactly one requested family instance");

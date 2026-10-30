@@ -1,0 +1,1499 @@
+{
+  "version": 1,
+  "domain": "swap",
+  "description": "Historical inputs for the shared Swap/Protocol acceptance runner. Data completeness only; execution results are produced separately.",
+  "scopeReference": {
+    "rule": "Only Swap families enabled in the latest app-run2 actual run configuration. A sample inventory is not a migration or execution acceptance.",
+    "run": "live-2026-10-30T03-10-36-590Z-68a6c8af",
+    "configSha256": "0f2c2973a82bd0a7b49fbffaf51bf7ed717f4486fb66bc0f973bfffd1d9ffe19",
+    "appRun2Head": "c609ffaf8b029cd40dd594af94925273fd900d76",
+    "familyIds": [
+      "balancer-v1",
+      "custom-swap:angstrom-v4",
+      "custom-swap:dodo-v2",
+      "custom-swap:ekubo-router-v1",
+      "custom-swap:oneswap",
+      "custom-swap:precision-pool",
+      "custom-swap:uniswap-v1",
+      "ella-exchange",
+      "fluid-dex",
+      "kyberswap-elastic",
+      "swap:algebra-integral",
+      "univ2-standard",
+      "univ3-standard",
+      "univ4",
+      "univ4-fee-hook"
+    ],
+    "enabledFamilies": [
+      {
+        "familyId": "balancer-v1",
+        "flag": "SEARCHER_FAMILY_BALANCER_V1_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "custom-swap:angstrom-v4",
+        "flag": "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "custom-swap:dodo-v2",
+        "flag": "SEARCHER_FAMILY_DODO_V2_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "custom-swap:ekubo-router-v1",
+        "flag": "SEARCHER_FAMILY_EKUBO_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "custom-swap:oneswap",
+        "flag": "SEARCHER_FAMILY_ONESWAP_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "custom-swap:precision-pool",
+        "flag": "SEARCHER_FAMILY_PRECISION_POOL_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "custom-swap:uniswap-v1",
+        "flag": "SEARCHER_FAMILY_UNISWAP_V1_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "ella-exchange",
+        "flag": "SEARCHER_FAMILY_ELLA_EXCHANGE_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "fluid-dex",
+        "flag": "SEARCHER_FAMILY_FLUID_DEX_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "kyberswap-elastic",
+        "flag": "SEARCHER_FAMILY_KYBERSWAP_ELASTIC_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "swap:algebra-integral",
+        "flag": "SEARCHER_FAMILY_ALGEBRA_INTEGRAL_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "univ2-standard",
+        "flag": "SEARCHER_FAMILY_UNIV2_STANDARD_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "univ3-standard",
+        "flag": "SEARCHER_FAMILY_UNIV3_STANDARD_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "univ4",
+        "flag": "SEARCHER_FAMILY_UNIV4_ENABLED",
+        "value": "1"
+      },
+      {
+        "familyId": "univ4-fee-hook",
+        "flag": "SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED",
+        "value": "1"
+      }
+    ],
+    "provenance": {
+      "file": "/Users/eunice/src/MEV/logs/swap-json-enabled-20261030/preflight.json",
+      "sha256": "d3bb8b3ee7b20e868a7b765dbe91f3f6862732f9409373df12655a62c9c3c230",
+      "jsonPointer": "/configs/0"
+    }
+  },
+  "families": [
+    {
+      "familyId": "balancer-v1",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "6be8b298d56a",
+          "classification": "real-historical-evidence",
+          "variant": "finalized-bpool",
+          "directions": [
+            {
+              "tokenIn": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+              "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+            },
+            {
+              "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "tokenOut": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671"
+            }
+          ],
+          "transactionHash": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+          "source": {
+            "number": 26138731,
+            "hash": "0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+          "lineageId": "balancer-v1:finalized-bpool",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
+          "amounts": [
+            {
+              "tokenIn": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+              "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "amountIn": "311013283877631901",
+              "purpose": "production-P",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/raw/logs/family-three-history.0rIF4l/26138731/dual-indexed-final.json",
+                "sha256": "27cccbe3bee1cb05abebcf19b46924a1da9340f5f1058f5834c8c27b888a60d6",
+                "jsonPointer": "/samples/0"
+              }
+            },
+            {
+              "tokenIn": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+              "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "amountIn": "155506641938815950",
+              "purpose": "half-production-P",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/raw/logs/family-three-history.0rIF4l/26138731/dual-indexed-final.json",
+                "sha256": "27cccbe3bee1cb05abebcf19b46924a1da9340f5f1058f5834c8c27b888a60d6",
+                "jsonPointer": "/samples/1"
+              }
+            },
+            {
+              "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "tokenOut": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+              "amountIn": "2000000000000000",
+              "purpose": "production-P",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/raw/logs/family-three-history.0rIF4l/26138731/dual-indexed-final.json",
+                "sha256": "27cccbe3bee1cb05abebcf19b46924a1da9340f5f1058f5834c8c27b888a60d6",
+                "jsonPointer": "/samples/2"
+              }
+            },
+            {
+              "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "tokenOut": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+              "amountIn": "8444695829171278",
+              "purpose": "historical-amount-at-N",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/raw/logs/family-three-history.0rIF4l/26138731/dual-indexed-final.json",
+                "sha256": "27cccbe3bee1cb05abebcf19b46924a1da9340f5f1058f5834c8c27b888a60d6",
+                "jsonPointer": "/samples/3"
+              }
+            }
+          ],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 33,
+              "column": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/raw/logs/family-three-history.0rIF4l/26138731/dual-indexed-final.json",
+              "sha256": "27cccbe3bee1cb05abebcf19b46924a1da9340f5f1058f5834c8c27b888a60d6",
+              "jsonPointer": "/samples/0"
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/raw/logs/family-three-history.0rIF4l/26138731/dual-indexed-final.json",
+              "sha256": "27cccbe3bee1cb05abebcf19b46924a1da9340f5f1058f5834c8c27b888a60d6",
+              "jsonPointer": "/samples/1"
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/raw/logs/family-three-history.0rIF4l/26138731/dual-indexed-final.json",
+              "sha256": "27cccbe3bee1cb05abebcf19b46924a1da9340f5f1058f5834c8c27b888a60d6",
+              "jsonPointer": "/samples/2"
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/family-implementation-20261015.0exjskqq/completion124/raw/logs/family-three-history.0rIF4l/26138731/dual-indexed-final.json",
+              "sha256": "27cccbe3bee1cb05abebcf19b46924a1da9340f5f1058f5834c8c27b888a60d6",
+              "jsonPointer": "/samples/3"
+            }
+          ],
+          "casePath": "cases/balancer-v1--nmr-weth.json",
+          "limitations": [
+            "Historical N-end inputs retained from the prior dual-execution run; current JSON migration requires fresh Ready/strict and actual execution.",
+            "Original-TX output uses the earlier intra-transaction state and must not become the N-end expectedAmountOut.",
+            "One two-token instance and both directions; other instances/weight distributions remain separate coverage."
+          ],
+          "missing": [],
+          "missingResponsibility": {}
+        }
+      ],
+      "missing": [],
+      "completeCases": 1,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "custom-swap:angstrom-v4",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "85e9c8d4b8f7",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x85e9c8d4b8f799dca214f6057d9caea6ca9485d7d4f9ae7603a7aec3427ac8b0",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/src/MEV/logs/swap-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/adapter-families/angstrom-v4-tx85.json",
+              "sha256": "f959eb27f17d89cfa871056c88870f329191173ab423d7b30ace59b893823d2c",
+              "jsonPointer": "/route/0"
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Real historical TX reference in committed fixture; input only, no current admission/execution claim",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "custom-swap:dodo-v2",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "00085da94204",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 32,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "3bb12ee62e79",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [
+            {
+              "tokenIn": "0x1aad217b8f78dba5e6693460e8470f8b1a3977f3",
+              "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+            }
+          ],
+          "transactionHash": "0x3bb12ee62e791d51b1081ecf956eac33a7bc964984ad845d25886a0cbdcaed61",
+          "source": {
+            "number": 25534475,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0x9f491edc967e186e00ff6c48f62ef1bec79fc50e",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [
+            {
+              "tokenIn": "0x1aad217b8f78dba5e6693460e8470f8b1a3977f3",
+              "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "amountIn": "21192254089977174",
+              "purpose": "original transaction input only",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/swap-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/loops/dodo-v2-strcx-3bb12e.json",
+                "sha256": "8ba9818b11e5b6a180bc53d46db36d678d3c68d4a1cee8261c3f81c5f5bef8b9",
+                "jsonPointer": "/legs/2"
+              }
+            }
+          ],
+          "provenance": [
+            {
+              "file": "/Users/eunice/src/MEV/logs/swap-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/loops/dodo-v2-strcx-3bb12e.json",
+              "sha256": "8ba9818b11e5b6a180bc53d46db36d678d3c68d4a1cee8261c3f81c5f5bef8b9",
+              "jsonPointer": "/legs/2"
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Real historical TX reference in committed fixture; input only, no current admission/execution claim",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported.",
+            "Recorded execution is backrun-prefix state; amounts may be borrowed for N-end adaptation, never outputs/state success"
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "03d6a2efb77d",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 37,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "ed014b884a51",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0xed014b884a511a4abd1c0e5f218be8dbcd1209cd7bb645d440334fdfecf928f0",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 37,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "868b69ff429f",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x868b69ff429fea8ec1e483c8be1d9e236aabe00065e355ff5a60af0596a75847",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 37,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "custom-swap:oneswap",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "df6b912487a0",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0xdf6b912487a08189ea8a69e93fba7e1428df1edb22d41c1c5cd85c994e23cfef",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 27,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "custom-swap:precision-pool",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "210a58374f99",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 28,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "custom-swap:uniswap-v1",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "4a4255cbfc05",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x4a4255cbfc0521233d4565f2073323a88c3ac1f8600a501aa5731ee8230288fc",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 36,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "1739fb16d714",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x1739fb16d7146585bf728b633e72fbb0f1575ec6c8aab61bc3d3a0c0325bae73",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 36,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "ella-exchange",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "ef53c889b727",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0xef53c889b7270ffc8556569a9682227c905e32491d55689249a1c4ca7fee74da",
+          "source": {
+            "number": 26023524,
+            "hash": "0x97c956ae1457521651e3a17b675c16fef5340483d0cf3b710d0d34d5afbb57f9"
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/src/MEV/logs/swap-json-enabled-20261030/stage/listener/src/searcher/venues/swaps/ella-exchange-family/test/public-sample.json",
+              "sha256": "b97336e65fcc879c4c7d085d953e40ff38a732f63c9a694c966eb7ddd2322747",
+              "jsonPointer": "/tx"
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Real historical TX reference in committed fixture; input only, no current admission/execution claim",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "fluid-dex",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "5b6114b5b77e",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 23,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "84e3bb020d91",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 26,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "kyberswap-elastic",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "10b81a77dc99",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x10b81a77dc9949d9ab1581a341d539de2ab0fbeae827b2a87d9ea6033c9b7549",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 16,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "swap:algebra-integral",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "02175d2ac2e8",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x02175d2ac2e806bc6e1033cae640cf45509b7ded4a2e64ebcbba9c425afff5b7",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 22,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "006223028f05",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x006223028f05865619d07584c43cf67cb608705d04ebc732e15bf40869d030b8",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 22,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "1f0e69a9d9be",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x1f0e69a9d9be232986b81216ce341e5d3dea9d6241074f2331cf8bb4d7ecaacc",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 22,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "246160cdd6c0",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x246160cdd6c0048a58076fc96a49d9ee18f4438a42e8bcb0727c6b42e06b86b8",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 22,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "4a12dbe50e89",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x4a12dbe50e89057b07ccfc471d0db0c406be65e9d82d6e29a55284844e30cd85",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 22,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "acc347b03f7b",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0xacc347b03f7b6fd9efe0f50035f2c63720ac2e2954229ac8fe7465dcc6f23ef0",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 22,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "univ2-standard",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "f2de7499db88",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [
+            {
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+            }
+          ],
+          "transactionHash": "0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b",
+          "source": {
+            "number": 25455297,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0x6d74748b7089409cd7c52dcb2cbcc3b204360296",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [
+            {
+              "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "amountIn": "270190",
+              "purpose": "original transaction input only",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/swap-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/blockscan-coffee-f2de7499.json",
+                "sha256": "0caf3a00e2142d3b6c0d14952e4a3a7e525edff84078e854ebdc499fac0c6d05",
+                "jsonPointer": "/legs/3"
+              }
+            }
+          ],
+          "provenance": [
+            {
+              "file": "/Users/eunice/src/MEV/logs/swap-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/blockscan-coffee-f2de7499.json",
+              "sha256": "0caf3a00e2142d3b6c0d14952e4a3a7e525edff84078e854ebdc499fac0c6d05",
+              "jsonPointer": "/legs/3"
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Real historical TX reference in committed fixture; input only, no current admission/execution claim",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported.",
+            "Explicit univ2 profit conversion leg, not core arbitrage route; usable adaptation sample"
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "univ3-standard",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "85e9c8d4b8f7",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x85e9c8d4b8f799dca214f6057d9caea6ca9485d7d4f9ae7603a7aec3427ac8b0",
+          "source": {
+            "number": 25635365,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/src/MEV/logs/swap-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/adapter-families/angstrom-v4-tx85.json",
+              "sha256": "f959eb27f17d89cfa871056c88870f329191173ab423d7b30ace59b893823d2c",
+              "jsonPointer": "/route/1"
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Real historical TX reference in committed fixture; input only, no current admission/execution claim",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported.",
+            "stateAnchor parent block25635364 + 1; verify receipt before treating as canonical"
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "univ4",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "2068e9fc151a",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x2068e9fc151ad0ea2cf273e50a8a0153cc1d0303deb9cf660f13dbbf8571548c",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 40,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "6adebef71c8c",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x6adebef71c8c464ca2096b092ed7093ba797199122351c6cf807be0255a92e8b",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 40,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    },
+    {
+      "familyId": "univ4-fee-hook",
+      "domain": "swap",
+      "samples": [
+        {
+          "id": "0be85b68578d",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x0be85b68578d45e449cf2285b2d331b8e3ed3f68240b3166e67abb2727f30b55",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 39,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        },
+        {
+          "id": "65d0517289a6",
+          "classification": "historical-reference-needs-extraction",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x65d0517289a6de7ad8c813799011907fadbb6b2bf6e5e8f8cf1ff872f93725f6",
+          "source": {
+            "number": null,
+            "hash": null
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+              "sha256": "5c1a4ad920e61c3105bc93a6386872c54172ed3cab3efcf1efc08ea376ba92c5",
+              "line": 41,
+              "column": 1
+            }
+          ],
+          "casePath": null,
+          "limitations": [
+            "Explicitly associated original/sample TX in family row; receipt/trace hydration not performed by this review",
+            "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
+          ],
+          "missing": [
+            "canonical receipt and N-end block hash verification",
+            "current lineage and instance binding",
+            "complete supported direction/amount inputs",
+            "test actor binding"
+          ],
+          "missingResponsibility": {
+            "canonical receipt and N-end block hash verification": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "current lineage and instance binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "complete supported direction/amount inputs": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace",
+            "test actor binding": "migration-window: recover existing evidence or receipt/header/calldata/logs/trace"
+          }
+        }
+      ],
+      "missing": [],
+      "completeCases": 0,
+      "scope": {
+        "appRun2Enabled": true,
+        "jsonMigrationAcceptance": "not-run"
+      }
+    }
+  ]
+}

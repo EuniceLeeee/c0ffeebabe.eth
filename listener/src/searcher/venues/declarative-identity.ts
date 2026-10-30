@@ -15,6 +15,7 @@ export interface DeclarativeIdentityDocument {
   readonly expressions: Record<string, Value>;
   readonly programs?: Record<string, readonly Value[]>;
   readonly identity: {
+    readonly applies?: Value;
     readonly select: readonly Value[];
     readonly stages: Record<string, { requirements: Value; optionalFailures?: string[]; requests: Value; decode: readonly Value[] }>;
     readonly decide: readonly Value[];
@@ -102,7 +103,7 @@ export function compileDeclarativeIdentity<C extends FamilyCandidate, I extends 
     return freeze(requests);
   }
   return {
-    id: profile.id, kind: profile.kind ?? "standalone-contract", lineageId: profile.lineageId, applies: () => true,
+    id: profile.id, kind: profile.kind ?? "standalone-contract", lineageId: profile.lineageId, applies: candidate => doc.identity.applies === undefined || evaluate(doc.identity.applies, environment({ candidate, step: 0 })) === true,
     requirements: step => freeze(evaluate(stage(step).requirements, environment(step))),
     buildRequests,
     decode: ({ step, results }) => {

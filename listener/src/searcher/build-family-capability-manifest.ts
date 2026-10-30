@@ -336,7 +336,7 @@ async function strictProductionRecords(input: {
     ));
     return [];
   }
-  if (input.jsonEntry?.format === "protocol-json-v2") {
+  if (input.jsonEntry && input.jsonEntry.format !== "bindings-v1") {
     return declarativeProtocolRecords(input, call);
   }
   const definition = unwrapObjectLiteral(call.arguments[0]);
@@ -589,29 +589,31 @@ async function declarativeProtocolRecords(input: {
   readonly issues: FamilyCapabilityShadowBuildIssue[];
 }, call: ts.CallExpression): Promise<readonly CapabilityExactShadowRecord[]> {
   const entry = input.jsonEntry!;
+  const suffix = entry.domain === "swap" ? "Swap" : entry.domain === "credit" ? "Credit" : "Protocol";
+  const constructor = `define${suffix}Family`, compiler = `compileDeclarative${suffix}`;
   const sourceLabel = repoRelative(input.context.rootDirectory, input.source.fileName);
   const fail = (message: string): readonly CapabilityExactShadowRecord[] => {
     input.issues.push(issue(sourceLabel, "invalid_production_entry", message));
     return [];
   };
-  if (input.source.text !== entry.source || entry.domain !== "protocol" ||
-      !ts.isIdentifier(call.expression) || call.expression.text !== "defineProtocolFamily")
+  if (input.source.text !== entry.source || !["protocol", "swap", "credit"].includes(entry.domain) ||
+      !ts.isIdentifier(call.expression) || call.expression.text !== constructor)
     return fail("declarative production source/domain differs from its validated generated entry");
   const compiled = unwrapExpression(call.arguments[0]);
   if (!ts.isCallExpression(compiled) || !ts.isIdentifier(compiled.expression) ||
-      compiled.expression.text !== "compileDeclarativeProtocol" || compiled.arguments.length !== 2)
+      compiled.expression.text !== compiler || compiled.arguments.length !== 2)
     return fail("declarative protocol must call the shared compiler with its static JSON inputs");
   const compilerRoot = directImportRoot(input.context, input.source, compiled.expression);
   const constructorRoot = directImportRoot(input.context, input.source, call.expression);
-  if (compilerRoot?.exportName !== "compileDeclarativeProtocol" || compilerRoot.sourceFile !==
-      resolve(input.context.rootDirectory, "src/searcher/venues/declarative-protocol.ts") ||
-      constructorRoot?.exportName !== "defineProtocolFamily" || constructorRoot.sourceFile !==
+  if (compilerRoot?.exportName !== compiler || compilerRoot.sourceFile !==
+      resolve(input.context.rootDirectory, `src/searcher/venues/declarative-${entry.domain}.ts`) ||
+      constructorRoot?.exportName !== constructor || constructorRoot.sourceFile !==
       resolve(input.context.rootDirectory, "src/searcher/venues/adapter-family-plugin.ts"))
     return fail("declarative compiler or strict constructor is not a resolvable framework export");
   const dependencies = [...new Set(entry.dependencyFiles)].filter(file => file !== compilerRoot.sourceFile);
   const strictFamilyId = familyId(entry.familyId);
-  const capabilities = familyCapabilitiesForDefinition("protocol", () => true)
-    .filter(capability => capability !== "victim" || entry.declaresOracleVictim === true);
+  const capabilities = familyCapabilitiesForDefinition(entry.domain, () => true)
+    .filter(capability => capability !== "victim" || entry.domain === "swap" || entry.declaresOracleVictim === true);
   const present = new Set<string>(capabilities);
   const records: CapabilityExactShadowRecord[] = [];
   try {

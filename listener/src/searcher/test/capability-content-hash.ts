@@ -1,3 +1,5 @@
+import { capabilityManifestHash } from "../venues/family-capability-catalog.js";
+import { hashCanonical } from "../venues/canonical-value.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -187,6 +189,26 @@ export function price(input: bigint): bigint {
   });
   assert.equal(absentA.contentHash, absentB.contentHash);
   assert(absentA.semanticDependencies[0]?.startsWith("contract:adapter-family/victim@"));
+
+  // Catalog identity uses code-unit order. Locale order differs for node:fs
+  // and node:fs/promises; preserve the existing closure hash projection.
+  await writeFile(resolve(root, "builtin-order.ts"), `
+    import { readFileSync } from "node:fs";
+    import { readFile } from "node:fs/promises";
+    export const reads = [readFileSync, readFile];
+  `);
+  const builtinOrder = await generateCapabilityClosure({
+    familyId: familyId("protocol:fixture"), capability: "pricing", rootDirectory: root,
+    entryFile: resolve(root, "builtin-order.ts"), provenanceCommit: null,
+  });
+  assert.deepEqual(builtinOrder.identity.semanticDependencies,
+    [...new Set(builtinOrder.identity.semanticDependencies)].sort());
+  assert.doesNotThrow(() => capabilityManifestHash([builtinOrder.identity]));
+  assert.equal(builtinOrder.identity.contentHash, hashCanonical({
+    contractVersion: builtinOrder.identity.contractVersion,
+    entry: builtinOrder.entryContentHash,
+    dependencies: builtinOrder.dependencyArtifacts.map(artifact => [artifact.logicalId, artifact.contentHash]),
+  }), "identity ordering must not alter the closure content hash algorithm");
 
   await writeFile(resolve(root, "bad.test.ts"), "export const BAD = true;\n");
   await writeFile(

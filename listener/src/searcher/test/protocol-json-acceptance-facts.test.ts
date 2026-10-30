@@ -36,6 +36,32 @@ test("case format is data-only, protocol-generic, normalized and immutable", () 
   assert.equal(parseProtocolJsonAcceptanceCase(minimal).trials.length, 1);
 });
 
+test("Swap cases require an explicit domain while legacy Protocol cases remain unchanged", () => {
+  const legacy = parseProtocolJsonAcceptanceCase(caseData()); assert.equal(legacy.domain, undefined);
+  for (const familyId of ["balancer-v1", "custom-swap:dodo-v2", "swap:algebra-integral"]) {
+    const raw = { ...caseData(), domain: "swap", familyId };
+    const parsed = parseProtocolJsonAcceptanceCase(raw); assert.equal(parsed.domain, "swap");
+    assert.equal(parsed.familyId, familyId); assert(Object.isFrozen(parsed));
+    const { domain: _domain, ...withoutDomain } = raw;
+    assert.throws(() => parseProtocolJsonAcceptanceCase(withoutDomain), /domain/);
+  }
+  assert.equal(parseProtocolJsonAcceptanceCase({ ...caseData(), domain: "protocol" }).domain, "protocol");
+  for (const [domain, familyId] of [["swap", "protocol:fixture"], ["swap", "credit:fixture"],
+    ["swap", "funding:fixture"], ["protocol", "balancer-v1"], ["credit", "credit:fixture"],
+    [null, "protocol:fixture"], ["swap", "../fixture"], ["swap", " fixture"], ["protocol", "protocol::fixture"]])
+    assert.throws(() => parseProtocolJsonAcceptanceCase({ ...caseData(), domain, familyId }), /domain/);
+});
+
+test("a route key is an immutable selection field, never executable case code", () => {
+  const raw: any = caseData(); raw.trials[0].routeKey = "pool:route:0:1";
+  const parsed = parseProtocolJsonAcceptanceCase(raw);
+  assert.equal(parsed.trials[0]!.routeKey, "pool:route:0:1");
+  raw.trials[0].routeKey = "changed"; assert.equal(parsed.trials[0]!.routeKey, "pool:route:0:1");
+  for (const routeKey of ["", " trailing ", null, 1, { selector: "0x00" }]) {
+    raw.trials[0].routeKey = routeKey; assert.throws(() => parseProtocolJsonAcceptanceCase(raw));
+  }
+});
+
 test("case JSON cannot decide admission, rejection, success or execution code", () => {
   for (const mutation of [
     (d: any) => { d.descriptor = {}; }, (d: any) => { d.admitted = true; },

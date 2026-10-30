@@ -1,4 +1,4 @@
-// One opt-in, data-driven Protocol acceptance entry. No Family-specific codec,
+// One opt-in, data-driven Swap/Protocol acceptance entry. No Family-specific codec,
 // math, discovery, scheduler, executor deployment, signing or submission here.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -17,7 +17,7 @@ import type { AdapterRequest, AdapterRequestResult } from "../venues/adapter-req
 import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../venues/production-infra-actions.js";
 import { openProtocolJsonAcceptanceContext, ProtocolJsonAcceptanceContextError, type ProtocolJsonAcceptanceContext } from "./protocol-json-acceptance-context.js";
 import { parseProtocolJsonAcceptanceCase, checkProtocolJsonExecutionFacts, checkProtocolJsonRevertFacts,
-  type ProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
+  type ProtocolJsonAcceptanceCase, type ProtocolJsonAcceptanceTrial } from "./protocol-json-acceptance-facts.js";
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
@@ -75,6 +75,16 @@ function delta(result: AdapterRequestResult, tokenAddress: string, account: stri
   return matches![0]!.delta;
 }
 
+/** Select only a naturally admitted route. A key resolves duplicate token
+ * directions; it cannot replace the declared token direction or create a route. */
+export function selectAcceptanceRoute<T extends { readonly routeKey: string; readonly tokenIn: string; readonly tokenOut: string }>(
+  routes: readonly T[], trial: Pick<ProtocolJsonAcceptanceTrial, "tokenIn" | "tokenOut" | "routeKey">): T {
+  const matches = routes.filter(route => same(route.tokenIn, trial.tokenIn) && same(route.tokenOut, trial.tokenOut) &&
+    (trial.routeKey === undefined || route.routeKey === trial.routeKey));
+  assert.equal(matches.length, 1, "case must select one naturally admitted route");
+  return matches[0]!;
+}
+
 export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCase, context: ProtocolJsonAcceptanceContext,
   report: Record<string, any>, checkpoint: () => void = () => {}) {
   sample = parseProtocolJsonAcceptanceCase(sample);
@@ -84,6 +94,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
   assert(same(source.hash, sample.source.hash), "case source differs from execution source");
   assert(same(executor, sample.executor) && same(context.owner, sample.owner), "case actors differ from execution actors");
   assert.equal(family.plugin.manifest.familyId, sample.familyId);
+  assert.equal(family.plugin.manifest.domain, sample.domain ?? "protocol", "case domain differs from the installed Family");
   assert.equal(instance.descriptor.lineageId, sample.lineageId);
   assert.equal(instance.instanceKey, sample.instanceKey);
   const guard = acceptanceConstructionGuard(runtime);
@@ -97,7 +108,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
   report.scope = "Current-source Ready rehydration and fresh same-state local EVM single-leg execution";
   report.notClaimed = ["original transaction pre-call parity", "new natural valuation", "opportunity replay", "performance", "all variants"];
   report.runtimeConstruction = guard.counts;
-  const covered = new Set<string>();
+  const covered = new Set<string>(), successful = new Set<string>();
   const dispatch = async (request: AdapterRequest) => {
     const outcome = await executeAdapterWork({ runtime, control, intent: {
       stage: "exact-refine", familyId: family.plugin.manifest.familyId, source, generation: source.generation,
@@ -115,9 +126,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
     const row: Record<string, any> = { id: trial.id, result: "failed", executions: [] };
     report.samples.push(row); checkpoint();
     try {
-      const matches = instance.routes.filter(route => same(route.tokenIn, trial.tokenIn) && same(route.tokenOut, trial.tokenOut));
-      assert.equal(matches.length, 1, "case must select one naturally admitted route");
-      const route = matches[0]!, handle = instance.routeHandles.find(handle => handle.routeKey === route.routeKey)!;
+      const route = selectAcceptanceRoute(instance.routes, trial), handle = instance.routeHandles.find(handle => handle.routeKey === route.routeKey)!;
       assert(handle); covered.add(route.routeKey);
       assert(context.graph.some(edge => edge.instanceKey === instance.instanceKey &&
         same(edge.tokenIn, route.tokenIn) && same(edge.tokenOut, route.tokenOut)), "admitted direction missing from production graph");
@@ -187,17 +196,19 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
         } else record.facts = checkProtocolJsonRevertFacts({ ...common, probe });
         assert(record.facts.passed, JSON.stringify(record.facts)); record.result = "pass"; checkpoint();
       }
-      row.result = "pass";
+      row.result = "pass"; successful.add(route.routeKey);
     } catch (error) {
       row.error = String(error instanceof Error ? error.message : error).replace(/https?:\/\/[^\s"<>]+/g, "[REDACTED_URL]");
       row.result = "failed";
     }
     checkpoint();
   }
-  report.coverage = { admittedRoutes: instance.routes.length, sampledRoutes: covered.size,
+  report.coverage = { scope: "one-admitted-instance", familyId: sample.familyId, domain: sample.domain ?? "protocol",
+    instanceKey: sample.instanceKey, lineageId: sample.lineageId,
+    admittedRoutes: instance.routes.length, sampledRoutes: covered.size, executedRoutes: successful.size,
     unsampledRoutes: instance.routes.filter(route => !covered.has(route.routeKey)).map(route => ({ routeKey: route.routeKey, tokenIn: route.tokenIn, tokenOut: route.tokenOut })) };
   report.result = report.samples.every((row: any) => row.result === "pass" && row.executions.length > 0) &&
-    covered.size === instance.routes.length && guard.counts.forbiddenDuringRuntimeBuild === 0 ? "pass" : "incomplete-or-failed";
+    successful.size === instance.routes.length && guard.counts.forbiddenDuringRuntimeBuild === 0 ? "pass" : "incomplete-or-failed";
   report.familyAcceptance = "sample evidence only; combine current variant coverage, interface review and production performance evidence";
   checkpoint();
   return report;

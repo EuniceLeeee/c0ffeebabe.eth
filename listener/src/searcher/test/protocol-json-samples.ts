@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, relative, resolve, isAbsolute } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { parseProtocolJsonAcceptanceCase, type ProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
+import { acceptanceFamilyDomain, parseProtocolJsonAcceptanceCase, type ProtocolJsonAcceptanceCase, type AcceptanceFamilyDomain } from "./protocol-json-acceptance-facts.js";
 
 export const protocolJsonSamplesPath = fileURLToPath(new URL("./fixtures/protocol-json/index.json", import.meta.url));
 const nonempty = (value: unknown): value is string => typeof value === "string" && value.trim() === value && value.length > 0;
@@ -17,12 +17,20 @@ export interface ProtocolJsonSampleSummary {
 /** The library contains historical inputs and provenance, never admission or a
  * passing test decision. Only the common runner may produce new execution facts. */
 export function loadProtocolJsonSamples(indexPath = protocolJsonSamplesPath) {
+  return loadFamilyJsonSamples(indexPath, "protocol");
+}
+
+/** Shared library validation for both priced domains; no RPC or execution. */
+export function loadFamilyJsonSamples(indexPath: string, domain: AcceptanceFamilyDomain) {
   const root = realpathSync(dirname(indexPath)), index: any = JSON.parse(readFileSync(indexPath, "utf8"));
-  assert.equal(index.version, 1); assert(Array.isArray(index.families) && index.families.length > 0);
+  assert.equal(index.version, 1);
+  assert.equal(index.domain ?? "protocol", domain, "sample library domain mismatch");
+  assert(Array.isArray(index.families) && index.families.length > 0);
   const families = new Set<string>(), paths = new Set<string>();
   const cases: { familyId: string; sampleId: string; path: string; data: ProtocolJsonAcceptanceCase }[] = [];
   const summary: ProtocolJsonSampleSummary[] = index.families.map((family: any) => {
-    assert(nonempty(family.familyId) && family.familyId.startsWith("protocol:") && !families.has(family.familyId), "invalid/duplicate sample Family");
+    assert(nonempty(family.familyId) && !families.has(family.familyId), "invalid/duplicate sample Family");
+    acceptanceFamilyDomain(family.familyId, domain);
     families.add(family.familyId);
     assert(Array.isArray(family.samples) && Array.isArray(family.missing));
     assert(family.samples.length > 0 || family.missing.length > 0, "missing samples must be explicit");
@@ -57,6 +65,7 @@ export function loadProtocolJsonSamples(indexPath = protocolJsonSamplesPath) {
       assert(rel.startsWith("cases/"), "case must be inside the cases directory");
       assert(!paths.has(path), "duplicate case file"); paths.add(path);
       const data = parseProtocolJsonAcceptanceCase(JSON.parse(readFileSync(path, "utf8")));
+      assert.equal(data.domain ?? "protocol", domain, "case/library domain mismatch");
       assert.equal(data.familyId, family.familyId); assert.equal(data.instanceKey, sample.instanceKey);
       assert.equal(data.lineageId, sample.lineageId); assert.deepEqual(data.source, sample.source);
       assert(sample.actors && same(data.executor, sample.actors.executor) && same(data.owner, sample.actors.owner), "case/test actor mismatch");
@@ -66,7 +75,7 @@ export function loadProtocolJsonSamples(indexPath = protocolJsonSamplesPath) {
       for (const trial of data.trials) {
         assert(trial.expectedAmountOut === undefined, "historical library borrows input only; do not promote recorded outputs across states");
         assert(sample.amounts.some((amount: any) => same(amount.tokenIn, trial.tokenIn) && same(amount.tokenOut, trial.tokenOut) &&
-          amount.amountIn === trial.amountIn), "case amount/direction has no recorded input source");
+          amount.amountIn === trial.amountIn && (trial.routeKey === undefined || amount.routeKey === trial.routeKey)), "case amount/direction has no recorded input source");
       }
       cases.push({ familyId: family.familyId, sampleId: sample.id, path, data }); ready++;
     }
