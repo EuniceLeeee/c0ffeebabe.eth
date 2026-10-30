@@ -45,7 +45,7 @@ export function familyModuleCatalog(math: ReturnType<typeof createDeclarativeMat
       dependencies: block => ["pricingFlow", ...(usesModel(block) ? ["math"] : [])],
     } } },
     { key: "quoteOutput", versions: { 1: {
-      required: ["steps", "result"], validate: validateDeclarativeQuoteOutput, compile: block => block,
+      required: ["steps", "result"], optional: ["exports"], validate: validateDeclarativeQuoteOutput, compile: block => block,
       dependencies: block => [
         ...(usesModel(block) ? ["math"] : []),
         ...((block.steps as { math?: unknown }[]).some(step => step.math) ? ["executionMath"] : []),
@@ -91,7 +91,7 @@ export function familyModuleCatalog(math: ReturnType<typeof createDeclarativeMat
       dependencies: block => usesModel(block) ? ["math"] : [],
     } } },
     { key: "trialState", versions: { 1: {
-      required: ["reads", "model", "input", "amountOut", "stateChanges", "stateEffects"],
+      required: ["reads", "model", "input", "amountOut", "stateChanges", "stateEffects"], optional: ["when", "unsupportedReason"],
       validate: validateDeclarativeTrialState, compile: block => block,
       dependencies: () => ["math", "quoteFlow"],
     } } },

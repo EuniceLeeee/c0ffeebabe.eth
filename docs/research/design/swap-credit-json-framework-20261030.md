@@ -30,6 +30,14 @@ export const plugin = defineSwapFamily(
 
 `declarative-protocol.ts`、`declarative-swap.ts`、`declarative-credit.ts` 仅做领域类型与入口检查；实际流程都调用 `declarative-family.ts#createDeclarativeFamilyRuntime()`。JSON 不允许 `module/export/handler` 回到 Family 专用 TS。
 
+三个领域的声明组装现在分别位于：
+
+- `declarative-protocol-domain.ts`：Protocol 声明及可选 `oracleVictim`。
+- `declarative-swap-domain.ts`：Swap 观察、事件、overlay/replay 声明。
+- `declarative-credit-domain.ts`：Credit 风险、仓位及收付证明。
+
+公共核心按 `production.domain` 调用上述模块；发现、身份、方向、价格、Exact 与执行仍共用。Protocol 抽取保持原字段及拒绝规则，旧 JSON 无需更新，空 `oracleVictim` 不增加能力或读取。本轮后续已补下述公共表达能力；单个协议 JSON 迁移及历史执行结论仍需分别验证。
+
 ```json
 {
   "version": 2,
@@ -94,11 +102,20 @@ Balancer 使用池记录的 `getBalance()`、权重和费用产生原始 mid，�
 - singleton 匿名 packed 事件声明精确地址、字节数、identity offset、字段偏移和有符号宽度；每个字节必须有归属，不能重叠。
 - `victimSupport` 与 `localApply/overlay/replay` 分开声明；缺失能力不得自动提升。
 - `liveStateProjection`、local/overlay/replay 仅做纯投影，不负责 live 搜索或调度。
+- `swap.calls` 声明 calldata ABI、有效性与 payload；只消费观察中实际存在的 target/sender，不虚构 value。
+- 事件可声明 `relatedEvents`，从完整、同交易/区块/池的 receipt 获取规范解码的关联事件。坏日志不会变成“缺日志”并触发补读。
+- 可选 `swap.receiptReads` 用 `when + flow` 声明必要的观察补读，复用原 tokenQuery 后端、deadline/signal 与 sourceBlock；回包是普通观察数据，不伪装为带 canonical source/provenance 的报价证据。缺模块不增加请求。
 - 这些是可供迁移消费的模块；尚未证明所有 15 族的关联事件、多池 identity、hook/plugin 或 victim 分支都可以无补充地完成等价迁移。每个真实缺口必须保留。
 
 ## 6. Exact、quoted、runtime 与回调
 
 `declarative-family.ts` 从同一动作定义调用 `buildDeclarativeExecutionProgram()`。quoted 在现有封存证据校验后固定输入；runtime 的输入留在 VM `r0`，不读 Exact、不取报价回填。收款、授权、实扣、实收、旧库存、原生币边界由公共编译器统一实施。quoted 要求 `0 < minAmountOut <= quotedAmountOut`。
+
+执行版本 2 可用 `steps[].when` 选择本方向实际步骤。条件必须是严格布尔，不能依赖链外 input/quote/minimum；原生币买卖可以保留不同调用与授权顺序，不必拆身份 variant。普通执行至少保留一个状态变更步骤。
+
+`modules.quoteOutput.exports` 显式导出本次交易中的报价局部结果；执行以 `{ "quoteOutput": "amountOut" }` 引用。未消费导出时旧普通路径不增加报价调用。direct/default 仍核对实际到账；deferred 必须先将父层 expectedOutput 与报价结果绑定，再走原回调 gross 实收/债务/旧库存检查。导出不是 callback 内部寄存器；只有 callback 内才知道输出且无父层见证仍不支持。
+
+正输入的本地数学报价可以返回零，但 evidence 必须有非空 `unavailableReason`；不发布 stateChanges/stateEffects，不能由此构造成功执行。原 chain quote 的正值与行为证明门不放宽。`exact.amountOut` 可从结构化 quoteResult 提取金额。`exact.stateOnlyReads: true` 仅可显式用于 local-math，缺省保持旧行为；trialState 的可选 `when + unsupportedReason` 保留按实例准入，关闭试算状态不关闭冷状态报价。
 
 `declarative-callback-frames.ts` 让 JSON 声明调用和回调 ABI、data argument、参数/父层捕获值、多步和嵌套 frame；TS 计算编码偏移、分配寄存器和鉴权 payload。完整 `int256` 及受限 `neg` 数学操作可用，窄整数 runtime patch 仍拒绝。
 
@@ -151,6 +168,8 @@ SEARCHER_FAMILY_BALANCER_V1_ENABLED=1 npm run accept:family-json -- \
 
 准备入口只从 case 取 family、块号/hash、测试 actor；池地址、预期 route、输出不喂给生产 discovery。中断先查原进程和产物，不能重复启动。模拟器使用本工作区当前源码构建的 `listener/revm-sim/target/release/revm-sim`，记录源码和二进制 SHA-256；不得凭别的工作区已有二进制就假设兼容 executor-program。RPC 文件不入库，日志与原始报告保留在 `logs/swap-json-enabled-20261030/`。
 
-迁移窗口只补其余 JSON/数学/样本字段并运行上述套件。缺真实方向／变体 TX 才向用户补样本；已有 TX 先补 receipt/header/calldata/logs，必要时 trace。每个方向的 quoted/runtime、实扣实收、拒绝/回滚和实际支持结算要分别记录。公共 runner 已覆盖默认与 direct 收款；对 deferred-input、deferred-debt、settle-output 仍明确拒绝，迁移这些能力前需要对应真实回调执行测试支持，不能改数据强行过门。
+迁移窗口只补其余 JSON/数学/样本字段并运行上述套件。缺真实方向／变体 TX 才向用户补样本；已有 TX 先补 receipt/header/calldata/logs，必要时 trace。每个方向的 quoted/runtime、实扣实收、拒绝/回滚和实际支持结算要分别记录。
+
+公共测试入口按模块与领域选择检查，不要求每个 Family 新建测试代码。共享生命周期共测；Swap 增加观察/回调，Protocol 按其已声明能力测试，Credit 使用仓位与收付风险检查。没有声明的可选模块不冒称支持，应有却缺失的能力必须作为未完成保留。Set 多资产 fan-out 尚未在本批实现，不能用单输出成功替代多组件验收。公共 runner 已覆盖默认与 direct 收款；对 deferred-input、deferred-debt、settle-output 仍明确拒绝，迁移这些能力前需要对应真实回调执行测试支持，不能改数据强行过门。
 
 本轮执行结果见 [验证报告](../reports/swap-credit-json-framework-20261030.md)。单块正确性不代表原 TX 机会复现或代表性时效性通过；本轮不跑 live 或性能实验。

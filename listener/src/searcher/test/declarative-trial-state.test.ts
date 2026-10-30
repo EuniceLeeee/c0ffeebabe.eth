@@ -33,6 +33,24 @@ function compiled(document = definition, changes: any = {}) {
 function quoteResult(attempt: any) { assert.equal(attempt.status, "quoted"); return attempt.result; }
 function seed() { return compiled().fromReadFlow({ ...input, trialState: emptyExactTrialState().view }, { fund: { reserve: 100n } }, observed); }
 
+test("zero trial output carries refusal evidence and never applies partial state changes", () => {
+  const runtime = compiled(definition, { evidence: (input: any, amountOut: bigint) => ({ ...evidence(input, amountOut),
+    ...(amountOut === 0n ? { unavailableReason: "insufficient-state" } : {}) }) });
+  const empty = emptyExactTrialState();
+  const result = runtime.fromReadFlow({ ...input, trialState: empty.view }, { fund: { reserve: 1n } }, observed);
+  assert.equal(result.amountOut, 0n);
+  assert.equal((result.evidence as any).unavailableReason, "insufficient-state");
+  assert.equal(result.stateChanges, undefined);
+  assert.equal(result.stateEffects, undefined);
+  assert.equal(empty.view.get(ref), undefined);
+  assert.throws(() => compiled().fromReadFlow(input, { fund: { reserve: 1n } }, observed), /unavailableReason/);
+  const seeded = applyExactTrialState(empty, [{ ref, value: { reserve: 1n } }], []);
+  const local = quoteResult(runtime.model.quote({ ...input, trialState: seeded.view }));
+  assert.equal(local.amountOut, 0n);
+  assert.equal(local.stateChanges, undefined);
+  assert.equal((seeded.view.get(ref) as any).reserve, 1n);
+});
+
 test("cold trial returns not-applicable; production source reads bootstrap and subsequent trials consume mutations", () => {
   const runtime = compiled(), empty = emptyExactTrialState();
   assert.equal(runtime.model.quote(input).status, "not-applicable");

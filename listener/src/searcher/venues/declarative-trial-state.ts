@@ -12,6 +12,8 @@ import { assertSource } from "./protocols/standard-family/common.js";
 type Value = any;
 export interface DeclarativeTrialState {
   readonly version: 1;
+  readonly when?: Value;
+  readonly unsupportedReason?: string;
   readonly reads: readonly { readonly id: string; readonly refs: Value; readonly initial?: Value;
     readonly onMissing?: "not-applicable" | "continue" }[];
   readonly model: string;
@@ -35,8 +37,11 @@ function refs(value: Value, seen: ReadonlySet<string>): void {
 }
 export function validateDeclarativeTrialState(raw: unknown): asserts raw is DeclarativeTrialState {
   assertModuleData(raw); validateDeclarativeValue(raw);
-  shape(raw, ["version", "reads", "model", "input", "amountOut", "stateChanges", "stateEffects"], [], "module");
+  shape(raw, ["version", "reads", "model", "input", "amountOut", "stateChanges", "stateEffects"], ["when", "unsupportedReason"], "module");
   const definition = raw as DeclarativeTrialState;
+  if (Object.hasOwn(definition, "when") !== Object.hasOwn(definition, "unsupportedReason") ||
+      (Object.hasOwn(definition, "when") && (typeof definition.unsupportedReason !== "string" || !definition.unsupportedReason.trim())))
+    throw new Error("conditional trial state requires an unsupportedReason");
   if (definition.version !== 1 || !Array.isArray(definition.reads) || !definition.reads.length || definition.reads.length > 128 ||
     typeof definition.model !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*$/.test(definition.model) || forbidden.has(definition.model))
     throw new Error("invalid trial-state version, reads or model");
@@ -85,7 +90,15 @@ export function compileDeclarativeTrialState<D extends CompiledInstanceDescripto
     throw new Error("trial-state requires a registered math model");
   const model = options.models[definition.model]!;
   const missing = (id: string): LocalExactAttempt<E> => Object.freeze({ status: "not-applicable", reason: `trial-state-missing:${id}` });
+  function isAvailable(input?: ExactQuoteInput<D, R>): boolean {
+    if (definition.when === undefined) return true;
+    if (!input) return false;
+    const allowed = options.values.evaluate(definition.when, options.environment(input));
+    if (typeof allowed !== "boolean") throw new Error("trial-state condition must resolve to boolean");
+    return allowed;
+  }
   function run(input: ExactQuoteInput<D, R>, prepared?: unknown): LocalExactAttempt<E> {
+    if (!isAvailable(input)) return { status: "not-applicable" as const, reason: definition.unsupportedReason! };
     canonicalSource(input.source);
     if (typeof input.amountIn !== "bigint" || input.amountIn <= 0n) throw new Error("trial-state model requires positive input");
     const route = input.route as R & { direction?: string; bindingRef?: { fingerprint?: string } };
@@ -129,7 +142,20 @@ export function compileDeclarativeTrialState<D extends CompiledInstanceDescripto
     const modelResult = immutable(model(options.values.evaluate(definition.input, env())));
     const outputEnv = env({ modelResult });
     const amountOut = options.values.evaluate(definition.amountOut, outputEnv);
-    if (typeof amountOut !== "bigint" || amountOut <= 0n) throw new Error("trial-state model returned no output");
+    if (typeof amountOut !== "bigint" || amountOut < 0n) throw new Error("trial-state model returned invalid output");
+    const evidenceInput = { ...input, modelResult, quoteResult: modelResult };
+    const evidence = immutable(options.evidence(evidenceInput, amountOut));
+    canonicalSource(evidence?.source); assertSource(evidence.source, input.source);
+    if (getAddress(evidence.executor) !== executor || evidence.direction !== direction || evidence.amountIn !== input.amountIn ||
+      evidence.amountOut !== amountOut || evidence.bindingFingerprint !== fingerprint)
+      throw new Error("trial-state quote evidence does not match invocation");
+    // A state-dependent unavailable quote is not an execution or a transition.
+    // In particular it must not publish partially simulated tick/reserve writes.
+    if (amountOut === 0n) {
+      if (typeof evidence.unavailableReason !== "string" || !evidence.unavailableReason.trim())
+        throw new Error("zero exact output requires an unavailableReason");
+      return Object.freeze({ status: "quoted", result: immutable({ amountOut, evidence }) });
+    }
     const changes = options.values.evaluate(definition.stateChanges, outputEnv) as readonly ExactTrialStateChange[];
     const effects = options.values.evaluate(definition.stateEffects, outputEnv) as readonly string[];
     if (!Array.isArray(changes) || !Array.isArray(effects) || (!changes.length && !effects.length))
@@ -144,14 +170,10 @@ export function compileDeclarativeTrialState<D extends CompiledInstanceDescripto
     // Reuse the production transition verifier, including duplicate keys,
     // undefined cells and malformed effect names. The issuer commits later.
     applyExactTrialState(emptyExactTrialState(), checkedChanges, effects);
-    const evidence = immutable(options.evidence(input, amountOut));
-    canonicalSource(evidence?.source); assertSource(evidence.source, input.source);
-    if (getAddress(evidence.executor) !== executor || evidence.direction !== direction || evidence.amountIn !== input.amountIn ||
-      evidence.amountOut !== amountOut || evidence.bindingFingerprint !== fingerprint)
-      throw new Error("trial-state quote evidence does not match invocation");
     return Object.freeze({ status: "quoted", result: immutable({ amountOut, evidence, stateChanges: checkedChanges, stateEffects: effects }) });
   }
   return Object.freeze({
+    isAvailable, unsupportedReason: definition.unsupportedReason,
     model: Object.freeze({ quote: (input: ExactQuoteInput<D, R>) => run(input) }),
     fromReadFlow(input: ExactQuoteInput<D, R>, prepared: unknown, observedResults: readonly AdapterRequestResult[]): ExactQuoteResult<E> {
       canonicalSource(input.source);

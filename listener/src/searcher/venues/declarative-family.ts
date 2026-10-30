@@ -7,7 +7,7 @@ import { getAddress, hexlify } from "ethers";
 import { readFamilyModules, type DeclarativeQuoteFlow } from "./declarative-family-modules.js";
 import { verifyDeclarativeQuoteChain } from "./declarative-quote-proof.js";
 import { compileDeclarativeTrialState } from "./declarative-trial-state.js";
-import { compileDeclarativeOracleVictim } from "./declarative-oracle-victim.js";
+import { compileDeclarativeProtocolDomain } from "./declarative-protocol-domain.js";
 import { compileDeclarativeReadFlow } from "./declarative-read-flow.js";
 import type { BoundRuntimeMath, createDeclarativeRuntimeMathRegistry } from "./declarative-runtime-math.js";
 import type { DeclarativeMathFunctions, createDeclarativeMathRegistry } from "./declarative-math.js";
@@ -24,7 +24,7 @@ import { instanceKey, routeKey } from "./adapter-family-identifiers.js";
 import { localZeroExactMethod, NO_EXECUTION_RUNTIME_PROJECTION } from "./adapter-family-plugin.js";
 import type { ExactQuoteInput, FamilyCandidate, VerifiedIdentity, CompiledInstanceDescriptor, FamilyRouteDescriptor,
   IdentitySemantics, InstanceSemantics, RouteProjectionSemantics, PricingSemantics, ExactQuoteSemantics,
-  ExecutionSemantics, FamilyManifest, ProtocolDomainSemantics, ProtocolFamilyPlugin } from "./adapter-family-plugin.js";
+  ExecutionSemantics, FamilyManifest, ProtocolFamilyPlugin } from "./adapter-family-plugin.js";
 import type { AdapterRequest, AdapterRequestResult, RequestRequirements } from "./adapter-request-program.js";
 import { assertSameSource, assertSource, protocolMid, returnedResult, sameAddress,
   type ProtocolPricingSnapshot } from "./protocols/standard-family/common.js";
@@ -96,8 +96,6 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
   if (Object.keys(raw).some(key => !allowed.has(key))) throw new Error("unknown declarative protocol field");
   if (Object.hasOwn(raw, "types")) validateDeclarativeTypeMetadata(raw.types);
   for (const key of ["manifest", "discovery", "identity", "instance", "routes", "pricing", domain, "standard"]) data(raw[key], key);
-  if (domain === "protocol" && Object.hasOwn(raw.protocol, "oracleVictim"))
-    throw new Error("oracleVictim must be declared in the root modules block");
   if (raw.manifest.familyId !== raw.scope?.family || raw.manifest.domain !== domain) throw new Error("declaration manifest identity mismatch");
   if (!Array.isArray(raw.variantFiles) || raw.variantFiles.length !== children.length) throw new Error("declaration child count mismatch");
   shape(raw.instance, ["key", "draft", "bindingProjection"], [], "instance declaration");
@@ -138,7 +136,9 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
       if (typeof v.exact.unavailableReason !== "string" || !v.exact.unavailableReason.trim()) throw new Error("exact unavailable reason is required");
     } else {
       shape(v.exact, ["methodId", "requirements", "evidence"],
-        ["guardProgram", "guardPrefix", "caller", "checks", "outputChecks", "protectedAddresses", "retainReadEvidence", "zeroEvidence"], "exact declaration");
+        ["guardProgram", "guardPrefix", "caller", "checks", "outputChecks", "protectedAddresses", "retainReadEvidence", "zeroEvidence", "stateOnlyReads", "amountOut"], "exact declaration");
+      if (v.exact.stateOnlyReads !== undefined && typeof v.exact.stateOnlyReads !== "boolean")
+        throw new Error("stateOnlyReads must be an explicit boolean declaration");
       if (v.exact.retainReadEvidence !== undefined && v.exact.retainReadEvidence !== true)
         throw new Error("retainReadEvidence must be true when declared");
     }
@@ -176,6 +176,8 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
       environment: input => environment(variant, input), evidence,
     });
     const quote = modules.blocks.quoteFlow as DeclarativeQuoteFlow;
+    if (v.exact.stateOnlyReads === true && quote.sourceKind !== "local-math")
+      throw new Error("stateOnlyReads requires a local-math quote flow");
     if (quote.sourceKind === "local-math" && !Object.keys(modules.blocks.trialState!).length && !quote.localStateUnsupportedReason)
       throw new Error("local math must explicitly declare its unsupported sequential trial state");
     if (variant.trialState && quote.localStateUnsupportedReason)
@@ -584,7 +586,7 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
   };
   function evidence(input: Data, amountOut: bigint) {
     const v = select(input.descriptor);
-    const declaration = amountOut === 0n && v.document.exact.zeroEvidence !== undefined ? v.document.exact.zeroEvidence : v.document.exact.evidence;
+    const declaration = input.amountIn === 0n && amountOut === 0n && v.document.exact.zeroEvidence !== undefined ? v.document.exact.zeroEvidence : v.document.exact.evidence;
     const value = v.values.evaluate(declaration, environment(v, { ...input, amountOut }));
     if (value && Object.hasOwn(value, "readProof")) throw new Error("exact evidence cannot replace framework read proof");
     return frozen(v.trialState ? { ...value, executor: getAddress(input.executor) } : value);
@@ -608,7 +610,8 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
       }),
       { id: selected.document.exact.methodId, kind: "request-program" as const,
         ...(provenance?.sourceKind === "local-math"
-          ? { trialState: selected.trialState ? { quote(input: ExactQuoteInput<Descriptor, Route>) {
+          ? { ...(selected.document.exact.stateOnlyReads === true ? { stateOnlyReads: true as const } : {}),
+              trialState: selected.trialState && selected.trialState.isAvailable(invocation) ? { quote(input: ExactQuoteInput<Descriptor, Route>) {
               assertInvocation(input.descriptor, input.route);
               const v = select(input.descriptor), env = environment(v, input);
               requireAvailableExtension(v, "trialState");
@@ -616,11 +619,12 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
               v.values.run(v.document.exact.checks ?? [], env);
               if (v.document.exact.protectedAddresses) runtimeExecutor(input.executor, ...v.values.evaluate(v.document.exact.protectedAddresses, env));
               // A guard requiring chain results cannot be skipped by a local hit.
-              if (v.document.exact.guardProgram) return { status: "not-applicable" as const, reason: "declared guard requires source reads" };
+              if (v.document.exact.guardProgram && guard(v, input, true).length) return { status: "not-applicable" as const, reason: "declared guard requires source reads" };
+              const guardResult = guard(v, input, true, []);
               const attempt = v.trialState.model.quote(input);
-              if (attempt.status === "quoted") v.values.run(v.document.exact.outputChecks ?? [], { ...env, amountOut: attempt.result.amountOut });
+              if (attempt.status === "quoted") v.values.run(v.document.exact.outputChecks ?? [], { ...env, amountOut: attempt.result.amountOut, guardResult });
               return attempt;
-            } } : { unsupportedReason: provenance.localStateUnsupportedReason! } }
+            } } : { unsupportedReason: selected.trialState?.unsupportedReason ?? provenance.localStateUnsupportedReason! } }
           : { chainAmountQuote: true as const }),
         program: {
           requirements(input) {
@@ -674,10 +678,11 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
             const flowInput = flowEnvironment(v, input);
             const output = v.quoteFlow ? v.quoteFlow.program.decode({ programInput: flowInput,
               initialResults: initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence }) : program(v, "quote", env, "decode");
-            const transition = v.trialState?.fromReadFlow(input, output, v.quoteFlow!.observedResults(flowInput,
-              initialFlowResults(v.quoteFlow!, flowInput, results), dependentEvidence));
-            const amountOut = transition ? transition.amountOut : output;
-            if (typeof amountOut !== "bigint" || amountOut <= 0n) throw new Error("exact quote returned no output");
+            const transition = v.trialState?.isAvailable(input) ? v.trialState.fromReadFlow(input, output, v.quoteFlow!.observedResults(flowInput,
+              initialFlowResults(v.quoteFlow!, flowInput, results), dependentEvidence)) : undefined;
+            const amountOut = transition ? transition.amountOut : v.document.exact.amountOut === undefined ? output
+              : v.values.evaluate(v.document.exact.amountOut, { ...env, quoteResult: output });
+            if (typeof amountOut !== "bigint" || amountOut < 0n) throw new Error("exact quote returned invalid output");
             const declaration = v.modules.get<DeclarativeQuoteFlow>("quoteFlow");
             if (v.quoteFlow && declaration && declaration.sourceKind !== "local-math") {
               verifyDeclarativeQuoteChain({ proof: declaration.chainQuote, sourceKind: declaration.sourceKind,
@@ -692,6 +697,8 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
             const context = v.quoteFlow ? v.quoteFlow.completedEnvironment(flowInput,
               initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence) : env;
             const fields = evidence({ ...context, ...input, quoteResult: output }, amountOut);
+            if (amountOut === 0n && (typeof fields?.unavailableReason !== "string" || !fields.unavailableReason.trim()))
+              throw new Error("zero exact output requires an unavailableReason");
             return frozen({ amountOut, evidence: v.document.exact.retainReadEvidence
               ? { ...fields, readProof: { initialResults: results, dependentEvidence } } : fields });
   }
@@ -751,15 +758,15 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
     expectedEffects: input => evalRoot(document.routes.effects, input),
   };
   const actionAdapters = document.actionAdapters.map((action: Data) => createDeclarativeProgramAction(action.descriptor, action.traces));
-  const oracleVictim = primary.modules.get("oracleVictim");
   const definition = {
     manifest: document.manifest as FamilyManifest<"protocol">,
     capture: (domain === "credit" ? createCreditCaptureMaterialization : createRouteCaptureMaterialization)({ familyId: document.manifest.familyId, discovery }),
     discovery, identity, instance, routes, pricing, exact, execution,
-    ...(domain === "protocol" ? { protocol: { ...document.protocol,
-      // The strict constructor installs its synchronous guard before freezing.
-      ...(oracleVictim ? { oracleVictim: { ...compileDeclarativeOracleVictim(oracleVictim, primary.values) } } : {}),
-    } as ProtocolDomainSemantics } : domain === "swap" ? { swap: compileDeclarativeSwap(document.swap, primary.values, document.manifest) } : { credit: credit!.definition }),
+    ...(domain === "protocol"
+      ? { protocol: compileDeclarativeProtocolDomain(document.protocol, primary.values, primary.modules.get("oracleVictim")) }
+      : domain === "swap"
+        ? { swap: compileDeclarativeSwap(document.swap, primary.values, document.manifest) }
+        : { credit: credit!.definition }),
     actionAdapters,
   };
   return { definition, assertInvocation, projection, executionProgram, variants, select, program, environment,
