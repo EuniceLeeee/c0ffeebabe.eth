@@ -1,0 +1,409 @@
+/**
+ * Read-only gap probes for the parked custom-swap:angstrom-v4 migration.
+ * Run from `listener/`:
+ *   node --import tsx .migration-probe/angstrom-probes.ts
+ * Synthetic fixtures only; never touches a VM, RPC or production entry.
+ */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { AbiCoder, Interface, keccak256, toBeHex } from "ethers";
+import { compileDeclarativeDiscovery } from "../src/searcher/venues/declarative-discovery.ts";
+import { compileDeclarativeValues } from "../src/searcher/venues/declarative-values.ts";
+import { compileDeclarativeSwap } from "../src/searcher/venues/declarative-swap-domain.ts";
+
+const op = (name: string, ...args: any[]) => ({ op: name, args });
+const source = { number: 100, hash: toBeHex(100, 32), generation: 1 };
+const receipt = { transactionHash: toBeHex(101, 32), blockHash: toBeHex(102, 32), blockNumber: 101 };
+const manager = "0x000000000004444c5dc75cB358380D2e3dE08A90";
+const adapter = "0xb535aEB27335B91e1B5bcCbd64888bA7574eFBF8";
+const hook = "0x0000000aa232009084Bd71A5797d089AA4Edfad4";
+const currency0 = toBeHex(0x11, 20);
+const currency1 = toBeHex(0x22, 20);
+const poolId = keccak256(AbiCoder.defaultAbiCoder().encode(
+  ["address", "address", "uint24", "int24", "address"],
+  [currency0, currency1, 24, 10, hook],
+));
+const values = compileDeclarativeValues({ abi: {}, constants: {}, expressions: {}, programs: {} });
+
+const INIT =
+  "event Initialize(bytes32 indexed id,address indexed currency0,address indexed currency1,uint24 fee,int24 tickSpacing,address hooks,uint160 sqrtPriceX96,int24 tick)";
+const SWAP =
+  "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)";
+const SWAP_CALL =
+  "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,bool zeroForOne,uint128 amountIn,uint128 minAmountOut,(uint64 blockNumber,bytes unlockData)[] bundle,address recipient,uint256 deadline) returns (uint256 amountOut)";
+
+// ── P-A0: the parked draft itself compiles and decodes Initialize only ─────
+{
+  const draft = JSON.parse(readFileSync(resolve(
+    "../docs/research/migration/pending-20261028/" +
+    "angstrom-v4.discovery-attempt.draft.json"), "utf8"));
+  if (draft.scope.family !== "custom-swap:angstrom-v4" ||
+      draft.manifest.familyId !== draft.scope.family ||
+      draft.production.activation.envKey !== "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED") {
+    throw new Error("P-A0 draft scope/manifest/activation mismatch");
+  }
+  const discovery: any = compileDeclarativeDiscovery(draft.discovery.definition, values);
+  const iface = new Interface([INIT]);
+  const encoded = iface.encodeEventLog("Initialize", [
+    poolId, currency0, currency1, 24, 10, hook, 1n << 96n, 0,
+  ]);
+  const candidate = discovery.decodeCandidate({
+    observation: { kind: "log", source, address: manager.toLowerCase(),
+      topics: encoded.topics, data: encoded.data, transactionHash: receipt.transactionHash },
+    matchedPatternId: "angstrom-v4-pool-initialize",
+  });
+  if (!candidate || candidate.poolId !== poolId || candidate.adapter !== adapter ||
+      candidate.currency0 !== currency0 || candidate.currency1 !== currency1 ||
+      candidate.hooks !== hook || candidate.fee !== 24n || candidate.tickSpacing !== 10n) {
+    throw new Error("P-A0 Initialize candidate did not decode");
+  }
+  const swapCall = new Interface([SWAP_CALL]);
+  const callCandidate = discovery.decodeCandidate({
+    observation: { kind: "call", source, target: adapter.toLowerCase(),
+      sender: toBeHex(0x99, 20), transactionHash: receipt.transactionHash,
+      data: swapCall.encodeFunctionData("swap", [
+        { currency0, currency1, fee: 24, tickSpacing: 10, hooks: hook },
+        true, 1000n, 1n, [[100n, "0x"]], toBeHex(0x99, 20), 2n ** 256n - 1n,
+      ]) },
+    matchedPatternId: "angstrom-v4-adapter-swap-call",
+  });
+  if (callCandidate !== null) throw new Error("P-A0 swap-call candidate unexpectedly decoded");
+  console.log("P-A0 draft compiles; Initialize candidate decoded; swap-call candidate null;",
+    "nomination=" + draft.discovery.definition.nomination,
+    "sources=" + draft.discovery.definition.sources.join("|"));
+}
+
+// ── P-A1: the declarative discovery object has no runtime-evidence producer ──
+{
+  const discovery: any = compileDeclarativeDiscovery({
+    version: 2,
+    sources: ["landed-log", "observed-call"],
+    candidateSources: [],
+    candidate: {
+      kind: "angstrom-v4-pool-key",
+      addressField: "adapter",
+      fields: {
+        adapter: "address",
+        manager: "address",
+        poolId: "bytes32",
+        sourceKind: "string",
+      },
+      key: ["adapter", "manager", "poolId"],
+      instanceKey: ["adapter", "manager", "poolId"],
+    },
+    calls: [],
+    events: [{
+      id: "angstrom-v4-initialize",
+      signature: INIT,
+      fields: {
+        manager: { from: "emitter" },
+        adapter: { from: "literal", value: adapter },
+        poolId: { from: "argument", index: 0 },
+        sourceKind: { from: "literal", value: "initialize-log" },
+      },
+    }],
+    labels: ["angstrom-v4", "custom-swap:angstrom-v4"],
+    nomination: "tx-evidence",
+  }, values);
+  console.log("P-A1 discovery keys:", Object.keys(discovery).sort().join(","));
+  console.log("P-A1 runtimeEvidenceFromObservation:",
+    typeof discovery.runtimeEvidenceFromObservation);
+  console.log("P-A1 pendingRuntimeEvidenceFromObservation:",
+    typeof discovery.pendingRuntimeEvidenceFromObservation);
+  console.log("P-A1 runtimeEvidenceRouteActivation:",
+    typeof discovery.runtimeEvidenceRouteActivation);
+}
+
+// ── P-A2: mapped discovery cannot project the swap-call PoolKey tuple ───────
+{
+  const discovery: any = compileDeclarativeDiscovery({
+    version: 2,
+    sources: ["landed-log", "observed-call"],
+    candidateSources: [],
+    candidate: {
+      kind: "angstrom-v4-pool-key",
+      addressField: "adapter",
+      fields: {
+        adapter: "address",
+        manager: "address",
+        poolId: "bytes32",
+        sourceKind: "string",
+        currency0: "address",
+        currency1: "address",
+      },
+      key: ["adapter", "manager", "poolId"],
+      instanceKey: ["adapter", "manager", "poolId"],
+    },
+    calls: [{
+      id: "angstrom-v4-adapter-swap",
+      signature: SWAP_CALL,
+      fields: {
+        adapter: { from: "target" },
+        manager: { from: "literal", value: manager },
+        poolId: { from: "argument", index: 0 },
+        sourceKind: { from: "literal", value: "adapter-swap-call" },
+        currency0: { from: "argument", index: 0 },
+        currency1: { from: "argument", index: 0 },
+      },
+    }],
+    events: [],
+    labels: ["angstrom-v4"],
+    nomination: "tx-evidence",
+  }, values);
+  const iface = new Interface([SWAP_CALL]);
+  const observation: any = {
+    kind: "call",
+    source,
+    target: adapter.toLowerCase(),
+    sender: toBeHex(0x99, 20),
+    transactionHash: receipt.transactionHash,
+    data: iface.encodeFunctionData("swap", [
+      { currency0, currency1, fee: 24, tickSpacing: 10, hooks: hook },
+      true, 1000n, 1n, [{ blockNumber: 100n, unlockData: "0x" }], toBeHex(0x99, 20), 2n ** 256n - 1n,
+    ]),
+  };
+  console.log("P-A2 swap-call candidate:", discovery.decodeCandidate({
+    observation, matchedPatternId: "angstrom-v4-adapter-swap",
+  }));
+}
+
+// ── P-A3: Initialize-log candidate is expressible and decodes canonically ───
+{
+  const discovery: any = compileDeclarativeDiscovery({
+    version: 2,
+    sources: ["landed-log", "observed-call"],
+    candidateSources: [],
+    candidate: {
+      kind: "angstrom-v4-pool-key",
+      addressField: "adapter",
+      fields: {
+        adapter: "address",
+        manager: "address",
+        poolId: "bytes32",
+        sourceKind: "string",
+      },
+      key: ["adapter", "manager", "poolId"],
+      instanceKey: ["adapter", "manager", "poolId"],
+    },
+    calls: [],
+    events: [{
+      id: "angstrom-v4-initialize",
+      signature: INIT,
+      fields: {
+        manager: { from: "emitter" },
+        adapter: { from: "literal", value: adapter },
+        poolId: { from: "argument", index: 0 },
+        sourceKind: { from: "literal", value: "initialize-log" },
+      },
+    }],
+    labels: ["angstrom-v4", "custom-swap:angstrom-v4"],
+    nomination: "tx-evidence",
+  }, values);
+  const iface = new Interface([INIT]);
+  const encoded = iface.encodeEventLog("Initialize", [
+    poolId, currency0, currency1, 24, 10, hook, 1n << 96n, 0,
+  ]);
+  const observation: any = {
+    kind: "log", source, address: manager.toLowerCase(),
+    topics: encoded.topics, data: encoded.data, transactionHash: receipt.transactionHash,
+  };
+  console.log("P-A3 initialize candidate:", discovery.decodeCandidate({
+    observation, matchedPatternId: "angstrom-v4-initialize",
+  }));
+  console.log("P-A3 candidateKey:", (() => {
+    try { return discovery.candidateKey(discovery.decodeCandidate({
+      observation, matchedPatternId: "angstrom-v4-initialize",
+    })); } catch (error) { return `THREW ${(error as Error).message}`; }
+  })());
+}
+
+// ── P-A4: production `factory-log` source is not a declarative source ───────
+{
+  try {
+    compileDeclarativeDiscovery({
+      version: 2,
+      sources: ["factory-log"],
+      candidateSources: [],
+      candidate: { kind: "x", addressField: "adapter", fields: { adapter: "address" }, key: ["adapter"] },
+      calls: [], events: [], labels: ["x"], nomination: "tx-evidence",
+    }, values);
+    console.log("P-A4 UNEXPECTED: factory-log accepted");
+  } catch (error) {
+    console.log("P-A4 factory-log rejected:", (error as Error).message);
+  }
+}
+
+// ── P-A5: tx-evidence nomination cannot use a nomination-only Swap log ─────
+{
+  const discovery: any = compileDeclarativeDiscovery({
+    version: 2,
+    sources: ["landed-log", "observed-call"],
+    candidateSources: [],
+    candidate: {
+      kind: "angstrom-v4-pool-key",
+      addressField: "adapter",
+      fields: {
+        adapter: "address",
+        manager: "address",
+        poolId: "bytes32",
+        sourceKind: "string",
+      },
+      key: ["adapter", "manager", "poolId"],
+      instanceKey: ["adapter", "manager", "poolId"],
+    },
+    calls: [],
+    events: [{
+      id: "angstrom-v4-manager-swap",
+      signature: SWAP,
+      nominationOnly: true,
+      fields: {},
+    }],
+    labels: ["angstrom-v4", "custom-swap:angstrom-v4"],
+    nomination: "tx-evidence",
+  }, values);
+  const iface = new Interface([SWAP]);
+  const encoded = iface.encodeEventLog("Swap", [
+    poolId, toBeHex(0x99, 20), -1000n, 900n, 1n << 96n, 10n ** 18n, 0, 24,
+  ]);
+  const provider: any = {
+    getTransactionReceipt: async () => ({
+      logs: [{ address: manager, ...encoded }],
+    }),
+  };
+  const nominated = await discovery.nominate.nominate({
+    nominations: [{
+      opaque: { adapter: "angstrom-v4", poolId, txHash: receipt.transactionHash },
+    }],
+    source,
+    provider,
+  });
+  console.log("P-A5 swap-log-only nomination:", nominated.length);
+}
+
+// ── P-B1/P-B2: V4 singleton receipt identity vs declarative edge binding ────
+const descriptor: any = {
+  familyId: "custom-swap:angstrom-v4",
+  instanceKey: `${manager.toLowerCase()}\u001f${poolId}`,
+  poolId,
+  poolKey: { currency0, currency1, fee: 24, tickSpacing: 10, hooks: hook },
+  immutableBinding: { manager, adapter, hook, quoter: toBeHex(0x55, 20) },
+};
+const edge: any = {
+  adapterId: "angstrom-v4-swap",
+  target: adapter,
+  tokenIn: currency0,
+  tokenOut: currency1,
+  instanceKey: descriptor.instanceKey,
+};
+const swapIface = new Interface([SWAP]);
+const swapLog = (id: string, amount0: bigint, amount1: bigint) => {
+  const encoded = swapIface.encodeEventLog("Swap", [
+    id, toBeHex(0x99, 20), amount0, amount1, 1n << 96n, 10n ** 18n, 0, 24,
+  ]);
+  return { ...receipt, address: manager, ...encoded };
+};
+function definition(poolExpression: any) {
+  const zeroForOne = op("and", op("lt", "$args.amount0", op("uint", "0")), op("gt", "$args.amount1", op("uint", "0")));
+  return {
+    version: 1,
+    canonicalIntakeTargets: [manager],
+    victimSupport: "none",
+    calls: [],
+    events: [{
+      id: "angstrom-v4-manager-swap",
+      signature: SWAP,
+      classification: "swap",
+      pool: poolExpression,
+      payload: "$args",
+      match: op("eq",
+        op("lower", op("get", "$args", "id")),
+        op("lower", op("get", "$descriptor", "poolId"))),
+      impact: {
+        pool: "$edge.target",
+        poolId: op("lower", op("get", "$args", "id")),
+        tokenIn: "$edge.tokenIn",
+        tokenOut: "$edge.tokenOut",
+        matchedAdapterId: "$edge.adapterId",
+        amountIn: op("if", zeroForOne,
+          op("sub", op("uint", "0"), "$args.amount0"), op("sub", op("uint", "0"), "$args.amount1")),
+        v4PostState: {
+          poolId: op("lower", op("get", "$args", "id")),
+          sqrtPriceX96: "$args.sqrtPriceX96",
+          liquidity: "$args.liquidity",
+          tick: "$args.tick",
+          lpFee: "$args.fee",
+        },
+      },
+    }],
+  };
+}
+function context(logs: any[], byTarget: Map<string, any[]>): any {
+  return {
+    logs,
+    graph: [edge],
+    edgesByTarget: byTarget,
+    resolveBinding: () => ({ familyId: descriptor.familyId, descriptor }),
+    sourceGeneration: {
+      id: "receipt-generation", sourceBlock: source.number, sourceBlockHash: source.hash,
+      receiptId: receipt.transactionHash, receiptBlockNumber: receipt.blockNumber,
+      receiptBlockHash: receipt.blockHash, receiptParentBlockHash: source.hash,
+      receiptTransactionHash: receipt.transactionHash, logsCompleteness: "complete-receipt",
+    },
+    matchedOwnedTriggers: logs.map((log, index) => ({
+      triggerId: `trigger:${index}`, logIndex: index, emitter: log.address,
+      topic0: log.topics[0],
+    })),
+    control: { signal: new AbortController().signal, deadlineAtMs: Date.now() + 10000 },
+  };
+}
+{
+  const family: any = compileDeclarativeSwap(definition(op("lower", op("get", "$args", "id"))), values, {
+    familyId: descriptor.familyId, edgeAdapterIds: ["angstrom-v4-swap"],
+  });
+  const log = swapLog(poolId, -1000n, 900n);
+  const byTarget = new Map([[adapter.toLowerCase(), [edge]]]);
+  const result = await family.receiptObservation.decodeReceiptImpacts(context([log], byTarget));
+  console.log("P-B1 poolId identity:", result.status,
+    result.status === "unresolved" ? result.reason : "");
+}
+{
+  const family: any = compileDeclarativeSwap(definition(adapter.toLowerCase()), values, {
+    familyId: descriptor.familyId, edgeAdapterIds: ["angstrom-v4-swap"],
+  });
+  const log = swapLog(poolId, -1000n, 900n);
+  const byTarget = new Map([[adapter.toLowerCase(), [edge]]]);
+  const result = await family.receiptObservation.decodeReceiptImpacts(context([log], byTarget));
+  console.log("P-B2 adapter identity:", JSON.stringify(result, (_key, value) =>
+    typeof value === "bigint" ? value.toString() : value));
+  const foreign = swapLog(toBeHex(0x1234, 32), -1n, 1n);
+  console.log("P-B2 foreign-pool observedPoolIdentity:",
+    family.receiptObservation.observedPoolIdentity(foreign));
+  const foreignResult = await family.receiptObservation.decodeReceiptImpacts(
+    context([foreign], byTarget));
+  console.log("P-B2 foreign-pool receipt:", foreignResult.status,
+    foreignResult.status === "resolved" ? JSON.stringify(foreignResult.mutations) : "");
+}
+
+// ── P-C1: sealed attestation payload is ABI-decodable from JSON, but the
+// signature / validator-membership authorization is not expressible ─────────
+{
+  const evidenceAbi = [{
+    type: "function", name: "executionEvidence", stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "tuple[]", name: "", components: [
+      { type: "uint64", name: "blockNumber" }, { type: "bytes", name: "unlockData" }] }],
+  }];
+  const local = compileDeclarativeValues({
+    abi: { evidence: evidenceAbi }, constants: {}, expressions: {}, programs: {},
+  });
+  const payload = AbiCoder.defaultAbiCoder().encode(
+    ["tuple(uint64,bytes)[]"],
+    [[[100n, "0x1234"]]],
+  );
+  try {
+    console.log("P-C1 decoded sealed payload:", local.evaluate(
+      op("decodeCanonical", "evidence", "executionEvidence", payload), {}));
+  } catch (error) {
+    console.log("P-C1 sealed payload rejected:", (error as Error).message);
+  }
+}

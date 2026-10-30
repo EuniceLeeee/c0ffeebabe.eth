@@ -1,0 +1,237 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:angstrom-v4"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:angstrom-v4",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "angstrom-v4-swap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "angstrom-v4:official-hook-poolkey"
+    ],
+    "poolAdapterIds": [
+      "angstrom-v4"
+    ],
+    "edgeAdapterIds": [
+      "angstrom-v4-swap"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "angstrom-v4-pool-key",
+        "addressField": "adapter",
+        "fields": {
+          "adapter": "address",
+          "manager": "address",
+          "poolId": "bytes32",
+          "currency0": "address",
+          "currency1": "address",
+          "fee": "uint",
+          "tickSpacing": "uint",
+          "hooks": "address",
+          "sourceKind": "string"
+        },
+        "key": [
+          "adapter",
+          "manager",
+          "poolId"
+        ],
+        "instanceKey": [
+          "adapter",
+          "manager",
+          "poolId"
+        ]
+      },
+      "calls": [
+        {
+          "id": "angstrom-v4-adapter-swap-call",
+          "signature": "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,bool zeroForOne,uint128 amountIn,uint128 minAmountOut,(uint64 blockNumber,bytes unlockData)[] bundle,address recipient,uint256 deadline) returns (uint256 amountOut)",
+          "fields": {
+            "adapter": {
+              "from": "target"
+            },
+            "manager": {
+              "from": "literal",
+              "value": "0x000000000004444c5dc75cB358380D2e3dE08A90"
+            },
+            "poolId": {
+              "from": "argument",
+              "index": 0
+            },
+            "currency0": {
+              "from": "argument",
+              "index": 0
+            },
+            "currency1": {
+              "from": "argument",
+              "index": 0
+            },
+            "fee": {
+              "from": "argument",
+              "index": 0
+            },
+            "tickSpacing": {
+              "from": "argument",
+              "index": 0
+            },
+            "hooks": {
+              "from": "argument",
+              "index": 0
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "adapter-swap-call"
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "angstrom-v4-pool-initialize",
+          "signature": "event Initialize(bytes32 indexed id,address indexed currency0,address indexed currency1,uint24 fee,int24 tickSpacing,address hooks,uint160 sqrtPriceX96,int24 tick)",
+          "fields": {
+            "adapter": {
+              "from": "literal",
+              "value": "0xb535aEB27335B91e1B5bcCbd64888bA7574eFBF8"
+            },
+            "manager": {
+              "from": "emitter"
+            },
+            "poolId": {
+              "from": "argument",
+              "index": 0
+            },
+            "currency0": {
+              "from": "argument",
+              "index": 1
+            },
+            "currency1": {
+              "from": "argument",
+              "index": 2
+            },
+            "fee": {
+              "from": "argument",
+              "index": 3
+            },
+            "tickSpacing": {
+              "from": "argument",
+              "index": 4
+            },
+            "hooks": {
+              "from": "argument",
+              "index": 5
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "initialize-log"
+            }
+          },
+          "predicates": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    5
+                  ]
+                },
+                "0x0000000aa232009084Bd71A5797d089AA4Edfad4"
+              ]
+            },
+            {
+              "op": "lt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        4
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "angstrom-v4-manager-swap-log",
+          "signature": "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+          "nominationOnly": true,
+          "fields": {}
+        }
+      ],
+      "labels": [
+        "angstrom-v4",
+        "custom-swap:angstrom-v4"
+      ],
+      "nomination": "tx-evidence"
+    }
+  }
+}
