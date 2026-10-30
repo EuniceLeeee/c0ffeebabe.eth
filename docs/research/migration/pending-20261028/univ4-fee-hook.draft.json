@@ -1,0 +1,619 @@
+{
+  "_status": "parked / not importable",
+  "_blocker": "docs/research/migration/pending-20261028/univ4-fee-hook.blockers.md",
+  "_source": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/*.ts",
+  "version": 2,
+  "scope": {
+    "family": "univ4-fee-hook"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "univ4-fee-hook",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "univ4-fee-hook-unlock",
+      "univ4-fee-hook-swap",
+      "univ4-fee-hook-take",
+      "univ4-fee-hook-sync",
+      "univ4-fee-hook-settle",
+      "univ4-fee-hook-settle-value"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-transfer",
+      "weth-deposit-value",
+      "weth-withdraw-amount"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "univ4:pool-manager-fee-hook-subinstance"
+    ],
+    "poolAdapterIds": [
+      "univ4-fee-hook",
+      "univ4-fee-hook-unlock"
+    ],
+    "edgeAdapterIds": [
+      "univ4-fee-hook-unlock"
+    ],
+    "requiresProtocolEdgesFlag": false,
+    "livePoolStateKind": "singleton-v4"
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "univ4-pool-key",
+        "addressField": "manager",
+        "fields": {
+          "manager": "address",
+          "poolId": "bytes32",
+          "currency0": "address",
+          "currency1": "address",
+          "fee": "uint",
+          "tickSpacing": "uint",
+          "hooks": "address",
+          "sourceKind": "string"
+        },
+        "key": [
+          "manager",
+          "poolId"
+        ],
+        "instanceKey": [
+          "manager",
+          "poolId"
+        ]
+      },
+      "calls": [],
+      "events": [
+        {
+          "id": "univ4-fee-hook-pool-initialize",
+          "signature": "event Initialize(bytes32 indexed id,address indexed currency0,address indexed currency1,uint24 fee,int24 tickSpacing,address hooks,uint160 sqrtPriceX96,int24 tick)",
+          "fields": {
+            "manager": {
+              "from": "emitter"
+            },
+            "poolId": {
+              "from": "argument",
+              "index": 0
+            },
+            "currency0": {
+              "from": "argument",
+              "index": 1
+            },
+            "currency1": {
+              "from": "argument",
+              "index": 2
+            },
+            "fee": {
+              "from": "argument",
+              "index": 3
+            },
+            "tickSpacing": {
+              "from": "argument",
+              "index": 4
+            },
+            "hooks": {
+              "from": "argument",
+              "index": 5
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "initialize-log"
+            }
+          }
+        },
+        {
+          "id": "univ4-fee-hook-manager-swap-log",
+          "signature": "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+          "fields": {},
+          "nominationOnly": true
+        },
+        {
+          "id": "univ4-fee-hook-manager-modify-liquidity",
+          "signature": "event ModifyLiquidity(bytes32 indexed id,address indexed sender,int24 tickLower,int24 tickUpper,int256 liquidityDelta,bytes32 salt)",
+          "fields": {},
+          "nominationOnly": true
+        }
+      ],
+      "labels": [
+        "univ4-fee-hook"
+      ],
+      "nomination": "address-surface",
+      "txSeedNominations": false,
+      "surface": {
+        "id": "univ4-fee-hook-pool-surface",
+        "fingerprint": "univ4-pool-surface-v1",
+        "fields": {
+          "manager": {
+            "from": "emitter"
+          },
+          "poolId": {
+            "from": "opaque",
+            "path": "poolId"
+          },
+          "currency0": {
+            "from": "opaque",
+            "path": "poolKey.currency0"
+          },
+          "currency1": {
+            "from": "opaque",
+            "path": "poolKey.currency1"
+          },
+          "fee": {
+            "from": "opaque",
+            "path": "poolKey.fee"
+          },
+          "tickSpacing": {
+            "from": "opaque",
+            "path": "poolKey.tickSpacing"
+          },
+          "hooks": {
+            "from": "opaque",
+            "path": "poolKey.hooks"
+          },
+          "sourceKind": {
+            "from": "literal",
+            "value": "pool-surface"
+          }
+        }
+      },
+      "nominationReadFlow": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "pool",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "nom-pool-keys",
+                "kind": "eth-call",
+                "to": "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "positionManager",
+                    "poolKeys",
+                    [
+                      {
+                        "op": "bytes",
+                        "args": [
+                          "$nomination.opaque.poolId",
+                          0,
+                          25
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "keyCurrency0",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "positionManager",
+                    "poolKeys",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "nom-pool-keys"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "keyCurrency1",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "positionManager",
+                    "poolKeys",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "nom-pool-keys"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "let": "keyFee",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "positionManager",
+                    "poolKeys",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "nom-pool-keys"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    2
+                  ]
+                }
+              },
+              {
+                "let": "keyTickSpacing",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "positionManager",
+                    "poolKeys",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "nom-pool-keys"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    3
+                  ]
+                }
+              },
+              {
+                "let": "keyHooks",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "positionManager",
+                    "poolKeys",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "nom-pool-keys"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    4
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "matches",
+                  "args": [
+                    "$nomination.opaque.poolId",
+                    "^0x[0-9a-fA-F]{64}$"
+                  ]
+                },
+                "error": "univ4 nomination poolId shape"
+              },
+              {
+                "assert": {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$keyCurrency0"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$keyCurrency1"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ4 nomination PoolKey currency order"
+              },
+              {
+                "assert": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$keyCurrency0",
+                                "0x0000000000000000000000000000000000000000"
+                              ]
+                            },
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$keyCurrency1",
+                                "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$keyCurrency1",
+                                "0x0000000000000000000000000000000000000000"
+                              ]
+                            },
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$keyCurrency0",
+                                "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ4 nomination native/WETH alias unsupported"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            {
+                              "op": "bytes",
+                              "args": [
+                                {
+                                  "op": "encode",
+                                  "args": [
+                                    "positionManager",
+                                    "encodePoolKey",
+                                    [
+                                      "$keyCurrency0",
+                                      "$keyCurrency1",
+                                      "$keyFee",
+                                      "$keyTickSpacing",
+                                      "$keyHooks"
+                                    ]
+                                  ]
+                                },
+                                4,
+                                160
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$nomination.opaque.poolId"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ4 nomination PoolKey reverse binding"
+              },
+              {
+                "let": "key",
+                "value": {
+                  "currency0": {
+                    "op": "address",
+                    "args": [
+                      "$keyCurrency0"
+                    ]
+                  },
+                  "currency1": {
+                    "op": "address",
+                    "args": [
+                      "$keyCurrency1"
+                    ]
+                  },
+                  "fee": {
+                    "op": "number",
+                    "args": [
+                      "$keyFee"
+                    ]
+                  },
+                  "tickSpacing": {
+                    "op": "number",
+                    "args": [
+                      "$keyTickSpacing"
+                    ]
+                  },
+                  "hooks": {
+                    "op": "address",
+                    "args": [
+                      "$keyHooks"
+                    ]
+                  }
+                }
+              },
+              {
+                "return": {
+                  "poolId": {
+                    "op": "lower",
+                    "args": [
+                      "$nomination.opaque.poolId"
+                    ]
+                  },
+                  "poolKey": {
+                    "currency0": {
+                      "op": "get",
+                      "args": [
+                        "$key",
+                        "currency0"
+                      ]
+                    },
+                    "currency1": {
+                      "op": "get",
+                      "args": [
+                        "$key",
+                        "currency1"
+                      ]
+                    },
+                    "fee": {
+                      "op": "string",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$key",
+                            "fee"
+                          ]
+                        }
+                      ]
+                    },
+                    "tickSpacing": {
+                      "op": "string",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$key",
+                            "tickSpacing"
+                          ]
+                        }
+                      ]
+                    },
+                    "hooks": {
+                      "op": "get",
+                      "args": [
+                        "$key",
+                        "hooks"
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "result": "$steps.pool"
+      },
+      "_candidateFilter": "identity-only: audited fee hook 0xfa43... or sat1Permissions(hook) (univ4-fee-hook-family/discovery.ts:24-40); no discovery predicate is declared in this draft"
+    }
+  },
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "univ4-fee-hook-unlock",
+        "lineage": "univ4",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": []
+    },
+    {
+      "descriptor": {
+        "adapterId": "univ4-fee-hook-swap",
+        "lineage": "univ4",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": []
+    },
+    {
+      "descriptor": {
+        "adapterId": "univ4-fee-hook-take",
+        "lineage": "univ4",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": []
+    },
+    {
+      "descriptor": {
+        "adapterId": "univ4-fee-hook-sync",
+        "lineage": "univ4",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": []
+    },
+    {
+      "descriptor": {
+        "adapterId": "univ4-fee-hook-settle",
+        "lineage": "univ4",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": []
+    },
+    {
+      "descriptor": {
+        "adapterId": "univ4-fee-hook-settle-value",
+        "lineage": "univ4",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": true,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": []
+    }
+  ]
+}

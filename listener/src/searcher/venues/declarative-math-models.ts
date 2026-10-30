@@ -22,6 +22,7 @@ import { univ1MathModels } from "./swaps/univ1-family/math.js";
 import { univ2MathModels } from "./swaps/univ2-family/math.js";
 import { univ3MathModels } from "./swaps/univ3-family/math.js";
 import { precisionPoolMathModels } from "./swaps/precision-pool-family/math.js";
+import { univ4MathModels } from "./swaps/univ4-family/math.js";
 
 // Static, source-hashed math entries are registered here by protocol migration.
 // JSON never imports arbitrary files or executable handlers. An absent model
@@ -53,5 +54,6 @@ const models: readonly DeclarativeMathModel[] = [
   ...univ2MathModels,
   ...univ3MathModels,
   ...precisionPoolMathModels,
+  ...univ4MathModels,
 ];
 export const declarativeMathRegistry = createDeclarativeMathRegistry(models);
