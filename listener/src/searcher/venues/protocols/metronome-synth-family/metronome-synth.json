@@ -2236,18 +2236,18 @@
         ]
       },
       "classifyUnavailable": {
-        "op": "map",
+        "op": "flatMap",
         "args": [
+          "$routes",
+          "route",
           {
-            "op": "filter",
+            "op": "if",
             "args": [
-              "$routes",
-              "route",
               {
-                "op": "eq",
+                "op": "and",
                 "args": [
                   {
-                    "op": "get",
+                    "op": "defined",
                     "args": [
                       {
                         "op": "get",
@@ -2261,31 +2261,51 @@
                             ]
                           }
                         ]
-                      },
-                      "amountOut"
+                      }
                     ]
                   },
                   {
-                    "op": "uint",
+                    "op": "eq",
                     "args": [
-                      "0"
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$snapshot.quotes",
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$route",
+                                  "routeKey"
+                                ]
+                              }
+                            ]
+                          },
+                          "amountOut"
+                        ]
+                      },
+                      0
                     ]
                   }
                 ]
-              }
+              },
+              [
+                [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "routeKey"
+                    ]
+                  },
+                  "metronome_quote_zero"
+                ]
+              ],
+              []
             ]
-          },
-          "route",
-          [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "routeKey"
-              ]
-            },
-            "metronome_quote_zero"
-          ]
+          }
         ]
       }
     },
