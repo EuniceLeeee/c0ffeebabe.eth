@@ -1,0 +1,1872 @@
+{
+  "_status": "blocked",
+  "_note": "Non-deliverable partial mapping draft for custom-swap:uniswap-v1. Do not copy to venues/swaps/univ1-family/uniswap-v1.json or register a production entry. The blocking gap is per-direction execution program selection; see uniswap-v1.blockers.md. Blocks below are the settled mapping or an outline; identity/exact decode statements and the execution body are intentionally not finalized because the engine cannot select a direction-specific call from one descriptor.",
+  "_blockers": [
+    "declarative-family.ts:199-203 selects a variant by descriptor only; executionProgram at :698-703 never sees the route",
+    "declarative-execution.ts:450 rejects 'when' on execution step calls; a single variant cannot choose ethToTokenSwapInput vs tokenToEthSwapInput",
+    "univ1-family/execution.ts:11-31 and :41-43, univ1-family/recipient.ts:9-47, univ1-family/action.ts:19-24 require direction-specific calls/approval/native handling",
+    "M2 in docs/research/migration/framework-ts-changes-20261029.md (per-direction quote/execution program) is not landed"
+  ],
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:uniswap-v1"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_UNISWAP_V1_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:uniswap-v1",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "univ1-exact-input"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "uniswap-v1:immutable-vyper-exchange"
+    ],
+    "poolAdapterIds": [
+      "univ1-exchange"
+    ],
+    "edgeAdapterIds": [
+      "univ1-exact-input"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "univ1-exchange",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address"
+        },
+        "key": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "univ1-ethToTokenSwapInput",
+          "signature": "function ethToTokenSwapInput(uint256,uint256) payable returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        },
+        {
+          "id": "univ1-ethToTokenSwapOutput",
+          "signature": "function ethToTokenSwapOutput(uint256,uint256) payable returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        },
+        {
+          "id": "univ1-tokenToEthSwapInput",
+          "signature": "function tokenToEthSwapInput(uint256,uint256,uint256) returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        },
+        {
+          "id": "univ1-tokenToEthSwapOutput",
+          "signature": "function tokenToEthSwapOutput(uint256,uint256,uint256) returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "univ1-TokenPurchase",
+          "signature": "event TokenPurchase(address indexed buyer,uint256 indexed eth_sold,uint256 indexed tokens_bought)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          }
+        },
+        {
+          "id": "univ1-EthPurchase",
+          "signature": "event EthPurchase(address indexed buyer,uint256 indexed tokens_sold,uint256 indexed eth_bought)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          }
+        }
+      ],
+      "nomination": "address-surface",
+      "surface": {
+        "id": "univ1-interface",
+        "fingerprint": "univ1-exchange-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "univ1-exchange",
+        "univ1-exact-input",
+        "custom-swap:uniswap-v1"
+      ]
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "identity": {
+        "select": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                "$candidate.candidateKind",
+                "univ1-exchange"
+              ]
+            },
+            "error": "univ1 wrong candidate kind"
+          },
+          {
+            "return": "clone",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "done",
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence.rejection"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "complete"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "implementation",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "clone"
+              ]
+            }
+          },
+          {
+            "return": "binding",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "implementation"
+              ]
+            }
+          },
+          {
+            "return": "registration"
+          }
+        ],
+        "stages": {
+          "clone": {
+            "requirements": {
+              "transports": [
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "code",
+                "kind": "get-code",
+                "address": "$candidate.pool"
+              }
+            ],
+            "decode": [
+              {
+                "let": "code",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "matches",
+                  "args": [
+                    "$code",
+                    "^0x366000600037611000600036600073[0-9a-f]{40}5af41558576110006000f3$"
+                  ]
+                },
+                "error": "unsupported-univ1-clone"
+              },
+              {
+                "let": "implementation",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "addressWord",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            "$code",
+                            18,
+                            32
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "clone",
+                  "source": {
+                    "op": "source",
+                    "args": [
+                      "$results"
+                    ]
+                  },
+                  "pool": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$candidate.pool"
+                        ]
+                      }
+                    ]
+                  },
+                  "implementation": "$implementation",
+                  "codeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$code"
+                    ]
+                  },
+                  "ids": [
+                    "code"
+                  ]
+                }
+              }
+            ]
+          },
+          "implementation": {
+            "requirements": {
+              "transports": [
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "implementation-code",
+                "kind": "get-code",
+                "address": "$evidence.implementation"
+              }
+            ],
+            "decode": [
+              {
+                "let": "implementationCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "implementation-code"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "model",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$implementationCodeHash",
+                        "0x149aa36e02a2583973be13ac2161eb3ada7ce722d148f1dfa04c94a680957b1b"
+                      ]
+                    },
+                    "anyswap-v1-issuer-fee-001",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$implementationCodeHash",
+                            "0xb9205fc3f30b0ad30c6f03a0f464f8fd435fbf28cdbb6071054d62fb506a4b96"
+                          ]
+                        },
+                        "uniswap-v1-997",
+                        null
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "implementation",
+                      "implementationCodeHash": "$implementationCodeHash",
+                      "model": "$model",
+                      "ids": [
+                        "implementation-code"
+                      ]
+                    }
+                  ]
+                },
+                "when": {
+                  "op": "defined",
+                  "args": [
+                    "$model"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "rejection": "unsupported-univ1-implementation",
+                      "ids": [
+                        "implementation-code"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "binding": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "token",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "tokenAddress",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "factory",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "factoryAddress",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "issuer",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "issuer",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "binding",
+                      "ids": [
+                        "token",
+                        "factory",
+                        "issuer"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "registration": {
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "factory-code",
+                "kind": "get-code",
+                "address": "$evidence.binding.factory"
+              },
+              {
+                "id": "token-code",
+                "kind": "get-code",
+                "address": "$evidence.binding.token"
+              },
+              {
+                "id": "exchange",
+                "kind": "eth-call",
+                "to": "$evidence.binding.factory",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "getExchange",
+                    [
+                      "$evidence.binding.token"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "reverse-token",
+                "kind": "eth-call",
+                "to": "$evidence.binding.factory",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "getToken",
+                    [
+                      "$candidate.pool"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "decimals",
+                "kind": "eth-call",
+                "to": "$evidence.binding.token",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "complete",
+                      "ids": [
+                        "factory-code",
+                        "token-code",
+                        "exchange",
+                        "reverse-token",
+                        "decimals"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "done": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "invalid-program",
+              "reasonCode": "foreign-univ1-candidate"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.pool",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "$evidence.rejection",
+              "evidenceRequestIds": "$evidence.ids"
+            },
+            "when": {
+              "op": "defined",
+              "args": [
+                "$evidence.rejection"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "complete"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": "$evidence.pool",
+                "facts": "$evidence.binding",
+                "provenance": [
+                  {
+                    "kind": "immutable-vyper-bytecode-and-bidirectional-factory-registration",
+                    "subject": "$evidence.binding.factory",
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "binding": "$evidence.binding",
+                          "source": "$evidence.source"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "applies": {
+          "op": "eq",
+          "args": [
+            "$candidate.candidateKind",
+            "univ1-exchange"
+          ]
+        }
+      },
+      "programs": {},
+      "abi": {
+        "pool": [
+          "function tokenAddress() view returns(address)",
+          "function factoryAddress() view returns(address)",
+          "function issuer() view returns(address)",
+          "function ethToTokenSwapInput(uint256,uint256) payable returns(uint256)",
+          "function tokenToEthSwapInput(uint256,uint256,uint256) returns(uint256)",
+          "function ethToTokenTransferInput(uint256,uint256,address) payable returns(uint256)",
+          "function tokenToEthTransferInput(uint256,uint256,uint256,address) returns(uint256)"
+        ],
+        "factory": [
+          "function getExchange(address) view returns(address)",
+          "function getToken(address) view returns(address)"
+        ],
+        "token": [
+          "function decimals() view returns(uint256)",
+          "function balanceOf(address) view returns(uint256)"
+        ]
+      },
+      "constants": {
+        "zero": "0x0000000000000000000000000000000000000000",
+        "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "issuerImplementationCodeHash": "0x149aa36e02a2583973be13ac2161eb3ada7ce722d148f1dfa04c94a680957b1b",
+        "standardImplementationCodeHash": "0xb9205fc3f30b0ad30c6f03a0f464f8fd435fbf28cdbb6071054d62fb506a4b96"
+      },
+      "expressions": {}
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.subject"
+                ]
+              }
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            }
+          ]
+        },
+        "$identity.facts"
+      ]
+    },
+    "bindingProjection": {
+      "pool": "$descriptor.pool",
+      "token": "$descriptor.token",
+      "factory": "$descriptor.factory",
+      "issuer": "$descriptor.issuer",
+      "implementation": "$descriptor.implementation",
+      "codeHash": "$descriptor.codeHash",
+      "implementationCodeHash": "$descriptor.implementationCodeHash",
+      "factoryCodeHash": "$descriptor.factoryCodeHash",
+      "decimals": "$descriptor.decimals",
+      "model": "$descriptor.model"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pool",
+    "bindingKey": "$descriptor.pool",
+    "directions": [
+      {
+        "id": "eth-token",
+        "enabled": true,
+        "tokenIn": "$constants.weth",
+        "tokenOut": "$descriptor.token",
+        "adapterId": "univ1-exact-input",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "buy": true,
+          "pool": "$descriptor.pool"
+        }
+      },
+      {
+        "id": "token-eth",
+        "enabled": true,
+        "tokenIn": "$descriptor.token",
+        "tokenOut": "$constants.weth",
+        "adapterId": "univ1-exact-input",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "buy": false,
+          "pool": "$descriptor.pool"
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "custom-swap:uniswap-v1",
+          "$descriptor.pool",
+          {
+            "op": "if",
+            "args": [
+              "$route.buy",
+              "eth-token",
+              "token-eth"
+            ]
+          }
+        ],
+        ":"
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": "$descriptor.pool"
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "descriptorChecks": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.familyId",
+                "custom-swap:uniswap-v1"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.lineageId",
+                "uniswap-v1:immutable-vyper-exchange"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.instanceKey",
+                "$descriptor.pool"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.pool",
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.token",
+                "$constants.weth"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.token",
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.factory",
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.issuer",
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "gte",
+              "args": [
+                "$descriptor.decimals",
+                0
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$descriptor.decimals",
+                36
+              ]
+            }
+          ]
+        },
+        "error": "univ1 incompatible descriptor"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "compatibility": {
+      "pool": "$descriptor.pool",
+      "token": "$descriptor.token",
+      "factory": "$descriptor.factory",
+      "issuer": "$descriptor.issuer",
+      "implementation": "$descriptor.implementation",
+      "codeHash": "$descriptor.codeHash",
+      "implementationCodeHash": "$descriptor.implementationCodeHash",
+      "factoryCodeHash": "$descriptor.factoryCodeHash",
+      "decimals": "$descriptor.decimals",
+      "model": "$descriptor.model"
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "finalize": "$draft",
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1"
+      ]
+    },
+    "exactCompatibility": {
+      "binding": "$route.bindingRef.fingerprint",
+      "routeKey": "$route.routeKey",
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "swap": {
+    "version": 1,
+    "events": [
+      {
+        "id": "univ1-TokenPurchase",
+        "signature": "event TokenPurchase(address indexed buyer,uint256 indexed eth_sold,uint256 indexed tokens_bought)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "buy": true,
+          "amountIn": "$args.eth_sold",
+          "amountOut": "$args.tokens_bought"
+        },
+        "valid": {
+          "op": "ne",
+          "args": [
+            "$args.eth_sold",
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "sameAddress",
+          "args": [
+            "$edge.target",
+            "$pool"
+          ]
+        },
+        "impact": {
+          "op": "merge",
+          "args": [
+            {
+              "pool": "$edge.target",
+              "matchedAdapterId": "$edge.adapterId"
+            },
+            "$payload"
+          ]
+        }
+      },
+      {
+        "id": "univ1-EthPurchase",
+        "signature": "event EthPurchase(address indexed buyer,uint256 indexed tokens_sold,uint256 indexed eth_bought)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "buy": false,
+          "amountIn": "$args.tokens_sold",
+          "amountOut": "$args.eth_bought"
+        },
+        "valid": {
+          "op": "ne",
+          "args": [
+            "$args.tokens_sold",
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "op": "merge",
+          "args": [
+            {
+              "pool": "$edge.target",
+              "matchedAdapterId": "$edge.adapterId"
+            },
+            "$payload"
+          ]
+        },
+        "match": {
+          "op": "sameAddress",
+          "args": [
+            "$edge.target",
+            "$pool"
+          ]
+        }
+      }
+    ],
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only",
+    "localApply": {},
+    "overlay": {},
+    "poolMaterialization": {},
+    "replay": {}
+  },
+  "standard": {
+    "id": "immutable-vyper-clone-factory-registration",
+    "lineageId": "uniswap-v1:immutable-vyper-exchange",
+    "identityKind": "standalone-contract",
+    "abi": {
+      "pool": [
+        "function tokenAddress() view returns(address)",
+        "function factoryAddress() view returns(address)",
+        "function issuer() view returns(address)",
+        "function ethToTokenSwapInput(uint256,uint256) payable returns(uint256)",
+        "function tokenToEthSwapInput(uint256,uint256,uint256) returns(uint256)",
+        "function ethToTokenTransferInput(uint256,uint256,address) payable returns(uint256)",
+        "function tokenToEthTransferInput(uint256,uint256,uint256,address) returns(uint256)",
+        "event TokenPurchase(address indexed buyer,uint256 indexed eth_sold,uint256 indexed tokens_bought)",
+        "event EthPurchase(address indexed buyer,uint256 indexed tokens_sold,uint256 indexed eth_bought)"
+      ],
+      "factory": [
+        "function getExchange(address) view returns(address)",
+        "function getToken(address) view returns(address)"
+      ],
+      "token": [
+        "function decimals() view returns(uint256)",
+        "function balanceOf(address) view returns(uint256)"
+      ],
+      "weth": [
+        "function withdraw(uint256)",
+        "function deposit() payable"
+      ]
+    },
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "multicall": "0xca11bde05977b3631167028862be2a173976ca11",
+      "max": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "maxValue": "79228162514264337593543950335",
+      "issuerModel": "anyswap-v1-issuer-fee-001",
+      "standardModel": "uniswap-v1-997"
+    },
+    "expressions": {},
+    "programs": {},
+    "match": {
+      "op": "defined",
+      "args": [
+        "$descriptor.model"
+      ]
+    },
+    "context": {},
+    "boundState": "$descriptor",
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.pool",
+        "$descriptor.token"
+      ],
+      "mutationAddresses": [
+        "$descriptor.pool",
+        "$descriptor.token"
+      ],
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "gt",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$snapshot.nativeReserve",
+                              0
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "gt",
+                        "args": [
+                          "$snapshot.tokenReserve",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          [
+            "$route.routeKey",
+            "univ1 empty reserve"
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "univ1-execution-math",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            "$descriptor.pool",
+            "$descriptor.token",
+            "$descriptor.issuer"
+          ],
+          [
+            "$constants.weth"
+          ]
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "ne",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$executor"
+                        ]
+                      }
+                    ]
+                  },
+                  "$descriptor.issuer"
+                ]
+              },
+              {
+                "op": "ne",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$executor"
+                        ]
+                      }
+                    ]
+                  },
+                  "$descriptor.pool"
+                ]
+              },
+              {
+                "op": "ne",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$executor"
+                        ]
+                      }
+                    ]
+                  },
+                  "$descriptor.token"
+                ]
+              }
+            ]
+          },
+          "error": "univ1 unsupported executor"
+        }
+      ],
+      "evidence": {
+        "kind": "univ1-execution-math",
+        "source": "$source",
+        "executor": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "binding": "$route.bindingRef.fingerprint",
+        "routeKey": "$route.routeKey",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut"
+      }
+    },
+    "readPrograms": {},
+    "_blocked_execution": {
+      "reason": "one variant cannot select the buy vs sell call; see uniswap-v1.blockers.md",
+      "buy": {
+        "approval": null,
+        "call": "ethToTokenSwapInput(min_tokens=1, deadline=MAX_UINT) with value=amountIn after unwrapping WETH amountIn"
+      },
+      "sell": {
+        "approval": {
+          "token": "$route.tokenIn",
+          "spender": "$descriptor.pool",
+          "mode": "exact-clear",
+          "verifyAllowance": true
+        },
+        "call": "tokenToEthSwapInput(tokens_sold=amountIn, min_eth=1, deadline=MAX_UINT) then wrap the measured native output"
+      },
+      "directOutput": "ethToTokenTransferInput / tokenToEthTransferInput with the requested recipient (univ1-family/recipient.ts:9-47)"
+    },
+    "modules": {}
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "quote": {
+          "model": "univ1:quote",
+          "version": 1
+        },
+        "transition": {
+          "model": "univ1:transition",
+          "version": 1
+        },
+        "mid": {
+          "model": "univ1:mid",
+          "version": 1
+        }
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "reserves",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "native-reserve",
+              "kind": "eth-call",
+              "to": "$constants.multicall",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "multicall",
+                  "getEthBalance",
+                  [
+                    "$descriptor.pool"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "token-reserve",
+              "kind": "eth-call",
+              "to": "$descriptor.token",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    "$descriptor.pool"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "return": {
+                "source": "$source",
+                "nativeReserve": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "native-reserve"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                },
+                "tokenReserve": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "token-reserve"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.reserves"
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [],
+      "rows": {
+        "op": "map",
+        "args": [
+          "$routes",
+          "route",
+          {
+            "routeKey": "$route.routeKey",
+            "numerator": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "model",
+                  "args": [
+                    "mid",
+                    {
+                      "op": "merge",
+                      "args": [
+                        "$snapshot",
+                        {
+                          "model": "$descriptor.model",
+                          "buy": "$route.buy",
+                          "depthIn": {
+                            "op": "if",
+                            "args": [
+                              "$route.buy",
+                              "$snapshot.nativeReserve",
+                              "$snapshot.tokenReserve"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "amountOut"
+              ]
+            },
+            "denominator": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "model",
+                  "args": [
+                    "mid",
+                    {
+                      "op": "merge",
+                      "args": [
+                        "$snapshot",
+                        {
+                          "model": "$descriptor.model",
+                          "buy": "$route.buy",
+                          "depthIn": {
+                            "op": "if",
+                            "args": [
+                              "$route.buy",
+                              "$snapshot.nativeReserve",
+                              "$snapshot.tokenReserve"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "amountIn"
+              ]
+            },
+            "depth": {
+              "op": "min",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    "$route.buy",
+                    "$snapshot.nativeReserve",
+                    "$snapshot.tokenReserve"
+                  ]
+                },
+                {
+                  "op": "if",
+                  "args": [
+                    "$route.buy",
+                    "$snapshot.tokenReserve",
+                    "$snapshot.nativeReserve"
+                  ]
+                }
+              ]
+            },
+            "reserveA": {
+              "op": "if",
+              "args": [
+                "$route.buy",
+                "$snapshot.nativeReserve",
+                "$snapshot.tokenReserve"
+              ]
+            },
+            "reserveB": {
+              "op": "if",
+              "args": [
+                "$route.buy",
+                "$snapshot.tokenReserve",
+                "$snapshot.nativeReserve"
+              ]
+            },
+            "feeBps": {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "steps": [
+        {
+          "id": "reserves",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "native-reserve",
+              "kind": "eth-call",
+              "to": "$constants.multicall",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "multicall",
+                  "getEthBalance",
+                  [
+                    "$descriptor.pool"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "token-reserve",
+              "kind": "eth-call",
+              "to": "$descriptor.token",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    "$descriptor.pool"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "return": [
+                {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "native-reserve"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "token-reserve"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "result": "$steps.reserves"
+    },
+    "trialState": {
+      "version": 1,
+      "reads": [
+        {
+          "id": "reserves",
+          "refs": [
+            {
+              "key": {
+                "op": "join",
+                "args": [
+                  [
+                    "pool:",
+                    "$descriptor.pool"
+                  ],
+                  ""
+                ]
+              },
+              "schema": "univ1-reserves:v2",
+              "binding": {
+                "op": "hash",
+                "args": [
+                  {
+                    "pool": "$descriptor.pool",
+                    "token": "$descriptor.token",
+                    "factory": "$descriptor.factory",
+                    "issuer": "$descriptor.issuer",
+                    "implementation": "$descriptor.implementation",
+                    "codeHash": "$descriptor.codeHash",
+                    "implementationCodeHash": "$descriptor.implementationCodeHash",
+                    "factoryCodeHash": "$descriptor.factoryCodeHash",
+                    "decimals": "$descriptor.decimals",
+                    "model": "$descriptor.model"
+                  }
+                ]
+              },
+              "dependencies": [
+                {
+                  "op": "join",
+                  "args": [
+                    [
+                      "storage:",
+                      "$descriptor.pool"
+                    ],
+                    ""
+                  ]
+                },
+                {
+                  "op": "join",
+                  "args": [
+                    [
+                      "native-balance:",
+                      "$descriptor.pool"
+                    ],
+                    ""
+                  ]
+                },
+                {
+                  "op": "join",
+                  "args": [
+                    [
+                      "token-balance:",
+                      "$descriptor.token",
+                      ":",
+                      "$descriptor.pool"
+                    ],
+                    ""
+                  ]
+                }
+              ]
+            }
+          ],
+          "initial": "$prepared"
+        }
+      ],
+      "model": "transition",
+      "input": {
+        "state": {
+          "op": "at",
+          "args": [
+            "$stateReads.reserves",
+            0
+          ]
+        },
+        "buy": "$route.buy",
+        "amountIn": "$amountIn",
+        "model": "$descriptor.model"
+      },
+      "amountOut": {
+        "op": "get",
+        "args": [
+          "$modelResult",
+          "amountOut"
+        ]
+      },
+      "stateChanges": [
+        {
+          "ref": {
+            "op": "at",
+            "args": [
+              "$stateRefs.reserves",
+              0
+            ]
+          },
+          "value": {
+            "op": "get",
+            "args": [
+              "$modelResult",
+              "state"
+            ]
+          }
+        }
+      ],
+      "stateEffects": [
+        {
+          "op": "join",
+          "args": [
+            [
+              "storage:",
+              "$descriptor.pool"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "native-balance:",
+              "$descriptor.pool"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "token-balance:",
+              "$descriptor.token",
+              ":",
+              "$descriptor.pool"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "native-balance:",
+              "$executor"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "token-balance:",
+              "$descriptor.token",
+              ":",
+              "$executor"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "token-balance:",
+              "$constants.weth",
+              ":",
+              "$executor"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "native-balance:",
+              "$constants.weth"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "token-supply:",
+              "$constants.weth"
+            ],
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "univ1-exact-input",
+        "lineage": "custom-swap:uniswap-v1",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": true,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function ethToTokenSwapInput(uint256,uint256) payable returns(uint256)"
+        },
+        {
+          "signature": "function tokenToEthSwapInput(uint256,uint256,uint256) returns(uint256)"
+        }
+      ]
+    }
+  ]
+}

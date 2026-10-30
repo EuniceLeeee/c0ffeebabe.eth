@@ -1,0 +1,1366 @@
+{
+  "_status": "blocked",
+  "_note": "Non-deliverable partial mapping draft for univ2-standard. Do not copy to venues/swaps/univ2-family/univ2-standard.json or register a production entry. Blocking gaps: univ2-standard.blockers.md. Discovery/identity/routes/pricing/exact blocks below are an outline where the declarative shape is settled; call-observation, transfer-tax identity, capacity zero-output and quoteOutput binding are intentionally not finalized.",
+  "_blockers": [
+    "declarative-family.ts:680 rejects amountOut<=0; univ2-family/exact.ts:112-130 returns amountOut=0 + unavailableReason=input-reserve-capacity",
+    "token-transfer-semantics/btb-bear.ts:5-27 runtime classification has no declarative identity surface beyond bytecodeGetter",
+    "univ2-family/runtime-execution.ts:39 always advertises quoteOutput and :84-99,160-175 feed the quoted output into pair.swap; declarative quote locals are internal (declarative-execution.ts:153-217,480)",
+    "univ2-family/swap.ts:41-67,87-147 custom createUniV2SwapObservation + call-observation decode; declarative swap domain decodes logs only",
+    "declarative-discovery.ts:92,308 hardcodes reverseBinding unsupported; univ2-family/discovery.ts:62-70 declares nominate/reverseBinding providers",
+    "univ2-family/exact.ts:162-174 declares stateOnlyReads:true; declarative exact methods only expose chainAmountQuote/trialState (declarative-family.ts:609-624)"
+  ],
+  "version": 2,
+  "scope": {
+    "family": "univ2-standard"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_UNIV2_STANDARD_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "univ2-standard",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "univ2-swap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-transfer"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "univ2:factory-child"
+    ],
+    "poolAdapterIds": [
+      "univ2",
+      "univ2-standard"
+    ],
+    "edgeAdapterIds": [
+      "univ2-swap"
+    ],
+    "requiresProtocolEdgesFlag": false,
+    "livePoolStateKind": "constant-product-v2"
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "factory-log",
+        "landed-log",
+        "observed-call"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "univ2-pair",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address",
+          "sourceKind": "string",
+          "hintedFactory": "address",
+          "hintedToken0": "address",
+          "hintedToken1": "address"
+        },
+        "optionalFields": [
+          "sourceKind"
+        ],
+        "nullableFields": [
+          "hintedFactory",
+          "hintedToken0",
+          "hintedToken1"
+        ],
+        "key": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "univ2-pair-swap-call",
+          "signature": "function swap(uint256,uint256,address,bytes)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "univ2-pair-created",
+          "signature": "event PairCreated(address indexed token0,address indexed token1,address pair,uint256)",
+          "fields": {
+            "pool": {
+              "from": "argument",
+              "index": 2
+            }
+          }
+        }
+      ],
+      "nomination": "address-surface",
+      "surface": {
+        "id": "univ2-pair-surface",
+        "fingerprint": "univ2-pair-surface-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          },
+          "hintedFactory": {
+            "from": "opaque",
+            "path": "factory"
+          },
+          "hintedToken0": {
+            "from": "opaque",
+            "path": "token0"
+          },
+          "hintedToken1": {
+            "from": "opaque",
+            "path": "token1"
+          }
+        }
+      },
+      "labels": [
+        "univ2",
+        "univ2-standard"
+      ],
+      "_blocked": [
+        "nominateUniv2 recent-log provider (nomination.ts:20-53)",
+        "implementation reverse binding (reverse-binding.ts:22-103; declarative-discovery.ts:92,308)"
+      ]
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "identity": {
+        "select": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                "$candidate.candidateKind",
+                "univ2-pair"
+              ]
+            },
+            "error": "univ2 wrong candidate kind"
+          },
+          {
+            "return": "pool-static",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "reverse",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "pool-static"
+              ]
+            }
+          },
+          {
+            "return": "done"
+          }
+        ],
+        "stages": {
+          "pool-static": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "pair-factory",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pair",
+                    "factory",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "pair-token0",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pair",
+                    "token0",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "pair-token1",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pair",
+                    "token1",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "factory",
+                "value": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pair-factory"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "token0",
+                "value": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pair-token0"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "token1",
+                "value": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pair-token1"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "pool-static",
+                  "source": {
+                    "op": "source",
+                    "args": [
+                      "$results"
+                    ]
+                  },
+                  "factory": "$factory",
+                  "token0": "$token0",
+                  "token1": "$token1",
+                  "ids": [
+                    "pair-factory",
+                    "pair-token0",
+                    "pair-token1"
+                  ]
+                }
+              }
+            ]
+          },
+          "reverse": {
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "factory-get-pair",
+                "kind": "eth-call",
+                "to": "$evidence.factory",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "getPair",
+                    [
+                      "$evidence.token0",
+                      "$evidence.token1"
+                    ]
+                  ]
+                },
+                "completion": "return-or-revert-data"
+              },
+              {
+                "id": "model-surface-0",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "quote",
+                    "getAmountOut",
+                    [
+                      "$evidence.token0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-or-revert-data",
+                "required": false
+              },
+              {
+                "id": "model-surface-1",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "quote",
+                    "getAmountOut",
+                    [
+                      "$evidence.token1",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-or-revert-data",
+                "required": false
+              },
+              {
+                "id": "model-decimals-0",
+                "kind": "eth-call",
+                "to": "$evidence.token0",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-or-revert-data",
+                "required": false
+              },
+              {
+                "id": "model-decimals-1",
+                "kind": "eth-call",
+                "to": "$evidence.token1",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-or-revert-data",
+                "required": false
+              },
+              {
+                "id": "transfer-code-0",
+                "kind": "get-code",
+                "address": "$evidence.token0"
+              },
+              {
+                "id": "transfer-code-1",
+                "kind": "get-code",
+                "address": "$evidence.token1"
+              }
+            ],
+            "decode": [
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "reverse-binding",
+                      "ids": [
+                        "factory-get-pair",
+                        "transfer-code-0",
+                        "transfer-code-1"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "done": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "pool-static"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "reverse-binding"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    }
+                  ]
+                },
+                "facts": {
+                  "pool": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$candidate.pool"
+                        ]
+                      }
+                    ]
+                  },
+                  "token0": "$evidence.token0",
+                  "token1": "$evidence.token1",
+                  "feeRule": {
+                    "kind": "constant-bps",
+                    "feeBps": 30,
+                    "evidence": "measured-factory"
+                  },
+                  "quoteModel": {
+                    "kind": "get-amount-out",
+                    "probe0": "0",
+                    "probe1": "0"
+                  },
+                  "factoryBinding": {
+                    "factory": "$evidence.factory",
+                    "reversePool": "$evidence.reversePool"
+                  }
+                },
+                "provenance": [
+                  {
+                    "kind": "factory-reverse-binding",
+                    "subject": "$evidence.factory",
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "pool": {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$candidate.pool"
+                                ]
+                              }
+                            ]
+                          },
+                          "source": "$evidence.source",
+                          "factory": "$evidence.factory"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "applies": {
+          "op": "eq",
+          "args": [
+            "$candidate.candidateKind",
+            "univ2-pair"
+          ]
+        }
+      },
+      "programs": {},
+      "abi": {
+        "pair": [
+          "function factory() view returns(address)",
+          "function token0() view returns(address)",
+          "function token1() view returns(address)",
+          "function getReserves() view returns(uint112,uint112,uint32)",
+          "function getAmountOut(address,uint256) view returns(uint256)",
+          "function swap(uint256,uint256,address,bytes)"
+        ],
+        "factory": [
+          "function getPair(address,address) view returns(address)"
+        ],
+        "token": [
+          "function decimals() view returns(uint8)",
+          "function balanceOf(address) view returns(uint256)"
+        ],
+        "quote": [
+          "function getAmountOut(address,uint256) view returns(uint256)"
+        ]
+      },
+      "constants": {
+        "zero": "0x0000000000000000000000000000000000000000",
+        "maxReserve": "5192296858534827628530496329220095"
+      },
+      "expressions": {}
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.subject"
+                ]
+              }
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            }
+          ]
+        },
+        "$identity.facts"
+      ]
+    },
+    "bindingProjection": {
+      "tokenTransfers": "$descriptor.tokenTransfers",
+      "quoteModel": "$descriptor.quoteModel",
+      "pool": "$descriptor.pool",
+      "token0": "$descriptor.token0",
+      "token1": "$descriptor.token1",
+      "feeRule": "$descriptor.feeRule",
+      "factoryBinding": "$descriptor.factoryBinding"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pool",
+    "bindingKey": "$descriptor.pool",
+    "directions": [
+      {
+        "id": "zero-for-one",
+        "enabled": true,
+        "tokenIn": "$descriptor.token0",
+        "tokenOut": "$descriptor.token1",
+        "adapterId": "univ2-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": "$descriptor.pool",
+          "direction": "zero-for-one",
+          "feeBps": "$descriptor.feeRule.feeBps"
+        }
+      },
+      {
+        "id": "one-for-zero",
+        "enabled": true,
+        "tokenIn": "$descriptor.token1",
+        "tokenOut": "$descriptor.token0",
+        "adapterId": "univ2-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": "$descriptor.pool",
+          "direction": "one-for-zero",
+          "feeBps": "$descriptor.feeRule.feeBps"
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "univ2-standard",
+          "$descriptor.pool",
+          "$route.direction"
+        ],
+        "\u001f"
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": "$descriptor.pool"
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "descriptorChecks": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.familyId",
+                "univ2-standard"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.lineageId",
+                "univ2:factory-child"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.pool",
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.token0",
+                "$descriptor.token1"
+              ]
+            }
+          ]
+        },
+        "error": "univ2 incompatible descriptor"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "compatibility": {
+      "tokenTransfers": "$descriptor.tokenTransfers",
+      "quoteModel": "$descriptor.quoteModel",
+      "pool": "$descriptor.pool",
+      "token0": "$descriptor.token0",
+      "token1": "$descriptor.token1"
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "finalize": "$draft",
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1"
+      ]
+    },
+    "exactCompatibility": {
+      "binding": "$route.bindingRef.fingerprint",
+      "routeKey": "$route.routeKey",
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "mutationKinds": [
+      "log"
+    ]
+  },
+  "swap": {
+    "version": 1,
+    "events": [
+      {
+        "id": "univ2-swap-log",
+        "signature": "event Swap(address indexed sender,uint256 amount0In,uint256 amount1In,uint256 amount0Out,uint256 amount1Out,address indexed to)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": "$pool",
+          "sender": "$args.sender",
+          "recipient": "$args.to",
+          "amount0In": "$args.amount0In",
+          "amount1In": "$args.amount1In",
+          "amount0Out": "$args.amount0Out",
+          "amount1Out": "$args.amount1Out"
+        },
+        "valid": {
+          "op": "or",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                "$args.amount0In",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.amount1In",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "sameAddress",
+          "args": [
+            "$edge.target",
+            "$pool"
+          ]
+        },
+        "impact": {
+          "op": "merge",
+          "args": [
+            {
+              "pool": "$edge.target",
+              "matchedAdapterId": "$edge.adapterId"
+            },
+            "$payload"
+          ]
+        }
+      },
+      {
+        "id": "univ2-sync-log",
+        "signature": "event Sync(uint112 reserve0,uint112 reserve1)",
+        "classification": "mutation",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": "$pool",
+          "reserve0": "$args.reserve0",
+          "reserve1": "$args.reserve1"
+        },
+        "impact": {
+          "op": "merge",
+          "args": [
+            {
+              "pool": "$edge.target",
+              "matchedAdapterId": "$edge.adapterId"
+            },
+            "$payload"
+          ]
+        }
+      }
+    ],
+    "canonicalIntakeTargets": [
+      "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
+    ],
+    "victimSupport": "replay",
+    "localApply": {},
+    "overlay": {},
+    "poolMaterialization": {},
+    "replay": {},
+    "_blocked": [
+      "call observation decode (swap.ts:87-147)",
+      "createUniV2SwapObservation resolvePool (swap.ts:41-67)"
+    ]
+  },
+  "standard": {
+    "id": "factory-child-reverse-binding",
+    "lineageId": "univ2:factory-child",
+    "identityKind": "factory-child",
+    "abi": {
+      "pair": [
+        "function getReserves() view returns(uint112,uint112,uint32)",
+        "function swap(uint256,uint256,address,bytes)",
+        "function getAmountOut(address,uint256) view returns(uint256)"
+      ],
+      "token": [
+        "function balanceOf(address) view returns(uint256)",
+        "function transfer(address,uint256) returns(bool)"
+      ],
+      "factory": [
+        "function getPair(address,address) view returns(address)"
+      ]
+    },
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "bips": "10000"
+    },
+    "expressions": {},
+    "programs": {},
+    "match": {
+      "op": "eq",
+      "args": [
+        "$descriptor.familyId",
+        "univ2-standard"
+      ]
+    },
+    "context": {},
+    "boundState": "$descriptor",
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.pool",
+        "$descriptor.token0",
+        "$descriptor.token1"
+      ],
+      "mutationAddresses": [
+        "$descriptor.pool"
+      ]
+    },
+    "exact": {
+      "methodId": "pair-reserves",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            "$descriptor.pool",
+            "$descriptor.factoryBinding.factory"
+          ],
+          [
+            "$descriptor.token0",
+            "$descriptor.token1"
+          ]
+        ]
+      },
+      "evidence": {
+        "kind": "univ2-reserves-exact",
+        "quoteModel": "$descriptor.quoteModel.kind",
+        "source": "$source",
+        "pool": "$descriptor.pool",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "feeBps": "$descriptor.feeRule.feeBps"
+      }
+    },
+    "readPrograms": {},
+    "_blocked_execution": {
+      "reason": "quoteOutput/transfer-tax/capacity gaps; see univ2-standard.blockers.md",
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.pool",
+        "mode": "ensure"
+      },
+      "call": "pair.swap(amount0Out, amount1Out, recipient, 0x) after transferring amountIn to the pair",
+      "quoteOutput": "pre-transfer getReserves/getAmountOut quote shared by the runtime swap amount (runtime-execution.ts:84-99,160-175)"
+    },
+    "modules": {}
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "quote": {
+          "model": "univ2:constant-product",
+          "version": 1
+        },
+        "capacity": {
+          "model": "univ2:capacity",
+          "version": 1
+        },
+        "received": {
+          "model": "univ2:transfer-received",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "steps": [
+        {
+          "id": "reserves",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "exact-reserves",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pair",
+                  "getReserves",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "exact-input-balance",
+              "kind": "eth-call",
+              "to": "$route.tokenIn",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    "$descriptor.pool"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "return": {
+                "reserve0": {
+                  "op": "decode",
+                  "args": [
+                    "pair",
+                    "getReserves",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "exact-reserves"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                },
+                "reserve1": {
+                  "op": "decode",
+                  "args": [
+                    "pair",
+                    "getReserves",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "exact-reserves"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    1
+                  ]
+                },
+                "inputBalance": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "exact-input-balance"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.reserves"
+    },
+    "trialState": {
+      "version": 1,
+      "reads": [
+        {
+          "id": "pair",
+          "refs": [
+            {
+              "key": {
+                "op": "join",
+                "args": [
+                  [
+                    "pool:",
+                    "$descriptor.pool"
+                  ],
+                  ""
+                ]
+              },
+              "schema": "v2-pair-state-v1",
+              "binding": {
+                "op": "hash",
+                "args": [
+                  {
+                    "pool": "$descriptor.pool",
+                    "token0": "$descriptor.token0",
+                    "token1": "$descriptor.token1",
+                    "feeRule": "$descriptor.feeRule"
+                  }
+                ]
+              },
+              "dependencies": [
+                {
+                  "op": "join",
+                  "args": [
+                    [
+                      "storage:",
+                      "$descriptor.pool"
+                    ],
+                    ""
+                  ]
+                },
+                {
+                  "op": "join",
+                  "args": [
+                    [
+                      "token-balance:",
+                      "$descriptor.token0",
+                      ":",
+                      "$descriptor.pool"
+                    ],
+                    ""
+                  ]
+                },
+                {
+                  "op": "join",
+                  "args": [
+                    [
+                      "token-balance:",
+                      "$descriptor.token1",
+                      ":",
+                      "$descriptor.pool"
+                    ],
+                    ""
+                  ]
+                }
+              ]
+            }
+          ],
+          "initial": [
+            "$prepared.reserve0",
+            "$prepared.reserve1"
+          ]
+        }
+      ],
+      "model": "quote",
+      "input": {
+        "reserveIn": {
+          "op": "at",
+          "args": [
+            "$stateReads.pair",
+            0
+          ]
+        },
+        "reserveOut": {
+          "op": "at",
+          "args": [
+            "$stateReads.pair",
+            1
+          ]
+        },
+        "amountIn": "$amountIn",
+        "feeBps": "$descriptor.feeRule.feeBps"
+      },
+      "amountOut": {
+        "op": "get",
+        "args": [
+          "$modelResult",
+          "amountOut"
+        ]
+      },
+      "stateChanges": [
+        {
+          "ref": {
+            "op": "at",
+            "args": [
+              "$stateRefs.pair",
+              0
+            ]
+          },
+          "value": {
+            "op": "get",
+            "args": [
+              "$modelResult",
+              "state"
+            ]
+          }
+        }
+      ],
+      "stateEffects": [
+        {
+          "op": "join",
+          "args": [
+            [
+              "storage:",
+              "$descriptor.pool"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "token-balance:",
+              "$route.tokenIn",
+              ":",
+              "$descriptor.pool"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "token-balance:",
+              "$route.tokenOut",
+              ":",
+              "$descriptor.pool"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "token-balance:",
+              "$route.tokenIn",
+              ":",
+              "$executor"
+            ],
+            ""
+          ]
+        },
+        {
+          "op": "join",
+          "args": [
+            [
+              "token-balance:",
+              "$route.tokenOut",
+              ":",
+              "$executor"
+            ],
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "univ2-swap",
+        "lineage": "univ2-standard",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function swap(uint256,uint256,address,bytes)"
+        }
+      ]
+    }
+  ]
+}

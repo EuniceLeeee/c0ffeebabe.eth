@@ -1,13 +1,36 @@
 {
   "_status": "blocked",
-  "_note": "Non-deliverable draft. Do not copy to protocols/set-redemption-family/set-redemption.json and do not generate a production entry from it. It records the parts that are expressible (discovery mapping, instance projection, routes/effects) and the shape of the parts that are not (multi-asset execution, direct redeem action, legacy variant, nomination/reverse-binding channels). See set-redemption.blockers.md.",
+  "_note": "Non-deliverable draft, reassessed 2026-10-30 against HEAD 845ad35d (merge 656cfbb3; framework code 570dde12). Do not copy to protocols/set-redemption-family/set-redemption.json and do not generate a production entry from it. It records the parts that are expressible (discovery mapping, instance projection, routes/effects) and the shape of the parts that are not (multi-asset execution fan-out and nested programs, direct redeem action, legacy variant, dual nomination channels and reverse binding). See set-redemption.blockers.md.",
+  "_reassessed": {
+    "date": "2026-10-30",
+    "head": "845ad35d52cfa6e6bea5ddbadb34dfec065c3470",
+    "mergedFramework": "656cfbb3",
+    "frameworkCode": "570dde12",
+    "baseline": "6876fef0",
+    "verdict": "blocked",
+    "closedSinceBaseline": [
+      "canonical call/event re-encode comparison (declarative-discovery.ts:205-208,219-224)"
+    ],
+    "stillOpen": [
+      "G1 multi-asset execution fan-out and nested runtime programs",
+      "G2 direct-calldata Basic action",
+      "G3 dual nomination channels and reverse binding"
+    ]
+  },
   "_blockers": [
-    "declarative-execution.ts:161-168 requires exactly one debit and one credit; a Set redemption credits/guards every basket component (set-redemption-family/execution.ts:74-110,134-146)",
-    "declarative-execution.ts:28-33,244-298 has static step/effect arrays only; no fan-out over $descriptor.components and no nested execSubscript program (execution.ts:16-42,93-98; direct.ts:27-64)",
-    "declarative-protocol.ts:650-671 emits one action node; it cannot add the per-output assert-balance nodes (execution.ts:134-136)",
-    "declarative-execution.ts:471-492 only encodes runtimeAmountProgram nodes; the Basic action is direct redeem calldata with empty params (action.ts:8-17; test/contract.ts:94-100)",
-    "declarative-discovery.ts:51,266-273 has one nomination discriminator and always reports reverseBinding explicitly-unsupported; the family combines address-surface and receipt-log nomination plus an implemented reverse binding (discovery.ts:6-41; nomination.ts:22-49)",
-    "declarative-discovery.ts:193,203,242-258 has no event encode/re-encode comparison; the family rejects non-canonical call/log encodings (discovery.ts:17-25; legacy.ts:47-55)"
+    "G1 declarative-execution.ts:295-315 keeps effects static and requires exactly one debit and one credit; no forEach over $descriptor.components and no nested execSubscript/run operation. The fragment builders emit one node (declarative-family.ts:747-749; declarative-execution.ts:765-767), while Basic/legacy redemption guards every basket receipt (set-redemption-family/execution.ts:74-110,134-136,138-146; direct.ts:27-64; legacy execution.ts:16-42; issuance.ts:12-51). quoteOutput is single-result (declarative-execution.ts:27-34,282-290) and does not help.",
+    "G2 declarative-execution.ts:769-790 only encodes a node.params.runtimeAmountProgram; action declarations carry only descriptor+traces (build-declarative-production.ts:147-152; declarative-family.ts:753). The Basic action is empty-params direct redeem(set,amount,recipient) calldata (set-redemption-family/action.ts:8-17; test/contract.ts:81-86).",
+    "G3 declarative-discovery.ts:54,121-122 accepts exactly one nomination discriminator and :302-307 builds one provider; :308 always returns explicitReverseBindingUnsupported. The family combines address-surface binding with receipt-log fallback in one nominate (set-redemption-family/discovery.ts:6-11,36-41; nomination.ts:22-49) and implements the retain channel (discovery.ts:37-41)."
+  ],
+  "_probeEvidence": [
+    "one debit + two credits -> declared conversion must bind full debit or bounded budget and fresh receipt to the route",
+    "declarative action node params {} -> declared quoted node adapter mismatch; params {calldata} -> declared quoted node has no program",
+    "mapped discovery nomination tx-evidence -> reverseBinding kind explicitly-unsupported; nomination [address-surface,tx-evidence] -> invalid discovery candidate or nomination kind; added reverseBinding property -> invalid discovery mapping",
+    "canonical event accepted and non-canonical event data rejected by the new re-encode check"
+  ],
+  "_parityNotes": [
+    "declarative candidate addresses are checksummed by scalar() (declarative-discovery.ts:105) while the TS candidate stores lowercase (codec.ts:23,27); the draft normalizes at identity/instance boundaries.",
+    "composite declarative candidateKey is JSON.stringify(parts) (declarative-discovery.ts:283-293) while TS uses ${set}:${module} (discovery.ts:34); instanceKey/instanceNominationKey do not change this internal dedupe key."
   ],
   "version": 2,
   "scope": {

@@ -1,0 +1,3003 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:metronome-synth"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_METRONOME_SYNTH_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:metronome-synth",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "metronome-synth-swap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "convert"
+      }
+    ],
+    "supportedLineages": [
+      "metronome-synth:active-membership"
+    ],
+    "poolAdapterIds": [
+      "metronome-synth"
+    ],
+    "edgeAdapterIds": [
+      "metronome-synth-swap"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "metronome-synth-pool",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address",
+          "hintIn": "address",
+          "hintOut": "address"
+        },
+        "optionalFields": [
+          "hintIn",
+          "hintOut"
+        ],
+        "key": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "metronome-synth-swap-call",
+          "signature": "swap(address,address,uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            },
+            "hintIn": {
+              "from": "argument",
+              "index": 0
+            },
+            "hintOut": {
+              "from": "argument",
+              "index": 1
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    2
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "pool",
+                        "swap",
+                        "$args"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "metronome-synth-quote-call",
+          "signature": "quoteSwapOut(address,address,uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            },
+            "hintIn": {
+              "from": "argument",
+              "index": 0
+            },
+            "hintOut": {
+              "from": "argument",
+              "index": 1
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    2
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "pool",
+                        "quoteSwapOut",
+                        "$args"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [],
+      "surface": {
+        "id": "metronome-synth-pool-surface",
+        "fingerprint": "metronome-synth-membership-and-quote-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "metronome-synth",
+        "protocol:metronome-synth"
+      ],
+      "nomination": "address-surface"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "pool": [
+          "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
+          "function quoteSwapOut(address syntheticTokenIn,address syntheticTokenOut,uint256 amountIn) view returns (uint256 amountOut,uint256 fee)",
+          "function swap(address syntheticTokenIn,address syntheticTokenOut,uint256 amountIn) returns (uint256 amountOut)"
+        ],
+        "token": [
+          "function decimals() view returns (uint8)"
+        ]
+      },
+      "constants": {
+        "tokens": [
+          "0x64351fc9810adad17a690e4e1717df5e7e085160",
+          "0x8b4f8ad3801b4015dea6da1d36f063cbf4e231c7",
+          "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa"
+        ],
+        "sample": "1000000000000000000",
+        "forwarder": "0xd8d2297bdf4a84569bcec83c92a81549be9c51e6",
+        "oracle": "0x7d4e742018fb52e48b08be73d041c18b21de6fb5",
+        "oracleBinding": "4ac71f0f8236a712ef688926dc509aadeadef675b0c52a729e772b64e3e89948",
+        "zero": "0x0000000000000000000000000000000000000000"
+      },
+      "expressions": {
+        "membershipTokens": {
+          "op": "map",
+          "args": [
+            {
+              "op": "sortId",
+              "args": [
+                {
+                  "op": "map",
+                  "args": [
+                    {
+                      "op": "unique",
+                      "args": [
+                        {
+                          "op": "concat",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$constants.tokens",
+                                "t",
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$t"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    "$candidate.hintIn"
+                                  ]
+                                },
+                                [
+                                  {
+                                    "op": "address",
+                                    "args": [
+                                      "$candidate.hintIn"
+                                    ]
+                                  }
+                                ],
+                                []
+                              ]
+                            },
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    "$candidate.hintOut"
+                                  ]
+                                },
+                                [
+                                  {
+                                    "op": "address",
+                                    "args": [
+                                      "$candidate.hintOut"
+                                    ]
+                                  }
+                                ],
+                                []
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "token",
+                    {
+                      "id": {
+                        "op": "lower",
+                        "args": [
+                          "$token"
+                        ]
+                      },
+                      "address": "$token"
+                    }
+                  ]
+                }
+              ]
+            },
+            "item",
+            "$item.address"
+          ]
+        },
+        "directedPairs": {
+          "op": "flatMap",
+          "args": [
+            "$tokens",
+            "tokenIn",
+            {
+              "op": "flatMap",
+              "args": [
+                "$tokens",
+                "tokenOut",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$tokenIn",
+                        "$tokenOut"
+                      ]
+                    },
+                    [],
+                    [
+                      {
+                        "tokenIn": "$tokenIn",
+                        "tokenOut": "$tokenOut"
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "membershipProof": {
+          "op": "hash",
+          "args": [
+            {
+              "pool": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$pool"
+                    ]
+                  }
+                ]
+              },
+              "tokens": {
+                "op": "map",
+                "args": [
+                  "$tokens",
+                  "t",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$t"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "directions": {
+                "op": "map",
+                "args": [
+                  {
+                    "op": "sortId",
+                    "args": [
+                      {
+                        "op": "map",
+                        "args": [
+                          "$directions",
+                          "d",
+                          {
+                            "id": {
+                              "op": "join",
+                              "args": [
+                                {
+                                  "op": "concat",
+                                  "args": [
+                                    [
+                                      [
+                                        {
+                                          "op": "lower",
+                                          "args": [
+                                            {
+                                              "op": "address",
+                                              "args": [
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    "$d",
+                                                    "tokenIn"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "\u001f",
+                                        {
+                                          "op": "lower",
+                                          "args": [
+                                            {
+                                              "op": "address",
+                                              "args": [
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    "$d",
+                                                    "tokenOut"
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    ]
+                                  ]
+                                },
+                                ""
+                              ]
+                            },
+                            "value": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "address",
+                                    "args": [
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          "$d",
+                                          "tokenIn"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "address",
+                                    "args": [
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          "$d",
+                                          "tokenOut"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "item",
+                  "$item.value"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "identity": {
+        "select": [
+          {
+            "return": "membership",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "active",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "membership"
+              ]
+            }
+          },
+          {
+            "return": "active"
+          }
+        ],
+        "stages": {
+          "membership": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": {
+              "op": "concat",
+              "args": [
+                [
+                  {
+                    "id": "identity-pool-code",
+                    "kind": "get-code",
+                    "address": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    }
+                  }
+                ],
+                {
+                  "op": "map",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "membershipTokens",
+                        {}
+                      ]
+                    },
+                    "token",
+                    {
+                      "id": {
+                        "op": "join",
+                        "args": [
+                          {
+                            "op": "concat",
+                            "args": [
+                              "identity-member:",
+                              {
+                                "op": "lower",
+                                "args": [
+                                  "$token"
+                                ]
+                              }
+                            ]
+                          },
+                          ""
+                        ]
+                      },
+                      "kind": "eth-call",
+                      "to": {
+                        "op": "address",
+                        "args": [
+                          "$candidate.pool"
+                        ]
+                      },
+                      "data": {
+                        "op": "encode",
+                        "args": [
+                          "pool",
+                          "doesSyntheticTokenExist",
+                          [
+                            "$token"
+                          ]
+                        ]
+                      },
+                      "completion": "return-data"
+                    }
+                  ]
+                }
+              ]
+            },
+            "decode": [
+              {
+                "let": "code",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "identity-pool-code"
+                  ]
+                }
+              },
+              {
+                "let": "candidates",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "membershipTokens",
+                    {}
+                  ]
+                }
+              },
+              {
+                "let": "tokens",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    "$candidates",
+                    "token",
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "bool",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    {
+                                      "op": "join",
+                                      "args": [
+                                        {
+                                          "op": "concat",
+                                          "args": [
+                                            "identity-member:",
+                                            {
+                                              "op": "lower",
+                                              "args": [
+                                                "$token"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        ""
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "data"
+                              ]
+                            }
+                          ]
+                        },
+                        true
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "membership",
+                  "pool": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.pool"
+                    ]
+                  },
+                  "tokens": "$tokens"
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": {
+              "op": "map",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "directedPairs",
+                    {
+                      "tokens": "$evidence.tokens"
+                    }
+                  ]
+                },
+                "pair",
+                {
+                  "id": {
+                    "op": "join",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          "identity-quote:",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "tokenIn": {
+                                          "op": "get",
+                                          "args": [
+                                            "$pair",
+                                            "tokenIn"
+                                          ]
+                                        },
+                                        "tokenOut": {
+                                          "op": "get",
+                                          "args": [
+                                            "$pair",
+                                            "tokenOut"
+                                          ]
+                                        }
+                                      },
+                                      "tokenIn"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          ":",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "tokenIn": {
+                                          "op": "get",
+                                          "args": [
+                                            "$pair",
+                                            "tokenIn"
+                                          ]
+                                        },
+                                        "tokenOut": {
+                                          "op": "get",
+                                          "args": [
+                                            "$pair",
+                                            "tokenOut"
+                                          ]
+                                        }
+                                      },
+                                      "tokenOut"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      ""
+                    ]
+                  },
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "address",
+                    "args": [
+                      "$evidence.pool"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "pool",
+                      "quoteSwapOut",
+                      [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$pair",
+                            "tokenIn"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$pair",
+                            "tokenOut"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "1000000000000000000"
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ]
+            },
+            "decode": [
+              {
+                "let": "directions",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "directedPairs",
+                        {
+                          "tokens": "$evidence.tokens"
+                        }
+                      ]
+                    },
+                    "pair",
+                    {
+                      "op": "gt",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "pool",
+                            "quoteSwapOut",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    {
+                                      "op": "join",
+                                      "args": [
+                                        {
+                                          "op": "concat",
+                                          "args": [
+                                            "identity-quote:",
+                                            {
+                                              "op": "lower",
+                                              "args": [
+                                                {
+                                                  "op": "address",
+                                                  "args": [
+                                                    {
+                                                      "op": "get",
+                                                      "args": [
+                                                        {
+                                                          "tokenIn": {
+                                                            "op": "get",
+                                                            "args": [
+                                                              "$pair",
+                                                              "tokenIn"
+                                                            ]
+                                                          },
+                                                          "tokenOut": {
+                                                            "op": "get",
+                                                            "args": [
+                                                              "$pair",
+                                                              "tokenOut"
+                                                            ]
+                                                          }
+                                                        },
+                                                        "tokenIn"
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            ":",
+                                            {
+                                              "op": "lower",
+                                              "args": [
+                                                {
+                                                  "op": "address",
+                                                  "args": [
+                                                    {
+                                                      "op": "get",
+                                                      "args": [
+                                                        {
+                                                          "tokenIn": {
+                                                            "op": "get",
+                                                            "args": [
+                                                              "$pair",
+                                                              "tokenIn"
+                                                            ]
+                                                          },
+                                                          "tokenOut": {
+                                                            "op": "get",
+                                                            "args": [
+                                                              "$pair",
+                                                              "tokenOut"
+                                                            ]
+                                                          }
+                                                        },
+                                                        "tokenOut"
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        ""
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "behaviorProofHash",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "membershipProof",
+                    {
+                      "pool": "$evidence.pool",
+                      "tokens": "$evidence.tokens",
+                      "directions": "$directions"
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "active",
+                      "directions": "$directions",
+                      "behaviorProofHash": "$behaviorProofHash"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "metronome_synth_membership_failed",
+              "evidenceRequestIds": [
+                "active-synth-membership"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "membership"
+                  ]
+                },
+                {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$evidence.tokens"
+                      ]
+                    },
+                    2
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "membership"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "metronome_synth_quotes_failed",
+              "evidenceRequestIds": [
+                "active-synth-membership"
+              ]
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$evidence.directions"
+                  ]
+                },
+                0
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.pool"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "metronome-active-membership-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.pool"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "behaviorProofHash"
+                      ]
+                    }
+                  }
+                ],
+                "pool": "$evidence.pool",
+                "tokens": "$evidence.tokens",
+                "directions": "$evidence.directions"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.pool"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.pool"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.pool"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        },
+        {
+          "kind": "oracle-state",
+          "oracleBinding": "$constants.oracleBinding",
+          "maxSourceLagBlocks": 0
+        }
+      ],
+      "pool": {
+        "op": "address",
+        "args": [
+          "$identity.pool"
+        ]
+      },
+      "tokens": {
+        "op": "map",
+        "args": [
+          "$identity.tokens",
+          "t",
+          {
+            "op": "address",
+            "args": [
+              "$t"
+            ]
+          }
+        ]
+      },
+      "directions": "$identity.directions",
+      "oracleBinding": "$constants.oracleBinding"
+    },
+    "bindingProjection": {
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.pool"
+            ]
+          }
+        ]
+      },
+      "tokens": {
+        "op": "map",
+        "args": [
+          "$descriptor.tokens",
+          "t",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$t"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "directions": {
+        "op": "expression",
+        "args": [
+          "directionProjection",
+          {
+            "directions": "$descriptor.directions"
+          }
+        ]
+      },
+      "oracleBinding": "$descriptor.oracleBinding",
+      "quoteSemantics": "metronome-quote-swap-out-v1"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pool",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.pool"
+          ]
+        }
+      ]
+    },
+    "directions": {
+      "op": "map",
+      "args": [
+        "$descriptor.directions",
+        "direction",
+        {
+          "id": {
+            "op": "join",
+            "args": [
+              {
+                "op": "concat",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$direction",
+                              "tokenIn"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  ":",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$direction",
+                              "tokenOut"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              ""
+            ]
+          },
+          "enabled": true,
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$direction",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$direction",
+              "tokenOut"
+            ]
+          },
+          "adapterId": "metronome-synth-swap",
+          "taxonomy": {
+            "slotKind": "protocol",
+            "protocolAction": "convert"
+          }
+        }
+      ]
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        {
+          "op": "concat",
+          "args": [
+            "$descriptor.familyId",
+            [
+              "\u001f"
+            ],
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.pool"
+                  ]
+                }
+              ]
+            },
+            [
+              "\u001f"
+            ],
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$route.tokenIn"
+                  ]
+                }
+              ]
+            },
+            [
+              "\u001f"
+            ],
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$route.tokenOut"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        ""
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.pool"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            "metronome-synth-swap"
+          ]
+        },
+        "error": "Metronome synth route lacks an active direction proof"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "finalizeChecks": [
+      {
+        "assert": {
+          "op": "gt",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$draft.routes"
+              ]
+            },
+            0
+          ]
+        },
+        "error": "Metronome synth pricing requires active routes"
+      }
+    ],
+    "compatibility": {
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.pool"
+            ]
+          }
+        ]
+      },
+      "oracleBinding": "$descriptor.oracleBinding",
+      "directions": {
+        "op": "expression",
+        "args": [
+          "directionProjection",
+          {
+            "directions": "$descriptor.directions"
+          }
+        ]
+      }
+    },
+    "static": {
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": {
+        "op": "concat",
+        "args": [
+          [
+            [
+              "$draft.pool"
+            ],
+            {
+              "op": "map",
+              "args": [
+                "$draft.tokens",
+                "t",
+                "$t"
+              ]
+            }
+          ]
+        ]
+      },
+      "requests": {
+        "op": "map",
+        "args": [
+          {
+            "op": "expression",
+            "args": [
+              "uniqueTokenIns",
+              {
+                "routes": "$draft.routes"
+              }
+            ]
+          },
+          "token",
+          {
+            "id": {
+              "op": "join",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    "static-decimals:",
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$token"
+                      ]
+                    }
+                  ]
+                },
+                ""
+              ]
+            },
+            "kind": "eth-call",
+            "to": "$token",
+            "data": {
+              "op": "encode",
+              "args": [
+                "token",
+                "decimals",
+                []
+              ]
+            },
+            "completion": "return-data"
+          }
+        ]
+      },
+      "decode": [
+        {
+          "let": "tokens",
+          "value": {
+            "op": "expression",
+            "args": [
+              "uniqueTokenIns",
+              {
+                "routes": "$programInput.routes"
+              }
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "every",
+            "args": [
+              "$tokens",
+              "token",
+              {
+                "op": "lte",
+                "args": [
+                  {
+                    "op": "number",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "token",
+                          "decimals",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  {
+                                    "op": "join",
+                                    "args": [
+                                      {
+                                        "op": "concat",
+                                        "args": [
+                                          "static-decimals:",
+                                          {
+                                            "op": "lower",
+                                            "args": [
+                                              "$token"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      ""
+                                    ]
+                                  }
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "77"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "metronome synth token decimals exceed uint256 scale"
+        },
+        {
+          "let": "oneTokens",
+          "value": {
+            "op": "map",
+            "args": [
+              "$tokens",
+              "token",
+              {
+                "token": "$token",
+                "amount": {
+                  "op": "pow",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "10"
+                      ]
+                    },
+                    {
+                      "op": "number",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "token",
+                            "decimals",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    {
+                                      "op": "join",
+                                      "args": [
+                                        {
+                                          "op": "concat",
+                                          "args": [
+                                            "static-decimals:",
+                                            {
+                                              "op": "lower",
+                                              "args": [
+                                                "$token"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        ""
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "return": {
+            "oneTokens": "$oneTokens"
+          }
+        }
+      ]
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "expression",
+      "args": [
+        "oneTokenFor",
+        {
+          "tokens": "$descriptor.oneTokens",
+          "token": "$route.tokenIn"
+        }
+      ]
+    },
+    "exactCompatibility": {
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.pool"
+            ]
+          }
+        ]
+      },
+      "tokenIn": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$route.tokenIn"
+            ]
+          }
+        ]
+      },
+      "tokenOut": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$route.tokenOut"
+            ]
+          }
+        ]
+      },
+      "oracleBinding": "$descriptor.oracleBinding",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "active-synth-membership",
+    "lineageId": "metronome-synth:active-membership",
+    "identityKind": "standalone-contract",
+    "abi": {
+      "pool": [
+        "function doesSyntheticTokenExist(address syntheticToken) view returns (bool)",
+        "function quoteSwapOut(address syntheticTokenIn,address syntheticTokenOut,uint256 amountIn) view returns (uint256 amountOut,uint256 fee)",
+        "function swap(address syntheticTokenIn,address syntheticTokenOut,uint256 amountIn) returns (uint256 amountOut)"
+      ],
+      "token": [
+        "function decimals() view returns (uint8)"
+      ]
+    },
+    "constants": {
+      "tokens": [
+        "0x64351fc9810adad17a690e4e1717df5e7e085160",
+        "0x8b4f8ad3801b4015dea6da1d36f063cbf4e231c7",
+        "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa"
+      ],
+      "sample": "1000000000000000000",
+      "forwarder": "0xd8d2297bdf4a84569bcec83c92a81549be9c51e6",
+      "oracle": "0x7d4e742018fb52e48b08be73d041c18b21de6fb5",
+      "oracleBinding": "4ac71f0f8236a712ef688926dc509aadeadef675b0c52a729e772b64e3e89948",
+      "zero": "0x0000000000000000000000000000000000000000",
+      "metronomeOracle": "0x7d4e742018fb52e48b08be73d041c18b21de6fb5",
+      "oracleSelector": "0xb1dc65a4"
+    },
+    "expressions": {
+      "membershipTokens": {
+        "op": "map",
+        "args": [
+          {
+            "op": "sortId",
+            "args": [
+              {
+                "op": "map",
+                "args": [
+                  {
+                    "op": "unique",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          {
+                            "op": "map",
+                            "args": [
+                              "$constants.tokens",
+                              "t",
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$t"
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "defined",
+                                "args": [
+                                  "$candidate.hintIn"
+                                ]
+                              },
+                              [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$candidate.hintIn"
+                                  ]
+                                }
+                              ],
+                              []
+                            ]
+                          },
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "defined",
+                                "args": [
+                                  "$candidate.hintOut"
+                                ]
+                              },
+                              [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$candidate.hintOut"
+                                  ]
+                                }
+                              ],
+                              []
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "token",
+                  {
+                    "id": {
+                      "op": "lower",
+                      "args": [
+                        "$token"
+                      ]
+                    },
+                    "address": "$token"
+                  }
+                ]
+              }
+            ]
+          },
+          "item",
+          "$item.address"
+        ]
+      },
+      "uniqueTokenIns": {
+        "op": "map",
+        "args": [
+          {
+            "op": "sortId",
+            "args": [
+              {
+                "op": "map",
+                "args": [
+                  {
+                    "op": "unique",
+                    "args": [
+                      {
+                        "op": "map",
+                        "args": [
+                          "$routes",
+                          "r",
+                          {
+                            "op": "address",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$r",
+                                  "tokenIn"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "t",
+                  {
+                    "id": {
+                      "op": "lower",
+                      "args": [
+                        "$t"
+                      ]
+                    },
+                    "address": "$t"
+                  }
+                ]
+              }
+            ]
+          },
+          "item",
+          "$item.address"
+        ]
+      },
+      "oneTokenFor": {
+        "op": "get",
+        "args": [
+          {
+            "op": "at",
+            "args": [
+              {
+                "op": "filter",
+                "args": [
+                  "$tokens",
+                  "t",
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$t",
+                          "token"
+                        ]
+                      },
+                      "$token"
+                    ]
+                  }
+                ]
+              },
+              0
+            ]
+          },
+          "amount"
+        ]
+      },
+      "directionProjection": {
+        "op": "map",
+        "args": [
+          {
+            "op": "sortId",
+            "args": [
+              {
+                "op": "map",
+                "args": [
+                  "$directions",
+                  "d",
+                  {
+                    "id": {
+                      "op": "join",
+                      "args": [
+                        {
+                          "op": "concat",
+                          "args": [
+                            [
+                              [
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "address",
+                                      "args": [
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            "$d",
+                                            "tokenIn"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "\u001f",
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "address",
+                                      "args": [
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            "$d",
+                                            "tokenOut"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            ]
+                          ]
+                        },
+                        ""
+                      ]
+                    },
+                    "value": [
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$d",
+                                  "tokenIn"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$d",
+                                  "tokenOut"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "item",
+          "$item.value"
+        ]
+      }
+    },
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "inputs": [
+      "prefix"
+    ],
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": {
+        "op": "concat",
+        "args": [
+          "$descriptor.pool",
+          {
+            "op": "map",
+            "args": [
+              "$descriptor.tokens",
+              "t",
+              "$t"
+            ]
+          },
+          [
+            "$constants.forwarder",
+            "$constants.oracle"
+          ]
+        ]
+      },
+      "mutationAddresses": [
+        "$descriptor.pool",
+        "$constants.forwarder"
+      ],
+      "mutationPredicate": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$observation.kind",
+              "log"
+            ]
+          },
+          {
+            "op": "sameAddress",
+            "args": [
+              "$observation.address",
+              "$descriptor.pool"
+            ]
+          },
+          {
+            "op": "sameAddress",
+            "args": [
+              "$observation.target",
+              "$constants.forwarder"
+            ]
+          }
+        ]
+      },
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$snapshot.quotes",
+                          {
+                            "op": "get",
+                            "args": [
+                              "$route",
+                              "routeKey"
+                            ]
+                          }
+                        ]
+                      },
+                      "amountOut"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "routeKey"
+              ]
+            },
+            "metronome_quote_zero"
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "metronome-synth-quote",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "retainReadEvidence": true,
+      "checks": [
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  {
+                    "op": "coalesce",
+                    "args": [
+                      "$prefix",
+                      []
+                    ]
+                  }
+                ]
+              },
+              0
+            ]
+          },
+          "error": "Metronome synth prefix quotes require issued trial state"
+        }
+      ],
+      "evidence": {
+        "kind": "metronome-synth-quote",
+        "source": "$source",
+        "pool": "$descriptor.pool",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "fee": "$steps.quote.fee",
+        "oracleBinding": "$descriptor.oracleBinding",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "zeroEvidence": {
+        "kind": "metronome-synth-quote",
+        "source": "$source",
+        "pool": "$descriptor.pool",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "amountIn": "$amountIn",
+        "amountOut": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "fee": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "oracleBinding": "$descriptor.oracleBinding",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "modules": {
+      "quoteFlow": {
+        "version": 1,
+        "sourceKind": "view",
+        "chainQuote": {
+          "step": "quote",
+          "requestId": "exact-quote-swap-out",
+          "signature": "function quoteSwapOut(address,address,uint256) view returns(uint256,uint256)",
+          "amountPath": [
+            2
+          ],
+          "outputPath": [
+            0
+          ]
+        },
+        "steps": [
+          {
+            "id": "quote",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "exact-quote-swap-out",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.pool"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "quoteSwapOut",
+                    [
+                      "$route.tokenIn",
+                      "$route.tokenOut",
+                      "$amountIn"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "return": {
+                  "amountOut": {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "pool",
+                          "quoteSwapOut",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "exact-quote-swap-out"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "fee": {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "pool",
+                          "quoteSwapOut",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "exact-quote-swap-out"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          1
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "result": {
+          "op": "get",
+          "args": [
+            "$steps.quote",
+            "amountOut"
+          ]
+        }
+      },
+      "pricingFlow": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "quote",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": {
+              "op": "map",
+              "args": [
+                "$descriptor.routes",
+                "route",
+                {
+                  "id": {
+                    "op": "join",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          "current:",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "tokenIn": {
+                                          "op": "get",
+                                          "args": [
+                                            "$route",
+                                            "tokenIn"
+                                          ]
+                                        },
+                                        "tokenOut": {
+                                          "op": "get",
+                                          "args": [
+                                            "$route",
+                                            "tokenOut"
+                                          ]
+                                        }
+                                      },
+                                      "tokenIn"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          ":",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "tokenIn": {
+                                          "op": "get",
+                                          "args": [
+                                            "$route",
+                                            "tokenIn"
+                                          ]
+                                        },
+                                        "tokenOut": {
+                                          "op": "get",
+                                          "args": [
+                                            "$route",
+                                            "tokenOut"
+                                          ]
+                                        }
+                                      },
+                                      "tokenOut"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      ""
+                    ]
+                  },
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.pool"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "pool",
+                      "quoteSwapOut",
+                      [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$route",
+                            "tokenIn"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$route",
+                            "tokenOut"
+                          ]
+                        },
+                        {
+                          "op": "expression",
+                          "args": [
+                            "oneTokenFor",
+                            {
+                              "tokens": "$descriptor.oneTokens",
+                              "token": {
+                                "op": "get",
+                                "args": [
+                                  "$route",
+                                  "tokenIn"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ]
+            },
+            "decode": [
+              {
+                "return": {
+                  "quotes": {
+                    "op": "objectFromEntries",
+                    "args": [
+                      {
+                        "op": "map",
+                        "args": [
+                          "$descriptor.routes",
+                          "route",
+                          [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$route",
+                                "routeKey"
+                              ]
+                            },
+                            {
+                              "amountIn": {
+                                "op": "expression",
+                                "args": [
+                                  "oneTokenFor",
+                                  {
+                                    "tokens": "$descriptor.oneTokens",
+                                    "token": {
+                                      "op": "get",
+                                      "args": [
+                                        "$route",
+                                        "tokenIn"
+                                      ]
+                                    }
+                                  }
+                                ]
+                              },
+                              "amountOut": {
+                                "op": "decode",
+                                "args": [
+                                  "pool",
+                                  "quoteSwapOut",
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "returned",
+                                        "args": [
+                                          {
+                                            "op": "join",
+                                            "args": [
+                                              {
+                                                "op": "concat",
+                                                "args": [
+                                                  "current:",
+                                                  {
+                                                    "op": "lower",
+                                                    "args": [
+                                                      {
+                                                        "op": "address",
+                                                        "args": [
+                                                          {
+                                                            "op": "get",
+                                                            "args": [
+                                                              {
+                                                                "tokenIn": {
+                                                                  "op": "get",
+                                                                  "args": [
+                                                                    "$route",
+                                                                    "tokenIn"
+                                                                  ]
+                                                                },
+                                                                "tokenOut": {
+                                                                  "op": "get",
+                                                                  "args": [
+                                                                    "$route",
+                                                                    "tokenOut"
+                                                                  ]
+                                                                }
+                                                              },
+                                                              "tokenIn"
+                                                            ]
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  },
+                                                  ":",
+                                                  {
+                                                    "op": "lower",
+                                                    "args": [
+                                                      {
+                                                        "op": "address",
+                                                        "args": [
+                                                          {
+                                                            "op": "get",
+                                                            "args": [
+                                                              {
+                                                                "tokenIn": {
+                                                                  "op": "get",
+                                                                  "args": [
+                                                                    "$route",
+                                                                    "tokenIn"
+                                                                  ]
+                                                                },
+                                                                "tokenOut": {
+                                                                  "op": "get",
+                                                                  "args": [
+                                                                    "$route",
+                                                                    "tokenOut"
+                                                                  ]
+                                                                }
+                                                              },
+                                                              "tokenOut"
+                                                            ]
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              },
+                                              ""
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "data"
+                                    ]
+                                  },
+                                  0
+                                ]
+                              }
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "result": {
+          "source": "$source",
+          "quotes": "$steps.quote.quotes"
+        }
+      }
+    },
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.pool"
+      ],
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.pool",
+        "mode": "ensure"
+      },
+      "call": {
+        "target": "$descriptor.pool",
+        "signature": "function swap(address,address,uint256)",
+        "args": [
+          "$route.tokenIn",
+          "$route.tokenOut",
+          {
+            "runtime": "amountIn"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "metronome-synth-swap",
+        "lineage": "metronome",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function swap(address,address,uint256)"
+        }
+      ]
+    }
+  ],
+  "modules": {
+    "oracleVictim": {
+      "version": 1,
+      "callPatterns": [
+        {
+          "id": "metronome-oracle-forward",
+          "signature": "forward(address,bytes)",
+          "candidateAddress": {
+            "from": "call-target"
+          },
+          "argumentProjection": [
+            {
+              "index": 0,
+              "type": "address",
+              "name": "oracle"
+            },
+            {
+              "index": 1,
+              "type": "bytes",
+              "name": "payload"
+            }
+          ],
+          "targets": [
+            "0xd8d2297bdf4a84569bcec83c92a81549be9c51e6"
+          ],
+          "when": {
+            "op": "and",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$args.0",
+                  "$constants.metronomeOracle"
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      "$args.1",
+                      0,
+                      4
+                    ]
+                  },
+                  "$constants.oracleSelector"
+                ]
+              }
+            ]
+          },
+          "result": {
+            "forwarder": {
+              "op": "lower",
+              "args": [
+                "$observation.target"
+              ]
+            },
+            "oracle": {
+              "op": "lower",
+              "args": [
+                "$args.0"
+              ]
+            },
+            "selector": {
+              "op": "bytes",
+              "args": [
+                "$args.1",
+                0,
+                4
+              ]
+            },
+            "payloadHash": {
+              "op": "codeHash",
+              "args": [
+                "$args.1"
+              ]
+            },
+            "oracleBinding": {
+              "op": "hash",
+              "args": [
+                {
+                  "forwarder": {
+                    "op": "lower",
+                    "args": [
+                      "$observation.target"
+                    ]
+                  },
+                  "oracle": {
+                    "op": "lower",
+                    "args": [
+                      "$args.0"
+                    ]
+                  },
+                  "selector": {
+                    "op": "bytes",
+                    "args": [
+                      "$args.1",
+                      0,
+                      4
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "resultChecks": [
+        {
+          "op": "sameAddress",
+          "args": [
+            "$result.forwarder",
+            "$observation.target"
+          ]
+        },
+        {
+          "op": "sameAddress",
+          "args": [
+            "$result.oracle",
+            "$args.0"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            "$result.selector",
+            {
+              "op": "bytes",
+              "args": [
+                "$args.1",
+                0,
+                4
+              ]
+            }
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            "$result.payloadHash",
+            {
+              "op": "codeHash",
+              "args": [
+                "$args.1"
+              ]
+            }
+          ]
+        },
+        {
+          "op": "matches",
+          "args": [
+            "$result.oracleBinding",
+            "^[0-9a-f]{64}$"
+          ]
+        }
+      ],
+      "canonicalIntakeTargets": [
+        "0xd8d2297bdf4a84569bcec83c92a81549be9c51e6"
+      ],
+      "runtimeDetection": {
+        "id": "metronome-eth-usd",
+        "affectedEdges": [
+          {
+            "adapterId": "metronome-synth-swap",
+            "target": "0x3364f53cb866762aef66deef2a6b1a17c1f17f46"
+          }
+        ],
+        "priceProbe": {
+          "signature": "quoteSwapOut(address,address,uint256) view returns (uint256,uint256)",
+          "functionName": "quoteSwapOut",
+          "amountIn": "1000000000000000000",
+          "outputIndex": 0
+        },
+        "maxSearchHops": 8
+      }
+    }
+  }
+}

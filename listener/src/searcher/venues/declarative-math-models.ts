@@ -3,6 +3,7 @@ import { badgerSettWithdrawMathModel } from "./badger-sett-withdraw-math.js";
 import { boringWithdrawOutMathModel } from "./boring-vault-teller-math.js";
 import { compoundCTokenExchangeRateMathModel } from "./compound-ctoken-math.js";
 import { balancerV1MathModels } from "./swaps/balancer-v1-family/math.js";
+import { fluidCreditMathModels } from "./credit/fluid-family/math.js";
 import { createDeclarativeMathRegistry, type DeclarativeMathModel } from "./declarative-math.js";
 import { defaultCollateralQuoteMathModel } from "./default-collateral-math.js";
 import { goldxUnitQuoteMathModel } from "./goldx-math.js";
@@ -39,5 +40,6 @@ const models: readonly DeclarativeMathModel[] = [
   xwinLocalStateMathModel,
   xwinQuoteMathModel,
   ...balancerV1MathModels,
+  ...fluidCreditMathModels,
 ];
 export const declarativeMathRegistry = createDeclarativeMathRegistry(models);
