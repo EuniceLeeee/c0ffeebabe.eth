@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "familyId": "protocol:psv",
+  "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+  "lineageId": "psv:uups-exact-input-v1",
+  "source": {
+    "number": 26152596,
+    "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-sell-gem-production-effective",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "amountIn": "4969763"
+    },
+    {
+      "id": "1-sell-gem-original-size-at-N-end",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "amountIn": "7361655916"
+    },
+    {
+      "id": "2-sell-gem-one-token-control",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "amountIn": "1000000"
+    },
+    {
+      "id": "3-sell-gem-one-raw-control",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "amountIn": "1"
+    },
+    {
+      "id": "4-buy-gem-production-effective",
+      "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "4969763"
+    },
+    {
+      "id": "5-buy-gem-original-size-at-N-end",
+      "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "7361655916"
+    },
+    {
+      "id": "6-buy-gem-one-token-control",
+      "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "1000000"
+    },
+    {
+      "id": "7-buy-gem-one-raw-control",
+      "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "1"
+    }
+  ],
+  "transactionHash": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8"
+}

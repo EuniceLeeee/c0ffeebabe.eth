@@ -610,7 +610,8 @@ async function declarativeProtocolRecords(input: {
     return fail("declarative compiler or strict constructor is not a resolvable framework export");
   const dependencies = [...new Set(entry.dependencyFiles)].filter(file => file !== compilerRoot.sourceFile);
   const strictFamilyId = familyId(entry.familyId);
-  const capabilities = familyCapabilitiesForDefinition("protocol", () => true).filter(capability => capability !== "victim");
+  const capabilities = familyCapabilitiesForDefinition("protocol", () => true)
+    .filter(capability => capability !== "victim" || entry.declaresOracleVictim === true);
   const present = new Set<string>(capabilities);
   const records: CapabilityExactShadowRecord[] = [];
   try {

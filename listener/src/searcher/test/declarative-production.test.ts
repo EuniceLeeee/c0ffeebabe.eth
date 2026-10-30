@@ -7,6 +7,7 @@ import test from "node:test";
 import { renderDeclarativeProductionEntry, syncDeclarativeProductionEntries } from "../build-declarative-production.js";
 import { buildFamilyCapabilityShadowArtifact } from "../build-family-capability-manifest.js";
 import definition from "../venues/protocols/erc4626-family/erc4626.json";
+import { oracleModuleFixture } from "./declarative-optional-modules-fixture.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const definitionFile = resolve(root, "src/searcher/venues/protocols/erc4626-family/erc4626.json");
@@ -190,6 +191,29 @@ async function protocolFixture() {
   await f.put("src/searcher/venues/fixture-operation.ts", "export const operation = 1;\n");
   return { ...f, child, childPath, saveChild };
 }
+
+test("optional oracle module changes only declared capability presence; absent and empty stay absent", async () => {
+  const f = await protocolFixture();
+  try {
+    const victim = async () => {
+      const entries = await f.sync("write"), entry = entries.get(f.entryPath)!;
+      const artifact = await f.build(); assert(artifact.complete, JSON.stringify(artifact.issues));
+      return { entry, row: artifact.exact.find(row => row.identity.capability === "victim")! };
+    };
+    const missing = await victim(); assert.equal(missing.entry.declaresOracleVictim, false);
+    assert.equal(missing.row.root.absence, "declared-absent");
+    f.doc.modules = { oracleVictim: {} }; await f.save();
+    assert.equal((await victim()).row.root.absence, "declared-absent");
+    f.doc.modules.oracleVictim = oracleModuleFixture("fixture-convert"); await f.save();
+    const present = await victim(); assert.equal(present.entry.declaresOracleVictim, true);
+    assert.equal(present.row.root.absence, null);
+    assert(present.row.identity.semanticDependencies.includes("src/searcher/venues/protocols/fixture-family/fixture.json"));
+    f.doc.modules.oracleVictim.runtimeDetection.id = "changed"; await f.save();
+    assert.notEqual((await victim()).row.identity.contentHash, present.row.identity.contentHash);
+    f.child.modules = { oracleVictim: {} }; await f.saveChild();
+    await assert.rejects(f.sync("check"), /root-only/);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
 
 test("v2 emits only shared compiler and static JSON imports; child data and transitive common code enter every present capability hash", async () => {
   const f = await protocolFixture();

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "familyId": "protocol:ethertoken-native-redeem",
+  "instanceKey": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+  "lineageId": "ethertoken-native:active-effect-delta-v1",
+  "source": {
+    "number": 25648967,
+    "hash": "0x65058fd339c9dbdabc378620f354a7e48b2dfae2df896536c985885f66085c1d"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-redeem-production-effective",
+      "tokenIn": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "1887004883045915"
+    },
+    {
+      "id": "1-redeem-historical-input-at-N",
+      "tokenIn": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "1056367846106427"
+    }
+  ],
+  "transactionHash": "0xdf54ad38d4b812c4ab23ba6225543caaa433897f9454414c70bf7fda1290694e"
+}

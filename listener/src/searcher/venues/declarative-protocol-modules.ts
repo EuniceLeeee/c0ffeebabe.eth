@@ -5,6 +5,8 @@ import { declarativeMathRegistry } from "./declarative-math-models.js";
 import { quoteProofSteps } from "./declarative-quote-proof.js";
 import { validateDeclarativeReadFlow } from "./declarative-read-flow.js";
 import { validateDeclarativeTrialState } from "./declarative-trial-state.js";
+import { validateDeclarativeOracleVictim } from "./declarative-oracle-victim.js";
+import { validateDeclarativeQuoteOutput } from "./declarative-execution.js";
 import type { createDeclarativeMathRegistry } from "./declarative-math.js";
 
 export interface DeclarativeQuoteFlow extends ModuleBlock {
@@ -23,6 +25,17 @@ export function protocolModuleCatalog(math: ReturnType<typeof createDeclarativeM
     validateDeclarativeReadFlow(steps);
   };
   return createDeclarativeModuleCatalog([
+    { key: "quoteOutput", versions: { 1: {
+      required: ["steps", "result"], validate: validateDeclarativeQuoteOutput, compile: block => block,
+      dependencies: block => [
+        ...(usesModel(block) ? ["math"] : []),
+        ...((block.steps as { math?: unknown }[]).some(step => step.math) ? ["executionMath"] : []),
+      ],
+    } } },
+    { key: "oracleVictim", versions: { 1: {
+      required: ["callPatterns", "runtimeDetection", "resultChecks"], optional: ["canonicalIntakeTargets"],
+      validate: validateDeclarativeOracleVictim, compile: block => block,
+    } } },
     { key: "math", versions: { 1: {
       required: ["entries"], validate: block => { math.bind(block); }, compile: block => math.bind(block),
     } } },
@@ -70,6 +83,8 @@ export function readProtocolModules(root: unknown = {}, variant: unknown = {}, m
   // Validate both before overlaying: an unknown or invalid inherited definition
   // cannot be hidden by a child. Empty child blocks are explicit undefinition.
   const base = catalog.read(root), child = catalog.read(variant);
+  if (Object.hasOwn(variant as object, "oracleVictim"))
+    throw new Error("oracleVictim is a root-only module; variants cannot override it");
   const result = catalog.read({ ...base.blocks, ...Object.fromEntries(Object.keys(variant as object).map(key => [key, child.blocks[key]])) });
   if (Object.keys(result.blocks.trialState!).length && Object.keys(result.blocks.quoteFlow!).length && result.blocks.quoteFlow!.sourceKind !== "local-math")
     throw new Error("trial state requires a local-math quote flow");

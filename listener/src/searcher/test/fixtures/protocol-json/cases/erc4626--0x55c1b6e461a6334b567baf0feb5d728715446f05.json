@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "familyId": "protocol:erc4626",
+  "instanceKey": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+  "lineageId": "erc4626:standalone-standard-behavior",
+  "source": {
+    "number": 25887363,
+    "hash": "0xc03086eb3caae34426e0243f1c98c253a12531043373463e83e258ebcca500dd"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-deposit-original-event-input",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x55C1B6e461a6334B567bAF0FEb5D728715446f05",
+      "amountIn": "19942278136"
+    },
+    {
+      "id": "1-deposit-twice-original-event-input",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x55C1B6e461a6334B567bAF0FEb5D728715446f05",
+      "amountIn": "39884556272"
+    },
+    {
+      "id": "2-redeem-original-event-input",
+      "tokenIn": "0x55C1B6e461a6334B567bAF0FEb5D728715446f05",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "19853762407926895267527"
+    },
+    {
+      "id": "3-redeem-twice-original-event-input",
+      "tokenIn": "0x55C1B6e461a6334B567bAF0FEb5D728715446f05",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "39707524815853790535054"
+    }
+  ],
+  "transactionHash": "0x7f814e6d8d5712e44897b82f512904b274b62dcd6164dbc891425dd3eb952a21"
+}

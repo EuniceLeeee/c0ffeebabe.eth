@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "familyId": "protocol:compound-ctoken",
+  "instanceKey": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+  "lineageId": "compound-v2:comptroller-registered-ctoken",
+  "source": {
+    "number": 25944463,
+    "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-redeem-production-reference",
+      "tokenIn": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "20576236020"
+    },
+    {
+      "id": "1-redeem-original-burned-shares",
+      "tokenIn": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "17733672807"
+    }
+  ],
+  "transactionHash": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df"
+}

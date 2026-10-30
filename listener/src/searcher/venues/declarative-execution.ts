@@ -23,13 +23,21 @@ interface SharedConversionExecution {
   readonly effects: readonly Value[];
 }
 export interface DeclarativeExecutionOptions { readonly math?: BoundRuntimeMath }
+export interface DeclarativeQuoteOutput {
+  readonly version: 1;
+  readonly steps: readonly {
+    readonly id: string; readonly call?: Value; readonly static?: true;
+    readonly math?: { readonly model: string; readonly inputs: Value; readonly outputs: Record<string, string>; readonly checks?: readonly Check[] };
+  }[];
+  readonly result: { readonly runtime: string };
+}
 export type DeclarativeConversionExecution = SharedConversionExecution & (
   | { readonly version: 1; readonly approval?: Value; readonly call: Value; readonly steps?: never }
   | { readonly version: 2; readonly steps: readonly {
       readonly id: string; readonly call?: Value; readonly static?: boolean;
       readonly math?: { readonly model: string; readonly inputs: Value; readonly outputs: Record<string, string>; readonly checks?: readonly Check[] };
       readonly approval?: Value; readonly effects?: readonly Value[];
-    }[]; readonly deferred?: Value; readonly call?: never; readonly approval?: never }
+    }[]; readonly deferred?: Value; readonly quoteOutput?: DeclarativeQuoteOutput; readonly call?: never; readonly approval?: never }
 );
 type RuntimeValue = bigint | number | string | boolean | { runtime: string };
 type Check = { left: RuntimeValue; operator: "eq" | "gte"; right: RuntimeValue };
@@ -44,6 +52,7 @@ type Operation =
   | { kind: "check"; check: Check }
   | { kind: "capture"; name: string; token?: string; account?: string; supply?: boolean; native?: boolean }
   | { kind: "difference"; name: string; left: string; right: string }
+  | { kind: "result"; value: RuntimeValue }
   | { kind: "allowance"; token: string; spender: string };
 
 const tokenAbi = new Interface([
@@ -79,6 +88,132 @@ function scalarWord(type: ParamType): boolean {
   return /^(uint[0-9]*|int[0-9]*|address|bool|bytes[0-9]+)$/.test(type.type);
 }
 
+/** A quote declaration is data for the shared read-only compiler, never an
+ * arbitrary bytecode/script source. Empty module handling belongs to catalog. */
+export function validateDeclarativeQuoteOutput(raw: unknown): asserts raw is DeclarativeQuoteOutput {
+  keys(raw, ["version", "steps", "result"], "quote output");
+  const definition = raw as DeclarativeQuoteOutput;
+  if (definition.version !== 1 || !Array.isArray(definition.steps) || !definition.steps.length || definition.steps.length > 64)
+    throw new Error("declared quote output steps");
+  keys(definition.result, ["runtime"], "quote output result");
+  if (typeof definition.result.runtime !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*$/.test(definition.result.runtime) || forbidden.has(definition.result.runtime))
+    throw new Error("declared quote output result");
+  const ids = new Set<string>(), captures = new Set<string>(["amountIn"]);
+  const save = (name: unknown) => {
+    if (typeof name !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*$/.test(name) || forbidden.has(name) || captures.has(name))
+      throw new Error("duplicate or invalid quote runtime capture");
+    captures.add(name);
+  };
+  const refs = (value: unknown): void => {
+    if (dynamic(value)) {
+      keys(value, ["runtime"], "quote runtime reference");
+      if (!captures.has(value.runtime)) throw new Error("unknown quote runtime capture");
+    } else if (value && typeof value === "object") Object.values(value).forEach(refs);
+  };
+  for (const step of definition.steps) {
+    keys(step, ["id", "call", "static", "math"], "quote output step");
+    if (typeof step.id !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*$/.test(step.id) || forbidden.has(step.id) || ids.has(step.id))
+      throw new Error("duplicate or invalid quote output step id");
+    ids.add(step.id);
+    if ((step.call !== undefined ? 1 : 0) + (step.math !== undefined ? 1 : 0) !== 1)
+      throw new Error("quote output step requires exactly one call or math definition");
+    if (step.call !== undefined) {
+      if (step.static !== true) throw new Error("quote output calls must be static");
+      keys(step.call, ["target", "signature", "args", "save", "checks"], "quote output call");
+      if (!["target", "signature", "args"].every(key => Object.hasOwn(step.call, key))) throw new Error("declared quote output call shape");
+      refs(step.call.args);
+      if (step.call.save !== undefined) {
+        if (!step.call.save || typeof step.call.save !== "object" || Array.isArray(step.call.save)) throw new Error("quote output call captures");
+        for (const [name, index] of Object.entries(step.call.save)) {
+          save(name);
+          if (!Number.isSafeInteger(index) || (index as number) < 0) throw new Error("quote output return index");
+        }
+      }
+      refs(step.call.checks);
+    } else {
+      if (step.static !== undefined) throw new Error("quote output math cannot contain call flags");
+      keys(step.math, ["model", "inputs", "outputs", "checks"], "quote output math");
+      if (!["model", "inputs", "outputs"].every(key => Object.hasOwn(step.math!, key))) throw new Error("declared quote output math shape");
+      if (typeof step.math!.model !== "string" || !step.math!.outputs || typeof step.math!.outputs !== "object" || Array.isArray(step.math!.outputs))
+        throw new Error("declared quote output math shape");
+      refs(step.math!.inputs);
+      Object.values(step.math!.outputs).forEach(save);
+      refs(step.math!.checks);
+    }
+  }
+  refs(definition.result);
+  if (definition.result.runtime === "amountIn") throw new Error("quote output must be a computed result");
+}
+
+/** Lower only static calls and whitelisted arithmetic. Names are local to this
+ * quote block, including its return value, so direct execution can inline the
+ * same operations without clobbering execution captures or invocation r0. */
+function quoteOperations(definition: DeclarativeQuoteOutput, resolved: (value: Value) => Value,
+  options: DeclarativeExecutionOptions): { operations: Operation[]; result: { runtime: string } } {
+  validateDeclarativeQuoteOutput(definition);
+  const operations: Operation[] = [];
+  const provenance = new Map<string, { read: boolean; input: boolean }>([["amountIn", { read: false, input: true }]]);
+  const name = (value: string) => value === "amountIn" ? value : `quoteLocal${value}`;
+  const refs = (value: Value): { read: boolean; input: boolean } => {
+    if (dynamic(value)) {
+      keys(value, ["runtime"], "quote runtime reference");
+      const origin = provenance.get(value.runtime);
+      if (!origin) throw new Error(`unknown quote runtime capture ${value.runtime}`);
+      return origin;
+    }
+    const origins = value && typeof value === "object" ? Object.values(value).map(refs) : [];
+    return { read: origins.some(origin => origin.read), input: origins.some(origin => origin.input) };
+  };
+  const rename = (value: Value): Value => dynamic(value) ? reference(name(value.runtime)) : Array.isArray(value)
+    ? value.map(rename) : value && typeof value === "object"
+      ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, rename(item)])) : value;
+  const save = (capture: string, origin: { read: boolean; input: boolean }) => {
+    if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(capture) || forbidden.has(capture) || provenance.has(capture))
+      throw new Error("duplicate or invalid quote runtime capture");
+    provenance.set(capture, origin);
+  };
+  const checks = (items: Value) => {
+    if (items !== undefined && !Array.isArray(items)) throw new Error("quote output checks must be an array");
+    for (const item of items ?? []) { refs(item); operations.push({ kind: "check", check: rename(item) }); }
+  };
+  for (const step of definition.steps) {
+    if (step.call !== undefined) {
+      const call = resolved(step.call) as Call;
+      keys(call, ["target", "signature", "args", "save", "checks"], "quote output call");
+      // Runtime references are ABI input words, never targets or signatures.
+      if (typeof call.target !== "string" || typeof call.signature !== "string" || !Array.isArray(call.args))
+        throw new Error("declared quote output call shape");
+      const origin = refs(call.args);
+      const saved = Object.entries(call.save ?? {});
+      for (const [capture] of saved) save(capture, { read: true, input: origin.input });
+      operations.push({ kind: "call", static: true, call: { ...call, args: rename(call.args), checks: undefined,
+        save: Object.fromEntries(saved.map(([capture, offset]) => [name(capture), offset])) } });
+      checks(call.checks);
+    } else {
+      if (!options.math) throw new Error("runtime math module is undefined");
+      const math = resolved(step.math);
+      const inputs = Object.fromEntries(Object.entries(math.inputs).map(([key, value]) =>
+        [key, dynamic(value) ? value : uint(value as RuntimeValue)]));
+      // Even an injected math registry cannot add a CALL/value/approval opcode.
+      for (const operation of options.math.expand(math.model, inputs, math.outputs, `Quote${step.id}Math`)) {
+        keys(operation, ["name", "op", "left", "right"], "quote runtime math operation");
+        if (!["add", "sub", "mul", "div", "shr", "and", "min", "eq"].includes(operation.op))
+          throw new Error("quote output arithmetic operation");
+        const origin = refs([operation.left, operation.right]);
+        save(operation.name, origin);
+        operations.push({ kind: "math", name: name(operation.name), op: operation.op,
+          left: rename(operation.left), right: rename(operation.right) });
+      }
+      checks(math.checks);
+    }
+  }
+  const origin = refs(definition.result);
+  if (!origin.read || !origin.input) throw new Error("quote output must derive from chain reads and actual input");
+  const result = reference(name(definition.result.runtime));
+  operations.push({ kind: "check", check: { left: result, operator: "gte", right: 1n } });
+  return { operations, result };
+}
+
 export function assertDeclarativeExecutionSource(value: unknown): asserts value is CanonicalSource {
   const source = value as CanonicalSource | undefined;
   if (!source || !Number.isSafeInteger(source.number) || source.number < 0 ||
@@ -96,9 +231,9 @@ export function buildDeclarativeExecutionProgram(
   values: DeclarationValues,
   options: DeclarativeExecutionOptions = {},
 ): RuntimeAmountProgram {
-  keys(definition, ["version", "settlement", "protectedAddresses", "contextChecks", "requireCanonicalSource", "rejectRuntimeEvidence", "preflight", "approval", "call", "steps", "deferred", "effects"], "execution definition");
+  keys(definition, ["version", "settlement", "protectedAddresses", "contextChecks", "requireCanonicalSource", "rejectRuntimeEvidence", "preflight", "approval", "call", "steps", "deferred", "quoteOutput", "effects"], "execution definition");
   if (definition.version !== 1 && definition.version !== 2) throw new Error("unsupported declared execution version");
-  if (definition.version === 1 && (Object.hasOwn(definition, "steps") || Object.hasOwn(definition, "deferred")) || definition.version === 2 &&
+  if (definition.version === 1 && (Object.hasOwn(definition, "steps") || Object.hasOwn(definition, "deferred") || Object.hasOwn(definition, "quoteOutput")) || definition.version === 2 &&
       (Object.hasOwn(definition, "call") || Object.hasOwn(definition, "approval"))) throw new Error("mixed execution versions");
   if (definition.version === 2 && (!Array.isArray(definition.steps) || !definition.steps.length))
     throw new Error("declared execution steps must be nonempty");
@@ -141,6 +276,15 @@ export function buildDeclarativeExecutionProgram(
     operations.push({ kind: "check", check: { left, operator, right } });
   // Zero debit cannot masquerade as a successful conversion, in either mode.
   check(reference("amountIn"), "gte", 1n);
+  const quote = definition.version === 2 && definition.quoteOutput &&
+    (request?.kind === "quote-output" || request?.kind === "direct-output")
+    ? quoteOperations(definition.quoteOutput, resolved, options) : undefined;
+  if (quote) operations.push(...quote.operations);
+  if (request?.kind === "quote-output") {
+    if (!quote) throw new Error("declared quote output unavailable");
+    operations.push({ kind: "result", value: quote.result });
+    return emit(operations, 2);
+  }
   for (const declaration of definition.preflight ?? []) {
     const call = resolved(declaration);
     if (call.when === undefined || call.when) addCall(call, true);
@@ -165,6 +309,16 @@ export function buildDeclarativeExecutionProgram(
       !same(debit[0].account, input.executor) || !(fullInput || budgetInput) ||
       !bindsAsset(credit[0], "output") || !same(credit[0].account, recipient)) {
     throw new Error("declared conversion must bind full debit or bounded budget and fresh receipt to the route");
+  }
+  if (quote && !fullInput) throw new Error("quoted direct output requires exact actual input debit");
+  // The direct path cannot settle a short receipt out of old inventory, or
+  // return a cross-asset rebate to either party. These guards are shared and
+  // mandatory even if the declaration omitted them.
+  if (quote && env.externalRecipient) {
+    for (const [token, account] of [[input.route.tokenIn, recipient], [input.route.tokenOut, input.executor]]) {
+      if (!effects.some(effect => effect.kind === "unchanged-token" && same(effect.token, token) && same(effect.account, account)))
+        effects.push({ kind: "unchanged-token", token, account });
+    }
   }
   function validateEffect(effect: Value) {
       keys(effect, ["kind", "token", "account", "direction", "equals", "minimum", "when",
@@ -232,7 +386,7 @@ export function buildDeclarativeExecutionProgram(
     const ids = new Set<string>(), saves = new Set<string>();
     function validateSaves(call: Value) {
       for (const name of Object.keys(resolved(call).save ?? {})) {
-        if (saves.has(name) || /^(?:effect|stepEffect)[0-9]+/.test(name) || ["approvalResult", "allowanceResult"].includes(name))
+        if (saves.has(name) || /^(?:effect|stepEffect)[0-9]+/.test(name) || quote && name.startsWith("quoteLocal") || ["approvalResult", "allowanceResult"].includes(name))
           throw new Error("duplicate or reserved runtime capture");
         saves.add(name);
       }
@@ -258,7 +412,7 @@ export function buildDeclarativeExecutionProgram(
           [key, dynamic(value) ? value : uint(value as RuntimeValue)]));
         const operationsForStep = options.math.expand(math.model, inputs, math.outputs, `${step.id}Math`);
         for (const operation of operationsForStep) {
-          if (saves.has(operation.name) || /^(?:effect|stepEffect)[0-9]+/.test(operation.name) ||
+          if (saves.has(operation.name) || /^(?:effect|stepEffect)[0-9]+/.test(operation.name) || quote && operation.name.startsWith("quoteLocal") ||
               ["amountIn", "approvalResult", "allowanceResult"].includes(operation.name)) throw new Error("duplicate or reserved runtime math capture");
           saves.add(operation.name); operations.push({ kind: "math", ...operation });
         }
@@ -298,6 +452,7 @@ export function buildDeclarativeExecutionProgram(
     }
   }
   assertEffects(measuredEffects, "effect", true);
+  if (quote) check(reference(`effect${effects.indexOf(credit[0])}Delta`), "eq", quote.result);
   return emit(operations, definition.version);
 }
 
@@ -384,6 +539,10 @@ function emit(operations: readonly Operation[], version: 1 | 2): RuntimeAmountPr
       emitDeclarativeDeferredExecution(program, operation.spec, operation.input,
         { word, release, take, call: (declaration, extra) => call(declaration, false, extra), check: emitCheck });
     }
+    else if (operation.kind === "result") {
+      const value = word(operation.value);
+      program.math("add", 0, value.reg, 14); release(value);
+    }
     else if (operation.kind === "allowance") program.allowance(operation.token, operation.spender, 0, MaxUint256);
     else if (operation.kind === "capture") {
       const reg = save(operation.name);
@@ -435,11 +594,15 @@ function validateSettlementDeclaration(definition: DeclarativeConversionExecutio
   if (typeof definition.settlement.directOutput !== "boolean") throw new Error("declared settlement capability");
   if (definition.version === 2 && definition.deferred !== undefined)
     validateDeclarativeDeferredDefinition(definition.deferred, definition.steps);
+  if (definition.version === 2 && definition.quoteOutput !== undefined) validateDeclarativeQuoteOutput(definition.quoteOutput);
 }
 export function supportsDeclarativeSettlement(definition: DeclarativeConversionExecution, input: Environment): boolean {
   validateSettlementDeclaration(definition);
   if (!input.settlement) return true;
+  if (input.settlement.kind === "quote-output") return definition.version === 2 && definition.quoteOutput !== undefined &&
+    !executionNativeSides(input.route);
   if (input.settlement.kind === "direct-output") return definition.settlement.directOutput &&
+    (!(definition.version === 2 && definition.quoteOutput) || !executionNativeSides(input.route)) &&
     (!executionNativeSides(input.route)?.output || getAddress(input.settlement.recipient) === getAddress(input.executor));
   return input.settlement.kind === "deferred-input" && definition.version === 2 && definition.deferred !== undefined &&
     !executionNativeSides(input.route) && input.settlement.paymentInput === undefined &&
@@ -447,14 +610,16 @@ export function supportsDeclarativeSettlement(definition: DeclarativeConversionE
 }
 export function declarativeSettlementCapabilities(definition: DeclarativeConversionExecution, input: Environment) {
   validateSettlementDeclaration(definition);
-  return { ...(definition.settlement.directOutput && !executionNativeSides(input.route)?.output ? { directOutput: true as const } : {}),
+  return { ...(definition.settlement.directOutput && !executionNativeSides(input.route)?.output &&
+      (!(definition.version === 2 && definition.quoteOutput) || !executionNativeSides(input.route)) ? { directOutput: true as const } : {}),
+    ...(definition.version === 2 && definition.quoteOutput !== undefined && !executionNativeSides(input.route) ? { quoteOutput: true as const } : {}),
     ...(definition.version === 2 && definition.deferred !== undefined && !executionNativeSides(input.route)
       ? { deferredInput: getAddress(input.executor) } : {}) };
 }
 export function buildDeclarativeRuntimeLeg(definition: DeclarativeConversionExecution, input: Environment, values: DeclarationValues,
   options: DeclarativeExecutionOptions = {}) {
   if (!supportsDeclarativeSettlement(definition, input)) return null;
-  const inputMode = declarativeInputMode(definition, input, values);
+  const inputMode = input.settlement?.kind === "quote-output" ? undefined : declarativeInputMode(definition, input, values);
   return { ...runtimeLeg(input.route.adapterId, buildDeclarativeExecutionProgram(definition, { ...executionContext(input, true), minAmountOut: 1n }, values, options)),
     ...(inputMode ? { inputMode } : {}),
     settlement: declarativeSettlementCapabilities(definition, input),
@@ -462,6 +627,7 @@ export function buildDeclarativeRuntimeLeg(definition: DeclarativeConversionExec
 }
 export function buildDeclarativeQuotedFragment(definition: DeclarativeConversionExecution, input: Environment, values: DeclarationValues,
   options: DeclarativeExecutionOptions = {}) {
+  if (input.settlement?.kind === "quote-output") throw new Error("quote output is a runtime preparation, not quoted execution");
   if (uint(input.amountIn) === 0n) throw new Error("declared quoted input must be positive");
   const program = buildDeclarativeExecutionProgram(definition, input, values, options);
   return { requirements: [], nodes: [{ adapterId: input.route.adapterId, target: input.route.target,

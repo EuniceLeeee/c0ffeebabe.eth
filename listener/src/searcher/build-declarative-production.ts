@@ -25,6 +25,7 @@ export interface DeclarativeProductionEntry {
   readonly dependencyFiles: readonly string[];
   readonly childFiles: readonly string[];
   readonly ownedActionAdapterIds: readonly string[];
+  readonly declaresOracleVictim?: boolean;
   readonly typesFile?: string;
 }
 function object(value: unknown, label: string): Record<string, any> {
@@ -66,9 +67,15 @@ function dataOnly(value: unknown): void {
 /** Validate the authored format here; the shared compiler alone expands and
  * interprets its semantics. Ordinary evidence fields named binding are data. */
 function variantDeclaration(child: Record<string, any>): void {
+  if (child.execution && Object.hasOwn(child.execution, "quoteOutput"))
+    throw new Error("quoteOutput must be declared in modules, not execution");
   // A child can depend on a root module; validate its own fields here and
   // resolve inherited capabilities in the common production compiler.
-  if (Object.hasOwn(child, "modules")) protocolModuleCatalog().read(child.modules);
+  if (Object.hasOwn(child, "modules")) {
+    protocolModuleCatalog().read(child.modules);
+    if (Object.hasOwn(child.modules, "oracleVictim"))
+      throw new Error("oracleVictim is a root-only module; variants cannot override it");
+  }
   if (!Object.hasOwn(child, "admission")) {
     object(child.identity, "variant identity"); // Existing expanded v2 declarations.
     return;
@@ -106,7 +113,11 @@ function renderProtocolEntry(input: {
   const required = ["version", "scope", "production", "manifest", "discovery", "identity", "instance", "routes",
     "pricing", "protocol", "standard", "actionAdapters", "variantFiles"];
   keys(doc, [...required, ...(Object.hasOwn(doc, "types") ? ["types"] : []), ...(Object.hasOwn(doc, "modules") ? ["modules"] : [])], "declarative protocol");
-  readProtocolModules(doc.modules, doc.standard.modules);
+  const modules = readProtocolModules(doc.modules, doc.standard.modules);
+  if (doc.standard.execution && Object.hasOwn(doc.standard.execution, "quoteOutput"))
+    throw new Error("quoteOutput must be declared in modules, not execution");
+  if (Object.keys(modules.blocks.quoteOutput!).length && doc.standard.execution?.version !== 2)
+    throw new Error("quoteOutput requires execution version 2");
   if (Object.hasOwn(doc, "types")) {
     validateDeclarativeTypeMetadata(doc.types);
     const contracts = object(doc.types.contracts, "protocol type contracts");
@@ -138,7 +149,7 @@ function renderProtocolEntry(input: {
   uniqueIds(actions, "action descriptor IDs");
   if (JSON.stringify([...actions].sort()) !== JSON.stringify([...ownedActionAdapterIds].sort()))
     throw new Error("declared actions disagree with manifest owned actions");
-  if (Object.hasOwn(doc.protocol, "oracleVictim")) throw new Error("v2 protocol victim semantics are not declared by this compiler");
+  if (Object.hasOwn(doc.protocol, "oracleVictim")) throw new Error("oracleVictim must be declared in the root modules block");
   if (!Array.isArray(doc.variantFiles) || doc.variantFiles.some((name: unknown) =>
     typeof name !== "string" || !/^\.\/[a-z0-9][a-z0-9-]*\.json$/.test(name)))
     throw new Error("variants must be same-directory static JSON references");
@@ -167,6 +178,7 @@ function renderProtocolEntry(input: {
   ].join("\n");
   return Object.freeze({ format: "protocol-json-v2", definitionFile, entryFile, familyId: doc.scope.family,
     domain: "protocol", source, childFiles: Object.freeze(childFiles), ownedActionAdapterIds: Object.freeze([...ownedActionAdapterIds]),
+    declaresOracleVictim: modules.get("oracleVictim") !== undefined,
     ...(typesFile ? { typesFile } : {}),
     dependencyFiles: Object.freeze([definitionFile, ...childFiles, compiler, resolve(root, "src/searcher/build-declarative-production.ts"),
       ...(typesFile ? [resolve(root, "src/searcher/venues/declarative-types.ts")] : [])]) });

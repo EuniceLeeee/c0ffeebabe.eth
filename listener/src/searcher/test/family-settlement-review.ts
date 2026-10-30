@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { generateRuntimeSourceClosure } from "../venues/capability-content-hash.js";
 import artifact from "../generated/family-capability-shadow.generated.json";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_LOAD as load } from "../venues/production-family-composition.js";
+import { explicitSettlementAssertionFailures, legacySettlementRegistrarEvidenceFailures } from "./settlement-registrar-evidence.js";
 
 type Pin = { path: string; sha256: string };
 export type VariantReview = {
@@ -140,6 +141,9 @@ export function evidenceFailures(row: FamilyReview, commonSource: Pin[], read: (
       assert.equal(independent.callerContinuation, false, "caller continuation cannot skip settlement execution");
       assert(v.ordinaryExecutionEvidence, `${v.id}: missing ordinary execution report`);
       const ordinary = JSON.parse(read(v.ordinaryExecutionEvidence.path).toString());
+      const requiredAssertions = ["actual-input-debit", "actual-output-receipt", "old-inventory"];
+      assert.deepEqual([...legacySettlementRegistrarEvidenceFailures(ordinary),
+        ...explicitSettlementAssertionFailures(ordinary, requiredAssertions)], [], `${v.id}: unsupported ordinary execution evidence`);
       assert.equal(ordinary.kind, "family-ordinary-execution-evidence-v1");
       assert.equal(ordinary.familyId, row.familyId);
       assert(Array.isArray(ordinary.variantIds) && ordinary.variantIds.every((x: unknown) => typeof x === "string"));
@@ -150,7 +154,7 @@ export function evidenceFailures(row: FamilyReview, commonSource: Pin[], read: (
       assert.deepEqual(ordinary.source, row.source, "ordinary execution did not use the reviewed Family source");
       assert.deepEqual(ordinary.commonSource, commonSource, "ordinary execution did not use the reviewed common executor");
       assert(Array.isArray(ordinary.verifiedAssertions) && ordinary.verifiedAssertions.every((x: unknown) => typeof x === "string"));
-      for (const required of ["actual-input-debit", "actual-output-receipt", "old-inventory"]) {
+      for (const required of requiredAssertions) {
         assert(ordinary.verifiedAssertions.includes(required), `${v.id}: missing ${required}`);
       }
       assert(Array.isArray(ordinary.evidence) && ordinary.evidence.length > 0, "ordinary execution needs saved evidence references");
@@ -161,6 +165,10 @@ export function evidenceFailures(row: FamilyReview, commonSource: Pin[], read: (
     for (const v of row.variants.filter(v => v.execution === "verified")) {
       assert(v.executionEvidence, `${v.id}: missing execution report`);
       const behavior = JSON.parse(read(v.executionEvidence.path).toString());
+      const requiredAssertions = ["actual-input-debit", "actual-output-receipt", "old-inventory", "rollback",
+        ...(v.callback === "output-first" ? ["callback-caller", "callback-debt", "output-before-payment"] : [])];
+      assert.deepEqual([...legacySettlementRegistrarEvidenceFailures(behavior),
+        ...explicitSettlementAssertionFailures(behavior, requiredAssertions)], [], `${v.id}: unsupported settlement execution evidence`);
       assert.equal(behavior.kind, "family-settlement-behavior-evidence-v1", "interface-only evidence is not an execution");
       assert.equal(behavior.familyId, row.familyId);
       assert(Array.isArray(behavior.variantIds) && behavior.variantIds.every((x: unknown) => typeof x === "string"));
@@ -171,8 +179,7 @@ export function evidenceFailures(row: FamilyReview, commonSource: Pin[], read: (
       assert(Number.isSafeInteger(behavior.rejections) && behavior.rejections > 0);
       assert.deepEqual(behavior.source, row.source, "execution did not use the reviewed Family source");
       assert.deepEqual(behavior.commonSource, commonSource, "execution did not use the reviewed common executor");
-      for (const required of ["actual-input-debit", "actual-output-receipt", "old-inventory", "rollback",
-        ...(v.callback === "output-first" ? ["callback-caller", "callback-debt", "output-before-payment"] : [])]) {
+      for (const required of requiredAssertions) {
         assert(behavior.verifiedAssertions.includes(required), `${v.id}: missing ${required}`);
       }
       assert(Array.isArray(behavior.evidence) && behavior.evidence.length > 0, "execution needs saved evidence references");

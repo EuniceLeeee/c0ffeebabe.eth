@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:rocksolid",
+  "instanceKey": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+  "lineageId": "rocksolid:active-sync-deposit",
+  "source": {
+    "number": 25535037,
+    "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-deposit-original-call",
+      "tokenIn": "0xae78736Cd615f374D3085123A210448E74Fc6393",
+      "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+      "amountIn": "665705106594162807"
+    }
+  ],
+  "transactionHash": "0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87"
+}

@@ -3,6 +3,7 @@ import { getAddress, hexlify } from "ethers";
 import { readProtocolModules, type DeclarativeQuoteFlow } from "./declarative-protocol-modules.js";
 import { verifyDeclarativeQuoteChain } from "./declarative-quote-proof.js";
 import { compileDeclarativeTrialState } from "./declarative-trial-state.js";
+import { compileDeclarativeOracleVictim } from "./declarative-oracle-victim.js";
 import { compileDeclarativeReadFlow } from "./declarative-read-flow.js";
 import type { BoundRuntimeMath, createDeclarativeRuntimeMathRegistry } from "./declarative-runtime-math.js";
 import type { DeclarativeMathFunctions, createDeclarativeMathRegistry } from "./declarative-math.js";
@@ -24,7 +25,8 @@ import type { AdapterRequest, AdapterRequestResult, RequestRequirements } from "
 import { assertSameSource, assertSource, protocolMid, returnedResult, sameAddress,
   type ProtocolPricingSnapshot } from "./protocols/standard-family/common.js";
 import { runtimeExecutor } from "./runtime-execution.js";
-import { buildDeclarativeExecutionProgram, createDeclarativeProgramAction, assertDeclarativeExecutionSource, buildDeclarativeRuntimeLeg } from "./declarative-execution.js";
+import { buildDeclarativeExecutionProgram, createDeclarativeProgramAction, assertDeclarativeExecutionSource, buildDeclarativeRuntimeLeg,
+  type DeclarativeConversionExecution } from "./declarative-execution.js";
 
 type Data = Record<string, any>;
 type Descriptor = CompiledInstanceDescriptor & Data;
@@ -32,7 +34,7 @@ type Route = FamilyRouteDescriptor & Data;
 type Identity = VerifiedIdentity & Data;
 type Candidate = FamilyCandidate & Data;
 type Values = ReturnType<typeof compileDeclarativeValues>;
-type Variant = { document: Data; values: Values; modules: ReturnType<typeof readProtocolModules>;
+type Variant = { document: Data; execution: DeclarativeConversionExecution; values: Values; modules: ReturnType<typeof readProtocolModules>;
   quoteFlow?: ReturnType<typeof compileDeclarativeReadFlow>; pricingFlow?: ReturnType<typeof compileDeclarativeReadFlow>;
   trialState?: ReturnType<typeof compileDeclarativeTrialState<Descriptor, Route, Data>> };
 export interface DeclarativeFamilyTypes {
@@ -89,6 +91,8 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
   if (Object.keys(raw).some(key => !allowed.has(key))) throw new Error("unknown declarative protocol field");
   if (Object.hasOwn(raw, "types")) validateDeclarativeTypeMetadata(raw.types);
   for (const key of ["manifest", "discovery", "identity", "instance", "routes", "pricing", "protocol", "standard"]) data(raw[key], key);
+  if (Object.hasOwn(raw.protocol, "oracleVictim"))
+    throw new Error("oracleVictim must be declared in the root modules block");
   if (raw.manifest.familyId !== raw.scope?.family || raw.manifest.domain !== "protocol") throw new Error("declaration manifest identity mismatch");
   if (!Array.isArray(raw.variantFiles) || raw.variantFiles.length !== children.length) throw new Error("declaration child count mismatch");
   shape(raw.instance, ["key", "draft", "bindingProjection"], [], "instance declaration");
@@ -136,8 +140,12 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
     for (const p of Object.values(v.readPrograms)) shape(p as Data, ["requests", "decode"], [], "read program declaration");
     if (!v.execution || typeof v.execution.settlement?.directOutput !== "boolean")
       throw new Error("variant requires settlement declarations");
+    if (Object.hasOwn(v.execution, "quoteOutput"))
+      throw new Error("quoteOutput must be declared in modules, not execution");
     if (typeof v.id !== "string" || typeof v.lineageId !== "string") throw new Error("invalid declarative variant identity");
     const modules = readProtocolModules(document.modules, v.modules, options.math, options.executionMath);
+    if (Object.keys(modules.blocks.quoteOutput!).length && v.execution.version !== 2)
+      throw new Error("quoteOutput requires execution version 2");
     const { modules: _moduleDefinitions, ...valueDefinition } = v;
     const values = compileDeclarativeValues(valueDefinition, {}, modules.get<DeclarativeMathFunctions>("math"));
     if (!v.readPrograms.quote && (!Object.keys(modules.blocks.pricingFlow!).length ||
@@ -153,7 +161,8 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
       const { sourceKind: _source, localStateUnsupportedReason: _reason, chainQuote: _proof, ...flow } = block;
       return compileDeclarativeReadFlow(flow as any, values, (requests, env) => materializeRequests(v, values, modules, requests, env));
     };
-    const variant: Variant = { document: v, values, modules, quoteFlow: compileFlow("quoteFlow"), pricingFlow: compileFlow("pricingFlow") };
+    const variant: Variant = { document: v, execution: frozen(executionDefinition(v, modules)), values, modules,
+      quoteFlow: compileFlow("quoteFlow"), pricingFlow: compileFlow("pricingFlow") };
     const trial = modules.get<Data>("trialState");
     if (trial && v.exact.retainReadEvidence) throw new Error("trial state does not support retained read evidence");
     if (trial) variant.trialState = compileDeclarativeTrialState<Descriptor, Route, Data>(trial, {
@@ -253,6 +262,15 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
   }
   // Pseudo requests exist only inside the Family compiler. The ordinary issuer
   // sees the same authenticated request type as hand-authored Families.
+  function executionDefinition(definition: Data, modules: ReturnType<typeof readProtocolModules>) {
+    const quoteOutput = modules.get("quoteOutput");
+    if (quoteOutput) return { ...definition.execution, quoteOutput };
+    // A declared but blocked quote program cannot silently become an unchecked
+    // direct-recipient path. Default executor receipt remains independently usable.
+    if (Object.keys(modules.blocks.quoteOutput!).length)
+      return { ...definition.execution, settlement: { ...definition.execution.settlement, directOutput: false } };
+    return definition.execution;
+  }
   function materializeRequests(definition: Data, values: Values, modules: ReturnType<typeof readProtocolModules>,
     requests: readonly Data[], env: Data): readonly AdapterRequest[] {
     if (!Array.isArray(requests)) throw new Error("declaration requests must be a list");
@@ -275,7 +293,7 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
       return buildDeclarativeExecutionSimulation({ kind: "declarative-execution-simulation", id: request.id,
         amountIn: "$simulationAmount", protectedTokens: "$simulationProtectedTokens",
         ...(request.observe === undefined ? {} : { observe: request.observe }),
-        ...(request.required === undefined ? {} : { required: request.required }) }, context, values, definition.execution,
+        ...(request.required === undefined ? {} : { required: request.required }) }, context, values, executionDefinition(definition, modules),
         { math: modules.get<BoundRuntimeMath>("executionMath") });
     });
   }
@@ -632,7 +650,7 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
   }
   function executionProgram(input: Data) {
     const v = select(input.descriptor), env = environment(v, input);
-    const spec = v.document.execution;
+    const spec = v.execution;
     if (!spec) throw new Error("missing declared execution direction");
     return buildDeclarativeExecutionProgram(spec, env, v.values, { math: v.modules.get<BoundRuntimeMath>("executionMath") });
   }
@@ -644,7 +662,7 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
       const env = environment(v, { descriptor: input.descriptor, route: input.route, executor: input.executor,
         source: input.source, transactionOrigin: input.transactionOrigin,
         runtimeEvidence: input.runtimeEvidence, settlement: input.settlement });
-      return buildDeclarativeRuntimeLeg(v.document.execution, env, v.values,
+      return buildDeclarativeRuntimeLeg(v.execution, env, v.values,
         { math: v.modules.get<BoundRuntimeMath>("executionMath") });
     },
     buildFragment(input) {
@@ -672,11 +690,15 @@ export function createDeclarativeProtocolRuntime(raw: Data, children: readonly D
     expectedEffects: input => evalRoot(document.routes.effects, input),
   };
   const actionAdapters = document.actionAdapters.map((action: Data) => createDeclarativeProgramAction(action.descriptor, action.traces));
+  const oracleVictim = primary.modules.get("oracleVictim");
   const definition = {
     manifest: document.manifest as FamilyManifest<"protocol">,
     capture: createRouteCaptureMaterialization({ familyId: document.manifest.familyId, discovery }),
     discovery, identity, instance, routes, pricing, exact, execution,
-    protocol: document.protocol as ProtocolDomainSemantics, actionAdapters,
+    protocol: { ...document.protocol,
+      // The strict constructor installs its synchronous guard before freezing.
+      ...(oracleVictim ? { oracleVictim: { ...compileDeclarativeOracleVictim(oracleVictim, primary.values) } } : {}),
+    } as ProtocolDomainSemantics, actionAdapters,
   };
   return { definition, assertInvocation, projection, executionProgram, variants, select, program, environment,
     moduleCoverage: variants.map(v => ({ variant: v.document.id, modules: v.modules.coverage })),

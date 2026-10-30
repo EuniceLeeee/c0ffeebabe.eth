@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:astra-multitoken",
+  "instanceKey": "0x460a253da3b248c077242027a1043fc64156665f",
+  "lineageId": "astra-multitoken:observed-active-registry",
+  "source": {
+    "number": 25645072,
+    "hash": "0xc7b5b023d93280ba77979ba97300d524f31d3a30def545193ee40c2fc82df953"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x7c8ffd12c9dcabe652dc55b6087768472d09dc1ac3e179b92cdba00a6546ebcd",
+  "trials": [
+    {
+      "id": "original-RCN-input",
+      "tokenIn": "0xf970b8e36e23f7fc3fd752eea86f8be8d83375a6",
+      "tokenOut": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+      "amountIn": "828547461981284792867"
+    }
+  ]
+}
