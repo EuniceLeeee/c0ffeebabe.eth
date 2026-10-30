@@ -16,6 +16,7 @@ import { psmConversionMathModel } from "./psm-math.js";
 import { selfBurnNativeWrapFeeMathModel } from "./self-burn-native-math.js";
 import { stakedUsdatEventAssetsMathModel } from "./staked-usdat-math.js";
 import { bearQuoteMathModel, xwinLocalStateMathModel, xwinQuoteMathModel } from "./token-conversion-math.js";
+import { ellaMathModels } from "./swaps/ella-exchange-family/math.js";
 import { univ1MathModels } from "./swaps/univ1-family/math.js";
 import { univ2MathModels } from "./swaps/univ2-family/math.js";
 import { univ3MathModels } from "./swaps/univ3-family/math.js";
@@ -44,6 +45,7 @@ const models: readonly DeclarativeMathModel[] = [
   xwinQuoteMathModel,
   ...balancerV1MathModels,
   ...fluidCreditMathModels,
+  ...ellaMathModels,
   ...univ1MathModels,
   ...univ2MathModels,
   ...univ3MathModels,

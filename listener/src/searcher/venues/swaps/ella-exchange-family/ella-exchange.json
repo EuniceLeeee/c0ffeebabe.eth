@@ -1,0 +1,5250 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "ella-exchange"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_ELLA_EXCHANGE_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "ella-exchange",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "ella-buy-token",
+      "ella-sell-token"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "ella-exchange:native-base-v1"
+    ],
+    "poolAdapterIds": [
+      "ella-exchange"
+    ],
+    "edgeAdapterIds": [
+      "ella-buy-token",
+      "ella-sell-token"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "ella-exchange",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address"
+        },
+        "key": [
+          "pool"
+        ],
+        "instanceKey": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "ella-swapBase1",
+          "signature": "function swapBase1() payable",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        },
+        {
+          "id": "ella-swap1",
+          "signature": "function swap1(uint256 amountIn)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "ella-bought",
+          "signature": "event Bought(uint256 price,uint256 grossOut,uint256 amountIn,address exchange,bool isBuy,uint256 timestamp)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    3
+                  ]
+                },
+                {
+                  "op": "get",
+                  "args": [
+                    "$observation",
+                    "address"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    0
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    2
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "labels": [
+        "ella-exchange"
+      ],
+      "nomination": "address-surface",
+      "surface": {
+        "id": "ella-native-base",
+        "fingerprint": "ella-exchange-native-base-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          }
+        }
+      },
+      "txSeedNominations": true
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "expressions": {},
+      "identity": {
+        "applies": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$candidate",
+                "candidateKind"
+              ]
+            },
+            "ella-exchange"
+          ]
+        },
+        "select": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$candidate",
+                    "candidateKind"
+                  ]
+                },
+                "ella-exchange"
+              ]
+            },
+            "error": "ella wrong candidate kind"
+          },
+          {
+            "return": "layout",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "factory",
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "layout"
+              ]
+            }
+          },
+          {
+            "return": "aggregated",
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "factory"
+              ]
+            }
+          },
+          {
+            "return": "done"
+          }
+        ],
+        "stages": {
+          "layout": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "get-storage"
+              ]
+            },
+            "requests": [
+              {
+                "id": "code",
+                "kind": "get-code",
+                "address": "$candidate.pool"
+              },
+              {
+                "id": "token",
+                "kind": "get-storage",
+                "address": "$candidate.pool",
+                "slot": "0x0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "id": "factory-native",
+                "kind": "get-storage",
+                "address": "$candidate.pool",
+                "slot": "0x0000000000000000000000000000000000000000000000000000000000000002"
+              },
+              {
+                "id": "secretary",
+                "kind": "get-storage",
+                "address": "$candidate.pool",
+                "slot": "0x000000000000000000000000000000000000000000000000000000000000000a"
+              },
+              {
+                "id": "oracle",
+                "kind": "get-storage",
+                "address": "$candidate.pool",
+                "slot": "0x000000000000000000000000000000000000000000000000000000000000000f"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$results",
+                        0
+                      ]
+                    },
+                    "source"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": [
+                    "$results",
+                    "r",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$r",
+                                    "source"
+                                  ]
+                                },
+                                "number"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$source",
+                                "number"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$r",
+                                        "source"
+                                      ]
+                                    },
+                                    "hash"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$source",
+                                    "hash"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$r",
+                                    "source"
+                                  ]
+                                },
+                                "generation"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$source",
+                                "generation"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "ella mixed source"
+              },
+              {
+                "assert": {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "token"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "pow",
+                      "args": [
+                        2,
+                        160
+                      ]
+                    }
+                  ]
+                },
+                "error": "ella malformed address"
+              },
+              {
+                "let": "token",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "token"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "secretary"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "pow",
+                      "args": [
+                        2,
+                        160
+                      ]
+                    }
+                  ]
+                },
+                "error": "ella malformed address"
+              },
+              {
+                "let": "secretary",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "secretary"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "oracle"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "pow",
+                      "args": [
+                        2,
+                        160
+                      ]
+                    }
+                  ]
+                },
+                "error": "ella malformed address"
+              },
+              {
+                "let": "oracle",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "oracle"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "code"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "packed",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "factory-native"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "factory",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "factory-native"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "nativeFlag",
+                "value": {
+                  "op": "div",
+                  "args": [
+                    "$packed",
+                    {
+                      "op": "pow",
+                      "args": [
+                        2,
+                        160
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "rejection",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$codeHash",
+                        "$constants.exchangeCodeHash"
+                      ]
+                    },
+                    "unsupported-exchange-runtime",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "ne",
+                          "args": [
+                            "$nativeFlag",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "1"
+                              ]
+                            }
+                          ]
+                        },
+                        "not-native-base-exchange",
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "or",
+                              "args": [
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    "$factory",
+                                    "$secretary"
+                                  ]
+                                },
+                                {
+                                  "op": "sameAddress",
+                                  "args": [
+                                    "$factory",
+                                    "$constants.zero"
+                                  ]
+                                }
+                              ]
+                            },
+                            "factory-secretary-mismatch",
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "or",
+                                  "args": [
+                                    {
+                                      "op": "sameAddress",
+                                      "args": [
+                                        "$token",
+                                        "$constants.zero"
+                                      ]
+                                    },
+                                    {
+                                      "op": "sameAddress",
+                                      "args": [
+                                        "$oracle",
+                                        "$constants.zero"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "invalid-token-oracle",
+                                "$missing"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "binding",
+                "value": {
+                  "pool": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.pool"
+                    ]
+                  },
+                  "token": "$token",
+                  "factory": "$factory",
+                  "oracle": "$oracle",
+                  "aggregator": "$constants.zero",
+                  "decimals": 0,
+                  "codeHash": "$codeHash",
+                  "factoryCodeHash": ""
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    {
+                      "phase": "layout",
+                      "source": "$source",
+                      "requestIds": {
+                        "op": "map",
+                        "args": [
+                          "$results",
+                          "r",
+                          {
+                            "op": "get",
+                            "args": [
+                              "$r",
+                              "id"
+                            ]
+                          }
+                        ]
+                      },
+                      "binding": "$binding"
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$rejection"
+                          ]
+                        },
+                        {
+                          "rejection": "$rejection"
+                        },
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "factory": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "factory-code",
+                "kind": "get-code",
+                "address": "$evidence.binding.factory"
+              },
+              {
+                "id": "token-code",
+                "kind": "get-code",
+                "address": "$evidence.binding.token"
+              },
+              {
+                "id": "oracle-code",
+                "kind": "get-code",
+                "address": "$evidence.binding.oracle"
+              },
+              {
+                "id": "decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "binding"
+                      ]
+                    },
+                    "token"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "aggregator",
+                "kind": "eth-call",
+                "to": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "binding"
+                      ]
+                    },
+                    "oracle"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "oracle",
+                    "aggregator",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$results",
+                        0
+                      ]
+                    },
+                    "source"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": [
+                    "$results",
+                    "r",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$r",
+                                    "source"
+                                  ]
+                                },
+                                "number"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$source",
+                                "number"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$r",
+                                        "source"
+                                      ]
+                                    },
+                                    "hash"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$source",
+                                    "hash"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$r",
+                                    "source"
+                                  ]
+                                },
+                                "generation"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$source",
+                                "generation"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "ella mixed source"
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                },
+                "error": "ella mixed source"
+              },
+              {
+                "let": "factoryCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "factory-code"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "number",
+                  "args": [
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "decimals"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "aggregator"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "pow",
+                      "args": [
+                        2,
+                        160
+                      ]
+                    }
+                  ]
+                },
+                "error": "ella malformed address"
+              },
+              {
+                "let": "aggregator",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "aggregator"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "tokenCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "token-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "oracleCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "oracle-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "rejection",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$factoryCodeHash",
+                        "$constants.factoryCodeHash"
+                      ]
+                    },
+                    "unsupported-factory-runtime",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "or",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                "$tokenCode",
+                                "0x"
+                              ]
+                            },
+                            {
+                              "op": "eq",
+                              "args": [
+                                "$oracleCode",
+                                "0x"
+                              ]
+                            }
+                          ]
+                        },
+                        "missing-token-oracle-code",
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "ne",
+                              "args": [
+                                "$decimals",
+                                18
+                              ]
+                            },
+                            "unsupported-token-scale",
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "sameAddress",
+                                  "args": [
+                                    "$aggregator",
+                                    "$constants.zero"
+                                  ]
+                                },
+                                "missing-oracle-aggregator",
+                                "$missing"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "binding",
+                "value": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence.binding",
+                    {
+                      "factoryCodeHash": "$factoryCodeHash",
+                      "decimals": "$decimals",
+                      "aggregator": "$aggregator"
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "factory",
+                      "requestIds": {
+                        "op": "map",
+                        "args": [
+                          "$results",
+                          "r",
+                          {
+                            "op": "get",
+                            "args": [
+                              "$r",
+                              "id"
+                            ]
+                          }
+                        ]
+                      },
+                      "binding": "$binding"
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$rejection"
+                          ]
+                        },
+                        {
+                          "rejection": "$rejection"
+                        },
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "aggregated": {
+            "requirements": {
+              "transports": [
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "aggregator-code",
+                "kind": "get-code",
+                "address": "$evidence.binding.aggregator"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "aggregator-code"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    "0x"
+                  ]
+                },
+                "error": "ella oracle aggregator unavailable"
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "complete",
+                      "requestIds": {
+                        "op": "map",
+                        "args": [
+                          "$results",
+                          "r",
+                          {
+                            "op": "get",
+                            "args": [
+                              "$r",
+                              "id"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "done": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "$evidence.rejection",
+              "evidenceRequestIds": "$evidence.requestIds"
+            },
+            "when": {
+              "op": "defined",
+              "args": [
+                "$evidence.rejection"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "complete"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": "$evidence.binding.pool",
+                "facts": "$evidence.binding",
+                "provenance": [
+                  {
+                    "kind": "ella-compiled-runtime-factory-storage",
+                    "subject": "$evidence.binding.factory",
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "binding": "$evidence.binding",
+                          "source": "$evidence.source"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.subject"
+                ]
+              }
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            }
+          ]
+        },
+        "$identity.facts"
+      ]
+    },
+    "bindingProjection": {
+      "op": "expression",
+      "args": [
+        "binding",
+        {
+          "d": "$descriptor"
+        }
+      ]
+    }
+  },
+  "routes": {
+    "target": {
+      "op": "get",
+      "args": [
+        {
+          "op": "expression",
+          "args": [
+            "instance",
+            {
+              "d": "$descriptor"
+            }
+          ]
+        },
+        "pool"
+      ]
+    },
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "instance",
+                    {
+                      "d": "$descriptor"
+                    }
+                  ]
+                },
+                "pool"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "familyId"
+            ]
+          },
+          ":",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "expression",
+                        "args": [
+                          "instance",
+                          {
+                            "d": "$descriptor"
+                          }
+                        ]
+                      },
+                      "pool"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          ":",
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "direction"
+            ]
+          }
+        ],
+        ""
+      ]
+    },
+    "directions": [
+      {
+        "id": "buy-token",
+        "enabled": true,
+        "tokenIn": "$constants.weth",
+        "tokenOut": {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "token"
+          ]
+        },
+        "adapterId": "ella-buy-token",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "executionAssets": {
+          "input": "native",
+          "output": "erc20"
+        },
+        "fields": {
+          "pool": {
+            "op": "get",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "instance",
+                  {
+                    "d": "$descriptor"
+                  }
+                ]
+              },
+              "pool"
+            ]
+          }
+        }
+      },
+      {
+        "id": "sell-token",
+        "enabled": true,
+        "tokenIn": {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "token"
+          ]
+        },
+        "tokenOut": "$constants.weth",
+        "adapterId": "ella-sell-token",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "executionAssets": {
+          "input": "erc20",
+          "output": "native"
+        },
+        "fields": {
+          "pool": {
+            "op": "get",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "instance",
+                  {
+                    "d": "$descriptor"
+                  }
+                ]
+              },
+              "pool"
+            ]
+          }
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "pool"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instance": "$descriptor"
+    },
+    "compatibility": {
+      "op": "expression",
+      "args": [
+        "binding",
+        {
+          "d": "$descriptor"
+        }
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "finalize": "$draft",
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1"
+      ]
+    },
+    "exactCompatibility": {
+      "binding": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "bindingRef"
+            ]
+          },
+          "fingerprint"
+        ]
+      },
+      "direction": {
+        "op": "get",
+        "args": [
+          "$route",
+          "direction"
+        ]
+      },
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ],
+    "stateKey": {
+      "op": "get",
+      "args": [
+        "$route",
+        "instanceKey"
+      ]
+    }
+  },
+  "standard": {
+    "id": "verified-native-base-runtime",
+    "lineageId": "ella-exchange:native-base-v1",
+    "identityKind": "standalone-contract",
+    "match": {
+      "op": "or",
+      "args": [
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "familyId"
+              ]
+            },
+            "ella-exchange"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "instance"
+                  ]
+                },
+                "familyId"
+              ]
+            },
+            "ella-exchange"
+          ]
+        }
+      ]
+    },
+    "context": {},
+    "boundState": {
+      "op": "expression",
+      "args": [
+        "binding",
+        {
+          "d": "$descriptor"
+        }
+      ]
+    },
+    "abi": {
+      "pool": [
+        "function tokenPrice() view returns(uint256)",
+        "function swapBase1() payable",
+        "function swap1(uint256)"
+      ],
+      "fees": [
+        "function getFees() view returns(uint256)",
+        "function getSystemCut() view returns(uint256)",
+        "function getFeesAddress() view returns(address)"
+      ],
+      "token": [
+        "function decimals() view returns(uint8)",
+        "function balanceOf(address) view returns(uint256)"
+      ],
+      "oracle": [
+        "function aggregator() view returns(address)"
+      ],
+      "balance": [
+        "function getEthBalance(address) view returns(uint256)"
+      ]
+    },
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "multicall": "0xca11bde05977b3631167028862be2a173976ca11",
+      "unit": "1000000000000000000",
+      "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "exchangeCodeHash": "0x8594ea55b8367287ced36b1a73006c77397b7b0940ff3f8da685799b4d301067",
+      "factoryCodeHash": "0x1b4336dddecfd3e095180b0e518cdbf1944c67e1b77dfbe1340801379e79db8d",
+      "buy": "buy-token",
+      "sell": "sell-token",
+      "decimals": 18
+    },
+    "expressions": {
+      "instance": {
+        "op": "coalesce",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$d",
+              "instance"
+            ]
+          },
+          "$d"
+        ]
+      },
+      "binding": {
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "instance",
+                        {
+                          "d": "$d"
+                        }
+                      ]
+                    },
+                    "pool"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "token": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "instance",
+                        {
+                          "d": "$d"
+                        }
+                      ]
+                    },
+                    "token"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "factory": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "instance",
+                        {
+                          "d": "$d"
+                        }
+                      ]
+                    },
+                    "factory"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "oracle": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "instance",
+                        {
+                          "d": "$d"
+                        }
+                      ]
+                    },
+                    "oracle"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "aggregator": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "instance",
+                        {
+                          "d": "$d"
+                        }
+                      ]
+                    },
+                    "aggregator"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "decimals": {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$d"
+                }
+              ]
+            },
+            "decimals"
+          ]
+        },
+        "codeHash": {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$d"
+                }
+              ]
+            },
+            "codeHash"
+          ]
+        },
+        "factoryCodeHash": {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$d"
+                }
+              ]
+            },
+            "factoryCodeHash"
+          ]
+        }
+      },
+      "outBalance": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "direction"
+                ]
+              },
+              "buy-token"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$snapshot",
+              "tokenBalance"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$snapshot",
+              "nativeBalance"
+            ]
+          }
+        ]
+      },
+      "capacity": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "direction"
+                ]
+              },
+              "buy-token"
+            ]
+          },
+          {
+            "op": "div",
+            "args": [
+              {
+                "op": "mul",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "outBalance",
+                      {
+                        "route": "$route",
+                        "snapshot": "$snapshot"
+                      }
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      "$snapshot",
+                      "price"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1000000000000000000"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "div",
+            "args": [
+              {
+                "op": "mul",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "outBalance",
+                      {
+                        "route": "$route",
+                        "snapshot": "$snapshot"
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "1000000000000000000"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$snapshot",
+                  "price"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "rawQuote": {
+        "op": "model",
+        "args": [
+          "quote",
+          {
+            "price": {
+              "op": "get",
+              "args": [
+                "$snapshot",
+                "price"
+              ]
+            },
+            "fee": {
+              "op": "get",
+              "args": [
+                "$snapshot",
+                "fee"
+              ]
+            },
+            "systemCut": {
+              "op": "get",
+              "args": [
+                "$snapshot",
+                "systemCut"
+              ]
+            },
+            "tokenBalance": {
+              "op": "get",
+              "args": [
+                "$snapshot",
+                "tokenBalance"
+              ]
+            },
+            "nativeBalance": {
+              "op": "get",
+              "args": [
+                "$snapshot",
+                "nativeBalance"
+              ]
+            },
+            "baseFeesGenerated": {
+              "op": "get",
+              "args": [
+                "$snapshot",
+                "baseFeesGenerated"
+              ]
+            },
+            "feesGenerated": {
+              "op": "get",
+              "args": [
+                "$snapshot",
+                "feesGenerated"
+              ]
+            },
+            "amountIn": {
+              "op": "div",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "capacity",
+                    {
+                      "route": "$route",
+                      "snapshot": "$snapshot"
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "100"
+                  ]
+                }
+              ]
+            },
+            "direction": {
+              "op": "get",
+              "args": [
+                "$route",
+                "direction"
+              ]
+            }
+          }
+        ]
+      },
+      "rawAvailable": {
+        "op": "gt",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              {
+                "op": "model",
+                "args": [
+                  "quote",
+                  {
+                    "price": {
+                      "op": "get",
+                      "args": [
+                        "$snapshot",
+                        "price"
+                      ]
+                    },
+                    "fee": {
+                      "op": "get",
+                      "args": [
+                        "$snapshot",
+                        "fee"
+                      ]
+                    },
+                    "systemCut": {
+                      "op": "get",
+                      "args": [
+                        "$snapshot",
+                        "systemCut"
+                      ]
+                    },
+                    "tokenBalance": {
+                      "op": "get",
+                      "args": [
+                        "$snapshot",
+                        "tokenBalance"
+                      ]
+                    },
+                    "nativeBalance": {
+                      "op": "get",
+                      "args": [
+                        "$snapshot",
+                        "nativeBalance"
+                      ]
+                    },
+                    "baseFeesGenerated": {
+                      "op": "get",
+                      "args": [
+                        "$snapshot",
+                        "baseFeesGenerated"
+                      ]
+                    },
+                    "feesGenerated": {
+                      "op": "get",
+                      "args": [
+                        "$snapshot",
+                        "feesGenerated"
+                      ]
+                    },
+                    "amountIn": {
+                      "op": "div",
+                      "args": [
+                        {
+                          "op": "expression",
+                          "args": [
+                            "capacity",
+                            {
+                              "route": "$route",
+                              "snapshot": "$snapshot"
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "100"
+                          ]
+                        }
+                      ]
+                    },
+                    "direction": {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "direction"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "amountOut"
+            ]
+          },
+          {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          }
+        ]
+      }
+    },
+    "programs": {
+      "ella-unresolved-impact": [
+        {
+          "assert": false,
+          "error": "ella Bought needs call context to distinguish token variant and net output"
+        }
+      ]
+    },
+    "readPrograms": {},
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call",
+          "get-storage"
+        ]
+      },
+      "dependencies": [
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "pool"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "token"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "factory"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "oracle"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "aggregator"
+          ]
+        }
+      ],
+      "mutationAddresses": [
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "pool"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "token"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "factory"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "oracle"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "aggregator"
+          ]
+        }
+      ],
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "rawAvailable",
+                      {
+                        "route": "$route",
+                        "snapshot": "$snapshot"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "routeKey"
+              ]
+            },
+            "ella raw mid unavailable: capacity or quote is zero at the current source"
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "ella-source-math",
+      "requirements": {
+        "transports": [
+          "eth-call",
+          "get-storage"
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "gte",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lte",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "ella invalid amountIn"
+        },
+        {
+          "assert": {
+            "op": "or",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "direction"
+                    ]
+                  },
+                  "buy-token"
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "direction"
+                    ]
+                  },
+                  "sell-token"
+                ]
+              }
+            ]
+          },
+          "error": "ella invalid direction"
+        }
+      ],
+      "amountOut": {
+        "op": "get",
+        "args": [
+          "$quoteResult",
+          "amountOut"
+        ]
+      },
+      "evidence": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$amountOut",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "merge",
+            "args": [
+              {
+                "kind": "ella-source-math",
+                "source": "$source",
+                "executor": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$executor"
+                      ]
+                    }
+                  ]
+                },
+                "binding": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "bindingRef"
+                      ]
+                    },
+                    "fingerprint"
+                  ]
+                },
+                "routeKey": {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "routeKey"
+                  ]
+                },
+                "amountIn": "$amountIn",
+                "amountOut": "$amountOut"
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "defined",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$quoteResult",
+                          "unavailableReason"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "unavailableReason": {
+                      "op": "get",
+                      "args": [
+                        "$quoteResult",
+                        "unavailableReason"
+                      ]
+                    }
+                  },
+                  {}
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "ella-source-math",
+            "source": "$source",
+            "executor": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$executor"
+                  ]
+                }
+              ]
+            },
+            "binding": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "bindingRef"
+                  ]
+                },
+                "fingerprint"
+              ]
+            },
+            "routeKey": {
+              "op": "get",
+              "args": [
+                "$route",
+                "routeKey"
+              ]
+            },
+            "amountIn": "$amountIn",
+            "amountOut": "$amountOut"
+          }
+        ]
+      },
+      "zeroEvidence": {
+        "kind": "ella-source-math",
+        "source": "$source",
+        "executor": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "binding": {
+          "op": "get",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "bindingRef"
+              ]
+            },
+            "fingerprint"
+          ]
+        },
+        "routeKey": {
+          "op": "get",
+          "args": [
+            "$route",
+            "routeKey"
+          ]
+        },
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut"
+      },
+      "outputChecks": [
+        {
+          "assert": {
+            "op": "lt",
+            "args": [
+              {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "fees-address"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "pow",
+                "args": [
+                  2,
+                  160
+                ]
+              }
+            ]
+          },
+          "error": "ella malformed address"
+        },
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "bytes",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "returned",
+                                    "args": [
+                                      "fees-address"
+                                    ]
+                                  },
+                                  "data"
+                                ]
+                              },
+                              12,
+                              20
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "expression",
+                            "args": [
+                              "instance",
+                              {
+                                "d": "$descriptor"
+                              }
+                            ]
+                          },
+                          "pool"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "ella unsupported execution actor"
+        }
+      ]
+    },
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "instance",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            },
+            "pool"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "buySwap",
+          "when": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "direction"
+                ]
+              },
+              "buy-token"
+            ]
+          },
+          "call": {
+            "target": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "instance",
+                    {
+                      "d": "$descriptor"
+                    }
+                  ]
+                },
+                "pool"
+              ]
+            },
+            "signature": "function swapBase1() payable",
+            "args": [],
+            "value": {
+              "runtime": "amountIn"
+            }
+          }
+        },
+        {
+          "id": "sellSwap",
+          "when": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "direction"
+                ]
+              },
+              "sell-token"
+            ]
+          },
+          "approval": {
+            "token": {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenIn"
+              ]
+            },
+            "spender": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "instance",
+                    {
+                      "d": "$descriptor"
+                    }
+                  ]
+                },
+                "pool"
+              ]
+            },
+            "mode": "ensure"
+          },
+          "call": {
+            "target": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "instance",
+                    {
+                      "d": "$descriptor"
+                    }
+                  ]
+                },
+                "pool"
+              ]
+            },
+            "signature": "function swap1(uint256)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "asset": "native",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          },
+          "when": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "direction"
+                ]
+              },
+              "buy-token"
+            ]
+          }
+        },
+        {
+          "kind": "credit",
+          "asset": "erc20",
+          "token": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenOut"
+            ]
+          },
+          "account": "$recipient",
+          "when": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "direction"
+                ]
+              },
+              "buy-token"
+            ]
+          }
+        },
+        {
+          "kind": "debit",
+          "asset": "erc20",
+          "token": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenIn"
+            ]
+          },
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          },
+          "when": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "direction"
+                ]
+              },
+              "sell-token"
+            ]
+          }
+        },
+        {
+          "kind": "credit",
+          "asset": "native",
+          "account": "$executor",
+          "when": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "direction"
+                ]
+              },
+              "sell-token"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "swap": {
+    "version": 1,
+    "events": [
+      {
+        "id": "ella-bought",
+        "signature": "event Bought(uint256 price,uint256 grossOut,uint256 amountIn,address exchange,bool isBuy,uint256 timestamp)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$log",
+                    "address"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": "$log.data",
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "price"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "amountIn"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "exchange"
+                  ]
+                },
+                {
+                  "op": "get",
+                  "args": [
+                    "$log",
+                    "address"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "target"
+                  ]
+                },
+                "$pool"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "isBuy"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$edge",
+                        "direction"
+                      ]
+                    },
+                    "buy-token"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "op": "program",
+          "args": [
+            "ella-unresolved-impact",
+            {}
+          ]
+        }
+      }
+    ],
+    "calls": [],
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only",
+    "poolMaterialization": {
+      "result": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$observation",
+                  "kind"
+                ]
+              },
+              "log"
+            ]
+          },
+          {
+            "pool": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "address"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "price": {
+              "op": "word",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    },
+                    0,
+                    32
+                  ]
+                }
+              ]
+            },
+            "grossOut": {
+              "op": "word",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    },
+                    32,
+                    32
+                  ]
+                }
+              ]
+            },
+            "amountIn": {
+              "op": "word",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    },
+                    64,
+                    32
+                  ]
+                }
+              ]
+            },
+            "isBuy": {
+              "op": "bool",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    },
+                    128,
+                    32
+                  ]
+                }
+              ]
+            }
+          },
+          null
+        ]
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "ella-buy-token",
+        "lineage": "custom-swap:ella-exchange",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": true,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function swapBase1()"
+        }
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "ella-sell-token",
+        "lineage": "custom-swap:ella-exchange",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function swap1(uint256)"
+        }
+      ]
+    }
+  ],
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "quote": {
+          "model": "ella:source-quote",
+          "version": 1
+        }
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call",
+              "get-storage"
+            ]
+          },
+          "requests": [
+            {
+              "id": "price",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "pool"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "tokenPrice",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "fee",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "factory"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "getFees",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "cut",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "factory"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "getSystemCut",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "fees-address",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "factory"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "getFeesAddress",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "token-balance",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "token"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "expression",
+                          "args": [
+                            "instance",
+                            {
+                              "d": "$descriptor"
+                            }
+                          ]
+                        },
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "native-balance",
+              "kind": "eth-call",
+              "to": "$constants.multicall",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "balance",
+                  "getEthBalance",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "expression",
+                          "args": [
+                            "instance",
+                            {
+                              "d": "$descriptor"
+                            }
+                          ]
+                        },
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "base-fees-generated",
+              "kind": "get-storage",
+              "address": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "pool"
+                ]
+              },
+              "slot": "0x000000000000000000000000000000000000000000000000000000000000000b"
+            },
+            {
+              "id": "fees-generated",
+              "kind": "get-storage",
+              "address": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "pool"
+                ]
+              },
+              "slot": "0x000000000000000000000000000000000000000000000000000000000000000c"
+            },
+            {
+              "id": "current-oracle",
+              "kind": "get-storage",
+              "address": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "pool"
+                ]
+              },
+              "slot": "0x000000000000000000000000000000000000000000000000000000000000000f"
+            },
+            {
+              "id": "current-aggregator",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "oracle"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "oracle",
+                  "aggregator",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "source",
+              "value": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$results",
+                      0
+                    ]
+                  },
+                  "source"
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "every",
+                "args": [
+                  "$results",
+                  "r",
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$r",
+                                  "source"
+                                ]
+                              },
+                              "number"
+                            ]
+                          },
+                          {
+                            "op": "get",
+                            "args": [
+                              "$source",
+                              "number"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$r",
+                                      "source"
+                                    ]
+                                  },
+                                  "hash"
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$source",
+                                  "hash"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$r",
+                                  "source"
+                                ]
+                              },
+                              "generation"
+                            ]
+                          },
+                          {
+                            "op": "get",
+                            "args": [
+                              "$source",
+                              "generation"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "ella mixed source"
+            },
+            {
+              "let": "price",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "price"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "fee",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "fee"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "systemCut",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "cut"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "lt",
+                "args": [
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "fees-address"
+                            ]
+                          },
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      160
+                    ]
+                  }
+                ]
+              },
+              "error": "ella malformed address"
+            },
+            {
+              "let": "feesAddress",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "fees-address"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      12,
+                      20
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "tokenBalance",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "token-balance"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "nativeBalance",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "native-balance"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "baseFeesGenerated",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "base-fees-generated"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "feesGenerated",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "fees-generated"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "lt",
+                "args": [
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-oracle"
+                            ]
+                          },
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      160
+                    ]
+                  }
+                ]
+              },
+              "error": "ella malformed address"
+            },
+            {
+              "let": "currentOracle",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-oracle"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      12,
+                      20
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "lt",
+                "args": [
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-aggregator"
+                            ]
+                          },
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      160
+                    ]
+                  }
+                ]
+              },
+              "error": "ella malformed address"
+            },
+            {
+              "let": "currentAggregator",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-aggregator"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      12,
+                      20
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$price",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lt",
+                    "args": [
+                      "$fee",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1000000000000000000"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lte",
+                    "args": [
+                      "$systemCut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1000000000000000000"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "ella unusable current oracle/fee state"
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$currentOracle",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "expression",
+                            "args": [
+                              "instance",
+                              {
+                                "d": "$descriptor"
+                              }
+                            ]
+                          },
+                          "oracle"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$currentAggregator",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "expression",
+                            "args": [
+                              "instance",
+                              {
+                                "d": "$descriptor"
+                              }
+                            ]
+                          },
+                          "aggregator"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "ella changed oracle binding requires instance revalidation"
+            },
+            {
+              "return": {
+                "source": "$source",
+                "price": "$price",
+                "fee": "$fee",
+                "systemCut": "$systemCut",
+                "feesAddress": "$feesAddress",
+                "tokenBalance": "$tokenBalance",
+                "nativeBalance": "$nativeBalance",
+                "baseFeesGenerated": "$baseFeesGenerated",
+                "feesGenerated": "$feesGenerated"
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.state"
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [],
+      "rows": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "expression",
+                "args": [
+                  "rawAvailable",
+                  {
+                    "route": "$route",
+                    "snapshot": "$snapshot"
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          {
+            "routeKey": {
+              "op": "get",
+              "args": [
+                "$route",
+                "routeKey"
+              ]
+            },
+            "numerator": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "rawQuote",
+                    {
+                      "route": "$route",
+                      "snapshot": "$snapshot"
+                    }
+                  ]
+                },
+                "amountOut"
+              ]
+            },
+            "denominator": {
+              "op": "div",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "capacity",
+                    {
+                      "route": "$route",
+                      "snapshot": "$snapshot"
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "100"
+                  ]
+                }
+              ]
+            },
+            "depth": {
+              "op": "min",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "capacity",
+                    {
+                      "route": "$route",
+                      "snapshot": "$snapshot"
+                    }
+                  ]
+                },
+                {
+                  "op": "expression",
+                  "args": [
+                    "outBalance",
+                    {
+                      "route": "$route",
+                      "snapshot": "$snapshot"
+                    }
+                  ]
+                }
+              ]
+            },
+            "reserveA": {
+              "op": "expression",
+              "args": [
+                "capacity",
+                {
+                  "route": "$route",
+                  "snapshot": "$snapshot"
+                }
+              ]
+            },
+            "reserveB": {
+              "op": "expression",
+              "args": [
+                "outBalance",
+                {
+                  "route": "$route",
+                  "snapshot": "$snapshot"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "ella-token-oracle-dependency-models-unproven",
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call",
+              "get-storage"
+            ]
+          },
+          "requests": [
+            {
+              "id": "price",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "pool"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "tokenPrice",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "fee",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "factory"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "getFees",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "cut",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "factory"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "getSystemCut",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "fees-address",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "factory"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "fees",
+                  "getFeesAddress",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "token-balance",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "token"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "expression",
+                          "args": [
+                            "instance",
+                            {
+                              "d": "$descriptor"
+                            }
+                          ]
+                        },
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "native-balance",
+              "kind": "eth-call",
+              "to": "$constants.multicall",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "balance",
+                  "getEthBalance",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "expression",
+                          "args": [
+                            "instance",
+                            {
+                              "d": "$descriptor"
+                            }
+                          ]
+                        },
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "base-fees-generated",
+              "kind": "get-storage",
+              "address": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "pool"
+                ]
+              },
+              "slot": "0x000000000000000000000000000000000000000000000000000000000000000b"
+            },
+            {
+              "id": "fees-generated",
+              "kind": "get-storage",
+              "address": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "pool"
+                ]
+              },
+              "slot": "0x000000000000000000000000000000000000000000000000000000000000000c"
+            },
+            {
+              "id": "current-oracle",
+              "kind": "get-storage",
+              "address": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "pool"
+                ]
+              },
+              "slot": "0x000000000000000000000000000000000000000000000000000000000000000f"
+            },
+            {
+              "id": "current-aggregator",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "instance",
+                      {
+                        "d": "$descriptor"
+                      }
+                    ]
+                  },
+                  "oracle"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "oracle",
+                  "aggregator",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "source",
+              "value": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$results",
+                      0
+                    ]
+                  },
+                  "source"
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "every",
+                "args": [
+                  "$results",
+                  "r",
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$r",
+                                  "source"
+                                ]
+                              },
+                              "number"
+                            ]
+                          },
+                          {
+                            "op": "get",
+                            "args": [
+                              "$source",
+                              "number"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$r",
+                                      "source"
+                                    ]
+                                  },
+                                  "hash"
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$source",
+                                  "hash"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$r",
+                                  "source"
+                                ]
+                              },
+                              "generation"
+                            ]
+                          },
+                          {
+                            "op": "get",
+                            "args": [
+                              "$source",
+                              "generation"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "ella mixed source"
+            },
+            {
+              "let": "price",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "price"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "fee",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "fee"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "systemCut",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "cut"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "lt",
+                "args": [
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "fees-address"
+                            ]
+                          },
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      160
+                    ]
+                  }
+                ]
+              },
+              "error": "ella malformed address"
+            },
+            {
+              "let": "feesAddress",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "fees-address"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      12,
+                      20
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "tokenBalance",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "token-balance"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "nativeBalance",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "native-balance"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "baseFeesGenerated",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "base-fees-generated"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "feesGenerated",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "fees-generated"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "lt",
+                "args": [
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-oracle"
+                            ]
+                          },
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      160
+                    ]
+                  }
+                ]
+              },
+              "error": "ella malformed address"
+            },
+            {
+              "let": "currentOracle",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-oracle"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      12,
+                      20
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "lt",
+                "args": [
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-aggregator"
+                            ]
+                          },
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      160
+                    ]
+                  }
+                ]
+              },
+              "error": "ella malformed address"
+            },
+            {
+              "let": "currentAggregator",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "current-aggregator"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      12,
+                      20
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$price",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lt",
+                    "args": [
+                      "$fee",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1000000000000000000"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lte",
+                    "args": [
+                      "$systemCut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1000000000000000000"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "ella unusable current oracle/fee state"
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$currentOracle",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "expression",
+                            "args": [
+                              "instance",
+                              {
+                                "d": "$descriptor"
+                              }
+                            ]
+                          },
+                          "oracle"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$currentAggregator",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "expression",
+                            "args": [
+                              "instance",
+                              {
+                                "d": "$descriptor"
+                              }
+                            ]
+                          },
+                          "aggregator"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "ella changed oracle binding requires instance revalidation"
+            },
+            {
+              "return": {
+                "op": "model",
+                "args": [
+                  "quote",
+                  {
+                    "price": "$price",
+                    "fee": "$fee",
+                    "systemCut": "$systemCut",
+                    "tokenBalance": "$tokenBalance",
+                    "nativeBalance": "$nativeBalance",
+                    "baseFeesGenerated": "$baseFeesGenerated",
+                    "feesGenerated": "$feesGenerated",
+                    "amountIn": "$amountIn",
+                    "direction": {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "direction"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.state"
+    }
+  }
+}
