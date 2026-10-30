@@ -1589,32 +1589,22 @@
         "op": "concat",
         "args": [
           [
-            [
-              "$draft.pool"
-            ],
-            {
-              "op": "map",
-              "args": [
-                "$draft.tokens",
-                "t",
-                "$t"
-              ]
-            }
-          ]
+            "$draft.pool"
+          ],
+          {
+            "op": "map",
+            "args": [
+              "$draft.tokens",
+              "t",
+              "$t"
+            ]
+          }
         ]
       },
       "requests": {
         "op": "map",
         "args": [
-          {
-            "op": "expression",
-            "args": [
-              "uniqueTokenIns",
-              {
-                "routes": "$draft.routes"
-              }
-            ]
-          },
+          "$draft.tokens",
           "token",
           {
             "id": {
