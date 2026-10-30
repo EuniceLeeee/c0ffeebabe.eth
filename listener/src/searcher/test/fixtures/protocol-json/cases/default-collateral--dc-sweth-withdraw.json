@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:default-collateral",
+  "instanceKey": "0x38b86004842d3fa4596f0b7a0b53de90745ab654",
+  "lineageId": "default-collateral:share-vault-v1",
+  "source": {
+    "number": 26244778,
+    "hash": "0x4d8e7ee76e1d7ce145a752ae4185056d13c83f3b1de57fffe0a1282ef8c39646"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0xad88c7f614ac27fa1707e224a2276d1f1b12f8cffe9a4443f1fa3fa2cf209833",
+  "trials": [
+    {
+      "id": "original-DC-swETH-input",
+      "tokenIn": "0x38b86004842d3fa4596f0b7a0b53de90745ab654",
+      "tokenOut": "0xf951e335afb289353dc249e82926178eac7ded78",
+      "amountIn": "9538714839966700"
+    }
+  ]
+}

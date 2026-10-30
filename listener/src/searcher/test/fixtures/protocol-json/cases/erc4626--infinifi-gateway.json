@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "familyId": "protocol:erc4626",
+  "instanceKey": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+  "lineageId": "erc4626:infinifi-gateway-staking",
+  "source": {
+    "number": 25944594,
+    "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-deposit-spliced-production-input-only",
+      "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "tokenOut": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "amountIn": "5131980894925000000"
+    },
+    {
+      "id": "1-deposit-one-token-control-not-production-reference",
+      "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "tokenOut": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "amountIn": "1000000000000000000"
+    },
+    {
+      "id": "2-deposit-original-assets-as-deposit-control-at-tested-state",
+      "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "tokenOut": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "amountIn": "857213759247368899192"
+    },
+    {
+      "id": "3-redeem-one-token-control-not-production-reference",
+      "tokenIn": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "tokenOut": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "amountIn": "1000000000000000000"
+    },
+    {
+      "id": "4-redeem-original-redeem-input-at-tested-state",
+      "tokenIn": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "tokenOut": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "amountIn": "787606233728059501656"
+    }
+  ],
+  "transactionHash": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5"
+}

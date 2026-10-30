@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:origin-ousd",
+  "instanceKey": "0xe75d77b1865ae93c7eaa3040b038d7aa7bc02f70",
+  "lineageId": "origin-ousd-vault",
+  "source": {
+    "number": 26185253,
+    "hash": "0xdd643ebc4407cddccee0ae6e7f5e9d34f8978fde5340d24aaacc39849ad91a2f"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0xab27e7006f6d2471e6f2d037cdc8e2ecbf6848f65d79c54a43c3bf145cbba13a",
+  "trials": [
+    {
+      "id": "original-USDC-input",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x2a8e1e676ec238d8a992307b495b45b3feaa5e86",
+      "amountIn": "394088756"
+    }
+  ]
+}

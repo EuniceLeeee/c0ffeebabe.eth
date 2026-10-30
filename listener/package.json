@@ -480,7 +480,10 @@
     "test:erc4626-family:standard-price-state": "tsx --test src/searcher/venues/protocols/erc4626-family/test/standard-price-state.test.ts",
     "searcher:curve-lp-historical-ready": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx src/searcher/venues/protocols/curve-lp-family/test/historical-ready.ts",
     "searcher:curve-lp-historical-dual": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
-    "searcher:identity-flow": "node --import tsx --test src/searcher/test/identity-flow.ts"
+    "searcher:identity-flow": "node --import tsx --test src/searcher/test/identity-flow.ts",
+    "test:protocol-json": "node scripts/test-protocol-json.mjs",
+    "accept:protocol-json": "node --import tsx src/searcher/test/protocol-json-acceptance.ts",
+    "check:protocol-json-samples": "node --import tsx src/searcher/test/protocol-json-samples.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

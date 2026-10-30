@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:boring-vault-teller",
+  "instanceKey": "0x63b2b0528376d1b34ed8c9ff61bd67ab2c8c2bb0",
+  "lineageId": "boring-vault-teller:v1",
+  "source": {
+    "number": 26184075,
+    "hash": "0x5d2d8c79dc5af4a8327cd95f5d19dc7e0ee29b3e4eb204cee951612b6cb8c9a1"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x0bff8c156d526f052998a5f27e25ec44493d71818189226a53888e3826648b80",
+  "trials": [
+    {
+      "id": "original-eEIGEN-input",
+      "tokenIn": "0xe77076518a813616315eaaba6ca8e595e845eee9",
+      "tokenOut": "0xec53bf9167f50cdeb3ae105f56099aaab9061f83",
+      "amountIn": "1247507673610103657860"
+    }
+  ]
+}

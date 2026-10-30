@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:origin-steth-arm",
+  "instanceKey": "0x85b78aca6deae198fbf201c82daf6ca21942acc6",
+  "lineageId": "origin-steth-arm-lido",
+  "source": {
+    "number": 26244681,
+    "hash": "0xead5583a63d04578dfd01b4d82a3c423b13aeb40a520cec84370b4bbfb4a77a3"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x1b6545dd23d993366e41175eaefbd993e740752d4c92ee8a1b473a7d43f40f5c",
+  "trials": [
+    {
+      "id": "original-stETH-input",
+      "tokenIn": "0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "8589306883606"
+    }
+  ]
+}

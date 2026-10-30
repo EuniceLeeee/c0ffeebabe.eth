@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:self-burn-native",
+  "instanceKey": "0x292a477e521230fe230c13c93374adde8ddec1c1",
+  "lineageId": "self-burn-native:active-effect-delta-v1",
+  "source": {
+    "number": 25619948,
+    "hash": "0x8a2813204e354d1024b359d61ad4cbcb6af2e1f3d6c7aa3034faeb5abc58eb31"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-redeem-original-input",
+      "tokenIn": "0x292a477e521230fe230c13c93374adde8ddec1c1",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "12306616935116519"
+    }
+  ],
+  "transactionHash": "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7"
+}

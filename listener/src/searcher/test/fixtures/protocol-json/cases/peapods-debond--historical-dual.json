@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "familyId": "protocol:peapods-debond",
+  "instanceKey": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+  "lineageId": "peapods:weighted-single-asset-v1",
+  "source": {
+    "number": 26152716,
+    "hash": "0x0c80d557cb71bdb448a893597f138dd7c6ec530b04fd7b1136a266877c647c5b"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-debond-production-effective",
+      "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+      "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+      "amountIn": "1907361111151028811545"
+    },
+    {
+      "id": "1-debond-original-input-at-N-end",
+      "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+      "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+      "amountIn": "11759600366451075559109"
+    },
+    {
+      "id": "2-debond-one-token-control",
+      "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+      "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+      "amountIn": "1000000000000000000"
+    },
+    {
+      "id": "3-debond-below-98-percent-exemption",
+      "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+      "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+      "amountIn": "2484306419094140914753082"
+    },
+    {
+      "id": "4-debond-at-98-percent-exemption",
+      "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+      "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+      "amountIn": "2484306419094140914753083"
+    },
+    {
+      "id": "5-debond-full-supply",
+      "tokenIn": "0xf7d7cf9195ed7e1fdc0fb26e463618bc09c67c34",
+      "tokenOut": "0x62d0a8458ed7719fdaf978fe5929c6d342b0bfce",
+      "amountIn": "2535006550096062157911310"
+    }
+  ],
+  "transactionHash": "0xb71237be54af5987a37dc5b9fdab19c3b39dae5d0803c3e4237a8b9d4f22b01d"
+}

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "familyId": "protocol:token-conversion",
+  "instanceKey": "0x88888880d5ca13018d2dc11e2e4744bd91a5656f",
+  "lineageId": "token-conversion:btb-bear-v1",
+  "source": {
+    "number": 26029369,
+    "hash": "0x8406ef83427bd09be91ef479edff4830d245d4c4658b75299b12e37c8ac20928"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-mint-recorded-input",
+      "tokenIn": "0x88888888c90CD71B35830daBFD24743DbC135B51",
+      "tokenOut": "0x88888880d5Ca13018D2dC11e2e4744BD91a5656f",
+      "amountIn": "13484449607819709120667"
+    },
+    {
+      "id": "1-mint-recorded-input",
+      "tokenIn": "0x88888888c90CD71B35830daBFD24743DbC135B51",
+      "tokenOut": "0x88888880d5Ca13018D2dC11e2e4744BD91a5656f",
+      "amountIn": "134844496078197091206672"
+    },
+    {
+      "id": "2-redeem-recorded-input",
+      "tokenIn": "0x88888880d5Ca13018D2dC11e2e4744BD91a5656f",
+      "tokenOut": "0x88888888c90CD71B35830daBFD24743DbC135B51",
+      "amountIn": "13484449607819709120667"
+    },
+    {
+      "id": "3-redeem-recorded-input",
+      "tokenIn": "0x88888880d5Ca13018D2dC11e2e4744BD91a5656f",
+      "tokenOut": "0x88888888c90CD71B35830daBFD24743DbC135B51",
+      "amountIn": "134844496078197091206672"
+    }
+  ],
+  "transactionHash": "0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91"
+}

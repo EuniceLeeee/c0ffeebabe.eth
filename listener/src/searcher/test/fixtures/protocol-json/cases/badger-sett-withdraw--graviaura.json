@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "familyId": "protocol:badger-sett-withdraw",
+  "instanceKey": "0xba485b556399123261a5f9c95d413b4f93107407",
+  "lineageId": "badger-sett:thevault-1.5-vlaura-1.2-liquid",
+  "source": {
+    "number": 26138511,
+    "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-withdraw-production-P",
+      "tokenIn": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "tokenOut": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+      "amountIn": "186879770730708662978"
+    },
+    {
+      "id": "1-withdraw-historical-amount-at-N",
+      "tokenIn": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "tokenOut": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+      "amountIn": "131502308044455713821"
+    }
+  ],
+  "transactionHash": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d"
+}

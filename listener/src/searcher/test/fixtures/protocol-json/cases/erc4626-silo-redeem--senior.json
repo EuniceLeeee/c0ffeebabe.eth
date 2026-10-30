@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "familyId": "protocol:erc4626-silo-redeem",
+  "instanceKey": "0x3d7d6fdf07ee548b939a80edbc9b2256d0cdc003:0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+  "lineageId": "erc4626-silo:observed-payout-active-proof",
+  "source": {
+    "number": 25462190,
+    "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-silo-redeem-spliced-production-input-only",
+      "tokenIn": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
+      "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+      "amountIn": "4967302987351000000"
+    },
+    {
+      "id": "1-silo-redeem-original-burned-shares-at-N",
+      "tokenIn": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
+      "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+      "amountIn": "934460889828731878592"
+    },
+    {
+      "id": "2-silo-redeem-twice-original-burned-shares-at-N",
+      "tokenIn": "0x3d7d6fdf07EE548B939A80edbc9B2256d0cdc003",
+      "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+      "amountIn": "1868921779657463757184"
+    }
+  ],
+  "transactionHash": "0xf391d02add5e6cbbd98836d9eacdb66de3e5d76ef3874134145a6563a126ee86"
+}

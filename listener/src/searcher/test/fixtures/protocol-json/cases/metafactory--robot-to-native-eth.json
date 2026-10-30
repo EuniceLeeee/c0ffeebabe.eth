@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:metafactory",
+  "instanceKey": "0x585aba689bf7293fe66e9fded9eec9d0e732b180",
+  "lineageId": "metafactory:v1-composter-pro-rata-eth-v1",
+  "source": {
+    "number": 26244712,
+    "hash": "0x437e273550182b05f4d656e3afe50b9b665e828984b217838cf1a0d7abbd13a5"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0xbc7223c28f592b70fd17b8ff9522efc244a1cffb2c73aec9a0dd4c1b820a0af7",
+  "trials": [
+    {
+      "id": "original-ROBOT-input",
+      "tokenIn": "0xfb5453340c03db5ade474b27e68b6a9c6b2823eb",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "2655542356342977559"
+    }
+  ]
+}

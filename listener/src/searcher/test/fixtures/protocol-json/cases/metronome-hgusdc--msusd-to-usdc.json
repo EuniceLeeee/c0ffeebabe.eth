@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:metronome-hgusdc",
+  "instanceKey": "0x365084b05fa7d5028346bd21d842ed0601bab5b8",
+  "lineageId": "metronome-hgusdc:observed-path-active-quote-v1",
+  "source": {
+    "number": 25515277,
+    "hash": "0x62df172938e48b7bd6ca7aecfd812fd15168caea049289a72d45d4c7bfb60580"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x4d1e4e5103cb8e754847e085fcd8de7d2fb18f6fbe1fdfd84e0c74b5cae0e0e4",
+  "trials": [
+    {
+      "id": "original-msUSD-input",
+      "tokenIn": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "123201027004629751869029"
+    }
+  ]
+}

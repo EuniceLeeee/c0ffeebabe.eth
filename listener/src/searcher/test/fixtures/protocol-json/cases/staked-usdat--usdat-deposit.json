@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:staked-usdat",
+  "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+  "lineageId": "staked-usdat:source-bound-deposit",
+  "source": {
+    "number": 25462190,
+    "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+  "trials": [
+    {
+      "id": "original-USDat-deposit",
+      "tokenIn": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+      "tokenOut": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+      "amountIn": "1012540431"
+    }
+  ]
+}

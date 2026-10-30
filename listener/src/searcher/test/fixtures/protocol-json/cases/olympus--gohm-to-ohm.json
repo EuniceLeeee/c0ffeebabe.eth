@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:olympus",
+  "instanceKey": "0xb63cac384247597756545b500253ff8e607a8020",
+  "lineageId": "olympus:staking-v3-gohm-unstake",
+  "source": {
+    "number": 26184922,
+    "hash": "0xcf9a9e94b8ec7856f8cd053254aefb7c507f85037dd8718a6ffc21e5d4956146"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x28c9e5f8b41db8e2a0b5653b0a48520307bcafe95d1edf993f6f15e1ea904696",
+  "trials": [
+    {
+      "id": "original-gOHM-input",
+      "tokenIn": "0x0ab87046fbb341d058f17cbc4c1133f25a20a52f",
+      "tokenOut": "0x64aa3364f17a4d01c6f1751fd97c2bd3d7e7f1d5",
+      "amountIn": "1997321805946478"
+    }
+  ]
+}

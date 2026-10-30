@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "familyId": "protocol:erc4626",
+  "instanceKey": "0xc58d044404d8b14e953c115e67823784dea53d8f",
+  "lineageId": "erc4626:standalone-standard-behavior",
+  "source": {
+    "number": 26130609,
+    "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-deposit-original-event-input",
+      "tokenIn": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+      "tokenOut": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+      "amountIn": "4075497995240840401175"
+    },
+    {
+      "id": "1-deposit-twice-original-event-input",
+      "tokenIn": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+      "tokenOut": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+      "amountIn": "8150995990481680802350"
+    }
+  ],
+  "transactionHash": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01"
+}

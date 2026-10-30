@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "familyId": "protocol:token-migration",
+  "instanceKey": "0x5c30d7494da55e23f62130c642c22af1814ef65d",
+  "lineageId": "token-migration:mantle-solc-0.8.13-v1",
+  "source": {
+    "number": 26029585,
+    "hash": "0x7d657e10588fe0327698837441079dc5568813e20a53057ae806a28ab210dead"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-migrate-recorded-input",
+      "tokenIn": "0x44108f0223A3C3028F5Fe7AEC7f9bb2E66beF82F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "2449664714642103638082"
+    },
+    {
+      "id": "1-migrate-recorded-input",
+      "tokenIn": "0x44108f0223A3C3028F5Fe7AEC7f9bb2E66beF82F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "24496647146421036380821"
+    }
+  ],
+  "transactionHash": "0x576dcfa02ef2f8c2a2038ed17070e14a757c9c2e0b2e19b2de65ff65b9e7c583"
+}

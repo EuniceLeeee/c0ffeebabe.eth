@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:arcana-migration",
+  "instanceKey": "0x5b370e144d41e596033fe3dc60e1c30e6c493962:0x16f21211a70a1df607240e833d383ecb5419961e21207dd5485807f02ce2c255",
+  "lineageId": "arcana-migration:v1",
+  "source": {
+    "number": 26183678,
+    "hash": "0xc0f491e710dcd9ee9e68a72af82dc515a599eb993215d42a4a5863761e6f3325"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0xefa1ed163fe6ce5dd40a67b5cc3d0ed43d3521cb4f1a07cb6e92bb1d5d1644de",
+  "trials": [
+    {
+      "id": "original-EMP-input",
+      "tokenIn": "0x39d5313c3750140e5042887413ba8aa6145a9bd2",
+      "tokenOut": "0xe3e3fb2f07cfe382d480197a3c8ea0778cf51110",
+      "amountIn": "1521420467986403112"
+    }
+  ]
+}

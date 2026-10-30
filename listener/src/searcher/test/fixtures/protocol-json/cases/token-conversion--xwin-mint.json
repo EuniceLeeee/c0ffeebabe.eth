@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "familyId": "protocol:token-conversion",
+  "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+  "lineageId": "token-conversion:xwin-allocations-v1",
+  "source": {
+    "number": 26075823,
+    "hash": "0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c"
+  },
+  "executor": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+  "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+  "trials": [
+    {
+      "id": "0-mint-saved-production-input-only",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "amountIn": "5330762"
+    },
+    {
+      "id": "1-mint-historical-input-at-N",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "amountIn": "1"
+    }
+  ],
+  "transactionHash": "0x10b7f1d5ac14281c916b4f94bd8c781c2795bfdd7d1a527885e83f4f22ec9ae3"
+}

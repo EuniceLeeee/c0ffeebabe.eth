@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "familyId": "protocol:psm",
+  "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+  "lineageId": "psm:lite-active-pair",
+  "source": {
+    "number": 26029876,
+    "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-sell-gem-production-P",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "5494762"
+    },
+    {
+      "id": "1-sell-gem-double-production-P",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "10989524"
+    },
+    {
+      "id": "2-sell-gem-original-USDC-size-at-N",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "8137414"
+    },
+    {
+      "id": "3-sell-gem-one-output-unit-cost",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "1"
+    },
+    {
+      "id": "4-sell-gem-one-output-unit-cost-plus-one",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "2"
+    },
+    {
+      "id": "5-buy-gem-production-P",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "5483517075214014766"
+    },
+    {
+      "id": "6-buy-gem-double-production-P",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "10967034150428029532"
+    },
+    {
+      "id": "7-buy-gem-historical-amount-at-N",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "8137414000000000000"
+    },
+    {
+      "id": "8-buy-gem-one-output-unit-cost",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "1000000000000"
+    },
+    {
+      "id": "9-buy-gem-one-output-unit-cost-plus-one",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "1000000000001"
+    }
+  ],
+  "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72"
+}
