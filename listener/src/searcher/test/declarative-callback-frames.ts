@@ -4,9 +4,10 @@ import { AbiCoder, Interface, getBytes, hexlify, toBeHex } from "ethers";
 import { RuntimeAmountProgram } from "../../adapters/runtime-amount-program.js";
 import { encodeDeclarativeCall } from "../venues/declarative-call-codec.js";
 import { buildDeclarativeExecutionProgram, buildDeclarativeRuntimeLeg, declarativeSettlementCapabilities,
-  supportsDeclarativeSettlement, type DeclarativeConversionExecution } from "../venues/declarative-execution.js";
+  supportsDeclarativeSettlement, buildDeclarativeQuotedFragment, type DeclarativeConversionExecution } from "../venues/declarative-execution.js";
 import { createDeclarativeRuntimeMathRegistry, type RuntimeMathModel } from "../venues/declarative-runtime-math.js";
 import { validateDeclarativeCallbackFrame } from "../venues/declarative-callback-frames.js";
+import { compileDeclarativeValues } from "../venues/declarative-values.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { inspectRuntime, type RuntimeCall } from "./runtime-program-testkit.js";
 const address = (n: number) => toBeHex(n, 20), INPUT = address(1), OUTPUT = address(2), POOL = address(3), EXECUTOR = address(4), RECIPIENT = address(5), INNER = address(6);
@@ -38,12 +39,12 @@ function body(payload: string): string {
   const bytes = getBytes(payload); assert.equal(bytes[0], 0x0e);
   const size = Number(BigInt(hexlify(bytes.slice(33, 36)))); return hexlify(bytes.slice(36, 36 + size));
 }
-function execute(options: { reverse?: boolean; debt?: bigint; fault?: string; definition?: DeclarativeConversionExecution; direct?: boolean } = {}) {
+function execute(options: { reverse?: boolean; debt?: bigint; fault?: string; definition?: DeclarativeConversionExecution; direct?: boolean; values?: typeof values } = {}) {
   const cap = 19n, debt = options.debt ?? cap, out = 38n;
   let inputBalance = 101n + cap, outputBalance = 103n, actorOutput = 107n, poolBalance = 13n, native = 17n, payCalls = 0;
   const d = options.definition ?? definition(options.reverse), input = { ...context,
     ...(options.direct ? { settlement: { kind: "direct-output" as const, recipient: RECIPIENT } } : {}) };
-  const leg = buildDeclarativeRuntimeLeg(d, input, values)!; assert.equal(leg.inputMode, "maximum");
+  const leg = buildDeclarativeRuntimeLeg(d, input, options.values ?? values)!; assert.equal(leg.inputMode, "maximum");
   function token(call: RuntimeCall): string {
     const decoded = tokenAbi.parseTransaction({ data: call.data })!;
     if (decoded.name === "balanceOf") {
@@ -396,4 +397,56 @@ test("registered math outputs cannot enter the compiler frame namespace", () => 
     operations: [{ name: "result", op: "add", left: { input: "a" }, right: { constant: "0" } }] }])
     .bind({ version: 1, entries: { identity: { model: "fixture-identity", version: 1 } } });
   assert.throws(() => math.expand("identity", { a: ref("amountIn") }, { result: "frameOpeningOutput" }, "Safe"), /capture|reserved/);
+});
+
+
+// Frame expressions become frame objects only after applying invocation context.
+function expressionFrame(kind: "named" | "conditional" | "nested", reverse = false) {
+  const d: any = JSON.parse(JSON.stringify(definition(reverse), (_key, value) =>
+    typeof value === "bigint" ? value.toString() : value));
+  const frame = d.steps[0].frame;
+  const compiled = compileDeclarativeValues({ abi: {}, constants: {}, expressions: { frame } });
+  d.steps[0].frame = kind === "named" ? { op: "expression", args: ["frame", {}] }
+    : kind === "conditional" ? { op: "if", args: [{ op: "ne", args: ["$route.frameDisabled", true] }, frame, {}] }
+    : { ...frame, call: { ...frame.call, target: { op: "if", args: [true, POOL, INNER] } },
+      callback: { ...frame.callback, steps: [{ ...frame.callback.steps[0],
+        call: { ...frame.callback.steps[0].call, target: { op: "if", args: [true, INPUT, OUTPUT] } } }] } };
+  return { d, compiled, frame };
+}
+for (const kind of ["named", "conditional", "nested"] as const) for (const reverse of [false, true]) {
+  test(`${kind} callback frame resolves identically in runtime and quoted execution (${reverse})`, () => {
+    const { d, compiled, frame } = expressionFrame(kind, reverse);
+    const literal = { ...d, steps: [{ id: "swap", frame }] };
+    assert.deepEqual(declarativeSettlementCapabilities(d, context, compiled), { directOutput: true });
+    assert.deepEqual(buildDeclarativeRuntimeLeg(d, context, compiled), buildDeclarativeRuntimeLeg(literal, context, compiled));
+    assert.deepEqual(buildDeclarativeQuotedFragment(d, context, compiled), buildDeclarativeQuotedFragment(literal, context, compiled));
+    execute({ reverse, definition: d, values: compiled });
+    execute({ reverse, definition: d, values: compiled, direct: true });
+  });
+}
+for (const fault of ["negative-debt", "high-debt", "wrong-sign", "selector", "zero-debit", "no-output", "old-input", "native", "false-transfer"])
+  test(`resolved callback frame retains ${fault} rejection`, () => {
+    const { d, compiled } = expressionFrame("named");
+    assert.throws(() => execute({ definition: d, values: compiled, fault }));
+  });
+for (const expression of [false, true]) test(`${expression ? "resolved" : "literal"} invalid callback frame cannot emit runtime or quoted bytecode`, () => {
+  const { d, compiled, frame } = expressionFrame("conditional");
+  frame.callback.arguments.pop();
+  if (!expression) d.steps[0].frame = frame;
+  assert.throws(() => buildDeclarativeRuntimeLeg(d, context, compiled), /callback/);
+  assert.throws(() => buildDeclarativeQuotedFragment(d, context, compiled), /callback/);
+  if (!expression) assert.throws(() => declarativeSettlementCapabilities(d, context), /callback/);
+});
+test("conditional frame validates the selected result, including malformed/missing frames", () => {
+  const { d, compiled } = expressionFrame("conditional");
+  const input = { ...context, route: { ...context.route, frameDisabled: true } };
+  assert.throws(() => buildDeclarativeRuntimeLeg(d, input, compiled), /callback frame definition/);
+  assert.throws(() => buildDeclarativeQuotedFragment(d, input, compiled), /callback frame definition/);
+});
+
+for (const frame of [null, [], 42, false, "invalid"]) test(`malformed literal frame ${JSON.stringify(frame)} is rejected before capability publication`, () => {
+  const d: any = definition(); d.steps[0].frame = frame;
+  assert.throws(() => declarativeSettlementCapabilities(d, context), /callback frame/);
+  assert.throws(() => buildDeclarativeRuntimeLeg(d, context, values), /callback frame/);
+  assert.throws(() => buildDeclarativeQuotedFragment(d, context, values), /callback frame/);
 });
