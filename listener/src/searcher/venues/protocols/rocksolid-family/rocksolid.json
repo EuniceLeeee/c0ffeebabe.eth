@@ -1,32 +1,67 @@
 {
   "version": 2,
-  "scope": {"family": "protocol:rocksolid"},
+  "scope": {
+    "family": "protocol:rocksolid"
+  },
   "production": {
     "domain": "protocol",
-    "activation": {"enabled": true, "envKey": "SEARCHER_FAMILY_ROCKSOLID_ENABLED"}
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_ROCKSOLID_ENABLED"
+    }
   },
   "manifest": {
     "familyId": "protocol:rocksolid",
     "domain": "protocol",
-    "ownedActionAdapterIds": ["rocksolid-sync-deposit"],
-    "requiredInfraActionAdapterIds": ["erc20-approve"],
-    "allowedTaxonomy": [{"slotKind": "protocol", "protocolAction": "wrap"}],
-    "supportedLineages": ["rocksolid:active-sync-deposit"],
-    "poolAdapterIds": ["rocksolid"],
-    "edgeAdapterIds": ["rocksolid-sync-deposit"],
+    "ownedActionAdapterIds": [
+      "rocksolid-sync-deposit"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "wrap"
+      }
+    ],
+    "supportedLineages": [
+      "rocksolid:active-sync-deposit"
+    ],
+    "poolAdapterIds": [
+      "rocksolid"
+    ],
+    "edgeAdapterIds": [
+      "rocksolid-sync-deposit"
+    ],
     "requiresProtocolEdgesFlag": true
   },
   "discovery": {
     "definition": {
-      "sources": ["observed-call", "address-surface"],
+      "sources": [
+        "observed-call",
+        "address-surface"
+      ],
       "candidateSources": [],
-      "candidate": {"kind": "rocksolid-receipt", "addressField": "target"},
+      "candidate": {
+        "kind": "rocksolid-receipt",
+        "addressField": "target"
+      },
       "calls": [
-        {"id": "rocksolid-sync-deposit-call", "signature": "syncDeposit(uint256,address,address)"}
+        {
+          "id": "rocksolid-sync-deposit-call",
+          "signature": "syncDeposit(uint256,address,address)"
+        }
       ],
       "events": [],
-      "surface": {"id": "rocksolid-sync-deposit-surface", "fingerprint": "rocksolid-sync-deposit-v1"},
-      "labels": ["rocksolid", "protocol:rocksolid"]
+      "surface": {
+        "id": "rocksolid-sync-deposit-surface",
+        "fingerprint": "rocksolid-sync-deposit-v1"
+      },
+      "labels": [
+        "rocksolid",
+        "protocol:rocksolid"
+      ]
     }
   },
   "identity": {
@@ -34,37 +69,78 @@
       "version": 1,
       "identity": {
         "select": [
-          {"return": "active-sync-deposit"}
+          {
+            "return": "active-sync-deposit"
+          }
         ],
         "stages": {
           "active-sync-deposit": {
-            "requirements": {"transports": ["get-code", "eth-call"]},
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
             "requests": [
               {
                 "id": "identity-code",
                 "kind": "get-code",
-                "address": {"op": "address", "args": ["$candidate.target"]}
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
               },
               {
                 "id": "identity-convert",
                 "kind": "eth-call",
-                "to": {"op": "address", "args": ["$candidate.target"]},
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
                 "data": {
                   "op": "encode",
                   "args": [
                     "rocksolid",
                     "convertToShares",
-                    [{"op": "uint", "args": ["$constants.sampleAssets"]}]
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "$constants.sampleAssets"
+                        ]
+                      }
+                    ]
                   ]
                 },
                 "completion": "return-data"
               }
             ],
             "decode": [
-              {"evaluate": {"op": "source", "args": ["$results"]}},
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
               {
                 "let": "codeHash",
-                "value": {"op": "codeHash", "args": [{"op": "code", "args": ["identity-code"]}]}
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "identity-code"
+                      ]
+                    }
+                  ]
+                }
               },
               {
                 "let": "sampleShares",
@@ -76,29 +152,65 @@
                       "args": [
                         "rocksolid",
                         "convertToShares",
-                        {"op": "get", "args": [{"op": "returned", "args": ["identity-convert"]}, "data"]},
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-convert"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
                         0
                       ]
                     }
                   ]
                 }
               },
-              {"return": {"codeHash": "$codeHash", "sampleShares": "$sampleShares"}}
+              {
+                "return": {
+                  "codeHash": "$codeHash",
+                  "sampleShares": "$sampleShares"
+                }
+              }
             ]
           }
         },
         "decide": [
           {
-            "return": {"status": "continue"},
-            "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]}
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
           },
           {
             "return": {
               "status": "chain-proven-rejected",
               "reasonCode": "rocksolid_active_quote_failed",
-              "evidenceRequestIds": ["active-sync-deposit"]
+              "evidenceRequestIds": [
+                "active-sync-deposit"
+              ]
             },
-            "when": {"op": "lte", "args": ["$evidence.sampleShares", 0]}
+            "when": {
+              "op": "lte",
+              "args": [
+                "$evidence.sampleShares",
+                0
+              ]
+            }
           },
           {
             "return": {
@@ -106,15 +218,28 @@
               "identity": {
                 "familyId": "$profile.familyId",
                 "lineageId": "$profile.lineageId",
-                "subject": {"op": "address", "args": ["$candidate.target"]},
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
                 "provenance": [
                   {
                     "kind": "rocksolid-active-convert-proof",
-                    "subject": {"op": "address", "args": ["$candidate.target"]},
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    },
                     "evidenceHash": {
                       "op": "hash",
                       "args": [
-                        {"codeHash": "$evidence.codeHash", "sampleShares": "$evidence.sampleShares"}
+                        {
+                          "codeHash": "$evidence.codeHash",
+                          "sampleShares": "$evidence.sampleShares"
+                        }
                       ]
                     }
                   }
@@ -126,30 +251,120 @@
         ]
       }
     },
-    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]}
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    }
   },
   "instance": {
-    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
     "draft": {
       "familyId": "$identity.familyId",
       "lineageId": "$identity.lineageId",
-      "instanceKey": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
       "provenance": "$identity.provenance",
-      "runtimeRequirements": [{"kind": "source-state", "freshness": "pinned-block"}],
-      "target": {"op": "address", "args": ["$identity.subject"]},
-      "asset": {"op": "address", "args": ["$constants.reth"]},
-      "receipt": {"op": "address", "args": ["$identity.subject"]}
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "target": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "asset": {
+        "op": "address",
+        "args": [
+          "$constants.reth"
+        ]
+      },
+      "receipt": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      }
     },
     "bindingProjection": {
-      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
-      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
-      "receipt": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.receipt"]}]},
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "receipt": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.receipt"
+            ]
+          }
+        ]
+      },
       "execution": "syncDeposit(assets,receiver,zero-referral)"
     }
   },
   "routes": {
     "target": "$descriptor.target",
-    "bindingKey": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        }
+      ]
+    },
     "directions": [
       {
         "id": "sync-deposit",
@@ -157,12 +372,25 @@
         "tokenIn": "$descriptor.asset",
         "tokenOut": "$descriptor.receipt",
         "adapterId": "rocksolid-sync-deposit",
-        "taxonomy": {"slotKind": "protocol", "protocolAction": "wrap"}
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "wrap"
+        }
       }
     ],
     "graphVenue": {
       "kind": "address-protocol",
-      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]}
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      }
     },
     "effects": [
       {
@@ -183,31 +411,98 @@
     "draft": {
       "instanceKey": "$descriptor.instanceKey",
       "target": "$descriptor.target",
-      "route": {"op": "at", "args": ["$routes", 0]},
+      "route": {
+        "op": "at",
+        "args": [
+          "$routes",
+          0
+        ]
+      },
       "routes": "$routes"
     },
     "compatibility": {
-      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
-      "asset": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.asset"]}]},
-      "receipt": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.receipt"]}]}
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "receipt": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.receipt"
+            ]
+          }
+        ]
+      }
     },
     "static": {
-      "requirements": {"transports": []},
+      "requirements": {
+        "transports": []
+      },
       "dependencies": [],
       "requests": [],
-      "decode": {"fields": [], "output": {}}
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
     },
-    "finalize": {"op": "merge", "args": ["$draft", "$staticEvidence"]},
-    "sampleAmount": {"op": "uint", "args": ["$constants.sampleAssets"]},
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "$constants.sampleAssets"
+      ]
+    },
     "exactCompatibility": {
-      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
       "direction": "$route.direction",
       "bindingFingerprint": "$route.bindingRef.fingerprint"
     },
-    "mutationKinds": ["call"]
+    "mutationKinds": [
+      "call"
+    ]
   },
   "protocol": {
-    "candidateKinds": ["observed-call", "address-surface"],
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
     "activeBehaviorProof": "required"
   },
   "standard": {
@@ -230,9 +525,15 @@
     "boundState": "$descriptor",
     "identityKind": "standalone-contract",
     "pricing": {
-      "mutationAddresses": ["$descriptor.target"],
+      "mutationAddresses": [
+        "$descriptor.target"
+      ],
       "refreshPolicy": "on-touch",
-      "requirements": {"transports": ["eth-call"]},
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
       "dependencies": [
         "$descriptor.target",
         "$descriptor.route.tokenIn",
@@ -241,7 +542,11 @@
     },
     "exact": {
       "methodId": "rocksolid-quote",
-      "requirements": {"transports": ["eth-call"]},
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
       "evidence": {
         "kind": "rocksolid-convert-to-shares",
         "source": "$source",
@@ -260,7 +565,13 @@
             "to": "$descriptor.target",
             "data": {
               "op": "encode",
-              "args": ["rocksolid", "convertToShares", ["$amountIn"]]
+              "args": [
+                "rocksolid",
+                "convertToShares",
+                [
+                  "$amountIn"
+                ]
+              ]
             },
             "completion": "return-data"
           }
@@ -273,7 +584,18 @@
               "args": [
                 "rocksolid",
                 "convertToShares",
-                {"op": "get", "args": [{"op": "returned", "args": ["$requestId"]}, "data"]},
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "$requestId"
+                      ]
+                    },
+                    "data"
+                  ]
+                },
                 0
               ]
             }
@@ -283,8 +605,12 @@
     },
     "execution": {
       "version": 1,
-      "settlement": {"directOutput": true},
-      "protectedAddresses": ["$descriptor.target"],
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.target"
+      ],
       "approval": {
         "token": "$route.tokenIn",
         "spender": "$descriptor.target",
@@ -294,9 +620,16 @@
         "target": "$descriptor.target",
         "signature": "function syncDeposit(uint256 assets,address receiver,address referral) returns (uint256 shares)",
         "args": [
-          {"runtime": "amountIn"},
+          {
+            "runtime": "amountIn"
+          },
           "$executor",
-          {"op": "address", "args": ["$constants.referral"]}
+          {
+            "op": "address",
+            "args": [
+              "$constants.referral"
+            ]
+          }
         ]
       },
       "effects": [
@@ -304,7 +637,9 @@
           "kind": "debit",
           "token": "$route.tokenIn",
           "account": "$executor",
-          "equals": {"runtime": "amountIn"}
+          "equals": {
+            "runtime": "amountIn"
+          }
         },
         {
           "kind": "credit",
@@ -322,7 +657,11 @@
       "steps": [
         {
           "id": "convert",
-          "requirements": {"transports": ["eth-call"]},
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
           "requests": [
             {
               "id": "quote-convert",
@@ -330,7 +669,13 @@
               "to": "$descriptor.target",
               "data": {
                 "op": "encode",
-                "args": ["rocksolid", "convertToShares", ["$amountIn"]]
+                "args": [
+                  "rocksolid",
+                  "convertToShares",
+                  [
+                    "$amountIn"
+                  ]
+                ]
               },
               "completion": "return-data"
             }
@@ -345,7 +690,18 @@
                     "args": [
                       "rocksolid",
                       "convertToShares",
-                      {"op": "get", "args": [{"op": "returned", "args": ["quote-convert"]}, "data"]},
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "quote-convert"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
                       0
                     ]
                   }
@@ -360,8 +716,12 @@
         "step": "convert",
         "requestId": "quote-convert",
         "signature": "function convertToShares(uint256 assets) view returns (uint256 shares)",
-        "amountPath": [0],
-        "outputPath": [0],
+        "amountPath": [
+          0
+        ],
+        "outputPath": [
+          0
+        ],
         "completion": "returned"
       }
     }
@@ -378,7 +738,9 @@
         "leavesStandingPositionDefault": false
       },
       "traces": [
-        {"signature": "function syncDeposit(uint256,address,address)"}
+        {
+          "signature": "function syncDeposit(uint256,address,address)"
+        }
       ]
     }
   ],
@@ -387,51 +749,91 @@
     "definitions": {
       "RocksolidCandidate": {
         "type": "object",
-        "extends": ["FamilyCandidate"],
+        "extends": [
+          "FamilyCandidate"
+        ],
         "fields": {
-          "candidateKind": {"literal": "rocksolid-receipt"},
-          "target": {"type": "string"}
+          "candidateKind": {
+            "literal": "rocksolid-receipt"
+          },
+          "target": {
+            "type": "string"
+          }
         }
       },
       "RocksolidIdentityEvidence": {
         "type": "object",
         "fields": {
-          "codeHash": {"type": "string"},
-          "sampleShares": {"type": "bigint"}
+          "codeHash": {
+            "type": "string"
+          },
+          "sampleShares": {
+            "type": "bigint"
+          }
         }
       },
       "RocksolidIdentity": {
         "type": "object",
-        "extends": ["VerifiedIdentity"],
+        "extends": [
+          "VerifiedIdentity"
+        ],
         "fields": {
-          "sampleShares": {"type": "bigint"}
+          "sampleShares": {
+            "type": "bigint"
+          }
         }
       },
       "RocksolidDescriptor": {
         "type": "object",
-        "extends": ["CompiledInstanceDescriptor"],
+        "extends": [
+          "CompiledInstanceDescriptor"
+        ],
         "fields": {
-          "target": {"type": "string"},
-          "asset": {"type": "string"},
-          "receipt": {"type": "string"}
+          "target": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "receipt": {
+            "type": "string"
+          }
         }
       },
       "RocksolidRoute": {
         "type": "object",
-        "extends": ["FamilyRouteDescriptor"],
+        "extends": [
+          "FamilyRouteDescriptor"
+        ],
         "fields": {
-          "target": {"type": "string"},
-          "direction": {"literal": "sync-deposit"},
-          "adapterId": {"literal": "rocksolid-sync-deposit"}
+          "target": {
+            "type": "string"
+          },
+          "direction": {
+            "literal": "sync-deposit"
+          },
+          "adapterId": {
+            "literal": "rocksolid-sync-deposit"
+          }
         }
       },
       "RocksolidPricingDraft": {
         "type": "object",
         "fields": {
-          "instanceKey": {"ref": "InstanceKey"},
-          "target": {"type": "string"},
-          "route": {"ref": "RocksolidRoute"},
-          "routes": {"array": {"ref": "RocksolidRoute"}}
+          "instanceKey": {
+            "ref": "InstanceKey"
+          },
+          "target": {
+            "type": "string"
+          },
+          "route": {
+            "ref": "RocksolidRoute"
+          },
+          "routes": {
+            "array": {
+              "ref": "RocksolidRoute"
+            }
+          }
         }
       },
       "RocksolidPricingStatic": {
@@ -440,18 +842,33 @@
       },
       "RocksolidPricingDescriptor": {
         "type": "object",
-        "extends": ["RocksolidPricingDraft", "RocksolidPricingStatic"],
+        "extends": [
+          "RocksolidPricingDraft",
+          "RocksolidPricingStatic"
+        ],
         "fields": {}
       },
       "RocksolidExactEvidence": {
         "type": "object",
         "fields": {
-          "kind": {"literal": "rocksolid-convert-to-shares"},
-          "source": {"ref": "CanonicalSource"},
-          "target": {"type": "string"},
-          "amountIn": {"type": "bigint"},
-          "amountOut": {"type": "bigint"},
-          "bindingFingerprint": {"type": "string"}
+          "kind": {
+            "literal": "rocksolid-convert-to-shares"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "target": {
+            "type": "string"
+          },
+          "amountIn": {
+            "type": "bigint"
+          },
+          "amountOut": {
+            "type": "bigint"
+          },
+          "bindingFingerprint": {
+            "type": "string"
+          }
         }
       }
     },
