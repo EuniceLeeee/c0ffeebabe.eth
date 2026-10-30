@@ -768,6 +768,13 @@ export function declarativeInputMode(definition: DeclarativeConversionExecution,
   return debit.length === 1 && debit[0].equals === undefined && dynamic(debit[0].maximum) &&
     debit[0].maximum.runtime === "amountIn" ? "maximum" : undefined;
 }
+// Expression frames are validated after resolution by the program compiler.
+// Literal objects still receive eager structural checks, including malformed ones.
+function literalCallbackFrame(frame: Value): boolean {
+  const hasExpression = (value: Value): boolean => value !== null && typeof value === "object" &&
+    (Object.hasOwn(value, "op") || Object.values(value).some(hasExpression));
+  return frame !== undefined && !(typeof frame === "string" && frame.startsWith("$")) && !hasExpression(frame);
+}
 function validateSettlementDeclaration(definition: DeclarativeConversionExecution): void {
   const publicName = (name: unknown) => {
     assertPublicRuntimeCaptureName(name);
@@ -777,7 +784,7 @@ function validateSettlementDeclaration(definition: DeclarativeConversionExecutio
   const stepNames = (step: Value) => {
     callNames(step.call);
     Object.values(step.math?.outputs ?? {}).forEach(publicName);
-    if (step.frame !== undefined) validateDeclarativeCallbackFrame(step.frame);
+    if (literalCallbackFrame(step.frame)) validateDeclarativeCallbackFrame(step.frame);
   };
   (definition.preflight ?? []).forEach(callNames);
   if (definition.version === 1) callNames(definition.call);
@@ -785,7 +792,7 @@ function validateSettlementDeclaration(definition: DeclarativeConversionExecutio
   keys(definition.settlement, ["directOutput"], "settlement");
   if (typeof definition.settlement.directOutput !== "boolean") throw new Error("declared settlement capability");
   if (definition.version === 2) for (const step of definition.steps) {
-    if (step.frame !== undefined) validateDeclarativeCallbackFrame(step.frame);
+    if (literalCallbackFrame(step.frame)) validateDeclarativeCallbackFrame(step.frame);
   }
   if (definition.version === 2 && definition.framedSettlement === undefined) {
     const needsSettlement = (value: any): boolean => value && typeof value === "object" &&
