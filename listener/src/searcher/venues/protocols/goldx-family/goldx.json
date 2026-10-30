@@ -456,9 +456,7 @@
       "requirements": {
         "transports": []
       },
-      "dependencies": [
-        "$draft.target"
-      ],
+      "dependencies": [],
       "requests": [],
       "decode": {
         "fields": [],
@@ -577,11 +575,43 @@
           "eth-call"
         ]
       },
-      "dependencies": [
-        "$descriptor.target",
-        "$descriptor.collateral",
-        "$descriptor.receipt"
-      ]
+      "dependencies": {
+        "op": "unique",
+        "args": [
+          {
+            "op": "concat",
+            "args": [
+              [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "target"
+                  ]
+                }
+              ],
+              [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor.route",
+                    "tokenIn"
+                  ]
+                }
+              ],
+              [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor.route",
+                    "tokenOut"
+                  ]
+                }
+              ]
+            ]
+          }
+        ]
+      }
     },
     "exact": {
       "methodId": "goldx-unit",

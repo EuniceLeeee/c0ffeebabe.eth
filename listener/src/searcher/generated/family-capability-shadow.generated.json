@@ -24396,7 +24396,7 @@
         "familyId": "protocol:goldx",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "8db6bdf26bf34ee3d7649388891817a5554509f9594f1f523a7c0edb55db47c9",
+        "contentHash": "626a3042a4ca99ae21df06ceb2f13c3121ce9e07d1e66056a9de26e041bee28e",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -24550,7 +24550,7 @@
         "familyId": "protocol:goldx",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "23569c49a51d3c8be4452c5338a1ec3fd25aa88b6463a096dec6da9e2ec4df35",
+        "contentHash": "89b8b48bf9228c17148b39e012a836a9996fd6c7e9d45a8d43f4634063245ff5",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -24684,7 +24684,7 @@
         "familyId": "protocol:goldx",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "91d22d3a1b59e3583b8d5589f5309d3ade02b8020337ec8ae4a3f8b04994cfe3",
+        "contentHash": "bc34ef97bce9efd0441ca9e5b51a56f7a6ea32de5ec551e09819f718d50d08b5",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -24818,7 +24818,7 @@
         "familyId": "protocol:goldx",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "4cc491f6530b9fc26f8d2f0fc28e19cb2fa6bbaa8b6cd92694f8dc41d14d16e0",
+        "contentHash": "998c78aae345a4017e9dcffdc8e9a0aa7532d13a527ba360f708df4b75d2e606",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -24973,7 +24973,7 @@
         "familyId": "protocol:goldx",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "9d082a0b74c6a539c00b86bb5d3045976b0314766fef71d437328337090be8a5",
+        "contentHash": "a6567e7f364c9510857ae84fb6f2246104ae14598bdb42484e072939fdabda27",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -25107,7 +25107,7 @@
         "familyId": "protocol:goldx",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "7a9d49b120069cc55bab5119c4bc1791dc891eba6cba578ed962de645384e365",
+        "contentHash": "2b52919353ddf755a96a11ce6296f95e3a05eb292083bbda0a9c4985f67da07c",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -25241,7 +25241,7 @@
         "familyId": "protocol:goldx",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "1923ec6781fe5042ebb6fea30429ebeba4218f8b6c7696ace50c25ff6570ab57",
+        "contentHash": "95337f4c9b03b9a36442ac67f09f73ac5d31efee789f62136bf0513688b9f7d8",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -25375,7 +25375,7 @@
         "familyId": "protocol:goldx",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "1546be4b35ebea03c6114e7b1e07c9eddef5b3c824040fd49346866044de8ff9",
+        "contentHash": "651ee8639697e7775893ef3b39d8d3282519c41fcae20259ac4049b946278e13",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -48324,5 +48324,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "7f307bcfb4e6e904d34e37150366465b768a5cf1163e42f2e656eaa35cdb24f1"
+  "artifactHash": "e16a9fc56d911085902909aa497b6c1300142f84bb3563a3224798a7c91f3b59"
 }
