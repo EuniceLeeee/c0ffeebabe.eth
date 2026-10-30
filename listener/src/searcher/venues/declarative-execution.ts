@@ -31,11 +31,13 @@ export interface DeclarativeQuoteOutput {
     readonly math?: { readonly model: string; readonly inputs: Value; readonly outputs: Record<string, string>; readonly checks?: readonly Check[] };
   }[];
   readonly result: { readonly runtime: string };
+  /** Explicit, read-only names exported to execution; captures stay private. */
+  readonly exports?: Readonly<Record<string, { readonly runtime: string }>>;
 }
 export type DeclarativeConversionExecution = SharedConversionExecution & (
   | { readonly version: 1; readonly approval?: Value; readonly call: Value; readonly steps?: never }
   | { readonly version: 2; readonly steps: readonly {
-      readonly id: string; readonly call?: Value; readonly frame?: Value; readonly static?: boolean;
+      readonly id: string; readonly when?: Value; readonly call?: Value; readonly frame?: Value; readonly static?: boolean;
       readonly math?: { readonly model: string; readonly inputs: Value; readonly outputs: Record<string, string>; readonly checks?: readonly Check[] };
       readonly approval?: Value; readonly effects?: readonly Value[];
     }[]; readonly deferred?: Value; readonly framedSettlement?: { readonly version: 1; readonly recipient: "executor" | "target"; readonly debtInput: boolean; readonly expectedOutput: FrameValue; readonly nativeBoundary?: true }; readonly quoteOutput?: DeclarativeQuoteOutput; readonly call?: never; readonly approval?: never }
@@ -93,7 +95,7 @@ function scalarWord(type: ParamType): boolean {
 /** A quote declaration is data for the shared read-only compiler, never an
  * arbitrary bytecode/script source. Empty module handling belongs to catalog. */
 export function validateDeclarativeQuoteOutput(raw: unknown): asserts raw is DeclarativeQuoteOutput {
-  keys(raw, ["version", "steps", "result"], "quote output");
+  keys(raw, ["version", "steps", "result", "exports"], "quote output");
   const definition = raw as DeclarativeQuoteOutput;
   if (definition.version !== 1 || !Array.isArray(definition.steps) || !definition.steps.length || definition.steps.length > 64)
     throw new Error("declared quote output steps");
@@ -145,13 +147,24 @@ export function validateDeclarativeQuoteOutput(raw: unknown): asserts raw is Dec
   }
   refs(definition.result);
   if (definition.result.runtime === "amountIn") throw new Error("quote output must be a computed result");
+  if (definition.exports !== undefined) {
+    keys(definition.exports, Object.keys(definition.exports), "quote output exports");
+    for (const [name, value] of Object.entries(definition.exports)) {
+      assertPublicRuntimeCaptureName(name);
+      if (name.startsWith("quoteLocal")) throw new Error("private quote export name");
+      keys(value, ["runtime"], "quote output export"); refs(value);
+      if (typeof value.runtime !== "string" || value.runtime === "amountIn")
+        throw new Error("quote export must identify a computed capture");
+    }
+  }
 }
 
 /** Lower only static calls and whitelisted arithmetic. Names are local to this
  * quote block, including its return value, so direct execution can inline the
  * same operations without clobbering execution captures or invocation r0. */
 function quoteOperations(definition: DeclarativeQuoteOutput, resolved: (value: Value) => Value,
-  options: DeclarativeExecutionOptions): { operations: Operation[]; result: { runtime: string } } {
+  options: DeclarativeExecutionOptions): { operations: Operation[]; result: { runtime: string };
+    exports: Readonly<Record<string, { runtime: string }>> } {
   validateDeclarativeQuoteOutput(definition);
   const operations: Operation[] = [];
   const provenance = new Map<string, { read: boolean; input: boolean }>([["amountIn", { read: false, input: true }]]);
@@ -213,7 +226,37 @@ function quoteOperations(definition: DeclarativeQuoteOutput, resolved: (value: V
   if (!origin.read || !origin.input) throw new Error("quote output must derive from chain reads and actual input");
   const result = reference(name(definition.result.runtime));
   operations.push({ kind: "check", check: { left: result, operator: "gte", right: 1n } });
-  return { operations, result };
+  return { operations, result, exports: Object.fromEntries(Object.entries(definition.exports ?? {})
+    .map(([key, value]) => [key, reference(name(value.runtime))])) };
+}
+
+/** Conditions choose a complete set of calls before bytecode generation. They
+ * never branch on an off-chain amount/minimum or on runtime registers. The
+ * omitted minimum cannot give quoted and runtime execution different steps. */
+function selectExecutionSteps(definition: DeclarativeConversionExecution, input: Environment,
+  values?: DeclarationValues): DeclarativeConversionExecution {
+  if (definition.version !== 2 || !definition.steps.some(step => step.when !== undefined)) return definition;
+  const recipient = input.settlement?.recipient ?? input.recipient ?? input.executor;
+  const env = { ...executionContext(input, true), recipient,
+    directSettlement: input.settlementRequested === true || input.settlement !== undefined,
+    externalRecipient: String(recipient).toLowerCase() !== String(input.executor).toLowerCase(),
+    fundedSettlement: input.settlement?.kind !== "deferred-input", deferredSettlement: input.settlement?.kind === "deferred-input" };
+  const steps = definition.steps.filter(step => {
+    if (step.when === undefined) return true;
+    const selected = typeof step.when === "boolean" ? step.when : values?.evaluate(step.when, env);
+    if (typeof selected !== "boolean") throw new Error("execution step condition must resolve to boolean");
+    return selected;
+  }).map(({ when: _when, ...step }) => step);
+  if (input.settlement?.kind !== "quote-output" && !steps.some(step => step.frame !== undefined || step.call !== undefined && step.static !== true))
+    throw new Error("selected execution requires a state-changing step");
+  return { ...definition, steps };
+}
+
+function assertNoPrivateQuoteReferences(value: Value): void {
+  if (!value || typeof value !== "object") return;
+  if (dynamic(value) && typeof value.runtime === "string" && value.runtime.startsWith("quoteLocal"))
+    throw new Error("private quote capture requires an explicit export");
+  Object.values(value).forEach(assertNoPrivateQuoteReferences);
 }
 
 export function assertDeclarativeExecutionSource(value: unknown): asserts value is CanonicalSource {
@@ -237,7 +280,7 @@ export function buildDeclarativeExecutionProgram(
   if (definition.version !== 1 && definition.version !== 2) throw new Error("unsupported declared execution version");
   if (definition.version === 1 && (Object.hasOwn(definition, "steps") || Object.hasOwn(definition, "deferred") || Object.hasOwn(definition, "framedSettlement") || Object.hasOwn(definition, "quoteOutput")) || definition.version === 2 &&
       (Object.hasOwn(definition, "call") || Object.hasOwn(definition, "approval"))) throw new Error("mixed execution versions");
-  if (definition.version === 2 && (!Array.isArray(definition.steps) || !definition.steps.length))
+  if (definition.version === 2 && (!Array.isArray(definition.steps) || !definition.steps.length && input.settlement?.kind !== "quote-output"))
     throw new Error("declared execution steps must be nonempty");
   function rejectQuotedAmounts(value: unknown): void {
     if (typeof value === "string" && /^\$(amountIn|quotedAmountOut|exactEvidence)(\.|$)/.test(value)) {
@@ -246,6 +289,9 @@ export function buildDeclarativeExecutionProgram(
     if (value && typeof value === "object") Object.values(value).forEach(rejectQuotedAmounts);
   }
   rejectQuotedAmounts(definition);
+  const { quoteOutput: _privateQuote, ...publicDefinition } = definition as DeclarativeConversionExecution & { quoteOutput?: DeclarativeQuoteOutput };
+  assertNoPrivateQuoteReferences(publicDefinition);
+  definition = selectExecutionSteps(definition, input, values);
   keys(definition.settlement, ["directOutput"], "settlement");
   if (typeof definition.settlement.directOutput !== "boolean") throw new Error("declared settlement capability");
   const request = input.settlement;
@@ -268,7 +314,38 @@ export function buildDeclarativeExecutionProgram(
   if (definition.requireCanonicalSource) assertDeclarativeExecutionSource(input.source);
   if (definition.rejectRuntimeEvidence && input.runtimeEvidence?.length) throw new Error("declared pending execution unsupported");
   const operations: Operation[] = [];
-  const resolved = (value: Value) => values.evaluate(value, env);
+  let quoteExports: Readonly<Record<string, { runtime: string }>> = {};
+  const resolveQuoteReferences = (value: Value): Value => {
+    if (!value || typeof value !== "object") return value;
+    if (value.when !== undefined && !value.when) return value;
+    if (Object.hasOwn(value, "quoteOutput")) {
+      keys(value, ["quoteOutput"], "quote output reference");
+      if (typeof value.quoteOutput !== "string" || !Object.hasOwn(quoteExports, value.quoteOutput))
+        throw new Error("unknown or unavailable quote output export");
+      return quoteExports[value.quoteOutput];
+    }
+    return Array.isArray(value) ? value.map(resolveQuoteReferences)
+      : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveQuoteReferences(item)]));
+  };
+  const resolved = (value: Value) => {
+    const result = values.evaluate(value, env); assertNoPrivateQuoteReferences(result);
+    return resolveQuoteReferences(result);
+  };
+  const neededExports = new Set<string>();
+  function collectQuoteReferences(value: Value): void {
+    if (!value || typeof value !== "object" || value.when !== undefined && !value.when) return;
+    if (Object.hasOwn(value, "quoteOutput")) {
+      keys(value, ["quoteOutput"], "quote output reference");
+      if (typeof value.quoteOutput !== "string") throw new Error("invalid quote output reference");
+      neededExports.add(value.quoteOutput); return;
+    }
+    Object.values(value).forEach(collectQuoteReferences);
+  }
+  const { quoteOutput: _quoteDefinition, ...activeDefinition } = definition as DeclarativeConversionExecution & { quoteOutput?: DeclarativeQuoteOutput };
+  const hasQuoteReference = (value: Value): boolean => !!value && typeof value === "object" &&
+    (Object.hasOwn(value, "quoteOutput") || Object.values(value).some(hasQuoteReference));
+  if (hasQuoteReference(activeDefinition) || definition.version === 2 && definition.quoteOutput?.exports)
+    collectQuoteReferences(values.evaluate(activeDefinition, env));
   const addCall = (call: Call, isStatic: boolean) => {
     keys(call, ["target", "signature", "args", "save", "checks", "when", ...(definition.version === 2 ? ["value"] : [])], "call");
     if (isStatic && call.value !== undefined) throw new Error("static declared calls cannot send value");
@@ -279,9 +356,13 @@ export function buildDeclarativeExecutionProgram(
     operations.push({ kind: "check", check: { left, operator, right } });
   // Zero debit cannot masquerade as a successful conversion, in either mode.
   check(reference("amountIn"), "gte", 1n);
+  if (neededExports.size && (definition.version !== 2 || !definition.quoteOutput))
+    throw new Error("execution references an undeclared quote output module");
   const quote = definition.version === 2 && definition.quoteOutput &&
-    (request?.kind === "quote-output" || request?.kind === "direct-output")
+    (neededExports.size > 0 || request?.kind === "quote-output" || request?.kind === "direct-output")
     ? quoteOperations(definition.quoteOutput, resolved, options) : undefined;
+  quoteExports = quote?.exports ?? {};
+  for (const name of neededExports) if (!Object.hasOwn(quoteExports, name)) throw new Error("unknown quote output export");
   if (quote) operations.push(...quote.operations);
   if (request?.kind === "quote-output") {
     if (!quote) throw new Error("declared quote output unavailable");
@@ -387,10 +468,10 @@ export function buildDeclarativeExecutionProgram(
   if (definition.version === 1) addStep(definition.call, definition.approval);
   else {
     const ids = new Set<string>(), saves = new Set<string>();
-    function validateSaves(call: Value) {
-      for (const name of Object.keys(resolved(call).save ?? {})) {
+    function validateSaves(call: Value, alreadyResolved = false) {
+      for (const name of Object.keys((alreadyResolved ? call : resolved(call)).save ?? {})) {
         assertPublicRuntimeCaptureName(name);
-        if (saves.has(name) || /^(?:effect|stepEffect)[0-9]+/.test(name) || quote && name.startsWith("quoteLocal") || ["approvalResult", "allowanceResult"].includes(name))
+        if (saves.has(name) || /^(?:effect|stepEffect)[0-9]+/.test(name) || name.startsWith("quoteLocal") || ["approvalResult", "allowanceResult"].includes(name))
           throw new Error("duplicate or reserved runtime capture");
         saves.add(name);
       }
@@ -417,7 +498,7 @@ export function buildDeclarativeExecutionProgram(
         const operationsForStep = options.math.expand(math.model, inputs, math.outputs, `${step.id}Math`);
         for (const operation of operationsForStep) {
           assertPublicRuntimeCaptureName(operation.name);
-          if (saves.has(operation.name) || /^(?:effect|stepEffect)[0-9]+/.test(operation.name) || quote && operation.name.startsWith("quoteLocal") ||
+          if (saves.has(operation.name) || /^(?:effect|stepEffect)[0-9]+/.test(operation.name) || operation.name.startsWith("quoteLocal") ||
               ["amountIn", "approvalResult", "allowanceResult"].includes(operation.name)) throw new Error("duplicate or reserved runtime math capture");
           saves.add(operation.name); operations.push({ kind: "math", ...operation });
         }
@@ -429,10 +510,13 @@ export function buildDeclarativeExecutionProgram(
         if (deferred && !definition.framedSettlement || step.static !== undefined || step.approval !== undefined)
           throw new Error("callback frame does not declare deferred settlement, static calls or outer approval");
         const spec = resolved(step.frame) as DeclarativeCallbackFrame;
-        validateDeclarativeCallbackFrame(spec); validateSaves(spec.call);
+        validateDeclarativeCallbackFrame(spec); validateSaves(spec.call, true);
         if (step.effects !== undefined && !Array.isArray(step.effects)) throw new Error("step effects must be an array");
         const stepEffects = (step.effects ?? []).map(resolved).filter(effect => effect.when === undefined || effect.when);
         captureEffects(stepEffects, `stepEffect${index}X`);
+        // This witness is resolved in the parent before entering the callback.
+        // The frame then independently proves the matching gross receipt.
+        if (deferred && quote) check(resolved(definition.framedSettlement!.expectedOutput), "eq", quote.result);
         operations.push({ kind: "frame", spec, math: options.math, depth: 0, ...(deferred ? { settlement: {
           request, executor: input.executor, tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut,
           recipient: definition.framedSettlement!.recipient === "executor" ? input.executor : input.route.target,
@@ -446,13 +530,17 @@ export function buildDeclarativeExecutionProgram(
         continue;
       }
       const activeCall = deferred && callback?.stepId === step.id ? callback.call : step.call;
-      validateSaves(activeCall);
-      if (resolved(activeCall).when !== undefined) throw new Error("execution step calls cannot silently skip on when");
+      const callbackCall = deferred && callback?.stepId === step.id;
+      validateSaves(activeCall, callbackCall);
+      if ((callbackCall ? activeCall : resolved(activeCall)).when !== undefined) throw new Error("execution step calls cannot silently skip on when");
       if (step.static !== undefined && typeof step.static !== "boolean") throw new Error("invalid execution step static flag");
       if (step.effects !== undefined && !Array.isArray(step.effects)) throw new Error("step effects must be an array");
       if (deferred) {
         if (callback?.stepId === step.id) {
           if (step.static || step.effects?.length) throw new Error("terminal deferred step requires its dedicated callback invariants");
+          // Unknown/future callback-local captures fail during parent emission;
+          // a valid parent witness must also equal this invocation's quote.
+          if (quote) check(callback.callback.expectedOutput, "eq", quote.result);
           operations.push({ kind: "callback", spec: callback, input: { executor: input.executor, route: input.route,
             settlement: request, fullInput: !budgetInput } });
           // These are gross route effects: the authenticated callback proves
@@ -477,7 +565,9 @@ export function buildDeclarativeExecutionProgram(
     }
   }
   assertEffects(measuredEffects, "effect", true);
-  if (quote) check(reference(`effect${effects.indexOf(credit[0])}Delta`), "eq", quote.result);
+  // Deferred emitters prove gross receipt against the parent witness above;
+  // their continuation may consume output, so a net delta is not that receipt.
+  if (quote && !deferred) check(reference(`effect${effects.indexOf(credit[0])}Delta`), "eq", quote.result);
   return emit(operations, definition.version);
 }
 
@@ -679,10 +769,14 @@ export function declarativeInputMode(definition: DeclarativeConversionExecution,
     debit[0].maximum.runtime === "amountIn" ? "maximum" : undefined;
 }
 function validateSettlementDeclaration(definition: DeclarativeConversionExecution): void {
-  const callNames = (call: Value) => Object.keys(call?.save ?? {}).forEach(assertPublicRuntimeCaptureName);
+  const publicName = (name: unknown) => {
+    assertPublicRuntimeCaptureName(name);
+    if (name.startsWith("quoteLocal")) throw new Error("reserved runtime capture");
+  };
+  const callNames = (call: Value) => Object.keys(call?.save ?? {}).forEach(publicName);
   const stepNames = (step: Value) => {
     callNames(step.call);
-    Object.values(step.math?.outputs ?? {}).forEach(assertPublicRuntimeCaptureName);
+    Object.values(step.math?.outputs ?? {}).forEach(publicName);
     if (step.frame !== undefined) validateDeclarativeCallbackFrame(step.frame);
   };
   (definition.preflight ?? []).forEach(callNames);
@@ -722,7 +816,8 @@ function supportsFramedAssets(definition: DeclarativeConversionExecution, input:
     (!native.input || definition.framedSettlement.recipient === "executor") &&
     cb?.steps.filter((step: any) => step.nativeBoundary?.kind === (native.input ? "unwrap-payment" : "wrap-output")).length === 1;
 }
-export function supportsDeclarativeSettlement(definition: DeclarativeConversionExecution, input: Environment): boolean {
+export function supportsDeclarativeSettlement(definition: DeclarativeConversionExecution, input: Environment, values?: DeclarationValues): boolean {
+  definition = selectExecutionSteps(definition, input, values);
   validateSettlementDeclaration(definition);
   if (!input.settlement) return true;
   if (input.settlement.kind === "quote-output") return definition.version === 2 && definition.quoteOutput !== undefined &&
@@ -737,7 +832,8 @@ export function supportsDeclarativeSettlement(definition: DeclarativeConversionE
     !executionNativeSides(input.route) && input.settlement.paymentInput === undefined &&
     getAddress(input.settlement.recipient ?? input.recipient ?? input.executor) === getAddress(input.executor);
 }
-export function declarativeSettlementCapabilities(definition: DeclarativeConversionExecution, input: Environment) {
+export function declarativeSettlementCapabilities(definition: DeclarativeConversionExecution, input: Environment, values?: DeclarationValues) {
+  definition = selectExecutionSteps(definition, input, values);
   validateSettlementDeclaration(definition);
   return { ...(definition.settlement.directOutput && !executionNativeSides(input.route)?.output &&
       (!(definition.version === 2 && definition.quoteOutput) || !executionNativeSides(input.route)) ? { directOutput: true as const } : {}),
@@ -750,6 +846,7 @@ export function declarativeSettlementCapabilities(definition: DeclarativeConvers
 }
 export function buildDeclarativeRuntimeLeg(definition: DeclarativeConversionExecution, input: Environment, values: DeclarationValues,
   options: DeclarativeExecutionOptions = {}) {
+  definition = selectExecutionSteps(definition, input, values);
   if (!supportsDeclarativeSettlement(definition, input)) return null;
   const inputMode = input.settlement?.kind === "quote-output" ? undefined : declarativeInputMode(definition, input, values);
   return { ...runtimeLeg(input.route.adapterId, buildDeclarativeExecutionProgram(definition, { ...executionContext(input, true), minAmountOut: 1n }, values, options)),
