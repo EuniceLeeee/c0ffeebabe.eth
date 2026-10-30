@@ -1,0 +1,725 @@
+import { ethers } from "ethers";
+import type { DeclarativeMathModel, MathValue } from "../../declarative-math.js";
+import {
+  MAX_SQRT_RATIO,
+  MIN_SQRT_RATIO,
+  MAX_TICK,
+  MIN_TICK,
+  V3MissingBitmapWordError,
+  v3SwapToState,
+  type V3PoolState,
+} from "../../../solver/v3-math.js";
+import {
+  bigintRatio,
+  q96DirectedReserves,
+  q96PrecisionProbeAmount,
+} from "../blockscan-state-shared.js";
+import { UNIV3_QUOTER_V2_INTERFACE, UNIV3_TICK_LENS_INTERFACE } from "../univ3-abi.js";
+import { readUniV3State, UNIV3_STATE_WORD_RADIUS } from "./state-reader.js";
+import { buildApprovedSwapVictimOverlay } from "../../victim-runtime-shared.js";
+import type { PoolImpact } from "../../swap-observation.js";
+
+/**
+ * UniV3 declarative math. Entries are pure integer functions of already-read
+ * state; they never read a transport, encode a call or decide admission.
+ *
+ * `readUniV3State` and `v3SwapToState` stay the single production decoders of
+ * the aggregate reader layout and the tick-walk; this module only adapts them
+ * to declarative MathValue records. No price may be reconstructed from a
+ * fraction of the pool state.
+ */
+type Data = Readonly<Record<string, any>>;
+const MAX_UINT256 = (1n << 256n) - 1n;
+const MAX_AMOUNT_IN = (1n << 255n) - 1n;
+const PRECISION_PREFIX = "univ3-precision:";
+const TICK_WORD_PREFIX = "local-tick-word:";
+
+function record(value: MathValue, label: string): Data {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value instanceof Map) {
+    throw new Error(`univ3 math: ${label} must be a record`);
+  }
+  return value as Data;
+}
+function array(value: MathValue, label: string): readonly MathValue[] {
+  if (!Array.isArray(value)) throw new Error(`univ3 math: ${label} must be an array`);
+  return value;
+}
+function uint(value: MathValue, label: string): bigint {
+  // Lossless Family JSON carries full-width constants as decimal text.
+  const parsed = typeof value === "bigint" ? value
+    : typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value) ? BigInt(value)
+    : null;
+  if (parsed === null || parsed < 0n || parsed > MAX_UINT256) {
+    throw new Error(`univ3 math: ${label} must be uint256`);
+  }
+  return parsed;
+}
+function integer(value: MathValue, label: string, min: number, max: number): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < min || value > max) {
+    throw new Error(`univ3 math: ${label} must be an integer in [${min}, ${max}]`);
+  }
+  return value;
+}
+function address(value: MathValue, label: string): string {
+  if (typeof value !== "string") throw new Error(`univ3 math: ${label} must be an address`);
+  return ethers.getAddress(value);
+}
+function lower(value: MathValue, label: string): string {
+  return address(value, label).toLowerCase();
+}
+function direction(value: MathValue): "zero-for-one" | "one-for-zero" {
+  if (value !== "zero-for-one" && value !== "one-for-zero") throw new Error("univ3 math: invalid direction");
+  return value;
+}
+function binding(input: Data): {
+  pool: string; token0: string; token1: string; fee: bigint; tickSpacing: number; factory: string;
+} {
+  const pool = address(input.pool, "pool");
+  const token0 = address(input.token0, "token0");
+  const token1 = address(input.token1, "token1");
+  const fee = uint(input.fee, "fee");
+  if (fee >= 1_000_000n) throw new Error("univ3 math: fee outside uint24 pool range");
+  if (ethers.getAddress(pool) === ethers.getAddress(token0) ||
+      ethers.getAddress(pool) === ethers.getAddress(token1) ||
+      ethers.getAddress(token0) === ethers.getAddress(token1)) {
+    throw new Error("univ3 math: pool/token identity");
+  }
+  return { pool, token0, token1, fee, tickSpacing: integer(input.tickSpacing, "tickSpacing", 1, 0x7f_ffff),
+    factory: address(input.factory, "factory") };
+}
+function tickMap(value: MathValue, label: string, bitmap = false): Map<number, bigint> {
+  if (!(value instanceof Map)) throw new Error(`univ3 math: ${label} must be a map`);
+  const result = new Map<number, bigint>();
+  for (const [key, item] of value.entries()) {
+    if (typeof key !== "number" || !Number.isSafeInteger(key) || typeof item !== "bigint" ||
+        (bitmap ? item < 0n || item > MAX_UINT256 : item < -(1n << 127n) || item >= (1n << 127n))) {
+      throw new Error(`univ3 math: invalid ${label} entry`);
+    }
+    result.set(key, item);
+  }
+  return result;
+}
+
+/** Complete sparse aggregate-reader response, identical to the production decoder. */
+const aggregateState: DeclarativeMathModel = {
+  id: "univ3:aggregate-state",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "aggregate state input");
+    if (typeof input.data !== "string" || !ethers.isHexString(input.data, true)) throw new Error("univ3 math: aggregate data");
+    binding(input);
+  },
+  evaluate(value) {
+    const input = record(value, "aggregate state input");
+    const bound = binding(input);
+    const state = readUniV3State(input.data as string, {
+      pool: bound.pool, token0: bound.token0, token1: bound.token1, fee: bound.fee,
+      tickSpacing: bound.tickSpacing, factoryBinding: { factory: bound.factory, reversePool: bound.pool },
+    });
+    return Object.freeze({ ...state, factory: bound.factory });
+  },
+  validateOutput(value) {
+    const state = record(value, "aggregate state output");
+    uint(state.sqrtPriceX96, "sqrtPriceX96");
+    integer(state.tick, "tick", MIN_TICK, MAX_TICK);
+    uint(state.liquidity, "liquidity");
+    uint(state.fee, "fee");
+    integer(state.tickSpacing, "tickSpacing", 1, 0x7f_ffff);
+    tickMap(state.tickBitmap, "tickBitmap", true);
+    tickMap(state.ticks, "ticks");
+  },
+};
+
+/** Tick window requested from TickLens, exactly the production 49-word window. */
+const tickWindow: DeclarativeMathModel = {
+  id: "univ3:tick-window",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "tick window input");
+    integer(input.tick, "tick", MIN_TICK, MAX_TICK);
+    integer(input.tickSpacing, "tickSpacing", 1, 0x7f_ffff);
+  },
+  evaluate(value) {
+    const input = record(value, "tick window input");
+    const tick = integer(input.tick, "tick", MIN_TICK, MAX_TICK);
+    const spacing = integer(input.tickSpacing, "tickSpacing", 1, 0x7f_ffff);
+    const center = Math.floor(tick / spacing) >> 8;
+    return Object.freeze(Array.from({ length: 2 * UNIV3_STATE_WORD_RADIUS + 1 },
+      (_, index) => center - UNIV3_STATE_WORD_RADIUS + index));
+  },
+  validateOutput(value) {
+    const words = array(value, "tick window output");
+    if (words.length !== 2 * UNIV3_STATE_WORD_RADIUS + 1 || words.some(word => typeof word !== "number")) {
+      throw new Error("univ3 math: invalid tick window");
+    }
+  },
+};
+
+/**
+ * Factory-agnostic TickLens state. `words` must be exactly the requested window
+ * for this tick/spacing, each result canonically re-encoded, and every bitmap
+ * bit must have its initialized tick. This is the production decoder, not a
+ * point-price substitute.
+ */
+const tickLensState: DeclarativeMathModel = {
+  id: "univ3:tick-lens-state",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "tick lens input");
+    uint(input.sqrtPriceX96, "sqrtPriceX96");
+    integer(input.tick, "tick", MIN_TICK, MAX_TICK);
+    uint(input.liquidity, "liquidity");
+    binding(input);
+    for (const entry of array(input.words, "words")) {
+      const row = record(entry as MathValue, "tick word");
+      if (typeof row.id !== "string" || typeof row.data !== "string") throw new Error("univ3 math: tick word row");
+    }
+  },
+  evaluate(value) {
+    const input = record(value, "tick lens input");
+    const bound = binding(input);
+    const sqrtPriceX96 = uint(input.sqrtPriceX96, "sqrtPriceX96");
+    const tick = integer(input.tick, "tick", MIN_TICK, MAX_TICK);
+    const liquidity = uint(input.liquidity, "liquidity");
+    const spacing = bound.tickSpacing;
+    const center = Math.floor(tick / spacing) >> 8;
+    const expected = Array.from({ length: 2 * UNIV3_STATE_WORD_RADIUS + 1 },
+      (_, index) => center - UNIV3_STATE_WORD_RADIUS + index);
+    const byId = new Map<string, string>();
+    for (const entry of array(input.words, "words")) {
+      const row = record(entry as MathValue, "tick word");
+      const id = row.id as string;
+      if (!id.startsWith(TICK_WORD_PREFIX) || byId.has(id)) throw new Error("univ3 math: duplicate or foreign tick word");
+      byId.set(id, row.data as string);
+    }
+    if (byId.size !== expected.length) throw new Error("univ3 math: incomplete or duplicate tick window");
+    const tickBitmap = new Map<number, bigint>(), ticks = new Map<number, bigint>();
+    for (const word of expected) {
+      const data = byId.get(`${TICK_WORD_PREFIX}${word}`);
+      if (data === undefined) throw new Error("univ3 math: tick window does not match the observed tick");
+      let populated: ethers.Result;
+      try {
+        populated = UNIV3_TICK_LENS_INTERFACE.decodeFunctionResult("getPopulatedTicksInWord", data)[0] as ethers.Result;
+        if (UNIV3_TICK_LENS_INTERFACE.encodeFunctionResult("getPopulatedTicksInWord", [populated]).toLowerCase() !==
+            data.toLowerCase()) throw new Error("non-canonical");
+      } catch {
+        throw new Error("univ3 math: non-canonical tick word");
+      }
+      tickBitmap.set(word, 0n);
+      for (const entry of populated) {
+        const tk = Number(entry.tick), compressed = Math.floor(tk / spacing);
+        const net = BigInt(entry.liquidityNet), gross = BigInt(entry.liquidityGross);
+        if (!Number.isSafeInteger(tk) || tk < MIN_TICK || tk > MAX_TICK || tk % spacing !== 0 ||
+            (compressed >> 8) !== word || ticks.has(tk) || gross <= 0n || net > gross || -net > gross) {
+          throw new Error("univ3 math: invalid initialized tick");
+        }
+        ticks.set(tk, net);
+        tickBitmap.set(word, (tickBitmap.get(word) ?? 0n) | (1n << BigInt(((compressed % 256) + 256) % 256)));
+      }
+    }
+    return Object.freeze({ sqrtPriceX96, tick, liquidity, fee: bound.fee, tickSpacing: spacing, tickBitmap, ticks });
+  },
+  validateOutput(value) {
+    const state = record(value, "tick lens output");
+    uint(state.sqrtPriceX96, "sqrtPriceX96");
+    integer(state.tick, "tick", MIN_TICK, MAX_TICK);
+    uint(state.liquidity, "liquidity");
+    tickMap(state.tickBitmap, "tickBitmap", true);
+    tickMap(state.ticks, "ticks");
+  },
+};
+
+function poolState(value: MathValue, label: string): V3PoolState {
+  const state = record(value, label);
+  const fee = uint(state.fee, "fee");
+  const tickSpacing = integer(state.tickSpacing, "tickSpacing", 1, 0x7f_ffff);
+  return {
+    sqrtPriceX96: uint(state.sqrtPriceX96, "sqrtPriceX96"),
+    tick: integer(state.tick, "tick", MIN_TICK, MAX_TICK),
+    liquidity: uint(state.liquidity, "liquidity"),
+    fee,
+    tickSpacing,
+    tickBitmap: tickMap(state.tickBitmap, "tickBitmap", true),
+    ticks: tickMap(state.ticks, "ticks"),
+  };
+}
+
+/**
+ * Exact-input quote on source-bound state. Zero is a declared unavailable
+ * result carrying its reason, never an execution or a published post-state.
+ */
+const localQuote: DeclarativeMathModel = {
+  id: "univ3:local-quote",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "local quote input");
+    poolState(input.state, "local quote state");
+    direction(input.direction);
+    uint(input.amountIn, "amountIn");
+  },
+  evaluate(value) {
+    const input = record(value, "local quote input");
+    const state = poolState(input.state, "local quote state");
+    const zeroForOne = direction(input.direction) === "zero-for-one";
+    const amountIn = uint(input.amountIn, "amountIn");
+    const zero = (reason: string) => Object.freeze({ amountOut: 0n, reason, postState: null });
+    if (amountIn === 0n) return zero("univ3 zero exact input");
+    if (state.sqrtPriceX96 === 0n) return zero("univ3 pool has zero sqrtPriceX96 at the current source");
+    let swap: ReturnType<typeof v3SwapToState>;
+    try {
+      swap = v3SwapToState(state, zeroForOne, amountIn);
+    } catch (error) {
+      if (error instanceof V3MissingBitmapWordError) {
+        return zero(`univ3 bitmap word ${error.word} is outside the source-bound tick window`);
+      }
+      throw error;
+    }
+    if (swap.state.sqrtPriceX96 === MIN_SQRT_RATIO + 1n || swap.state.sqrtPriceX96 === MAX_SQRT_RATIO - 1n) {
+      return zero("univ3 local quote reached the pool price limit");
+    }
+    if (swap.amountOut === 0n) return zero("univ3 local quote returned zero at the current source");
+    return Object.freeze({ amountOut: swap.amountOut, reason: null, postState: swap.state }) as unknown as MathValue;
+  },
+  validateOutput(value) {
+    const output = record(value, "local quote output");
+    uint(output.amountOut, "amountOut");
+    if (output.reason !== null && (typeof output.reason !== "string" || !output.reason.trim())) {
+      throw new Error("univ3 math: missing unavailable reason");
+    }
+    if (output.amountOut === 0n) {
+      if (typeof output.reason !== "string") throw new Error("univ3 math: zero quote requires a reason");
+      if (output.postState !== null) throw new Error("univ3 math: zero quote must not publish a post-state");
+      return;
+    }
+    if (output.reason !== null) throw new Error("univ3 math: positive quote must not be unavailable");
+    poolState(output.postState, "local quote post-state");
+  },
+};
+
+/** Current-source scanner-ceiling probe, identical to the pricing declaration. */
+const precisionAmount: DeclarativeMathModel = {
+  id: "univ3:precision-amount",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "precision amount input");
+    uint(input.sqrtPriceX96, "sqrtPriceX96");
+    uint(input.liquidity, "liquidity");
+    address(input.token0, "token0");
+    address(input.token1, "token1");
+    address(input.tokenIn, "tokenIn");
+    address(input.tokenOut, "tokenOut");
+    uint(input.maxAmountIn, "maxAmountIn");
+  },
+  evaluate(value) {
+    const input = record(value, "precision amount input");
+    const amount = q96PrecisionProbeAmount({
+      sqrtPriceX96: uint(input.sqrtPriceX96, "sqrtPriceX96"),
+      liquidity: uint(input.liquidity, "liquidity"),
+      token0: address(input.token0, "token0"),
+      token1: address(input.token1, "token1"),
+      edge: { tokenIn: address(input.tokenIn, "tokenIn"),
+        tokenOut: address(input.tokenOut, "tokenOut") } as any,
+      maxAmountIn: uint(input.maxAmountIn, "maxAmountIn"),
+    });
+    return amount === null ? null : Object.freeze(amount);
+  },
+  validateOutput(value) {
+    if (value === null) return;
+    uint(value, "precision amount");
+  },
+};
+
+function unavailableReason(
+  route: Data,
+  descriptor: Data,
+  snapshot: Data,
+  precision: ReadonlyMap<string, Data>,
+): string | null {
+  const amountIn = precisionAmountOf(descriptor, snapshot, route);
+  if (amountIn === null) return null;
+  const quoter = descriptor.quoterBinding?.quoter;
+  if (quoter === null || quoter === undefined) {
+    return `univ3 direction ${route.tokenIn}->${route.tokenOut} requires a ` +
+      "factory-bound current-source precision witness, but the " +
+      `reverse-verified factory ${descriptor.factoryBinding.factory} ` +
+      "has no verified quoter binding";
+  }
+  const outcome = precision.get(precisionRequestId(route, amountIn));
+  if (outcome === undefined) throw new Error(`univ3 precision result missing for ${route.routeKey}`);
+  if (outcome.failure !== undefined) {
+    return `univ3 direction ${route.tokenIn}->${route.tokenOut} ` +
+      `factory-bound current-source precision witness failed: ${outcome.failure}`;
+  }
+  if (outcome.amountOut === 0n) {
+    return `univ3 direction ${route.tokenIn}->${route.tokenOut} returned zero ` +
+      `at its current-source scanner ceiling ${amountIn}`;
+  }
+  return null;
+}
+function precisionAmountOf(descriptor: Data, snapshot: Data, route: Data): bigint | null {
+  const amount = q96PrecisionProbeAmount({
+    sqrtPriceX96: uint(snapshot.sqrtPriceX96, "sqrtPriceX96"),
+    liquidity: uint(snapshot.liquidity, "liquidity"),
+    token0: address(descriptor.token0, "token0"),
+    token1: address(descriptor.token1, "token1"),
+    edge: { tokenIn: address(route.tokenIn, "tokenIn"),
+      tokenOut: address(route.tokenOut, "tokenOut") } as any,
+    maxAmountIn: MAX_AMOUNT_IN,
+  });
+  return amount === null ? null : amount;
+}
+function precisionRequestId(route: Data, amountIn: bigint): string {
+  // The declarative request id is carried in the JSON request itself; the
+  // route direction keeps two directions with one ceiling apart without
+  // depending on insert order or a second hash implementation.
+  return `${PRECISION_PREFIX}${String(route.direction)}:${amountIn}`;
+}
+
+
+/** Decode one precision round: quoter output or its declared revert, by id.
+ * Mirrors the production snapshot decode (no fallback to a point price). */
+const precisionOutcomes: DeclarativeMathModel = {
+  id: "univ3:precision-outcomes",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "precision outcomes input");
+    for (const entry of array(input.requests, "requests")) {
+      const request = record(entry as MathValue, "precision request");
+      if (typeof request.id !== "string") throw new Error("univ3 math: precision request id");
+    }
+    for (const entry of array(input.results, "results")) {
+      const result = record(entry as MathValue, "precision result");
+      if (typeof result.id !== "string" || typeof result.ok !== "boolean" || typeof result.data !== "string") {
+        throw new Error("univ3 math: precision result shape");
+      }
+    }
+  },
+  evaluate(value) {
+    const input = record(value, "precision outcomes input");
+    const requests = array(input.requests, "requests").map(entry => record(entry as MathValue, "precision request"));
+    const results = array(input.results, "results").map(entry => record(entry as MathValue, "precision result"));
+    if (results.length !== requests.length) throw new Error("univ3 math: precision result coverage");
+    const byId = new Map(results.map(result => [result.id as string, result]));
+    if (byId.size !== results.length) throw new Error("univ3 math: duplicate precision result");
+    return Object.freeze(requests.map(request => {
+      const id = request.id as string;
+      const result = byId.get(id);
+      if (result === undefined) throw new Error(`univ3 precision result missing for ${id}`);
+      const suffix = id.slice(PRECISION_PREFIX.length);
+      const separator = suffix.indexOf(":");
+      if (separator <= 0 || !["zero-for-one", "one-for-zero"].includes(suffix.slice(0, separator))) {
+        throw new Error("univ3 math: malformed precision id");
+      }
+      const amountIn = BigInt(suffix.slice(separator + 1));
+      if (amountIn <= 0n) throw new Error("univ3 math: precision amount");
+      if (!result.ok) throw new Error(`univ3 precision result unresolved: ${String(result.failure)}`);
+      if (result.completion === "reverted-as-declared") {
+        return Object.freeze({ id, amountIn, failure: "quote call reverted" });
+      }
+      if (result.completion !== "returned") throw new Error("univ3 math: precision result did not return");
+      let amountOut: bigint;
+      try {
+        amountOut = BigInt(UNIV3_QUOTER_V2_INTERFACE.decodeFunctionResult(
+          "quoteExactInputSingle", result.data as string)[0]);
+      } catch {
+        throw new Error("univ3 math: malformed precision quote result");
+      }
+      return Object.freeze({ id, amountIn, amountOut });
+    }));
+  },
+  validateOutput(value) {
+    for (const entry of array(value, "precision outcomes output")) {
+      const row = record(entry as MathValue, "precision outcome");
+      if (typeof row.id !== "string" || uint(row.amountIn, "precision amountIn") <= 0n) {
+        throw new Error("univ3 math: precision outcome");
+      }
+      if (row.failure !== undefined) {
+        if (typeof row.failure !== "string") throw new Error("univ3 math: precision failure");
+      } else {
+        uint(row.amountOut, "precision amountOut");
+      }
+    }
+  },
+};
+
+/**
+ * Pricing projection: identical mid/unavailable decisions to the production
+ * pricing semantics (q96 virtual reserves, precision-ceiling witnesses).
+ */
+const pricing: DeclarativeMathModel = {
+  id: "univ3:pricing",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "pricing input");
+    if (input.inactiveReason !== null && typeof input.inactiveReason !== "string") {
+      throw new Error("univ3 math: pricing inactive reason");
+    }
+    uint(input.sqrtPriceX96, "sqrtPriceX96");
+    uint(input.liquidity, "liquidity");
+    address(input.token0, "token0");
+    address(input.token1, "token1");
+    uint(input.fee, "fee");
+    integer(input.tickSpacing, "tickSpacing", 1, 0x7f_ffff);
+    address(input.factory, "factory");
+    if (input.quoter !== null) address(input.quoter, "quoter");
+    for (const entry of array(input.precision, "precision")) {
+      const row = record(entry as MathValue, "precision outcome");
+      if (typeof row.id !== "string" || uint(row.amountIn, "precision amountIn") <= 0n) {
+        throw new Error("univ3 math: precision outcome");
+      }
+      if (row.failure !== undefined) {
+        if (typeof row.failure !== "string") throw new Error("univ3 math: precision failure");
+      } else {
+        uint(row.amountOut, "precision amountOut");
+      }
+    }
+    for (const entry of array(input.routes, "routes")) {
+      const route = record(entry as MathValue, "route");
+      if (typeof route.routeKey !== "string") throw new Error("univ3 math: route key");
+      address(route.tokenIn, "tokenIn");
+      address(route.tokenOut, "tokenOut");
+      direction(route.direction);
+    }
+  },
+  evaluate(value) {
+    const input = record(value, "pricing input");
+    const descriptor = {
+      token0: address(input.token0, "token0"),
+      token1: address(input.token1, "token1"),
+      fee: uint(input.fee, "fee"),
+      factoryBinding: { factory: address(input.factory, "factory") },
+      quoterBinding: { quoter: input.quoter === null ? null : address(input.quoter, "quoter") },
+    };
+    const snapshot: Data = {
+      sqrtPriceX96: uint(input.sqrtPriceX96, "sqrtPriceX96"),
+      liquidity: uint(input.liquidity, "liquidity"),
+      tick: integer(input.tick, "tick", MIN_TICK, MAX_TICK),
+      inactiveReason: input.inactiveReason as string | null,
+    };
+    const routes = array(input.routes, "routes").map(entry => ({ ...(entry as Data) }));
+    const precision = new Map<string, Data>();
+    for (const entry of array(input.precision, "precision")) {
+      const row = record(entry as MathValue, "precision outcome");
+      const id = row.id as string;
+      if (!id.startsWith(PRECISION_PREFIX)) throw new Error("univ3 math: foreign precision outcome");
+      if (precision.has(id)) throw new Error("univ3 math: duplicate precision outcome");
+      precision.set(id, row);
+    }
+    const unavailable: [string, string][] = [];
+    const inactive = snapshot.inactiveReason as string | null;
+    if (inactive !== null) {
+      for (const route of routes) unavailable.push([route.routeKey, inactive]);
+    } else {
+      for (const route of routes) {
+        const reason = unavailableReason(route, descriptor, snapshot, precision);
+        if (reason !== null) unavailable.push([route.routeKey, reason]);
+      }
+    }
+    const unavailableKeys = new Set(unavailable.map(([key]) => key));
+    const rows: Data[] = [];
+    for (const route of routes) {
+      if (unavailableKeys.has(route.routeKey)) continue;
+      const amountIn = precisionAmountOf(descriptor, snapshot, route);
+      const outcome = amountIn === null ? undefined : precision.get(precisionRequestId(route, amountIn));
+      const directed = q96DirectedReserves({
+        sqrtPriceX96: snapshot.sqrtPriceX96 as bigint,
+        liquidity: snapshot.liquidity as bigint,
+        token0: descriptor.token0,
+        token1: descriptor.token1,
+        edge: { tokenIn: route.tokenIn, tokenOut: route.tokenOut, target: route.pool } as any,
+        ...(amountIn === null ? {} : { precisionQuote: { amountIn, amountOut: outcome!.amountOut as bigint } }),
+      });
+      if (directed === null) {
+        // A zero precision output is an unavailable direction, not an empty mid.
+        unavailable.push([route.routeKey, `univ3 direction ${route.tokenIn}->${route.tokenOut} has no positive ` +
+          "current-source virtual reserve witness"]);
+        continue;
+      }
+      const feeBps = BigInt(Math.round(Number(descriptor.fee) / 100));
+      const depth = directed.reserveIn < directed.reserveOut ? directed.reserveIn : directed.reserveOut;
+      rows.push({
+        routeKey: route.routeKey,
+        // The declared mid keeps the exact integer ratio; only the final
+        // graph mid boundary divides as a float, exactly like the production path.
+        numerator: route.direction === "zero-for-one"
+          ? snapshot.sqrtPriceX96 as bigint * (snapshot.sqrtPriceX96 as bigint)
+          : (1n << 192n),
+        denominator: route.direction === "zero-for-one"
+          ? (1n << 192n)
+          : snapshot.sqrtPriceX96 as bigint * (snapshot.sqrtPriceX96 as bigint),
+        depth,
+        feeBps,
+        reserveA: directed.reserveIn,
+        reserveB: directed.reserveOut,
+      });
+    }
+    // The projection must be total: exactly one classification per route.
+    if (unavailable.length + rows.length !== routes.length ||
+        new Set([...unavailable.map(([key]) => key), ...rows.map(row => row.routeKey)]).size !== routes.length) {
+      throw new Error("univ3 math: pricing projection coverage");
+    }
+    return Object.freeze({ rows: Object.freeze(rows), unavailable: Object.freeze(unavailable) });
+  },
+  validateOutput(value) {
+    const output = record(value, "pricing output");
+    for (const row of array(output.rows, "pricing rows")) {
+      const entry = record(row as MathValue, "pricing row");
+      if (typeof entry.routeKey !== "string") throw new Error("univ3 math: pricing row key");
+      for (const key of ["numerator", "denominator", "depth", "feeBps", "reserveA", "reserveB"]) {
+        uint(entry[key], key);
+      }
+      if (entry.numerator === 0n || entry.denominator === 0n || entry.depth === 0n) {
+        throw new Error("univ3 math: pricing row amount");
+      }
+      if (bigintRatio(entry.numerator as bigint, entry.denominator as bigint) <= 0) {
+        throw new Error("univ3 math: pricing row mid");
+      }
+    }
+    for (const entry of array(output.unavailable, "unavailable")) {
+      const row = array(entry as MathValue, "unavailable row");
+      if (row.length !== 2 || typeof row[0] !== "string" || typeof row[1] !== "string" || !row[1].trim()) {
+        throw new Error("univ3 math: unavailable row");
+      }
+    }
+  },
+};
+
+function victimPreState(value: MathValue, bound: ReturnType<typeof binding>): V3PoolState {
+  const state = record(value, "victim pre-state");
+  if (state.pool !== undefined && lower(state.pool, "pre-state pool") !== bound.pool.toLowerCase()) {
+    throw new Error("univ3 math: victim pre-state pool mismatch");
+  }
+  if (uint(state.fee, "pre-state fee") !== bound.fee ||
+      integer(state.tickSpacing, "pre-state tickSpacing", 1, 0x7f_ffff) !== bound.tickSpacing) {
+    throw new Error("univ3 math: victim pre-state static binding mismatch");
+  }
+  return poolState(state, "victim pre-state");
+}
+function postImpact(bound: ReturnType<typeof binding>, state: V3PoolState, blockNumber: number): Data {
+  return Object.freeze({
+    kind: "v3",
+    pool: ethers.getAddress(bound.pool),
+    sqrtPriceX96: state.sqrtPriceX96,
+    tick: state.tick,
+    liquidity: state.liquidity,
+    blockNumber,
+    ...(state.observationIndex === undefined ? {} : { observationIndex: state.observationIndex }),
+    ...(state.observationCardinality === undefined ? {} : { observationCardinality: state.observationCardinality }),
+    ...(state.observationCardinalityNext === undefined ? {} : { observationCardinalityNext: state.observationCardinalityNext }),
+    ...(state.feeProtocol === undefined ? {} : { feeProtocol: state.feeProtocol }),
+    ...(state.unlocked === undefined ? {} : { unlocked: state.unlocked }),
+  });
+}
+
+/** Victim replay local application over a source-bound pre-state. */
+const victimLocal: DeclarativeMathModel = {
+  id: "univ3:victim-local",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "victim input");
+    binding(input);
+    direction(input.direction);
+    uint(input.amountIn, "amountIn");
+    integer(input.blockNumber, "blockNumber", 0, Number.MAX_SAFE_INTEGER);
+  },
+  evaluate(value) {
+    const input = record(value, "victim input");
+    const bound = binding(input);
+    const amountIn = uint(input.amountIn, "amountIn");
+    if (amountIn <= 0n) return null;
+    const state = victimPreState(input.preState, bound);
+    const result = v3SwapToState(state, direction(input.direction) === "zero-for-one", amountIn);
+    if (result.amountOut <= 0n) return null;
+    return Object.freeze({
+      amountOut: result.amountOut,
+      postImpact: postImpact(bound, result.state, integer(input.blockNumber, "blockNumber", 0, Number.MAX_SAFE_INTEGER)),
+    });
+  },
+  validateOutput(value) {
+    if (value === null) return;
+    const output = record(value, "victim output");
+    uint(output.amountOut, "amountOut");
+    record(output.postImpact, "post impact");
+  },
+};
+
+/** Exact post-state published by the pool's own Swap event. */
+const victimExactPost: DeclarativeMathModel = {
+  id: "univ3:victim-exact-post",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "exact post input");
+    binding(input);
+    uint(input.sqrtPriceX96, "sqrtPriceX96");
+    integer(input.tick, "tick", MIN_TICK, MAX_TICK);
+    uint(input.liquidity, "liquidity");
+    integer(input.blockNumber, "blockNumber", 0, Number.MAX_SAFE_INTEGER);
+  },
+  evaluate(value) {
+    const input = record(value, "exact post input");
+    const bound = binding(input);
+    return postImpact(bound, {
+      sqrtPriceX96: uint(input.sqrtPriceX96, "sqrtPriceX96"),
+      tick: integer(input.tick, "tick", MIN_TICK, MAX_TICK),
+      liquidity: uint(input.liquidity, "liquidity"),
+      fee: bound.fee, tickSpacing: bound.tickSpacing, tickBitmap: new Map(), ticks: new Map(),
+    }, integer(input.blockNumber, "blockNumber", 0, Number.MAX_SAFE_INTEGER));
+  },
+  validateOutput(value) {
+    const output = record(value, "exact post output");
+    if (output.kind !== "v3") throw new Error("univ3 math: exact post kind");
+  },
+};
+
+/** Approved-router overlay used only by victim replay. The production helper
+ * owns whale/deal/storage-layout knowledge, so JSON cannot invent it. */
+const victimOverlay: DeclarativeMathModel = {
+  id: "univ3:victim-overlay",
+  version: 1,
+  validateInput(value) {
+    const input = record(value, "victim overlay input");
+    const impact = record(input.impact as MathValue, "victim overlay impact");
+    address(impact.tokenIn, "impact tokenIn");
+    uint(impact.amountIn, "impact amountIn");
+    address(input.approveTarget, "approveTarget");
+    address(input.swapTarget, "swapTarget");
+    if (typeof input.swapCalldata !== "string" || !ethers.isHexString(input.swapCalldata, true)) {
+      throw new Error("univ3 math: overlay calldata");
+    }
+    integer(input.gasLimit, "gasLimit", 1, Number.MAX_SAFE_INTEGER);
+  },
+  evaluate(value) {
+    const input = record(value, "victim overlay input");
+    const impact = record(input.impact as MathValue, "victim overlay impact");
+    return buildApprovedSwapVictimOverlay({
+      impact: Object.freeze({ pool: address(input.pool, "pool"),
+        tokenIn: address(impact.tokenIn, "impact tokenIn"),
+        tokenOut: address(impact.tokenOut, "impact tokenOut"),
+        amountIn: uint(impact.amountIn, "impact amountIn"),
+        matchedAdapterId: String(impact.matchedAdapterId ?? "") }) as PoolImpact,
+      approveTarget: address(input.approveTarget, "approveTarget"),
+      swapTarget: address(input.swapTarget, "swapTarget"),
+      swapCalldata: input.swapCalldata as string,
+      gasLimit: integer(input.gasLimit, "gasLimit", 1, Number.MAX_SAFE_INTEGER),
+    }) as unknown as MathValue;
+  },
+  validateOutput(value) {
+    const output = record(value, "victim overlay output");
+    address(output.whale, "overlay whale");
+    array(output.tokenDeals, "overlay token deals");
+    array(output.preCalls, "overlay pre calls");
+  },
+};
+
+export const univ3MathModels: readonly DeclarativeMathModel[] = Object.freeze([
+  aggregateState,
+  tickWindow,
+  tickLensState,
+  localQuote,
+  precisionAmount,
+  precisionOutcomes,
+  pricing,
+  victimLocal,
+  victimExactPost,
+  victimOverlay,
+]);
