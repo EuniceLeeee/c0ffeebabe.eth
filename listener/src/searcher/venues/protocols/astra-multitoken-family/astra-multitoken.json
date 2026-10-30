@@ -2815,7 +2815,7 @@
     "execution": {
       "version": 2,
       "settlement": {
-        "directOutput": true
+        "directOutput": false
       },
       "protectedAddresses": [
         "$descriptor.target"

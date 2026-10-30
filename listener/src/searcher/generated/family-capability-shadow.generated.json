@@ -13421,7 +13421,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "d5bd3b061b5145056b017520576ddbf3b9ef961e387f3db0b70702da5426a02f",
+        "contentHash": "b2fdcaf9a441bf5b598cb7c160becf757c4b1849a2714fa7a098e799ab154624",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -13574,7 +13574,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "5079ccb594a61723a5228dc3d1fef6f74f491e5367c203d829bde5e32d72ed58",
+        "contentHash": "2ea4df11c580bc977a469c52b0a8782e01fc6289abaa8eac7dc5cdcd9a6ac997",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -13707,7 +13707,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "05f46c5a94f7cab0a1399b08638b4429523e227749058639f992dad66596ca57",
+        "contentHash": "1e06edfee257c633712eeb63315c7c3c8e2c46f40e4f16e41475313890d6e2c9",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -13840,7 +13840,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "474463deadeeb84352c1662eba970bb11dd51f7baec03a713078be9befd36cac",
+        "contentHash": "2d20eca9514a8e88b4aa8a965ed122f2e842c02f8e26f729843f3ca81c5d616a",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -13994,7 +13994,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "617b8dd995252a23361dcdac8862d9083bf34fcfad33ad6ff2a41f1085fa589c",
+        "contentHash": "02fe5fc745d6a6d283195d538af825281e69af30cdc232b5bf17b8de13f79c7a",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -14127,7 +14127,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "2356378e1c473c73b535bffad737fc773ce8b23a8f5dc7860bc4a8202c0745a8",
+        "contentHash": "674ecf9f2ccf757ffb088e84b6a3bb525e98507b8ebdd1060ce0e11e912e0dde",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -14260,7 +14260,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "07bc684602ecd5b24a2e5c56a9c8afbb9fa379f9afdc57bf88f2c6466f004f3f",
+        "contentHash": "99f5d56d634d65738e8dcbe101c9914e509a316568c025a280a6bd68b38efd2d",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -14393,7 +14393,7 @@
         "familyId": "protocol:astra-multitoken",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "99153fd9901d0ba33f6b38f0a50aa3d310cda1b84cca225a19dd4cadf9951d98",
+        "contentHash": "b98abeb0f7ad73b4bcafaed6dd2a4dcaf4f49e678f9fa16c4eee5f56664415e5",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -48324,5 +48324,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "a17d67bfbb548f183df2b81d03666b9a1f9eb980c25b9d08e220a8b7a2b2cf6e"
+  "artifactHash": "82c2e8dc3165efaee4ca61ce9a6475c6b2ee6a0a8b5da95e11232c4eae73d3a6"
 }
