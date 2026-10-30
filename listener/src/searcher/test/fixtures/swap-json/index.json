@@ -240,13 +240,16 @@
           "directions": [],
           "transactionHash": "0x85e9c8d4b8f799dca214f6057d9caea6ca9485d7d4f9ae7603a7aec3427ac8b0",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 25635365,
+            "hash": "0x6c4964b47c2cf9a1b82cc63f01083c18f30961ed85357a43b83bb9e970b40644"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3",
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -261,7 +264,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -292,13 +294,16 @@
           "directions": [],
           "transactionHash": "0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26016874,
+            "hash": "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -314,7 +319,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -339,12 +343,15 @@
           "transactionHash": "0x3bb12ee62e791d51b1081ecf956eac33a7bc964984ad845d25886a0cbdcaed61",
           "source": {
             "number": 25534475,
-            "hash": null
+            "hash": "0x9b54cf2b3362883b0a7c9b24accf6da17a59248e6945c5c76fc58ffdb321806b"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": "0x9f491edc967e186e00ff6c48f62ef1bec79fc50e",
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [
             {
               "tokenIn": "0x1aad217b8f78dba5e6693460e8470f8b1a3977f3",
@@ -372,7 +379,6 @@
             "Recorded execution is backrun-prefix state; amounts may be borrowed for N-end adaptation, never outputs/state success"
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -403,13 +409,16 @@
           "directions": [],
           "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26029876,
+            "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -425,7 +434,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -444,13 +452,16 @@
           "directions": [],
           "transactionHash": "0xed014b884a511a4abd1c0e5f218be8dbcd1209cd7bb645d440334fdfecf928f0",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26088150,
+            "hash": "0xcd1606be5437c39dae2f04fd1709e6016827cd05323e81674ce8b378f46f86b6"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -466,7 +477,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -485,13 +495,16 @@
           "directions": [],
           "transactionHash": "0x868b69ff429fea8ec1e483c8be1d9e236aabe00065e355ff5a60af0596a75847",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 25943731,
+            "hash": "0x265fd1d8bfa75ca4aa8ae34c486750b62c494be0695dc2893c5e74836aa63e41"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -507,7 +520,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -538,13 +550,16 @@
           "directions": [],
           "transactionHash": "0xdf6b912487a08189ea8a69e93fba7e1428df1edb22d41c1c5cd85c994e23cfef",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26130639,
+            "hash": "0x69fe42671a3df6c3bfcdc98f44d7078870696568246b1d9dfd976d2f3a0e42e5"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -560,7 +575,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -591,13 +605,16 @@
           "directions": [],
           "transactionHash": "0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26129175,
+            "hash": "0xf924162840314cea5b4f7a49aa84827ac258d3ad715dea045140754d1a200b03"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -613,7 +630,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -644,13 +660,16 @@
           "directions": [],
           "transactionHash": "0x4a4255cbfc0521233d4565f2073323a88c3ac1f8600a501aa5731ee8230288fc",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26029476,
+            "hash": "0x74997e992f9feddb1b373da2eb41e7cd3abe189c537b4fc79e7d15896c092c35"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -666,7 +685,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -685,13 +703,16 @@
           "directions": [],
           "transactionHash": "0x1739fb16d7146585bf728b633e72fbb0f1575ec6c8aab61bc3d3a0c0325bae73",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 25970301,
+            "hash": "0xc0edc029d55a0356f7a337f1ec4eb94803c7a047927e846c6bf43508f7f31455"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -707,7 +728,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -741,10 +761,13 @@
             "number": 26023524,
             "hash": "0x97c956ae1457521651e3a17b675c16fef5340483d0cf3b710d0d34d5afbb57f9"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -759,7 +782,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -790,13 +812,16 @@
           "directions": [],
           "transactionHash": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26152607,
+            "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -812,7 +837,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -831,13 +855,16 @@
           "directions": [],
           "transactionHash": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26130609,
+            "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -853,7 +880,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -884,13 +910,16 @@
           "directions": [],
           "transactionHash": "0x10b81a77dc9949d9ab1581a341d539de2ab0fbeae827b2a87d9ea6033c9b7549",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26030898,
+            "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -906,7 +935,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -937,13 +965,16 @@
           "directions": [],
           "transactionHash": "0x02175d2ac2e806bc6e1033cae640cf45509b7ded4a2e64ebcbba9c425afff5b7",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26018534,
+            "hash": "0xba26a0e4891db23e721b7d434b592622fb7842dc35b2dffc20bc1f7936a65a8a"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -959,7 +990,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -978,13 +1008,16 @@
           "directions": [],
           "transactionHash": "0x006223028f05865619d07584c43cf67cb608705d04ebc732e15bf40869d030b8",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26030898,
+            "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1000,7 +1033,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1019,13 +1051,16 @@
           "directions": [],
           "transactionHash": "0x1f0e69a9d9be232986b81216ce341e5d3dea9d6241074f2331cf8bb4d7ecaacc",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26013785,
+            "hash": "0x673de33446bcd9fdee4371c29d237c46402e2360186a3fb3fc3a2a3a37a33403"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1041,7 +1076,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1060,13 +1094,16 @@
           "directions": [],
           "transactionHash": "0x246160cdd6c0048a58076fc96a49d9ee18f4438a42e8bcb0727c6b42e06b86b8",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 25946003,
+            "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1082,7 +1119,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1101,13 +1137,16 @@
           "directions": [],
           "transactionHash": "0x4a12dbe50e89057b07ccfc471d0db0c406be65e9d82d6e29a55284844e30cd85",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 25930616,
+            "hash": "0x74738d6652e7cf663495912cc71099623b8ee9636aad5e1a8d0f58827f8651d5"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1123,7 +1162,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1142,13 +1180,16 @@
           "directions": [],
           "transactionHash": "0xacc347b03f7b6fd9efe0f50035f2c63720ac2e2954229ac8fe7465dcc6f23ef0",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 25975130,
+            "hash": "0x58ac4d102bb4c31b585f078b50b3dbea9b0ffab35149c8659b0227aaec8ea466"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1164,7 +1205,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1201,12 +1241,15 @@
           "transactionHash": "0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b",
           "source": {
             "number": 25455297,
-            "hash": null
+            "hash": "0x6c510692c9e3040afcad67160119c611a5091ca8dd4d71f0ea81f6a672eb4090"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": "0x6d74748b7089409cd7c52dcb2cbcc3b204360296",
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [
             {
               "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
@@ -1234,7 +1277,6 @@
             "Explicit univ2 profit conversion leg, not core arbitrage route; usable adaptation sample"
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1266,12 +1308,15 @@
           "transactionHash": "0x85e9c8d4b8f799dca214f6057d9caea6ca9485d7d4f9ae7603a7aec3427ac8b0",
           "source": {
             "number": 25635365,
-            "hash": null
+            "hash": "0x6c4964b47c2cf9a1b82cc63f01083c18f30961ed85357a43b83bb9e970b40644"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1287,7 +1332,6 @@
             "stateAnchor parent block25635364 + 1; verify receipt before treating as canonical"
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1318,13 +1362,16 @@
           "directions": [],
           "transactionHash": "0x2068e9fc151ad0ea2cf273e50a8a0153cc1d0303deb9cf660f13dbbf8571548c",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26029537,
+            "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1340,7 +1387,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1359,13 +1405,16 @@
           "directions": [],
           "transactionHash": "0x6adebef71c8c464ca2096b092ed7093ba797199122351c6cf807be0255a92e8b",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26029537,
+            "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1381,7 +1430,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1412,13 +1460,16 @@
           "directions": [],
           "transactionHash": "0x0be85b68578d45e449cf2285b2d331b8e3ed3f68240b3166e67abb2727f30b55",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26029537,
+            "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1434,7 +1485,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
@@ -1453,13 +1503,16 @@
           "directions": [],
           "transactionHash": "0x65d0517289a6de7ad8c813799011907fadbb6b2bf6e5e8f8cf1ff872f93725f6",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 25811499,
+            "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786"
           },
-          "stateScope": "reference-only-not-execution",
+          "stateScope": "canonical-block-end",
           "instanceKey": null,
           "lineageId": null,
-          "actors": null,
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001"
+          },
           "amounts": [],
           "provenance": [
             {
@@ -1475,7 +1528,6 @@
             "Historical output is not an expectation for N-end acceptance; no current JSON execution pass is imported."
           ],
           "missing": [
-            "canonical receipt and N-end block hash verification",
             "current lineage and instance binding",
             "complete supported direction/amount inputs",
             "test actor binding"
