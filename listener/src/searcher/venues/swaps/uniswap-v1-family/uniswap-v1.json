@@ -1,0 +1,5461 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:uniswap-v1"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_UNISWAP_V1_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:uniswap-v1",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "univ1-exact-input"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "uniswap-v1:immutable-vyper-exchange"
+    ],
+    "poolAdapterIds": [
+      "univ1-exchange"
+    ],
+    "edgeAdapterIds": [
+      "univ1-exact-input"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "univ1-exchange",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address"
+        },
+        "key": [
+          "pool"
+        ],
+        "instanceKey": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "univ1-ethToTokenSwapInput",
+          "signature": "function ethToTokenSwapInput(uint256 min_tokens,uint256 deadline) payable returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        },
+        {
+          "id": "univ1-ethToTokenSwapOutput",
+          "signature": "function ethToTokenSwapOutput(uint256 tokens_bought,uint256 deadline) payable returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        },
+        {
+          "id": "univ1-tokenToEthSwapInput",
+          "signature": "function tokenToEthSwapInput(uint256 tokens_sold,uint256 min_eth,uint256 deadline) returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        },
+        {
+          "id": "univ1-tokenToEthSwapOutput",
+          "signature": "function tokenToEthSwapOutput(uint256 eth_bought,uint256 max_tokens,uint256 deadline) returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "univ1-TokenPurchase",
+          "signature": "event TokenPurchase(address indexed buyer,uint256 indexed eth_sold,uint256 indexed tokens_bought)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          }
+        },
+        {
+          "id": "univ1-EthPurchase",
+          "signature": "event EthPurchase(address indexed buyer,uint256 indexed tokens_sold,uint256 indexed eth_bought)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          }
+        }
+      ],
+      "nomination": "address-surface",
+      "surface": {
+        "id": "univ1-interface",
+        "fingerprint": "univ1-exchange-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "univ1-exchange",
+        "univ1-exact-input",
+        "custom-swap:uniswap-v1"
+      ],
+      "txSeedNominations": false
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "expressions": {
+        "addressOrZero": {
+          "op": "if",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "matches",
+                  "args": [
+                    "$raw",
+                    "^0x(?:[0-9a-fA-F]{64}|[0-9a-fA-F]{8192})$"
+                  ]
+                },
+                {
+                  "op": "matches",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$raw",
+                        0,
+                        32
+                      ]
+                    },
+                    "^0x0{24}[0-9a-fA-F]{40}$"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$raw",
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "$constants.zero"
+          ]
+        },
+        "cloneAddress": {
+          "op": "if",
+          "args": [
+            {
+              "op": "matches",
+              "args": [
+                "$code",
+                "^0x366000600037611000600036600073[0-9a-f]{40}5af41558576110006000f3$"
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        15,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "$constants.zero"
+          ]
+        },
+        "modelFromHash": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$codeHash",
+                "$constants.issuerCodeHash"
+              ]
+            },
+            "$constants.issuerModel",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$codeHash",
+                    "$constants.standardCodeHash"
+                  ]
+                },
+                "$constants.standardModel",
+                null
+              ]
+            }
+          ]
+        }
+      },
+      "identity": {
+        "applies": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$candidate",
+                "candidateKind"
+              ]
+            },
+            "univ1-exchange"
+          ]
+        },
+        "select": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$candidate",
+                    "candidateKind"
+                  ]
+                },
+                "univ1-exchange"
+              ]
+            },
+            "error": "univ1 wrong candidate kind"
+          },
+          {
+            "return": "clone",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "done",
+            "when": {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "rejection"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "implementation-code",
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "clone"
+              ]
+            }
+          },
+          {
+            "return": "actors",
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "implementation"
+              ]
+            }
+          },
+          {
+            "return": "registration",
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "binding"
+              ]
+            }
+          },
+          {
+            "return": "done"
+          }
+        ],
+        "stages": {
+          "clone": {
+            "requirements": {
+              "transports": [
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "code",
+                "kind": "get-code",
+                "address": "$candidate.pool"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 missing/extra identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$row",
+                                    "id"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 duplicate identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 unexpected identity results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "code",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "cloneOk",
+                "value": {
+                  "op": "matches",
+                  "args": [
+                    "$code",
+                    "^0x366000600037611000600036600073[0-9a-f]{40}5af41558576110006000f3$"
+                  ]
+                }
+              },
+              {
+                "let": "implementation",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "cloneAddress",
+                    {
+                      "code": "$code"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    "$code"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    {
+                      "phase": "clone",
+                      "source": "$source",
+                      "pool": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "pool"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "implementation": "$implementation",
+                      "codeHash": "$codeHash",
+                      "ids": {
+                        "op": "map",
+                        "args": [
+                          "$requests",
+                          "request",
+                          {
+                            "op": "get",
+                            "args": [
+                              "$request",
+                              "id"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        "$cloneOk",
+                        {},
+                        {
+                          "rejection": "unsupported-univ1-clone"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "implementation-code": {
+            "requirements": {
+              "transports": [
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "implementation-code",
+                "kind": "get-code",
+                "address": "$evidence.implementation"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 missing/extra identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$row",
+                                    "id"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 duplicate identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 unexpected identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "pool"
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "pool"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 foreign identity evidence"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "phase"
+                      ]
+                    },
+                    "clone"
+                  ]
+                },
+                "error": "univ1 invalid identity continuation"
+              },
+              {
+                "assert": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "rejection"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 rejected evidence cannot continue"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                },
+                "error": "univ1 identity source changed"
+              },
+              {
+                "let": "implementationCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "implementation-code"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "model",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "modelFromHash",
+                    {
+                      "codeHash": "$implementationCodeHash"
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "implementation",
+                      "ids": {
+                        "op": "map",
+                        "args": [
+                          "$requests",
+                          "request",
+                          {
+                            "op": "get",
+                            "args": [
+                              "$request",
+                              "id"
+                            ]
+                          }
+                        ]
+                      },
+                      "implementationCodeHash": "$implementationCodeHash"
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$model"
+                          ]
+                        },
+                        {
+                          "model": "$model"
+                        },
+                        {
+                          "rejection": "unsupported-univ1-implementation"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "actors": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": {
+              "op": "concat",
+              "args": [
+                [
+                  {
+                    "id": "token",
+                    "kind": "eth-call",
+                    "to": "$candidate.pool",
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "pool",
+                        "tokenAddress",
+                        []
+                      ]
+                    },
+                    "completion": "return-data"
+                  },
+                  {
+                    "id": "factory",
+                    "kind": "eth-call",
+                    "to": "$candidate.pool",
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "pool",
+                        "factoryAddress",
+                        []
+                      ]
+                    },
+                    "completion": "return-data"
+                  }
+                ],
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "model"
+                          ]
+                        },
+                        "anyswap-v1-issuer-fee-001"
+                      ]
+                    },
+                    [
+                      {
+                        "id": "issuer",
+                        "kind": "eth-call",
+                        "to": "$candidate.pool",
+                        "data": {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "issuer",
+                            []
+                          ]
+                        },
+                        "completion": "return-data"
+                      }
+                    ],
+                    []
+                  ]
+                }
+              ]
+            },
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 missing/extra identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$row",
+                                    "id"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 duplicate identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 unexpected identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "pool"
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "pool"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 foreign identity evidence"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "phase"
+                      ]
+                    },
+                    "implementation"
+                  ]
+                },
+                "error": "univ1 invalid identity continuation"
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "implementationCodeHash"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "model"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 missing implementation evidence"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                },
+                "error": "univ1 identity source changed"
+              },
+              {
+                "let": "tokenRaw",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "token"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "factoryRaw",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "factory"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "issuerModel",
+                "value": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "model"
+                      ]
+                    },
+                    "anyswap-v1-issuer-fee-001"
+                  ]
+                }
+              },
+              {
+                "let": "issuerRaw",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    "$issuerModel",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "issuer"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                }
+              },
+              {
+                "let": "token",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "addressOrZero",
+                    {
+                      "raw": "$tokenRaw"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "factory",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "addressOrZero",
+                    {
+                      "raw": "$factoryRaw"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "issuer",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "addressOrZero",
+                    {
+                      "raw": "$issuerRaw"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "invalid",
+                "value": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$token",
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$factory",
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "and",
+                      "args": [
+                        "$issuerModel",
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$issuer",
+                            "$constants.zero"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$token",
+                        "$constants.weth"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$token",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$candidate",
+                                    "pool"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$factory",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$candidate",
+                                    "pool"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "and",
+                      "args": [
+                        "$issuerModel",
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$issuer",
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$candidate",
+                                        "pool"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$issuer",
+                        "$token"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "binding",
+                      "ids": {
+                        "op": "map",
+                        "args": [
+                          "$requests",
+                          "request",
+                          {
+                            "op": "get",
+                            "args": [
+                              "$request",
+                              "id"
+                            ]
+                          }
+                        ]
+                      },
+                      "binding": {
+                        "pool": {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$candidate",
+                                    "pool"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "token": "$token",
+                        "factory": "$factory",
+                        "issuer": "$issuer",
+                        "implementation": {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "implementation"
+                          ]
+                        },
+                        "codeHash": {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "codeHash"
+                          ]
+                        },
+                        "implementationCodeHash": {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "implementationCodeHash"
+                          ]
+                        },
+                        "factoryCodeHash": "",
+                        "decimals": 0,
+                        "model": {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "model"
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        "$invalid",
+                        {
+                          "rejection": "invalid-univ1-binding"
+                        },
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "registration": {
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "factory-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "binding"
+                      ]
+                    },
+                    "factory"
+                  ]
+                }
+              },
+              {
+                "id": "token-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "binding"
+                      ]
+                    },
+                    "token"
+                  ]
+                }
+              },
+              {
+                "id": "exchange",
+                "kind": "eth-call",
+                "to": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "binding"
+                      ]
+                    },
+                    "factory"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "getExchange",
+                    [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "binding"
+                            ]
+                          },
+                          "token"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "reverse-token",
+                "kind": "eth-call",
+                "to": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "binding"
+                      ]
+                    },
+                    "factory"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "getToken",
+                    [
+                      "$candidate.pool"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "binding"
+                      ]
+                    },
+                    "token"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 missing/extra identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$row",
+                                    "id"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 duplicate identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 unexpected identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "pool"
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "pool"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 foreign identity evidence"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "phase"
+                      ]
+                    },
+                    "binding"
+                  ]
+                },
+                "error": "univ1 invalid identity continuation"
+              },
+              {
+                "assert": {
+                  "op": "defined",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "binding"
+                      ]
+                    }
+                  ]
+                },
+                "error": "univ1 missing identity binding"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                },
+                "error": "univ1 identity source changed"
+              },
+              {
+                "let": "factoryCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "factory-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "tokenCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "token-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "exchangeRaw",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "exchange"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "reverseRaw",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "reverse-token"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "decimalsRaw",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "decimals"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "exchange",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "addressOrZero",
+                    {
+                      "raw": "$exchangeRaw"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "reverseToken",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "addressOrZero",
+                    {
+                      "raw": "$reverseRaw"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "matches",
+                      "args": [
+                        "$decimalsRaw",
+                        "^0x[0-9a-fA-F]{64}$"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$decimalsRaw"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "37"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "missingCode",
+                "value": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$factoryCode",
+                        "0x"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$tokenCode",
+                        "0x"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "registrationMismatch",
+                "value": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$exchange",
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$candidate",
+                                        "pool"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$reverseToken",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$evidence",
+                                    "binding"
+                                  ]
+                                },
+                                "token"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "rejection",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    "$missingCode",
+                    "missing-univ1-code",
+                    {
+                      "op": "if",
+                      "args": [
+                        "$registrationMismatch",
+                        "univ1-factory-registration-mismatch",
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "gt",
+                              "args": [
+                                "$decimals",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "36"
+                                  ]
+                                }
+                              ]
+                            },
+                            "unsupported-token-decimals",
+                            null
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "complete",
+                      "ids": {
+                        "op": "map",
+                        "args": [
+                          "$requests",
+                          "request",
+                          {
+                            "op": "get",
+                            "args": [
+                              "$request",
+                              "id"
+                            ]
+                          }
+                        ]
+                      },
+                      "binding": {
+                        "op": "merge",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "binding"
+                            ]
+                          },
+                          {
+                            "decimals": {
+                              "op": "number",
+                              "args": [
+                                {
+                                  "op": "min",
+                                  "args": [
+                                    "$decimals",
+                                    {
+                                      "op": "uint",
+                                      "args": [
+                                        "36"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "factoryCodeHash": {
+                              "op": "codeHash",
+                              "args": [
+                                "$factoryCode"
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$rejection"
+                          ]
+                        },
+                        {
+                          "rejection": "$rejection"
+                        },
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "done": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "assert": false,
+                "error": "univ1 invalid identity continuation"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "let": "pool",
+            "value": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$candidate",
+                        "pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "invalid-program",
+              "reasonCode": "foreign-univ1-candidate"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "pool"
+                  ]
+                },
+                "$pool"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": {
+                "op": "get",
+                "args": [
+                  "$evidence",
+                  "rejection"
+                ]
+              },
+              "evidenceRequestIds": {
+                "op": "get",
+                "args": [
+                  "$evidence",
+                  "ids"
+                ]
+              }
+            },
+            "when": {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "rejection"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "complete"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "invalid-program",
+              "reasonCode": "missing-univ1-binding"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "binding"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "pool"
+                  ]
+                },
+                "facts": {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "binding"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "immutable-vyper-bytecode-and-bidirectional-factory-registration",
+                    "subject": {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "binding"
+                          ]
+                        },
+                        "factory"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "binding": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "binding"
+                            ]
+                          },
+                          "source": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "source"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.subject"
+                ]
+              }
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            }
+          ]
+        },
+        "$identity.facts"
+      ]
+    },
+    "bindingProjection": {
+      "op": "expression",
+      "args": [
+        "binding",
+        {
+          "d": "$descriptor"
+        }
+      ]
+    }
+  },
+  "routes": {
+    "target": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "pool"
+      ]
+    },
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "buy",
+        "enabled": true,
+        "tokenIn": "$constants.weth",
+        "tokenOut": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token"
+          ]
+        },
+        "adapterId": "univ1-exact-input",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "buy": true
+        }
+      },
+      {
+        "id": "sell",
+        "enabled": true,
+        "tokenIn": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token"
+          ]
+        },
+        "tokenOut": "$constants.weth",
+        "adapterId": "univ1-exact-input",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "buy": false
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "familyId"
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "pool"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "buy"
+                ]
+              },
+              "eth-token",
+              "token-eth"
+            ]
+          }
+        ],
+        ":"
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "pool"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "descriptorChecks": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "familyId"
+              ]
+            },
+            "custom-swap:uniswap-v1"
+          ]
+        },
+        "error": "univ1 incompatible family identity"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "lineageId"
+              ]
+            },
+            "uniswap-v1:immutable-vyper-exchange"
+          ]
+        },
+        "error": "univ1 incompatible lineage identity"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "instanceKey"
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "univ1 instance key mismatch"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "pool"
+                  ]
+                },
+                "$constants.zero"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 exchange cannot be zero"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                },
+                "$constants.zero"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 token cannot be zero"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                },
+                "$constants.weth"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 exchange token cannot be WETH"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                },
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "pool"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "univ1 token cannot be the exchange"
+      },
+      {
+        "assert": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "model"
+                  ]
+                },
+                "anyswap-v1-issuer-fee-001"
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "implementationCodeHash"
+                      ]
+                    },
+                    "0x149aa36e02a2583973be13ac2161eb3ada7ce722d148f1dfa04c94a680957b1b"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$descriptor",
+                            "issuer"
+                          ]
+                        },
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "model"
+                      ]
+                    },
+                    "uniswap-v1-997"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "implementationCodeHash"
+                      ]
+                    },
+                    "0xb9205fc3f30b0ad30c6f03a0f464f8fd435fbf28cdbb6071054d62fb506a4b96"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "issuer"
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "univ1 incompatible implementation model"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "buy"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "direction"
+                  ]
+                },
+                "buy"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 route direction/buy mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "adapterId"
+              ]
+            },
+            "univ1-exact-input"
+          ]
+        },
+        "error": "univ1 route adapter mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "target"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 route target mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenIn"
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                "$constants.weth",
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "univ1 route input direction mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenOut"
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                },
+                "$constants.weth"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 route output direction mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "bindingRef"
+                  ]
+                },
+                "bindingKey"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 route binding key mismatch"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "compatibility": {
+      "op": "expression",
+      "args": [
+        "binding",
+        {
+          "d": "$descriptor"
+        }
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "finalize": "$draft",
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1"
+      ]
+    },
+    "exactCompatibility": {
+      "binding": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "bindingRef"
+            ]
+          },
+          "fingerprint"
+        ]
+      },
+      "routeKey": {
+        "op": "get",
+        "args": [
+          "$route",
+          "routeKey"
+        ]
+      },
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "standard": {
+    "id": "immutable-vyper-clone-factory-registration",
+    "lineageId": "uniswap-v1:immutable-vyper-exchange",
+    "identityKind": "standalone-contract",
+    "inputs": [
+      "trialState"
+    ],
+    "abi": {
+      "pool": [
+        "function tokenAddress() view returns(address)",
+        "function factoryAddress() view returns(address)",
+        "function issuer() view returns(address)",
+        "function ethToTokenSwapInput(uint256 min_tokens,uint256 deadline) payable returns(uint256)",
+        "function ethToTokenSwapOutput(uint256 tokens_bought,uint256 deadline) payable returns(uint256)",
+        "function tokenToEthSwapInput(uint256 tokens_sold,uint256 min_eth,uint256 deadline) returns(uint256)",
+        "function tokenToEthSwapOutput(uint256 eth_bought,uint256 max_tokens,uint256 deadline) returns(uint256)",
+        "function getEthToTokenInputPrice(uint256) view returns(uint256)",
+        "function getTokenToEthInputPrice(uint256) view returns(uint256)",
+        "event TokenPurchase(address indexed buyer,uint256 indexed eth_sold,uint256 indexed tokens_bought)",
+        "event EthPurchase(address indexed buyer,uint256 indexed tokens_sold,uint256 indexed eth_bought)"
+      ],
+      "factory": [
+        "function getExchange(address) view returns(address)",
+        "function getToken(address) view returns(address)"
+      ],
+      "token": [
+        "function decimals() view returns(uint256)",
+        "function balanceOf(address) view returns(uint256)",
+        "function approve(address,uint256) returns(bool)",
+        "function allowance(address,address) view returns(uint256)",
+        "function transfer(address,uint256) returns(bool)"
+      ],
+      "wrap": [
+        "function withdraw(uint256)",
+        "function deposit() payable"
+      ],
+      "transfer": [
+        "function ethToTokenTransferInput(uint256 min_tokens,uint256 deadline,address recipient) payable returns(uint256)",
+        "function tokenToEthTransferInput(uint256 tokens_sold,uint256 min_eth,uint256 deadline,address recipient) returns(uint256)"
+      ],
+      "balance": [
+        "function getEthBalance(address) view returns(uint256)"
+      ]
+    },
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "multicall": "0xca11bde05977b3631167028862be2a173976ca11",
+      "implementation": "0x575ba30c7b77fa0eebd34cc5416538323c4e5612",
+      "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "maxValue": "79228162514264337593543950335",
+      "issuerCodeHash": "0x149aa36e02a2583973be13ac2161eb3ada7ce722d148f1dfa04c94a680957b1b",
+      "standardCodeHash": "0xb9205fc3f30b0ad30c6f03a0f464f8fd435fbf28cdbb6071054d62fb506a4b96",
+      "issuerModel": "anyswap-v1-issuer-fee-001",
+      "standardModel": "uniswap-v1-997"
+    },
+    "expressions": {
+      "binding": {
+        "pool": {
+          "op": "get",
+          "args": [
+            "$d",
+            "pool"
+          ]
+        },
+        "token": {
+          "op": "get",
+          "args": [
+            "$d",
+            "token"
+          ]
+        },
+        "factory": {
+          "op": "get",
+          "args": [
+            "$d",
+            "factory"
+          ]
+        },
+        "issuer": {
+          "op": "get",
+          "args": [
+            "$d",
+            "issuer"
+          ]
+        },
+        "implementation": {
+          "op": "get",
+          "args": [
+            "$d",
+            "implementation"
+          ]
+        },
+        "codeHash": {
+          "op": "get",
+          "args": [
+            "$d",
+            "codeHash"
+          ]
+        },
+        "implementationCodeHash": {
+          "op": "get",
+          "args": [
+            "$d",
+            "implementationCodeHash"
+          ]
+        },
+        "factoryCodeHash": {
+          "op": "get",
+          "args": [
+            "$d",
+            "factoryCodeHash"
+          ]
+        },
+        "decimals": {
+          "op": "get",
+          "args": [
+            "$d",
+            "decimals"
+          ]
+        },
+        "model": {
+          "op": "get",
+          "args": [
+            "$d",
+            "model"
+          ]
+        }
+      },
+      "trialKey": {
+        "op": "join",
+        "args": [
+          [
+            "pool:",
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$d",
+                        "pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          ""
+        ]
+      },
+      "trialRef": {
+        "key": {
+          "op": "expression",
+          "args": [
+            "trialKey",
+            {
+              "d": "$d"
+            }
+          ]
+        },
+        "schema": "univ1-reserves:v2",
+        "binding": {
+          "op": "hash",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "binding",
+                {
+                  "d": "$d"
+                }
+              ]
+            }
+          ]
+        },
+        "dependencies": [
+          {
+            "op": "join",
+            "args": [
+              [
+                "storage:",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$d",
+                            "pool"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              ""
+            ]
+          },
+          {
+            "op": "join",
+            "args": [
+              [
+                "native-balance:",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$d",
+                            "pool"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              ""
+            ]
+          },
+          {
+            "op": "join",
+            "args": [
+              [
+                "token-balance:",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$d",
+                            "token"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                ":",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$d",
+                            "pool"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              ""
+            ]
+          }
+        ]
+      },
+      "storageKey": {
+        "op": "join",
+        "args": [
+          [
+            "storage:",
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$account"
+                  ]
+                }
+              ]
+            }
+          ],
+          ""
+        ]
+      },
+      "nativeKey": {
+        "op": "join",
+        "args": [
+          [
+            "native-balance:",
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$account"
+                  ]
+                }
+              ]
+            }
+          ],
+          ""
+        ]
+      },
+      "tokenKey": {
+        "op": "join",
+        "args": [
+          [
+            "token-balance:",
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$token"
+                  ]
+                }
+              ]
+            },
+            ":",
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$account"
+                  ]
+                }
+              ]
+            }
+          ],
+          ""
+        ]
+      },
+      "supplyKey": {
+        "op": "join",
+        "args": [
+          [
+            "token-supply:",
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$token"
+                  ]
+                }
+              ]
+            }
+          ],
+          ""
+        ]
+      },
+      "depthIn": {
+        "op": "if",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "buy"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$snapshot",
+              "nativeReserve"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$snapshot",
+              "tokenReserve"
+            ]
+          }
+        ]
+      },
+      "depthOut": {
+        "op": "if",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "buy"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$snapshot",
+              "tokenReserve"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$snapshot",
+              "nativeReserve"
+            ]
+          }
+        ]
+      },
+      "sampleIn": {
+        "op": "div",
+        "args": [
+          {
+            "op": "expression",
+            "args": [
+              "depthIn",
+              {
+                "route": "$route",
+                "snapshot": "$snapshot"
+              }
+            ]
+          },
+          {
+            "op": "uint",
+            "args": [
+              "100000"
+            ]
+          }
+        ]
+      },
+      "quoteOut": {
+        "op": "get",
+        "args": [
+          {
+            "op": "model",
+            "args": [
+              "quote",
+              {
+                "nativeReserve": {
+                  "op": "get",
+                  "args": [
+                    "$snapshot",
+                    "nativeReserve"
+                  ]
+                },
+                "tokenReserve": {
+                  "op": "get",
+                  "args": [
+                    "$snapshot",
+                    "tokenReserve"
+                  ]
+                },
+                "buy": {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                "amountIn": {
+                  "op": "expression",
+                  "args": [
+                    "sampleIn",
+                    {
+                      "route": "$route",
+                      "snapshot": "$snapshot"
+                    }
+                  ]
+                },
+                "model": {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "model"
+                  ]
+                }
+              }
+            ]
+          },
+          "amountOut"
+        ]
+      },
+      "priceAvailable": {
+        "op": "and",
+        "args": [
+          {
+            "op": "gt",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "sampleIn",
+                  {
+                    "route": "$route",
+                    "snapshot": "$snapshot"
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "gt",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "depthOut",
+                  {
+                    "route": "$route",
+                    "snapshot": "$snapshot"
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "gt",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "quoteOut",
+                  {
+                    "route": "$route",
+                    "snapshot": "$snapshot"
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "match": {
+      "op": "eq",
+      "args": [
+        {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "familyId"
+          ]
+        },
+        "custom-swap:uniswap-v1"
+      ]
+    },
+    "context": {},
+    "boundState": {
+      "op": "expression",
+      "args": [
+        "binding",
+        {
+          "d": "$descriptor"
+        }
+      ]
+    },
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "pool"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token"
+          ]
+        }
+      ],
+      "mutationAddresses": [
+        {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "pool"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token"
+          ]
+        }
+      ],
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "priceAvailable",
+                      {
+                        "route": "$route",
+                        "snapshot": "$snapshot"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "routeKey"
+              ]
+            },
+            "univ1 price unavailable: insufficient depth or zero quote at the current source"
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "univ1-execution-math",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "stateOnlyReads": true,
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "issuer"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "token"
+              ]
+            }
+          ]
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "gte",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lte",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "univ1 exact amountIn must be uint256"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "number",
+                "args": [
+                  "$source.number"
+                ]
+              },
+              "$source.number"
+            ]
+          },
+          "error": "univ1 exact source block number"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "number",
+                "args": [
+                  "$source.generation"
+                ]
+              },
+              "$source.generation"
+            ]
+          },
+          "error": "univ1 exact source generation"
+        },
+        {
+          "assert": {
+            "op": "matches",
+            "args": [
+              "$source.hash",
+              "^0x[0-9a-fA-F]{64}$"
+            ]
+          },
+          "error": "univ1 exact source hash"
+        },
+        {
+          "assert": {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$executor",
+                  "$constants.zero"
+                ]
+              }
+            ]
+          },
+          "error": "univ1 exact executor cannot be zero"
+        }
+      ],
+      "amountOut": {
+        "op": "get",
+        "args": [
+          "$quoteResult",
+          "amountOut"
+        ]
+      },
+      "evidence": {
+        "op": "merge",
+        "args": [
+          {
+            "kind": "univ1-execution-math",
+            "source": "$source",
+            "executor": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$executor"
+                  ]
+                }
+              ]
+            },
+            "binding": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "bindingRef"
+                  ]
+                },
+                "fingerprint"
+              ]
+            },
+            "routeKey": {
+              "op": "get",
+              "args": [
+                "$route",
+                "routeKey"
+              ]
+            },
+            "amountIn": "$amountIn",
+            "amountOut": "$amountOut",
+            "direction": {
+              "op": "get",
+              "args": [
+                "$route",
+                "direction"
+              ]
+            },
+            "bindingFingerprint": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "bindingRef"
+                  ]
+                },
+                "fingerprint"
+              ]
+            }
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$amountIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$amountOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "unavailableReason": "univ1-zero-curve-output"
+              },
+              {}
+            ]
+          }
+        ]
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "issuer"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "token"
+              ]
+            }
+          ]
+        ]
+      },
+      "requireCanonicalSource": true,
+      "steps": [
+        {
+          "id": "withdrawNative",
+          "when": {
+            "op": "get",
+            "args": [
+              "$route",
+              "buy"
+            ]
+          },
+          "call": {
+            "target": "$constants.weth",
+            "signature": "function withdraw(uint256)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              }
+            ]
+          }
+        },
+        {
+          "id": "buySwap",
+          "when": {
+            "op": "and",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "buy"
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  "$externalRecipient"
+                ]
+              }
+            ]
+          },
+          "call": {
+            "target": {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            },
+            "signature": "function ethToTokenSwapInput(uint256,uint256)",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                ]
+              }
+            ],
+            "value": {
+              "runtime": "amountIn"
+            }
+          }
+        },
+        {
+          "id": "buyTransfer",
+          "when": {
+            "op": "and",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "buy"
+                ]
+              },
+              "$externalRecipient"
+            ]
+          },
+          "call": {
+            "target": {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            },
+            "signature": "function ethToTokenTransferInput(uint256,uint256,address)",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                ]
+              },
+              "$recipient"
+            ],
+            "value": {
+              "runtime": "amountIn"
+            }
+          }
+        },
+        {
+          "id": "sellSwap",
+          "when": {
+            "op": "not",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "buy"
+                ]
+              }
+            ]
+          },
+          "approval": {
+            "token": {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenIn"
+              ]
+            },
+            "spender": {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            },
+            "mode": "exact-clear"
+          },
+          "call": {
+            "target": {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            },
+            "signature": "function tokenToEthSwapInput(uint256,uint256,uint256)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                ]
+              }
+            ]
+          },
+          "effects": [
+            {
+              "kind": "credit",
+              "asset": "native",
+              "account": "$executor"
+            }
+          ]
+        },
+        {
+          "id": "wrapReceipt",
+          "when": {
+            "op": "not",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "buy"
+                ]
+              }
+            ]
+          },
+          "call": {
+            "target": "$constants.weth",
+            "signature": "function deposit()",
+            "args": [],
+            "value": {
+              "runtime": "stepEffect0X0Delta"
+            }
+          }
+        },
+        {
+          "id": "sellTransfer",
+          "when": {
+            "op": "and",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "buy"
+                    ]
+                  }
+                ]
+              },
+              "$externalRecipient"
+            ]
+          },
+          "call": {
+            "target": "$constants.weth",
+            "signature": "function transfer(address,uint256)",
+            "args": [
+              "$recipient",
+              {
+                "runtime": "stepEffect0X0Delta"
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenIn"
+            ]
+          },
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenOut"
+            ]
+          },
+          "account": "$recipient"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    }
+  },
+  "swap": {
+    "version": 1,
+    "events": [
+      {
+        "id": "univ1-TokenPurchase",
+        "signature": "event TokenPurchase(address indexed buyer,uint256 indexed eth_sold,uint256 indexed tokens_bought)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$log",
+                    "address"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "buy": true,
+          "buyer": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "buyer"
+                ]
+              }
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "eth_sold"
+            ]
+          },
+          "amountOut": {
+            "op": "get",
+            "args": [
+              "$args",
+              "tokens_bought"
+            ]
+          }
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "eth_sold"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "tokens_bought"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "target"
+                  ]
+                },
+                "$pool"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "tokenIn"
+                  ]
+                },
+                "$constants.weth"
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": "$pool",
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenOut"
+            ]
+          },
+          "matchedAdapterId": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "adapterId"
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "eth_sold"
+            ]
+          },
+          "amountOut": {
+            "op": "get",
+            "args": [
+              "$args",
+              "tokens_bought"
+            ]
+          }
+        }
+      },
+      {
+        "id": "univ1-EthPurchase",
+        "signature": "event EthPurchase(address indexed buyer,uint256 indexed tokens_sold,uint256 indexed eth_bought)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$log",
+                    "address"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "buy": false,
+          "buyer": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "buyer"
+                ]
+              }
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "tokens_sold"
+            ]
+          },
+          "amountOut": {
+            "op": "get",
+            "args": [
+              "$args",
+              "eth_bought"
+            ]
+          }
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "tokens_sold"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "eth_bought"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "target"
+                  ]
+                },
+                "$pool"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "tokenOut"
+                  ]
+                },
+                "$constants.weth"
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": "$pool",
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenOut"
+            ]
+          },
+          "matchedAdapterId": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "adapterId"
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "tokens_sold"
+            ]
+          },
+          "amountOut": {
+            "op": "get",
+            "args": [
+              "$args",
+              "eth_bought"
+            ]
+          }
+        }
+      }
+    ],
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only"
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "quote": {
+          "model": "univ1:quote",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "native-reserve",
+              "kind": "eth-call",
+              "to": "$constants.multicall",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "balance",
+                  "getEthBalance",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "token-reserve",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "source",
+              "value": {
+                "op": "source",
+                "args": [
+                  "$results"
+                ]
+              }
+            },
+            {
+              "let": "nativeReserve",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "native-reserve"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "tokenReserve",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "token-reserve"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "source": "$source",
+                "nativeReserve": "$nativeReserve",
+                "tokenReserve": "$tokenReserve"
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "merge",
+        "args": [
+          {
+            "op": "model",
+            "args": [
+              "quote",
+              {
+                "nativeReserve": {
+                  "op": "get",
+                  "args": [
+                    "$steps.state",
+                    "nativeReserve"
+                  ]
+                },
+                "tokenReserve": {
+                  "op": "get",
+                  "args": [
+                    "$steps.state",
+                    "tokenReserve"
+                  ]
+                },
+                "buy": {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                "amountIn": "$amountIn",
+                "model": {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "model"
+                  ]
+                }
+              }
+            ]
+          },
+          "$steps.state"
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "native-reserve",
+              "kind": "eth-call",
+              "to": "$constants.multicall",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "balance",
+                  "getEthBalance",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "token-reserve",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "source",
+              "value": {
+                "op": "source",
+                "args": [
+                  "$results"
+                ]
+              }
+            },
+            {
+              "let": "nativeReserve",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "native-reserve"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "tokenReserve",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "token-reserve"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "source": "$source",
+                "nativeReserve": "$nativeReserve",
+                "tokenReserve": "$tokenReserve"
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.state"
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [],
+      "rows": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "expression",
+                "args": [
+                  "priceAvailable",
+                  {
+                    "route": "$route",
+                    "snapshot": "$snapshot"
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          {
+            "routeKey": {
+              "op": "get",
+              "args": [
+                "$route",
+                "routeKey"
+              ]
+            },
+            "numerator": {
+              "op": "expression",
+              "args": [
+                "quoteOut",
+                {
+                  "route": "$route",
+                  "snapshot": "$snapshot"
+                }
+              ]
+            },
+            "denominator": {
+              "op": "expression",
+              "args": [
+                "sampleIn",
+                {
+                  "route": "$route",
+                  "snapshot": "$snapshot"
+                }
+              ]
+            },
+            "depth": {
+              "op": "min",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "depthIn",
+                    {
+                      "route": "$route",
+                      "snapshot": "$snapshot"
+                    }
+                  ]
+                },
+                {
+                  "op": "expression",
+                  "args": [
+                    "depthOut",
+                    {
+                      "route": "$route",
+                      "snapshot": "$snapshot"
+                    }
+                  ]
+                }
+              ]
+            },
+            "reserveA": {
+              "op": "expression",
+              "args": [
+                "depthIn",
+                {
+                  "route": "$route",
+                  "snapshot": "$snapshot"
+                }
+              ]
+            },
+            "reserveB": {
+              "op": "expression",
+              "args": [
+                "depthOut",
+                {
+                  "route": "$route",
+                  "snapshot": "$snapshot"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "trialState": {
+      "version": 1,
+      "when": {
+        "op": "defined",
+        "args": [
+          "$trialState"
+        ]
+      },
+      "unsupportedReason": "univ1 trial state not loaded",
+      "reads": [
+        {
+          "id": "reserves",
+          "refs": [
+            {
+              "op": "expression",
+              "args": [
+                "trialRef",
+                {
+                  "d": "$descriptor"
+                }
+              ]
+            }
+          ],
+          "initial": [
+            {
+              "nativeReserve": {
+                "op": "get",
+                "args": [
+                  "$prepared",
+                  "nativeReserve"
+                ]
+              },
+              "tokenReserve": {
+                "op": "get",
+                "args": [
+                  "$prepared",
+                  "tokenReserve"
+                ]
+              },
+              "source": {
+                "op": "get",
+                "args": [
+                  "$prepared",
+                  "source"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "model": "quote",
+      "input": {
+        "op": "merge",
+        "args": [
+          {
+            "nativeReserve": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$stateReads.reserves",
+                    0
+                  ]
+                },
+                "nativeReserve"
+              ]
+            },
+            "tokenReserve": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$stateReads.reserves",
+                    0
+                  ]
+                },
+                "tokenReserve"
+              ]
+            },
+            "amountIn": "$amountIn",
+            "buy": {
+              "op": "get",
+              "args": [
+                "$route",
+                "buy"
+              ]
+            },
+            "model": {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "model"
+              ]
+            }
+          },
+          {
+            "sourceOk": {
+              "op": "assertSource",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$stateReads.reserves",
+                        0
+                      ]
+                    },
+                    "source"
+                  ]
+                },
+                "$source"
+              ]
+            }
+          }
+        ]
+      },
+      "amountOut": {
+        "op": "get",
+        "args": [
+          "$modelResult",
+          "amountOut"
+        ]
+      },
+      "stateChanges": [
+        {
+          "ref": {
+            "op": "expression",
+            "args": [
+              "trialRef",
+              {
+                "d": "$descriptor"
+              }
+            ]
+          },
+          "value": {
+            "source": "$source",
+            "nativeReserve": {
+              "op": "get",
+              "args": [
+                "$modelResult",
+                "nativeReserve"
+              ]
+            },
+            "tokenReserve": {
+              "op": "get",
+              "args": [
+                "$modelResult",
+                "tokenReserve"
+              ]
+            }
+          }
+        }
+      ],
+      "stateEffects": {
+        "op": "concat",
+        "args": [
+          [
+            {
+              "op": "expression",
+              "args": [
+                "storageKey",
+                {
+                  "account": {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "pool"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "op": "expression",
+              "args": [
+                "nativeKey",
+                {
+                  "account": {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "pool"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "op": "expression",
+              "args": [
+                "tokenKey",
+                {
+                  "token": {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "token"
+                    ]
+                  },
+                  "account": {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "pool"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "model"
+                    ]
+                  },
+                  "anyswap-v1-issuer-fee-001"
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "buy"
+                    ]
+                  },
+                  [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "nativeKey",
+                        {
+                          "account": {
+                            "op": "get",
+                            "args": [
+                              "$descriptor",
+                              "issuer"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "tokenKey",
+                        {
+                          "token": {
+                            "op": "get",
+                            "args": [
+                              "$descriptor",
+                              "token"
+                            ]
+                          },
+                          "account": {
+                            "op": "get",
+                            "args": [
+                              "$descriptor",
+                              "issuer"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              },
+              []
+            ]
+          },
+          [
+            {
+              "op": "expression",
+              "args": [
+                "nativeKey",
+                {
+                  "account": "$executor"
+                }
+              ]
+            },
+            {
+              "op": "expression",
+              "args": [
+                "tokenKey",
+                {
+                  "token": {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "token"
+                    ]
+                  },
+                  "account": "$executor"
+                }
+              ]
+            },
+            {
+              "op": "expression",
+              "args": [
+                "tokenKey",
+                {
+                  "token": "$constants.weth",
+                  "account": "$executor"
+                }
+              ]
+            },
+            {
+              "op": "expression",
+              "args": [
+                "nativeKey",
+                {
+                  "account": "$constants.weth"
+                }
+              ]
+            },
+            {
+              "op": "expression",
+              "args": [
+                "supplyKey",
+                {
+                  "token": "$constants.weth"
+                }
+              ]
+            }
+          ]
+        ]
+      }
+    },
+    "liveStateProjection": {
+      "version": 1,
+      "result": {
+        "op": "merge",
+        "args": [
+          "$snapshot",
+          {
+            "source": {
+              "number": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$snapshot",
+                      "source"
+                    ]
+                  },
+                  "number"
+                ]
+              },
+              "hash": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$snapshot",
+                      "source"
+                    ]
+                  },
+                  "hash"
+                ]
+              },
+              "generation": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$snapshot",
+                      "source"
+                    ]
+                  },
+                  "generation"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "univ1-exact-input",
+        "lineage": "custom-swap:uniswap-v1",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": true,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function ethToTokenSwapInput(uint256,uint256)"
+        },
+        {
+          "signature": "function tokenToEthSwapInput(uint256,uint256,uint256)"
+        }
+      ]
+    }
+  ]
+}
