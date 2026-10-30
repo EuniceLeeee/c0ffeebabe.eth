@@ -3596,7 +3596,7 @@
     "execution": {
       "version": 1,
       "settlement": {
-        "directOutput": true
+        "directOutput": false
       },
       "protectedAddresses": [
         {
@@ -3683,7 +3683,7 @@
               "$route.tokenOut"
             ]
           },
-          "account": "$executor"
+          "account": "$recipient"
         }
       ]
     },
