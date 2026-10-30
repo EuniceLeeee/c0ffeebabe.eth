@@ -1,0 +1,35 @@
+{
+  "learning_case_id": "tooldef-20261030-settlement-registrar-false-acceptance",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "whole_transaction_summary_promoted_to_single_leg_settlement_acceptance",
+  "evidence": {
+    "scope": "Tooling-only family acceptance audit. No new competitor event or production opportunity judgment. Strategy and trigger are required schema discriminators only.",
+    "before": "Actual evidenceFailures and reviewFailures returned [] for a fresh-hashed synthetic report with positive.success=false, four false assertions and null deltas.",
+    "cause": "Two legacy writers derived single-leg assertions from whole-plan success/grossProfit and fixed pass labels; reader ignored explicit contradictory assertion facts. trial-1 was pinned independently of the selected highest-amount trial.",
+    "boundary": "SourceBlockSimulator whole-transaction repayment, inventory and independent effects do not establish single-leg debit/receipt or seeded old-inventory rejection.",
+    "independent_review": "Separate readflow and discovery reviewers confirmed source and actual consumer behavior; generic runner reviewed by a non-author.",
+    "after": "Reader rejects legacy registrar shapes even with all-true assertion labels; explicit nontrue required facts reject in other formats. Retired CLI writers fail before external artifact/config/RPC reads or registry writes.",
+    "regression": "13/13 settlement-registrar-evidence plus existing family-settlement-review-contract; 356/356 complete common offline suite. Generic runner/context/facts 31/31. All are offline framework checks.",
+    "data_impact": "Historical reports, registry entries, production protocol JSON and live defaults remain unchanged. Existing evidence was not rewritten to success.",
+    "logs": "logs/protocol-json-enabled-20261030/"
+  },
+  "tooling_defect": {
+    "tool": "listener/src/searcher/test/settlement-register-family.ts; settlement-register-boring.ts; family-settlement-review.ts",
+    "issue": "Whole-transaction summaries could manufacture single-leg settlement acceptance even when assertions explicitly contradicted success.",
+    "evidence": "Actual reader accepted false-labelled synthetic legacy summaries before the fix; negative and all-true legacy-shape regressions now reject.",
+    "codify_target": "Shared evidence rejection helper, both review branches, retired registrar guards and real-reader/subprocess regressions.",
+    "codify_commit": "09a79761d009ce5e7a0720277d08b67e9402c6ba",
+    "status": "codified"
+  },
+  "replay_gate": {
+    "command": "cd listener && node --import tsx --test src/searcher/test/settlement-registrar-evidence.test.ts src/searcher/test/family-settlement-review-contract.ts",
+    "expected_transition": "False-labelled and all-true whole-loop legacy summaries reject; existing unrelated evidence-format contracts retain prior behavior; retired CLIs have no external effects."
+  },
+  "created_at": "2026-10-30T04:26:02.990480Z",
+  "updated_at": "2026-10-30T04:26:02.990480Z"
+}

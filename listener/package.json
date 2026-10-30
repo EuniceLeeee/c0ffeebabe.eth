@@ -483,7 +483,11 @@
     "searcher:identity-flow": "node --import tsx --test src/searcher/test/identity-flow.ts",
     "test:protocol-json": "node scripts/test-protocol-json.mjs",
     "accept:protocol-json": "node --import tsx src/searcher/test/protocol-json-acceptance.ts",
-    "check:protocol-json-samples": "node --import tsx src/searcher/test/protocol-json-samples.ts"
+    "check:protocol-json-samples": "node --import tsx src/searcher/test/protocol-json-samples.ts",
+    "test:family-json": "node scripts/test-protocol-json.mjs",
+    "accept:family-json": "node --import tsx src/searcher/test/protocol-json-acceptance.ts",
+    "check:swap-json-samples": "node --import tsx src/searcher/test/swap-json-samples.ts",
+    "prepare:family-json": "node --import tsx src/searcher/test/family-json-ready.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

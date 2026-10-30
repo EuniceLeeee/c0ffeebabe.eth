@@ -183,7 +183,7 @@ test("token-only v2 routes automatically protect old native balance", () => {
 });
 
 test("runtime ABI leaf references reject narrow and aligned scalar encodings", () => {
-  for (const type of ["bytes4", "uint8", "int256", "address", "bool"]) {
+  for (const type of ["bytes4", "uint8", "int128", "address", "bool"]) {
     assert.throws(() => encodeDeclarativeCall(`function narrow(${type})`, [{ runtime: "value" }]), /uint256 or bytes32/);
   }
   assert.equal(encodeDeclarativeCall("function full(bytes32,uint256)", [{ runtime: "word" }, { runtime: "amount" }]).patches.length, 2);

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "domain": "swap",
+  "familyId": "balancer-v1",
+  "instanceKey": "0x5a0d85166a20f9cd27be2cb293e4d10188f0c97d",
+  "lineageId": "balancer-v1:finalized-bpool",
+  "source": {
+    "number": 26138731,
+    "hash": "0x696b86358440cc2b7a0a5e80dc87c2542a2e1535cd21502b99b317fef1d4d266"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x6be8b298d56ac7993ee3a2e9faa389b73694d70d0d385b490b74f6bba78094a8",
+  "trials": [
+    {
+      "id": "direction-0-production-P",
+      "tokenIn": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "311013283877631901"
+    },
+    {
+      "id": "direction-0-half-production-P",
+      "tokenIn": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "155506641938815950"
+    },
+    {
+      "id": "direction-1-production-P",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+      "amountIn": "2000000000000000"
+    },
+    {
+      "id": "direction-1-historical-amount-at-N",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x1776e1f26f98b1a5df9cd347953a26dd3cb46671",
+      "amountIn": "8444695829171278"
+    }
+  ]
+}

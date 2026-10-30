@@ -123,7 +123,7 @@ export async function generateCapabilityClosure(
     contractVersion,
     contentHash,
     semanticDependencies: Object.freeze(
-      dependencyArtifacts.map((artifact) => artifact.logicalId),
+      dependencyArtifacts.map((artifact) => artifact.logicalId).sort(),
     ),
     provenanceCommit: input.provenanceCommit,
   });

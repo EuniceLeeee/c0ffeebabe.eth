@@ -138,6 +138,7 @@ const counters: CallbackCounters = {
   executionBuild: 0,
   expectedEffects: 0,
 };
+const executionCallerContexts: Array<{ readonly executor: string; readonly transactionOrigin?: string }> = [];
 const plugin = observedFluidCreditPlugin(counters);
 const primary = loadedFamily(plugin);
 const family = primary.family;
@@ -398,10 +399,11 @@ async function dependentRiskProgramsStayBoundedAndAuthenticated(): Promise<void>
 }
 
 async function creditRiskUsesTrustedTransactionOrigin(): Promise<void> {
-  const harness = runtimeHarness({
+  const caller = {
     descriptor: descriptorA, currentSource: SOURCE, executor: EXECUTOR,
     transactionOrigin: TRANSACTION_ORIGIN,
-  });
+  };
+  const harness = runtimeHarness(caller);
   const invocation = {
     family, route: routeA, collateralAmount: COLLATERAL_AMOUNT, debtBps: DEBT_BPS,
     executor: EXECUTOR, runtimeEvidence: runtimeEvidenceA,
@@ -416,6 +418,17 @@ async function creditRiskUsesTrustedTransactionOrigin(): Promise<void> {
   assert.equal(operate.kind, "effect-delta-simulation");
   if (operate.kind !== "effect-delta-simulation") throw new Error("expected operate effect proof");
   assert.equal(operate.call.executionMode, "impersonated-call-frame");
+  if (risk.status !== "resolved") throw new Error(risk.reasonCode);
+  assert.equal("transactionOrigin" in risk, false, "risk handle keeps caller authority private");
+  const executionInvocation = { ...invocation, risk, minAmountOut: risk.amountOut };
+  const handle = issueCreditExecutionHandle(executionInvocation);
+  // The risk proof has already sealed its caller. Neither a later authority
+  // change nor an extra consumer field may replace that origin at construction.
+  caller.transactionOrigin = OTHER_ORIGIN;
+  const buildInvocation = { family, actionOwnership: primary.catalog, handle, transactionOrigin: OTHER_ORIGIN };
+  const execution = buildCreditExecutionFragment(buildInvocation);
+  assert.equal(execution.status, "resolved");
+  assert.deepEqual(executionCallerContexts.at(-1), { executor: EXECUTOR, transactionOrigin: TRANSACTION_ORIGIN });
 }
 
 function instanceCapabilityRejectsRawForgedAndStaleInputs(): void {
@@ -556,6 +569,7 @@ async function happyPathPublishesOneCommonCreditGraphAndExecutes(): Promise<void
   assert.equal(execution.fragment.nodes[0]?.adapterId, "fluid-vault");
   assert.equal(execution.fragment.nodes[0]?.amount, COLLATERAL_AMOUNT);
   assert.equal(execution.fragment.nodes[0]?.params.debtDelta, risk.amountOut);
+  assert.deepEqual(executionCallerContexts.at(-1), { executor: EXECUTOR }, "legacy callers gain no origin field");
   assert(Object.isFrozen(execution.fragment));
   assert(Object.isFrozen(execution.fragment.nodes[0]!));
   assert.equal(execution.expectedEffects.length, 4);
@@ -1243,6 +1257,8 @@ function observedFluidCreditPlugin(
       },
       buildFragment(input) {
         callbacks.executionBuild++;
+        executionCallerContexts.push({ executor: input.executor,
+          ...(input.transactionOrigin === undefined ? {} : { transactionOrigin: input.transactionOrigin }) });
         return execution.buildFragment(input);
       },
       expectedEffects(input) {

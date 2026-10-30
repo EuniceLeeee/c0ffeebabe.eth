@@ -1,3 +1,4 @@
+import { classifyDeclarativeBytecodeGetter } from "./declarative-bytecode.js";
 import { executorFromObservedSimulation, decodeDeclarativeExecutionSimulationReceipt } from "./declarative-simulation.js";
 import { Interface, getAddress, keccak256, ZeroAddress } from "ethers";
 import type { AdapterRequestResult } from "./adapter-request-program.js";
@@ -19,10 +20,10 @@ export interface DeclarativeValuesDocument {
   readonly expressions: Record<string, Value>;
   readonly programs?: Record<string, readonly Value[]>;
 }
-const ops = new Set(["simulationActor", "programReceipt", "mul", "max", "program", "number", "lower", "unique", "decodeAll", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "model", "requestFailure"]);
+const ops = new Set(["bytecodeGetter", "simulationActor", "programReceipt", "mul", "max", "program", "number", "lower", "unique", "decodeAll", "decodeCanonical", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "model", "requestFailure"]);
 const arity: Record<string, [number, number]> = Object.fromEntries([
   ["simulationActor", [1, 1]], ["programReceipt", [1, 1]], ["mul", [2, 2]], ["max", [2, 2]],
-  ...["number", "lower", "unique", "successful", "word", "bool", "objectEntries", "objectFromEntries"].map(k => [k, [1, 1]]), ["program", [2, 2]], ["pow", [2, 2]], ["decodeAll", [3, 3]],
+  ...["number", "lower", "unique", "successful", "word", "bool", "objectEntries", "objectFromEntries"].map(k => [k, [1, 1]]), ["program", [2, 2]], ["pow", [2, 2]], ["bytecodeGetter", [2, 2]], ["decodeAll", [3, 3]], ["decodeCanonical", [3, 4]],
   ...["uint", "address", "hash", "codeHash", "defined", "not", "length", "string", "sortId", "result", "returned", "code", "shape", "wordSurface", "source", "effects", "tokenDelta", "supplyDelta", "event", "requestFailure"].map(k => [k, [1, 1]]),
   ...["get", "sameAddress", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "omit", "at", "join", "assertSource", "maskHash", "matches", "expression", "math", "model"].map(k => [k, [2, 2]]),
   ...["if", "map", "flatMap", "filter", "some", "every", "encode", "bytes"].map(k => [k, [3, 3]]),
@@ -138,6 +139,7 @@ export function compileDeclarativeValues(
         const input = { ...declaration, request: requests[0], result: results[0] };
         return x.op === "simulationActor" ? executorFromObservedSimulation(input) : decodeDeclarativeExecutionSimulationReceipt(input);
       }
+      case "bytecodeGetter": return classifyDeclarativeBytecodeGetter(e(0), e(1));
       case "uint": return BigInt(e(0));
       case "number": { const v = Number(e(0)); if (!Number.isSafeInteger(v)) throw new Error("unsafe declaration number"); return v; }
       case "lower": return String(e(0)).toLowerCase();
@@ -148,6 +150,12 @@ export function compileDeclarativeValues(
       case "successful": { const r = env.results.find((r: AdapterRequestResult) => r.id === e(0)); if (!r) throw new Error("declaration result missing"); if (!r.ok) throw new RequiredAdapterRequestError(r); return r; }
       case "word": { const data = e(0); if (typeof data !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(data)) throw new Error("malformed declaration word"); return BigInt(data); }
       case "bool": { const data = e(0); if (typeof data !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(data)) throw new Error("malformed declaration bool"); const value = BigInt(data); if (value > 1n) throw new Error("malformed declaration bool"); return value === 1n; }
+      case "decodeCanonical": {
+        const iface = abi[e(0)], fn = e(1), data = e(2);
+        const decoded = iface.decodeFunctionResult(fn, data);
+        if (iface.encodeFunctionResult(fn, decoded).toLowerCase() !== data.toLowerCase()) throw new Error("noncanonical ABI return data");
+        return args.length === 4 ? decoded[e(3)] : Array.from(decoded);
+      }
       case "decodeAll": return abi[e(0)].decodeFunctionResult(e(1), e(2));
       case "program": { const name = e(0); if (!Object.prototype.hasOwnProperty.call(doc.programs ?? {}, name)) throw new Error("unknown declaration program"); return runInternal(doc.programs![name], { ...env, ...e(1) }); }
       case "get": { const obj = e(0), key = String(e(1)); if (forbidden.has(key)) throw new Error("forbidden lookup"); return obj?.[key]; }

@@ -41,6 +41,15 @@ test("context input requires explicit identities and a pinned historical source"
   ]) { const value = input(); change(value); assert.throws(() => validateAcceptanceContextInput(value)); }
 });
 
+test("context supports explicitly selected Swap without accepting another domain", () => {
+  assert.doesNotThrow(() => validateAcceptanceContextInput({ ...input(), domain: "swap", familyId: "balancer-v1" }));
+  assert.doesNotThrow(() => validateAcceptanceContextInput({ ...input(), domain: "protocol" }));
+  assert.throws(() => validateAcceptanceContextInput({ ...input(), familyId: "balancer-v1" }), /domain/);
+  for (const domain of ["credit", "funding", "unknown", null])
+    assert.throws(() => validateAcceptanceContextInput({ ...input(), domain } as any), /domain/);
+  assert.throws(() => validateAcceptanceContextInput({ ...input(), domain: "swap" }), /domain/);
+});
+
 test("header and receipt checks reject reorgs, wrong transactions, failed receipts and incomplete environments", () => {
   assert.doesNotThrow(() => assertAcceptanceHeader(header, source));
   for (const change of [

@@ -152,6 +152,8 @@ interface SealedCreditRiskQuoteHandleRecord {
   readonly amountOut: bigint;
   readonly evidence: unknown;
   readonly executor: string;
+  /** Caller authority captured with the risk proof, never a consumer override. */
+  readonly transactionOrigin?: string;
   readonly runtimeEvidence: readonly RuntimeEvidence[];
   readonly runtimeEvidenceFingerprint: string;
   readonly source: CanonicalSource;
@@ -641,6 +643,7 @@ export async function executeCreditRiskQuote(input: {
       amountOut,
       evidence,
       executor,
+      ...(caller.transactionOrigin === undefined ? {} : { transactionOrigin: caller.transactionOrigin }),
       runtimeEvidence,
       runtimeEvidenceFingerprint: runtimeEvidenceHash(runtimeEvidence),
       source,
@@ -721,6 +724,7 @@ export function buildCreditExecutionFragment(input: {
       minAmountOut: record.minAmountOut,
       exactEvidence: riskRecord.evidence,
       executor: record.executor,
+      ...(riskRecord.transactionOrigin === undefined ? {} : { transactionOrigin: riskRecord.transactionOrigin }),
       runtimeEvidence: record.runtimeEvidence,
     });
     assertFamilyOwnedPlanFragment({

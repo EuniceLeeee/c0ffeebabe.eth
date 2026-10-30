@@ -1,6 +1,7 @@
+import { assertPublicRuntimeCaptureName } from "./declarative-call-codec.js";
 import { assertModuleData, type ModuleBlock } from "./declarative-modules.js";
 
-export type RuntimeMathOperator = "add" | "sub" | "mul" | "div" | "shr" | "and" | "min" | "eq";
+export type RuntimeMathOperator = "add" | "sub" | "mul" | "div" | "shr" | "and" | "min" | "eq" | "neg";
 export type RuntimeMathOperand = { readonly input: string } | { readonly local: string } | { readonly constant: string };
 /** Statically imported TS math only. The declaration contains no calls, ABI,
  * callback, state reads or handler functions. JSON binds its opaque ID/version. */
@@ -31,7 +32,7 @@ export interface BoundRuntimeMath {
   expand(alias: string, bindings: Readonly<Record<string, RuntimeMathValue>>,
     outputNames: Readonly<Record<string, string>>, namespace: string): readonly ExpandedRuntimeMathOperation[];
 }
-const operators = new Set<RuntimeMathOperator>(["add", "sub", "mul", "div", "shr", "and", "min", "eq"]);
+const operators = new Set<RuntimeMathOperator>(["add", "sub", "mul", "div", "shr", "and", "min", "eq", "neg"]);
 const forbidden = new Set(["__proto__", "constructor", "prototype"]);
 const maxUint = (1n << 256n) - 1n;
 function name(value: unknown): asserts value is string {
@@ -86,7 +87,12 @@ function validateModel(raw: RuntimeMathModel): RuntimeMathModel {
     shape(operation, ["name", "op", "left", "right"]); name(operation.name);
     if (typeof operation.op !== "string" || !operators.has(operation.op as RuntimeMathOperator)) throw new Error("unsupported runtime math operator");
     if (locals.has(operation.name) || raw.inputs.includes(operation.name)) throw new Error("runtime math names cannot overwrite inputs or locals");
-    operand(operation.left); operand(operation.right); locals.add(operation.name);
+    operand(operation.left); operand(operation.right);
+    // The existing VM negates a nonnegative magnitude below 2^255. The
+    // unused operand is canonical, not an alternate sign/overflow policy.
+    if (operation.op === "neg" && ((!operation.right || typeof operation.right !== "object" || !("constant" in operation.right)) || operation.right.constant !== "0"))
+      throw new Error("runtime signed negation requires zero right operand");
+    locals.add(operation.name);
   }
   if (raw.outputs.some(output => !locals.has(output))) throw new Error("runtime math output must name a defined local");
   const model = JSON.parse(JSON.stringify(raw)) as RuntimeMathModel;
@@ -100,6 +106,7 @@ function value(raw: RuntimeMathValue): RuntimeMathValue {
   return Object.freeze({ runtime: raw.runtime });
 }
 function destination(output: unknown): asserts output is string {
+  assertPublicRuntimeCaptureName(output);
   name(output);
   if (["amountIn", "approvalResult", "allowanceResult"].includes(output) || /^effect[0-9]+(?:Before|After|Delta)$/.test(output))
     throw new Error("runtime math cannot write a reserved capture");

@@ -1,16 +1,29 @@
 import { MaxUint256, ZeroAddress, getAddress, isHexString } from "ethers";
 import type { AdapterRequestResult, CanonicalSource } from "../venues/adapter-request-program.js";
 
+export type AcceptanceFamilyDomain = "protocol" | "swap";
+
+/** Domain is an expected contract, never an admission grant. Runtime checks the
+ * installed manifest. Omission preserves existing Protocol case documents. */
+export function acceptanceFamilyDomain(familyId: unknown, domain: unknown = "protocol"): AcceptanceFamilyDomain {
+  if ((domain !== "protocol" && domain !== "swap") ||
+      typeof familyId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(familyId) ||
+      (domain === "protocol" ? !/^protocol:[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(familyId)
+        : /^(protocol|credit|funding):/.test(familyId)))
+    throw new Error("acceptance case must select the declared Swap or Protocol Family domain");
+  return domain as AcceptanceFamilyDomain;
+}
+
 export interface ProtectedAcceptanceBalance { readonly token: string; readonly account: string }
 export interface ProtocolJsonAcceptanceTrial {
-  readonly id: string;
+  readonly id: string; readonly routeKey?: string;
   readonly tokenIn: string; readonly tokenOut: string; readonly amountIn: string;
   readonly outputToleranceRawUnits?: 0 | 1; readonly inputToleranceRawUnits?: 0 | 1;
   readonly expectedAmountOut?: string; readonly recipients?: readonly string[];
   readonly protectedBalances?: readonly ProtectedAcceptanceBalance[];
 }
 export interface ProtocolJsonAcceptanceCase {
-  readonly version: 1; readonly familyId: string; readonly instanceKey: string; readonly lineageId: string;
+  readonly version: 1; readonly domain?: AcceptanceFamilyDomain; readonly familyId: string; readonly instanceKey: string; readonly lineageId: string;
   readonly source: { readonly number: number; readonly hash: string };
   readonly executor: string; readonly owner: string; readonly transactionHash?: string;
   readonly trials: readonly ProtocolJsonAcceptanceTrial[];
@@ -90,9 +103,9 @@ function protection(raw: unknown): readonly ProtectedAcceptanceBalance[] {
 /** A case selects actual production work. It cannot inject a descriptor,
  * admission decision, callback, test handler, observation or success label. */
 export function parseProtocolJsonAcceptanceCase(raw: unknown): ProtocolJsonAcceptanceCase {
-  json(raw); shape(raw, ["version", "familyId", "instanceKey", "lineageId", "source", "executor", "owner", "trials"], ["transactionHash"]);
-  if (raw.version !== 1 || typeof raw.familyId !== "string" || !/^protocol:[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(raw.familyId))
-    throw new Error("acceptance case must select a protocol Family");
+  json(raw); shape(raw, ["version", "familyId", "instanceKey", "lineageId", "source", "executor", "owner", "trials"], ["transactionHash", "domain"]);
+  if (raw.version !== 1) throw new Error("unsupported acceptance case version");
+  const domain = acceptanceFamilyDomain(raw.familyId, raw.domain);
   text(raw.instanceKey); text(raw.lineageId);
   shape(raw.source, ["number", "hash"]);
   if (!Number.isSafeInteger(raw.source.number) || raw.source.number < 0) throw new Error("acceptance source block");
@@ -100,7 +113,8 @@ export function parseProtocolJsonAcceptanceCase(raw: unknown): ProtocolJsonAccep
   const ids = new Set<string>();
   const trials = raw.trials.map((trial: unknown) => {
     shape(trial, ["id", "tokenIn", "tokenOut", "amountIn"],
-      ["outputToleranceRawUnits", "inputToleranceRawUnits", "expectedAmountOut", "recipients", "protectedBalances"]);
+      ["outputToleranceRawUnits", "inputToleranceRawUnits", "expectedAmountOut", "recipients", "protectedBalances", "routeKey"]);
+    if (trial.routeKey !== undefined) text(trial.routeKey);
     text(trial.id); if (ids.has(trial.id)) throw new Error("duplicate acceptance trial id"); ids.add(trial.id);
     const tokenIn = address(trial.tokenIn), tokenOut = address(trial.tokenOut);
     if (tokenIn === tokenOut) throw new Error("acceptance route tokens must differ");
@@ -112,13 +126,14 @@ export function parseProtocolJsonAcceptanceCase(raw: unknown): ProtocolJsonAccep
     }
     tolerance(trial.inputToleranceRawUnits); tolerance(trial.outputToleranceRawUnits);
     return Object.freeze({ id: trial.id, tokenIn, tokenOut, amountIn: decimal(trial.amountIn, true),
+      ...(trial.routeKey !== undefined ? { routeKey: trial.routeKey } : {}),
       ...(trial.inputToleranceRawUnits !== undefined ? { inputToleranceRawUnits: trial.inputToleranceRawUnits } : {}),
       ...(trial.outputToleranceRawUnits !== undefined ? { outputToleranceRawUnits: trial.outputToleranceRawUnits } : {}),
       ...(trial.expectedAmountOut !== undefined ? { expectedAmountOut: decimal(trial.expectedAmountOut) } : {}),
       ...(recipients ? { recipients } : {}),
       ...(trial.protectedBalances !== undefined ? { protectedBalances: protection(trial.protectedBalances) } : {}) });
   });
-  return Object.freeze({ version: 1, familyId: raw.familyId, instanceKey: raw.instanceKey, lineageId: raw.lineageId,
+  return Object.freeze({ version: 1, ...(raw.domain !== undefined ? { domain } : {}), familyId: raw.familyId, instanceKey: raw.instanceKey, lineageId: raw.lineageId,
     source: Object.freeze({ number: raw.source.number, hash: hash(raw.source.hash) }), executor: address(raw.executor), owner: address(raw.owner),
     ...(raw.transactionHash !== undefined ? { transactionHash: hash(raw.transactionHash) } : {}), trials: Object.freeze(trials) });
 }

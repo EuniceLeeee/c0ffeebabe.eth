@@ -1,0 +1,30 @@
+{
+  "learning_case_id": "tooldef-20261030-capability-dependency-sort",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "generated_capability_dependency_order_rejected_by_its_catalog",
+  "evidence": {
+    "scope": "Tooling-only generator/catalog compatibility; no production opportunity claim.",
+    "before": "Actual common suite failed at production import: balancer-v1/capture semantic dependencies must be unique and sorted. node:fs@ preceded node:fs/promises@ under localeCompare.",
+    "cause": "Generator mapped locale-sorted closure artifacts to semanticDependencies while catalog requires default code-unit sort.",
+    "independent_review": "Non-author reviewer independently confirmed generated order and both sort algorithms; approved preserving closure contentHash algorithm.",
+    "after": "Only identity.semanticDependencies is sorted by the catalog rule. dependencyArtifacts/contentHash projection is unchanged. Regression generates both node built-ins and exercises the real catalog hash validator.",
+    "logs": "logs/swap-json-enabled-20261030/stage/suite-1.log; suite-final.log; manifest-final.log"
+  },
+  "tooling_defect": {
+    "tool": "listener family-capability-manifest generator / capability-content-hash",
+    "issue": "Generated manifest could reject at production catalog import despite successful generation.",
+    "evidence": "Actual generated artifact and real catalog failure, independently confirmed.",
+    "codify_target": "capability-content-hash.ts identity ordering and existing content-hash regression suite",
+    "codify_commit": "570dde129584f0e52bcf9034f15b2e6997d807a2",
+    "status": "fixed"
+  },
+  "replay_gate": {
+    "command": "cd listener && npm run searcher:capability-content-hash && npm run family-capability-manifest:check && npm run test:family-json",
+    "expected_transition": "Generated identity accepted by real catalog; unchanged closure hash algorithm; production import and shared suite pass."
+  }
+}
