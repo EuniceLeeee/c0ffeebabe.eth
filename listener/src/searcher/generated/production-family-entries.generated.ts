@@ -24,8 +24,8 @@ import * as entry21 from "../venues/production-families/erc4626-silo-redeem.prod
 import * as entry22 from "../venues/production-families/erc4626.production.js";
 import * as entry23 from "../venues/production-families/ethertoken-native-redeem.production.js";
 import * as entry24 from "../venues/production-families/few-wrapped.production.js";
-import * as entry25 from "../venues/production-families/fluid-credit.production.js";
-import * as entry26 from "../venues/production-families/fluid-dex.production.js";
+import * as entry25 from "../venues/production-families/fluid-dex.production.js";
+import * as entry26 from "../venues/production-families/fluid.production.js";
 import * as entry27 from "../venues/production-families/goldx.production.js";
 import * as entry28 from "../venues/production-families/kyberswap-elastic.production.js";
 import * as entry29 from "../venues/production-families/mellow-queue.production.js";
@@ -85,8 +85,8 @@ export const GENERATED_PRODUCTION_FAMILY_ENTRIES = Object.freeze([
   Object.freeze({ sourceFile: "erc4626.production.ts", module: entry22 }),
   Object.freeze({ sourceFile: "ethertoken-native-redeem.production.ts", module: entry23 }),
   Object.freeze({ sourceFile: "few-wrapped.production.ts", module: entry24 }),
-  Object.freeze({ sourceFile: "fluid-credit.production.ts", module: entry25 }),
-  Object.freeze({ sourceFile: "fluid-dex.production.ts", module: entry26 }),
+  Object.freeze({ sourceFile: "fluid-dex.production.ts", module: entry25 }),
+  Object.freeze({ sourceFile: "fluid.production.ts", module: entry26 }),
   Object.freeze({ sourceFile: "goldx.production.ts", module: entry27 }),
   Object.freeze({ sourceFile: "kyberswap-elastic.production.ts", module: entry28 }),
   Object.freeze({ sourceFile: "mellow-queue.production.ts", module: entry29 }),

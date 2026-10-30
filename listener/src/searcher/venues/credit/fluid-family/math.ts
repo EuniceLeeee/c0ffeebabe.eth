@@ -103,6 +103,36 @@ function maxBorrowRequest(amountIn: bigint, state: BorrowState, debtBps: bigint)
   return requested;
 }
 
+/** Decode the vault's packed risk-config word (the same word the vault stores
+ * and updateExchangePrices consumes). JSON cannot express the bit extraction,
+ * so this pure integer transform exposes the fields the risk condition uses.
+ * It performs no transport, storage or protocol lookup. */
+const CONFIG_STATE_ID = "fluid-credit:config-state";
+export const fluidCreditConfigStateMathModel: DeclarativeMathModel = Object.freeze({
+  id: CONFIG_STATE_ID, version: 1,
+  validateInput(value: MathValue): void {
+    if (!Array.isArray(value) || value.length !== 1) throw new Error("fluid-credit config state requires one packed word");
+    uint(value[0], "config[0]");
+  },
+  evaluate(value: MathValue): MathValue {
+    const [packed] = value as readonly bigint[];
+    const oracle = getAddress(toBeHex(packed! >> 96n, 20));
+    const collateralFactorBps = ((packed! >> 32n) & 1023n) * 10n;
+    const borrowFeeBps = (packed! >> 82n) & 1023n;
+    if (oracle === ZeroAddress || collateralFactorBps <= 0n || collateralFactorBps > 10_000n || borrowFeeBps > 1023n)
+      throw new Error("fluid-credit config state invalid oracle/collateral factor");
+    return { oracle, collateralFactorBps, borrowFeeBps };
+  },
+  validateOutput(value: MathValue): void {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("fluid-credit config state output");
+    const output = value as { readonly oracle?: unknown; readonly collateralFactorBps?: unknown; readonly borrowFeeBps?: unknown };
+    if (typeof output.oracle !== "string" || output.oracle === ZeroAddress ||
+        typeof output.collateralFactorBps !== "bigint" || output.collateralFactorBps <= 0n || output.collateralFactorBps > 10_000n ||
+        typeof output.borrowFeeBps !== "bigint" || output.borrowFeeBps > 1023n)
+      throw new Error("fluid-credit config state output is invalid");
+  },
+});
+
 function state(values: readonly MathValue[]): BorrowState {
   if (!Array.isArray(values) || values.length !== 3) throw new Error("fluid-credit math state requires three values");
   const [oracleRate, collateralFactorBps, borrowFeeBps] = values.map((value, index) => uint(value, `state[${index}]`));
@@ -133,4 +163,5 @@ export const fluidCreditMathModels: readonly DeclarativeMathModel[] = Object.fre
       if (output < 10_000n) throw new Error("fluid-credit math output below minimum debt");
     },
   },
+  fluidCreditConfigStateMathModel,
 ]);

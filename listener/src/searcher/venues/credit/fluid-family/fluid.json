@@ -1,0 +1,3276 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "credit:fluid"
+  },
+  "production": {
+    "domain": "credit",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "credit:fluid",
+    "domain": "credit",
+    "ownedActionAdapterIds": [
+      "fluid-vault",
+      "fluid-dex-liquidate"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "lend"
+      }
+    ],
+    "supportedLineages": [
+      "fluid-credit:vault-factory-child"
+    ],
+    "poolAdapterIds": [
+      "fluid-vault"
+    ],
+    "edgeAdapterIds": [
+      "fluid-vault"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "fluid-credit-vault",
+        "addressField": "vault",
+        "fields": {
+          "vault": "address",
+          "sourceKind": "string"
+        },
+        "optionalFields": [
+          "sourceKind"
+        ],
+        "key": [
+          "vault"
+        ]
+      },
+      "calls": [
+        {
+          "id": "fluid-credit-operate-call",
+          "signature": "function operate(uint256,int256,int256,address) payable returns(uint256,int256,int256)",
+          "fields": {
+            "vault": {
+              "from": "target"
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "operate-call"
+            }
+          },
+          "predicates": [
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "0x0000000000000000000000000000000000000000"
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [],
+      "nomination": "address-surface",
+      "surface": {
+        "id": "fluid-credit-vault-surface",
+        "fingerprint": "fluid-credit:constantsView+operate",
+        "fields": {
+          "vault": {
+            "from": "emitter"
+          },
+          "sourceKind": {
+            "from": "literal",
+            "value": "address-surface"
+          }
+        },
+        "predicates": [
+          {
+            "op": "ne",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  "$candidate.vault"
+                ]
+              },
+              "0x0000000000000000000000000000000000000000"
+            ]
+          }
+        ]
+      },
+      "labels": [
+        "fluid",
+        "credit:fluid",
+        "fluid-credit",
+        "fluid-vault"
+      ]
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "identity": {
+        "applies": {
+          "op": "eq",
+          "args": [
+            "$candidate.candidateKind",
+            "fluid-credit-vault"
+          ]
+        },
+        "select": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                "$candidate.candidateKind",
+                "fluid-credit-vault"
+              ]
+            },
+            "error": "fluid-credit wrong candidate kind"
+          },
+          {
+            "return": "constants",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        "$evidence.vault",
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            "$evidence.constants.vault",
+                            "$evidence.binding.constants.vault"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "fluid-credit foreign identity continuation"
+          },
+          {
+            "return": "reverse",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "constants"
+              ]
+            }
+          },
+          {
+            "return": "active",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "reverse-binding"
+              ]
+            }
+          },
+          {
+            "return": "active",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "active-behavior"
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "constants": {
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "vault-constants",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "constantsView",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "vault-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                }
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit missing/extra identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                "$row.id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit duplicate identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit unexpected identity results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "vaultConstants",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "vault",
+                    "constantsView",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "vault-constants"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "vault",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                }
+              },
+              {
+                "let": "factory",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$vaultConstants",
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "supplyToken",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$vaultConstants",
+                        4
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "borrowToken",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$vaultConstants",
+                        5
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "supplyDecimals",
+                "value": {
+                  "op": "number",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$vaultConstants",
+                        6
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "borrowDecimals",
+                "value": {
+                  "op": "number",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$vaultConstants",
+                        7
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "vaultId",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$vaultConstants",
+                    8
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$factory",
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$supplyToken",
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$borrowToken",
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$supplyToken",
+                            "$borrowToken"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gte",
+                      "args": [
+                        "$supplyDecimals",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "lte",
+                      "args": [
+                        "$supplyDecimals",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "$constants.maxDecimals"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gte",
+                      "args": [
+                        "$borrowDecimals",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "lte",
+                      "args": [
+                        "$borrowDecimals",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "$constants.maxDecimals"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$vaultId",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit constantsView returned an invalid binding"
+              },
+              {
+                "let": "vaultCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "vault-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "constants",
+                  "source": "$source",
+                  "vault": "$vault",
+                  "factory": "$factory",
+                  "supplyToken": "$supplyToken",
+                  "borrowToken": "$borrowToken",
+                  "supplyDecimals": "$supplyDecimals",
+                  "borrowDecimals": "$borrowDecimals",
+                  "vaultId": "$vaultId",
+                  "vaultHasCode": {
+                    "op": "ne",
+                    "args": [
+                      "$vaultCode",
+                      "0x"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "reverse": {
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "factory-reverse-vault",
+                "kind": "eth-call",
+                "to": "$evidence.factory",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "getVaultAddress",
+                    [
+                      "$evidence.vaultId"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "supply-token-code",
+                "kind": "get-code",
+                "address": "$evidence.supplyToken"
+              },
+              {
+                "id": "borrow-token-code",
+                "kind": "get-code",
+                "address": "$evidence.borrowToken"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit missing/extra reverse results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                "$row.id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit duplicate reverse results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit unexpected reverse results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                }
+              },
+              {
+                "let": "reverseVault",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "factory",
+                    "getVaultAddress",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "factory-reverse-vault"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "supplyTokenCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "supply-token-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "borrowTokenCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "borrow-token-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "reverse-binding",
+                  "source": "$source",
+                  "constants": "$evidence",
+                  "reverseVault": {
+                    "op": "address",
+                    "args": [
+                      "$reverseVault"
+                    ]
+                  },
+                  "supplyTokenHasCode": {
+                    "op": "ne",
+                    "args": [
+                      "$supplyTokenCode",
+                      "0x"
+                    ]
+                  },
+                  "borrowTokenHasCode": {
+                    "op": "ne",
+                    "args": [
+                      "$borrowTokenCode",
+                      "0x"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "transports": [
+                "effect-delta-simulation"
+              ],
+              "caller": "verified-actor",
+              "effects": [
+                "return-data",
+                "token-delta"
+              ]
+            },
+            "requests": [
+              {
+                "id": "active-operate-effect-proof",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {
+                      "kind": "verified-actor",
+                      "evidenceId": "$constants.probeEvidenceId"
+                    },
+                    "to": "$evidence.constants.supplyToken",
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          "$evidence.constants.vault",
+                          {
+                            "op": "mul",
+                            "args": [
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "$constants.thousand"
+                                ]
+                              },
+                              {
+                                "op": "pow",
+                                "args": [
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "$constants.ten"
+                                    ]
+                                  },
+                                  "$evidence.constants.supplyDecimals"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {
+                    "kind": "verified-actor",
+                    "evidenceId": "$constants.probeEvidenceId"
+                  },
+                  "to": "$evidence.constants.vault",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "vault",
+                      "operate",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        },
+                        {
+                          "op": "mul",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "$constants.thousand"
+                              ]
+                            },
+                            {
+                              "op": "pow",
+                              "args": [
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "$constants.ten"
+                                  ]
+                                },
+                                "$evidence.constants.supplyDecimals"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "pow",
+                          "args": [
+                            {
+                              "op": "uint",
+                              "args": [
+                                "$constants.ten"
+                              ]
+                            },
+                            "$evidence.constants.borrowDecimals"
+                          ]
+                        },
+                        "$constants.probeActor"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "verified-actor",
+                    "evidenceId": "$constants.probeEvidenceId"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": "$evidence.constants.supplyToken",
+                      "amount": {
+                        "op": "mul",
+                        "args": [
+                          {
+                            "op": "uint",
+                            "args": [
+                              "$constants.thousand"
+                            ]
+                          },
+                          {
+                            "op": "pow",
+                            "args": [
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "$constants.ten"
+                                ]
+                              },
+                              "$evidence.constants.supplyDecimals"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "observe": [
+                  "return-data",
+                  "token-delta"
+                ],
+                "observeTokenBalances": [
+                  {
+                    "token": "$evidence.constants.supplyToken",
+                    "account": {
+                      "kind": "verified-actor",
+                      "evidenceId": "$constants.probeEvidenceId"
+                    }
+                  },
+                  {
+                    "token": "$evidence.constants.borrowToken",
+                    "account": {
+                      "kind": "verified-actor",
+                      "evidenceId": "$constants.probeEvidenceId"
+                    }
+                  }
+                ]
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit missing/extra active results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                "$row.id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit duplicate active results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit unexpected active results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                }
+              },
+              {
+                "let": "collateralAmount",
+                "value": {
+                  "op": "mul",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$constants.thousand"
+                      ]
+                    },
+                    {
+                      "op": "pow",
+                      "args": [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "$constants.ten"
+                          ]
+                        },
+                        "$evidence.constants.supplyDecimals"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "debtAmount",
+                "value": {
+                  "op": "pow",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$constants.ten"
+                      ]
+                    },
+                    "$evidence.constants.borrowDecimals"
+                  ]
+                }
+              },
+              {
+                "let": "operateData",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "active-operate-effect-proof"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "nftId",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "vault",
+                    "operate",
+                    "$operateData",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "finalSupply",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "vault",
+                    "operate",
+                    "$operateData",
+                    1
+                  ]
+                }
+              },
+              {
+                "let": "finalBorrow",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "vault",
+                    "operate",
+                    "$operateData",
+                    2
+                  ]
+                }
+              },
+              {
+                "let": "collateralDelta",
+                "value": {
+                  "op": "tokenDelta",
+                  "args": [
+                    {
+                      "result": {
+                        "op": "result",
+                        "args": [
+                          "active-operate-effect-proof"
+                        ]
+                      },
+                      "token": "$evidence.constants.supplyToken",
+                      "account": "$constants.probeActor",
+                      "direction": "decrease",
+                      "amount": "$collateralAmount"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "debtDelta",
+                "value": {
+                  "op": "tokenDelta",
+                  "args": [
+                    {
+                      "result": {
+                        "op": "result",
+                        "args": [
+                          "active-operate-effect-proof"
+                        ]
+                      },
+                      "token": "$evidence.constants.borrowToken",
+                      "account": "$constants.probeActor",
+                      "direction": "increase",
+                      "amount": "$debtAmount"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "active",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$nftId",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$finalSupply",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$finalBorrow",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    "$collateralDelta",
+                    "$debtDelta"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "active-behavior",
+                  "source": "$source",
+                  "binding": "$evidence",
+                  "actor": "$constants.probeActor",
+                  "collateralAmount": "$collateralAmount",
+                  "debtAmount": "$debtAmount",
+                  "active": "$active"
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        "$evidence.vault",
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            "$evidence.constants.vault",
+                            "$evidence.binding.constants.vault"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "fluid-credit foreign identity continuation"
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "vault_has_no_code",
+              "evidenceRequestIds": [
+                "vault-code"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "constants"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    "$evidence.vaultHasCode"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "constants"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "factory_reverse_binding_failed",
+              "evidenceRequestIds": [
+                "factory-reverse-vault"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "reverse-binding"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$evidence.reverseVault",
+                        "$evidence.constants.vault"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "credit_token_code_binding_failed",
+              "evidenceRequestIds": [
+                "supply-token-code",
+                "borrow-token-code"
+              ]
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "reverse-binding"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        "$evidence.supplyTokenHasCode",
+                        "$evidence.borrowTokenHasCode"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "reverse-binding"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "active-behavior"
+              ]
+            },
+            "error": "fluid-credit unexpected identity phase"
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "nonzero_operate_effect_proof_failed",
+              "evidenceRequestIds": [
+                "active-operate-effect-proof"
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.active"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": "$evidence.binding.constants.vault",
+                "provenance": [
+                  {
+                    "kind": "fluid-vault-factory-reverse-active-operate",
+                    "subject": "$evidence.binding.constants.factory",
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "vault": "$evidence.binding.constants.vault",
+                          "supplyToken": "$evidence.binding.constants.supplyToken",
+                          "borrowToken": "$evidence.binding.constants.borrowToken",
+                          "supplyDecimals": "$evidence.binding.constants.supplyDecimals",
+                          "borrowDecimals": "$evidence.binding.constants.borrowDecimals",
+                          "factoryBinding": {
+                            "factory": "$evidence.binding.constants.factory",
+                            "vaultId": "$evidence.binding.constants.vaultId",
+                            "reverseVault": "$evidence.binding.reverseVault"
+                          },
+                          "localQuoteModel": null,
+                          "activeProbe": {
+                            "actor": "$evidence.actor",
+                            "collateralAmount": "$evidence.collateralAmount",
+                            "debtAmount": "$evidence.debtAmount"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "facts": {
+                  "vault": "$evidence.binding.constants.vault",
+                  "supplyToken": "$evidence.binding.constants.supplyToken",
+                  "borrowToken": "$evidence.binding.constants.borrowToken",
+                  "supplyDecimals": "$evidence.binding.constants.supplyDecimals",
+                  "borrowDecimals": "$evidence.binding.constants.borrowDecimals",
+                  "factoryBinding": {
+                    "factory": "$evidence.binding.constants.factory",
+                    "vaultId": "$evidence.binding.constants.vaultId",
+                    "reverseVault": "$evidence.binding.reverseVault"
+                  },
+                  "activeProbeActor": "$evidence.actor"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "programs": {}
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        },
+        {
+          "kind": "execution-actor",
+          "role": "executor"
+        },
+        {
+          "kind": "effect-observation",
+          "effects": [
+            "token-delta"
+          ]
+        }
+      ],
+      "vault": "$identity.facts.vault",
+      "supplyToken": "$identity.facts.supplyToken",
+      "borrowToken": "$identity.facts.borrowToken",
+      "supplyDecimals": "$identity.facts.supplyDecimals",
+      "borrowDecimals": "$identity.facts.borrowDecimals",
+      "factoryBinding": "$identity.facts.factoryBinding"
+    },
+    "bindingProjection": {
+      "vault": "$descriptor.vault",
+      "supplyToken": "$descriptor.supplyToken",
+      "borrowToken": "$descriptor.borrowToken",
+      "supplyDecimals": "$descriptor.supplyDecimals",
+      "borrowDecimals": "$descriptor.borrowDecimals",
+      "localQuoteModel": null,
+      "factoryBinding": {
+        "factory": "$descriptor.factoryBinding.factory",
+        "vaultId": "$descriptor.factoryBinding.vaultId",
+        "reverseVault": "$descriptor.factoryBinding.reverseVault"
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.vault",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        "$descriptor.vault"
+      ]
+    },
+    "directions": [
+      {
+        "id": "collateral-debt",
+        "enabled": true,
+        "tokenIn": "$descriptor.supplyToken",
+        "tokenOut": "$descriptor.borrowToken",
+        "adapterId": "fluid-vault",
+        "taxonomy": {
+          "slotKind": "lend"
+        },
+        "fields": {
+          "vault": "$descriptor.vault",
+          "lifecycle": "standing-position"
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.familyId",
+          {
+            "op": "lower",
+            "args": [
+              "$descriptor.vault"
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              "$descriptor.supplyToken"
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              "$descriptor.borrowToken"
+            ]
+          },
+          "standing-position"
+        ],
+        "\u001f"
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-credit-vault",
+      "target": {
+        "op": "lower",
+        "args": [
+          "$descriptor.vault"
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "route-target",
+        "direction": "increase"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "route-target",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "descriptorChecks": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.familyId",
+                "$constants.familyId"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.lineageId",
+                "$constants.lineageId"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$descriptor.instanceKey",
+                {
+                  "op": "lower",
+                  "args": [
+                    "$descriptor.vault"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$descriptor.vault"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$descriptor.factoryBinding.reverseVault"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.vault",
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.supplyToken",
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.borrowToken",
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.supplyToken",
+                    "$descriptor.borrowToken"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gte",
+              "args": [
+                "$descriptor.supplyDecimals",
+                0
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$descriptor.supplyDecimals",
+                {
+                  "op": "uint",
+                  "args": [
+                    "$constants.maxDecimals"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gte",
+              "args": [
+                "$descriptor.borrowDecimals",
+                0
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$descriptor.borrowDecimals",
+                {
+                  "op": "uint",
+                  "args": [
+                    "$constants.maxDecimals"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$descriptor.factoryBinding.vaultId",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "fluid-credit incompatible descriptor"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$route.vault",
+                "$descriptor.vault"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$route.lifecycle",
+                "standing-position"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$route.adapterId",
+                "fluid-vault"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$route.taxonomy.slotKind",
+                "lend"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$route.tokenIn",
+                    "$route.tokenOut"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "fluid-credit incompatible route"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "finalizeChecks": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$draft.routes"
+              ]
+            },
+            1
+          ]
+        },
+        "error": "fluid-credit requires one collateral/debt direction"
+      }
+    ],
+    "compatibility": {
+      "vault": "$descriptor.vault",
+      "supplyToken": "$descriptor.supplyToken",
+      "borrowToken": "$descriptor.borrowToken",
+      "supplyDecimals": "$descriptor.supplyDecimals",
+      "borrowDecimals": "$descriptor.borrowDecimals",
+      "localQuoteModel": null,
+      "factoryBinding": {
+        "factory": "$descriptor.factoryBinding.factory",
+        "vaultId": "$descriptor.factoryBinding.vaultId",
+        "reverseVault": "$descriptor.factoryBinding.reverseVault"
+      }
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "finalize": "$draft",
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1"
+      ]
+    },
+    "exactCompatibility": {
+      "mode": "credit-risk-proof",
+      "vault": "$descriptor.vault",
+      "localQuoteModel": null,
+      "binding": "$route.bindingRef.fingerprint",
+      "routeKey": "$route.routeKey",
+      "tokenIn": "$route.tokenIn",
+      "tokenOut": "$route.tokenOut"
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ],
+    "stateKey": "$route.instanceKey"
+  },
+  "credit": {
+    "version": 1,
+    "activeBehaviorProof": "required",
+    "position": {
+      "lifecycle": "standing-position",
+      "finalSafety": "position-and-repayment-required",
+      "key": {
+        "op": "hash",
+        "args": [
+          {
+            "familyId": "$descriptor.familyId",
+            "vault": "$descriptor.vault",
+            "routeKey": "$route.routeKey",
+            "lifecycle": "$route.lifecycle"
+          }
+        ]
+      }
+    },
+    "risk": {
+      "debtBpsCandidates": [
+        "8500",
+        "9500",
+        "10000"
+      ],
+      "blocksPrefixInversion": true,
+      "evidence": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "state",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "credit-current-config",
+                "kind": "eth-call",
+                "to": "$descriptor.vault",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "state",
+                    "readFromStorage",
+                    [
+                      "$constants.configSlot"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit missing/extra state results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "packed",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "credit-current-config"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "config",
+                "value": {
+                  "op": "model",
+                  "args": [
+                    "configState",
+                    [
+                      "$packed"
+                    ]
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "packed": "$packed",
+                  "oracle": "$config.oracle",
+                  "collateralFactorBps": "$config.collateralFactorBps",
+                  "borrowFeeBps": "$config.borrowFeeBps",
+                  "source": "$source"
+                }
+              }
+            ]
+          },
+          {
+            "id": "rates",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "credit-current-oracle",
+                "kind": "eth-call",
+                "to": "$steps.state.oracle",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "state",
+                    "getExchangeRateOperate",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "credit-current-rates",
+                "kind": "eth-call",
+                "to": "$descriptor.vault",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "state",
+                    "updateExchangePrices",
+                    [
+                      "$steps.state.packed"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit missing/extra rate results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$steps.state.source"
+                  ]
+                }
+              },
+              {
+                "let": "oracleRate",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "state",
+                    "getExchangeRateOperate",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "credit-current-oracle"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "exchangePrices",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "state",
+                    "updateExchangePrices",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "credit-current-rates"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "supplyExchangePrice",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$exchangePrices",
+                    2
+                  ]
+                }
+              },
+              {
+                "let": "borrowExchangePrice",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$exchangePrices",
+                    3
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "gte",
+                      "args": [
+                        "$oracleRate",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "$constants.minOracleRate"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lte",
+                      "args": [
+                        "$oracleRate",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "$constants.maxOracleRate"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$supplyExchangePrice",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$borrowExchangePrice",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit invalid current borrow parameters"
+              },
+              {
+                "return": {
+                  "source": "$source",
+                  "oracle": "$steps.state.oracle",
+                  "collateralFactorBps": "$steps.state.collateralFactorBps",
+                  "borrowFeeBps": "$steps.state.borrowFeeBps",
+                  "oracleRate": "$oracleRate",
+                  "supplyExchangePrice": "$supplyExchangePrice",
+                  "borrowExchangePrice": "$borrowExchangePrice"
+                }
+              }
+            ]
+          },
+          {
+            "id": "operate",
+            "requirements": {
+              "transports": [
+                "effect-delta-simulation"
+              ],
+              "caller": "executor",
+              "effects": [
+                "return-data",
+                "token-delta"
+              ]
+            },
+            "requests": [
+              {
+                "id": "credit-exact-operate",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {
+                      "kind": "executor"
+                    },
+                    "to": "$descriptor.supplyToken",
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "erc20",
+                        "approve",
+                        [
+                          "$descriptor.vault",
+                          "$collateralAmount"
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "defined",
+                            "args": [
+                              "$transactionOrigin"
+                            ]
+                          }
+                        ]
+                      },
+                      "top-level",
+                      "impersonated-call-frame"
+                    ]
+                  },
+                  "to": "$descriptor.vault",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "vault",
+                      "operate",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        },
+                        "$collateralAmount",
+                        {
+                          "op": "model",
+                          "args": [
+                            "maxBorrow",
+                            [
+                              "$collateralAmount",
+                              "$steps.rates.oracleRate",
+                              "$steps.rates.collateralFactorBps",
+                              "$steps.rates.borrowFeeBps",
+                              "$steps.rates.supplyExchangePrice",
+                              "$steps.rates.borrowExchangePrice",
+                              "$debtBps"
+                            ]
+                          ]
+                        },
+                        "$executor"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": "$descriptor.supplyToken",
+                      "amount": "$collateralAmount"
+                    }
+                  ]
+                },
+                "observe": [
+                  "return-data",
+                  "token-delta"
+                ],
+                "observeTokenBalances": [
+                  {
+                    "token": "$descriptor.supplyToken",
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": "$descriptor.borrowToken",
+                    "account": {
+                      "kind": "executor"
+                    }
+                  }
+                ]
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "fluid-credit missing/extra operate results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$steps.rates.source"
+                  ]
+                }
+              },
+              {
+                "let": "requestedDebt",
+                "value": {
+                  "op": "model",
+                  "args": [
+                    "maxBorrow",
+                    [
+                      "$collateralAmount",
+                      "$steps.rates.oracleRate",
+                      "$steps.rates.collateralFactorBps",
+                      "$steps.rates.borrowFeeBps",
+                      "$steps.rates.supplyExchangePrice",
+                      "$steps.rates.borrowExchangePrice",
+                      "$debtBps"
+                    ]
+                  ]
+                }
+              },
+              {
+                "let": "operateData",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "credit-exact-operate"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "nftId",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "vault",
+                    "operate",
+                    "$operateData",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "finalSupply",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "vault",
+                    "operate",
+                    "$operateData",
+                    1
+                  ]
+                }
+              },
+              {
+                "let": "finalBorrow",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "vault",
+                    "operate",
+                    "$operateData",
+                    2
+                  ]
+                }
+              },
+              {
+                "let": "collateralDelta",
+                "value": {
+                  "op": "tokenDelta",
+                  "args": [
+                    {
+                      "result": {
+                        "op": "result",
+                        "args": [
+                          "credit-exact-operate"
+                        ]
+                      },
+                      "token": "$descriptor.supplyToken",
+                      "account": "$executor",
+                      "direction": "decrease",
+                      "amount": "$collateralAmount"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "debtDelta",
+                "value": {
+                  "op": "tokenDelta",
+                  "args": [
+                    {
+                      "result": {
+                        "op": "result",
+                        "args": [
+                          "credit-exact-operate"
+                        ]
+                      },
+                      "token": "$descriptor.borrowToken",
+                      "account": "$executor",
+                      "direction": "increase",
+                      "amount": "$requestedDebt"
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$nftId",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$finalSupply",
+                        "$collateralAmount"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$finalBorrow",
+                        "$requestedDebt"
+                      ]
+                    },
+                    "$collateralDelta",
+                    "$debtDelta"
+                  ]
+                },
+                "error": "fluid-credit exact operate did not prove requested collateral and actual debt receipt"
+              },
+              {
+                "return": "$requestedDebt"
+              }
+            ]
+          }
+        ],
+        "result": "$steps.operate"
+      },
+      "proof": {
+        "profile": "new-position-return-and-effects-v1",
+        "step": "operate",
+        "requestId": "credit-exact-operate",
+        "signature": "function operate(uint256,int256,int256,address) returns(uint256,int256,int256)",
+        "target": "$descriptor.vault",
+        "call": {
+          "position": [
+            0
+          ],
+          "collateral": [
+            1
+          ],
+          "debt": [
+            2
+          ],
+          "recipient": [
+            3
+          ]
+        },
+        "returns": {
+          "position": [
+            0
+          ],
+          "collateral": [
+            1
+          ],
+          "debt": [
+            2
+          ]
+        }
+      },
+      "quote": {
+        "checks": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                "$evidence",
+                {
+                  "op": "model",
+                  "args": [
+                    "maxBorrow",
+                    [
+                      "$collateralAmount",
+                      "$steps.rates.oracleRate",
+                      "$steps.rates.collateralFactorBps",
+                      "$steps.rates.borrowFeeBps",
+                      "$steps.rates.supplyExchangePrice",
+                      "$steps.rates.borrowExchangePrice",
+                      "$debtBps"
+                    ]
+                  ]
+                }
+              ]
+            },
+            "error": "fluid-credit risk quote differs from the current-oracle ceiling"
+          },
+          {
+            "assert": {
+              "op": "gt",
+              "args": [
+                "$evidence",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            "error": "fluid-credit risk quote must be positive"
+          }
+        ],
+        "result": "$evidence"
+      },
+      "inputChecks": [
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  {
+                    "op": "coalesce",
+                    "args": [
+                      "$prefix",
+                      []
+                    ]
+                  }
+                ]
+              },
+              0
+            ]
+          },
+          "error": "fluid-credit sequential prefix requires an unimplemented state transition"
+        }
+      ]
+    }
+  },
+  "standard": {
+    "id": "factory-child-active-operate",
+    "lineageId": "fluid-credit:vault-factory-child",
+    "identityKind": "factory-child",
+    "abi": {
+      "vault": [
+        "function constantsView() view returns ((address liquidity,address factory,address adminImplementation,address secondaryImplementation,address supplyToken,address borrowToken,uint8 supplyDecimals,uint8 borrowDecimals,uint256 vaultId,bytes32 liquiditySupplyExchangePriceSlot,bytes32 liquidityBorrowExchangePriceSlot,bytes32 liquidityUserSupplySlot,bytes32 liquidityUserBorrowSlot) constantsView_)",
+        "function operate(uint256,int256,int256,address) payable returns(uint256,int256,int256)"
+      ],
+      "factory": [
+        "function getVaultAddress(uint256) view returns(address)"
+      ],
+      "erc20": [
+        "function approve(address,uint256) returns(bool)"
+      ],
+      "state": [
+        "function readFromStorage(bytes32) view returns(uint256)",
+        "function updateExchangePrices(uint256) view returns(uint256,uint256,uint256,uint256)",
+        "function getExchangeRateOperate() view returns(uint256)"
+      ]
+    },
+    "constants": {
+      "familyId": "credit:fluid",
+      "lineageId": "fluid-credit:vault-factory-child",
+      "zero": "0x0000000000000000000000000000000000000000",
+      "probeActor": "0x000000000000000000000000000000000000f1d2",
+      "probeEvidenceId": "fluid-credit-probe-actor",
+      "ten": "10",
+      "thousand": "1000",
+      "maxDecimals": "36",
+      "minOracleRate": "1000000000",
+      "maxOracleRate": "1000000000000000000000000000000000000000000000000000000",
+      "configSlot": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "priceDenominator": "10000000000000000000000000000000"
+    },
+    "expressions": {},
+    "programs": {},
+    "match": {
+      "op": "eq",
+      "args": [
+        "$descriptor.familyId",
+        "$constants.familyId"
+      ]
+    },
+    "context": {},
+    "boundState": {},
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.vault",
+        "$descriptor.supplyToken",
+        "$descriptor.borrowToken"
+      ],
+      "mutationAddresses": [
+        "$descriptor.vault"
+      ]
+    },
+    "exact": {
+      "unavailableReason": "credit risk proof is the only quote"
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.vault",
+        "$descriptor.supplyToken",
+        "$descriptor.borrowToken"
+      ],
+      "requireCanonicalSource": true,
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.vault",
+        "mode": "exact-clear",
+        "verifyAllowance": true
+      },
+      "call": {
+        "target": "$descriptor.vault",
+        "signature": "function operate(uint256,int256,int256,address) returns(uint256,int256,int256)",
+        "args": [
+          {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          },
+          {
+            "runtime": "amountIn"
+          },
+          "$creditQuote.amountOut",
+          "$executor"
+        ]
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": "$creditQuote.amountOut",
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    },
+    "inputs": [
+      "transactionOrigin",
+      "prefix"
+    ]
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "configState": {
+          "model": "fluid-credit:config-state",
+          "version": 1
+        },
+        "maxBorrow": {
+          "model": "fluid-credit:max-borrow-request",
+          "version": 1
+        }
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "config",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "credit-current-config",
+              "kind": "eth-call",
+              "to": "$descriptor.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "state",
+                  "readFromStorage",
+                  [
+                    "$constants.configSlot"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "source",
+              "value": {
+                "op": "source",
+                "args": [
+                  "$results"
+                ]
+              }
+            },
+            {
+              "let": "packed",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "credit-current-config"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "config",
+              "value": {
+                "op": "model",
+                "args": [
+                  "configState",
+                  [
+                    "$packed"
+                  ]
+                ]
+              }
+            },
+            {
+              "return": {
+                "packed": "$packed",
+                "oracle": "$config.oracle",
+                "collateralFactorBps": "$config.collateralFactorBps",
+                "borrowFeeBps": "$config.borrowFeeBps",
+                "source": "$source"
+              }
+            }
+          ]
+        },
+        {
+          "id": "rates",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "credit-current-oracle",
+              "kind": "eth-call",
+              "to": "$steps.config.oracle",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "state",
+                  "getExchangeRateOperate",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "credit-current-rates",
+              "kind": "eth-call",
+              "to": "$descriptor.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "state",
+                  "updateExchangePrices",
+                  [
+                    "$steps.config.packed"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "evaluate": {
+                "op": "assertSource",
+                "args": [
+                  {
+                    "op": "source",
+                    "args": [
+                      "$results"
+                    ]
+                  },
+                  "$steps.config.source"
+                ]
+              }
+            },
+            {
+              "let": "oracleRate",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "state",
+                  "getExchangeRateOperate",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "credit-current-oracle"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "exchangePrices",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "state",
+                  "updateExchangePrices",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "credit-current-rates"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "supplyExchangePrice",
+              "value": {
+                "op": "at",
+                "args": [
+                  "$exchangePrices",
+                  2
+                ]
+              }
+            },
+            {
+              "let": "borrowExchangePrice",
+              "value": {
+                "op": "at",
+                "args": [
+                  "$exchangePrices",
+                  3
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gte",
+                    "args": [
+                      "$oracleRate",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "$constants.minOracleRate"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lte",
+                    "args": [
+                      "$oracleRate",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "$constants.maxOracleRate"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$supplyExchangePrice",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$borrowExchangePrice",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "fluid-credit invalid current borrow parameters"
+            },
+            {
+              "return": {
+                "source": "$steps.config.source",
+                "oracle": "$steps.config.oracle",
+                "collateralFactorBps": "$steps.config.collateralFactorBps",
+                "borrowFeeBps": "$steps.config.borrowFeeBps",
+                "oracleRate": "$oracleRate",
+                "supplyExchangePrice": "$supplyExchangePrice",
+                "borrowExchangePrice": "$borrowExchangePrice"
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.rates"
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [
+        {
+          "assert": {
+            "op": "gt",
+            "args": [
+              "$snapshot.collateralFactorBps",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "fluid-credit price requires a positive collateral factor"
+        }
+      ],
+      "rows": {
+        "op": "map",
+        "args": [
+          "$routes",
+          "route",
+          {
+            "routeKey": "$route.routeKey",
+            "numerator": {
+              "op": "mul",
+              "args": [
+                "$snapshot.oracleRate",
+                "$snapshot.collateralFactorBps"
+              ]
+            },
+            "denominator": {
+              "op": "uint",
+              "args": [
+                "$constants.priceDenominator"
+              ]
+            },
+            "depth": {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            },
+            "feeBps": "$snapshot.borrowFeeBps"
+          }
+        ]
+      }
+    },
+    "liveStateProjection": {
+      "version": 1,
+      "result": {
+        "oracle": "$snapshot.oracle",
+        "collateralFactorBps": "$snapshot.collateralFactorBps",
+        "borrowFeeBps": "$snapshot.borrowFeeBps",
+        "oracleRate": "$snapshot.oracleRate",
+        "supplyExchangePrice": "$snapshot.supplyExchangePrice",
+        "borrowExchangePrice": "$snapshot.borrowExchangePrice",
+        "source": {
+          "number": "$snapshot.source.number",
+          "hash": "$snapshot.source.hash",
+          "generation": "$snapshot.source.generation"
+        }
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "fluid-vault",
+        "lineage": "fluid-credit",
+        "edgeKind": "credit",
+        "action": "borrow",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": true
+      },
+      "traces": [
+        {
+          "signature": "function operate(uint256,int256,int256,address) returns(uint256,int256,int256)"
+        }
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "fluid-dex-liquidate",
+        "lineage": "fluid-credit",
+        "edgeKind": "credit",
+        "action": "repay",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": true
+      },
+      "traces": [
+        {
+          "signature": "function liquidate(uint256,uint256,address,bool)"
+        }
+      ]
+    }
+  ]
+}
