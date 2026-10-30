@@ -1,0 +1,162 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:dodo-v2"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_DODO_V2_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:dodo-v2",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "dodo-v2-swap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-transfer"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "dodo-v2:registry-member"
+    ],
+    "poolAdapterIds": [
+      "dodo-v2",
+      "custom-swap:dodo-v2"
+    ],
+    "edgeAdapterIds": [
+      "dodo-v2-swap"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call"
+      ],
+      "candidateSources": [],
+      "nomination": "address-surface",
+      "labels": [
+        "dodo-v2",
+        "custom-swap:dodo-v2"
+      ],
+      "candidate": {
+        "kind": "dodo-v2-pool",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address",
+          "sourceKind": "string",
+          "hintedTokenIn": "address",
+          "hintedTokenOut": "address"
+        },
+        "nullableFields": [
+          "hintedTokenIn",
+          "hintedTokenOut"
+        ],
+        "key": [
+          "pool"
+        ],
+        "instanceKey": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "dodo-v2-sell-base-call",
+          "signature": "sellBase(address)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "sell-base-call"
+            },
+            "hintedTokenIn": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedTokenOut": {
+              "from": "literal",
+              "value": null
+            }
+          }
+        },
+        {
+          "id": "dodo-v2-sell-quote-call",
+          "signature": "sellQuote(address)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "sell-quote-call"
+            },
+            "hintedTokenIn": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedTokenOut": {
+              "from": "literal",
+              "value": null
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "dodo-v2-swap-log",
+          "signature": "DODOSwap(address,address,uint256,uint256,address,address)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "swap-log"
+            },
+            "hintedTokenIn": {
+              "from": "argument",
+              "index": 0
+            },
+            "hintedTokenOut": {
+              "from": "argument",
+              "index": 1
+            }
+          }
+        }
+      ],
+      "surface": {
+        "id": "dodo-v2-pool-surface",
+        "fingerprint": "dodo-pool-surface-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          },
+          "sourceKind": {
+            "from": "literal",
+            "value": "pool-surface"
+          },
+          "hintedTokenIn": {
+            "from": "literal",
+            "value": null
+          },
+          "hintedTokenOut": {
+            "from": "literal",
+            "value": null
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:ekubo-router-v1"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_EKUBO_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:ekubo-router-v1",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "ekubo-router-swap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "ekubo:vanilla-core-pool-key-v1"
+    ],
+    "poolAdapterIds": [
+      "ekubo-core-pool-v1"
+    ],
+    "edgeAdapterIds": [
+      "ekubo-router-swap"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call"
+      ],
+      "candidateSources": [],
+      "nomination": "tx-evidence",
+      "txSeedNominations": true,
+      "labels": [
+        "ekubo",
+        "ekubo-core-pool-v1",
+        "ekubo-router-swap",
+        "custom-swap:ekubo-router-v1"
+      ],
+      "candidate": {
+        "kind": "ekubo-pool-key",
+        "addressField": "poolId",
+        "fields": {
+          "poolId": "bytes32",
+          "token0": "address",
+          "token1": "address",
+          "config": "bytes32"
+        },
+        "key": [
+          "poolId"
+        ],
+        "instanceKey": [
+          "poolId"
+        ]
+      },
+      "calls": [
+        {
+          "id": "ekubo-vanilla-exact-input",
+          "signature": "function swap((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead,int256 calculatedAmountThreshold,address recipient) payable returns (bytes32 balanceUpdate)",
+          "fields": {
+            "poolId": {
+              "from": "argument",
+              "index": 0
+            },
+            "token0": {
+              "from": "argument",
+              "index": 0
+            },
+            "token1": {
+              "from": "argument",
+              "index": 0
+            },
+            "config": {
+              "from": "argument",
+              "index": 0
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "ekubo-core-pool-initialized",
+          "signature": "PoolInitialized(bytes32,(address,address,bytes32),int32,uint96)",
+          "fields": {
+            "poolId": {
+              "from": "argument",
+              "index": 0
+            },
+            "token0": {
+              "from": "argument",
+              "index": 1
+            },
+            "token1": {
+              "from": "argument",
+              "index": 1
+            },
+            "config": {
+              "from": "argument",
+              "index": 1
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,162 @@
+/**
+ * Gap probes for the parked dodo-v2 / ekubo-router-v1 Swap JSON migrations.
+ *
+ * Run from the workspace root after copying this file to
+ * `listener/.migration-probe/swap-json-gap-probes.ts`:
+ *
+ *   cd listener
+ *   node --import tsx .migration-probe/swap-json-gap-probes.ts
+ *
+ * Each probe is read-only and uses synthetic fixtures. It proves an engine
+ * boundary, not a production behaviour:
+ *  - P1 exact chain quotes bind the *invocation* amountIn (adjusted-input
+ *    DODO quotes cannot be declared);
+ *  - P2 the production generator requires distinct lineages per identity
+ *    variant (DODO's four registry variants share one lineage);
+ *  - P3 mapped discovery cannot project the Ekubo pool-key tuple; the pool id
+ *    is derived and cannot be a mapped candidate field;
+ *  - P4 multihop call fan-out has no field source for nested hop arguments.
+ */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { Interface } from "ethers";
+import { renderDeclarativeProductionEntry } from "../src/searcher/build-declarative-production.ts";
+import { compileDeclarativeDiscovery } from "../src/searcher/venues/declarative-discovery.ts";
+import { verifyDeclarativeQuoteChain } from "../src/searcher/venues/declarative-quote-proof.ts";
+import type { AdapterRequest, AdapterRequestResult } from "../src/searcher/venues/adapter-request-program.ts";
+
+const source = { number: 1, hash: `0x${"11".repeat(32)}`, generation: 1 };
+const TOKEN_IN = "0x00000000000000000000000000000000000000B0";
+const TOKEN_OUT = "0x00000000000000000000000000000000000000C0";
+const EXECUTOR = "0x0000000000000000000000000000000000000a14";
+const TRADER = "0x0000000000000000000000000000000000000a12";
+
+// P1: DODO exact re-queries at the effective input after the input-semantics
+// read (dodo-v2-family/exact.ts:95-133,183-220). A declared view chain quote is
+// checked against the invocation amountIn (declarative-quote-proof.ts:102).
+{
+  const iface = new Interface(["function querySellBase(address trader,uint256 payBaseAmount) view returns (uint256 receiveQuoteAmount)"]);
+  const request: AdapterRequest = { id: "exact-actor-query", kind: "eth-call",
+    to: "0x0000000000000000000000000000000000000D02",
+    data: iface.encodeFunctionData("querySellBase", [TRADER, 1000n]), completion: "return-data" };
+  const result: AdapterRequestResult = { id: request.id, ok: true, source,
+    provenance: { kind: "rpc", fingerprint: "probe" }, completion: "returned",
+    data: iface.encodeFunctionResult("querySellBase", [400n]) };
+  const proof = { step: "state", requestId: "exact-actor-query",
+    signature: "function querySellBase(address trader,uint256 payBaseAmount) view returns (uint256 receiveQuoteAmount)",
+    amountPath: [1], outputPath: [0], completion: "returned" } as const;
+  const input = { proof, sourceKind: "view" as const, observation: () => ({ request, result }),
+    source, tokenIn: TOKEN_IN, tokenOut: TOKEN_OUT, executor: EXECUTOR };
+  verifyDeclarativeQuoteChain({ ...input, amountIn: 1000n, amountOut: 400n });
+  console.log("P1 unadjusted input: accepted");
+  try {
+    verifyDeclarativeQuoteChain({ ...input, amountIn: 1200n, amountOut: 400n });
+    console.log("P1 UNEXPECTED: adjusted input accepted");
+  } catch (error) { console.log("P1 adjusted input rejected:", (error as Error).message); }
+}
+
+// P2: four registry identity variants share manifest.supportedLineages[0]
+// (dodo-v2-family/identity.ts:46-56, manifest.ts:14). The generator requires one
+// lineage per variant (build-declarative-production.ts:163).
+{
+  const root = resolve(".");
+  const definitionFile = resolve("src/searcher/venues/swaps/univ2-family/univ2.json");
+  const document = JSON.parse(readFileSync(definitionFile, "utf8"));
+  document.variantFiles = ["./univ2-child.json"];
+  try {
+    renderDeclarativeProductionEntry({ rootDirectory: root, definitionFile, document });
+    console.log("P2 UNEXPECTED: duplicate-lineage variants rendered");
+  } catch (error) { console.log("P2 duplicate-lineage variants rejected:", (error as Error).message); }
+}
+
+// P3: an Ekubo candidate is `{poolId: bytes32, poolKey: tuple}` where poolId is
+// the keccak of the key (ekubo-family/types.ts:5-12, codec.ts:36-41). Mapped
+// discovery can only map flat argument indices to scalar fields
+// (declarative-discovery.ts:161-181,189-195). Both the swap call and the
+// PoolInitialized event carry the key as a tuple:
+//  (a) a candidate address taken from the tuple argument is rejected;
+//  (b) even with an address field from the call target, tuple-derived fields
+//      decode to null (scalar conversion rejects the tuple).
+{
+  const signature = "function swap((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead,int256 calculatedAmountThreshold,address recipient) payable returns (bytes32 balanceUpdate)";
+  const base = { version: 2, sources: ["observed-call"], candidateSources: [], events: [], labels: [], nomination: "tx-evidence" } as any;
+  try {
+    compileDeclarativeDiscovery({ ...base,
+      candidate: { kind: "ekubo-pool-key", addressField: "token0",
+        fields: { token0: "address", token1: "address", config: "bytes32" }, key: ["token0", "token1", "config"] },
+      calls: [{ id: "swap", signature,
+        fields: { token0: { from: "argument", index: 0 }, token1: { from: "argument", index: 0 },
+          config: { from: "argument", index: 0 } } }] });
+    console.log("P3a UNEXPECTED: tuple candidate-address compiled");
+  } catch (error) { console.log("P3a tuple candidate-address rejected:", (error as Error).message); }
+  const discovery = compileDeclarativeDiscovery({ ...base,
+    candidate: { kind: "ekubo-pool-key", addressField: "token0",
+      fields: { token0: "address", token1: "address", config: "bytes32" }, key: ["token0", "token1", "config"] },
+    calls: [{ id: "swap", signature,
+      fields: { token0: { from: "target" }, token1: { from: "argument", index: 0 },
+        config: { from: "argument", index: 0 } } }] });
+  const iface = new Interface([signature]);
+  const observation = { kind: "call", source, target: "0xd26f20001a72a18c002b00e6710000d68700ce00",
+    data: iface.encodeFunctionData("swap", [{ token0: TOKEN_IN, token1: TOKEN_OUT, config: `0x${"00".repeat(32)}` },
+      false, 1000n, 0n, 0n, 1n, EXECUTOR]), transactionHash: `0x${"22".repeat(32)}` } as any;
+  console.log("P3b tuple field candidate:", discovery.decodeCandidate({ observation, matchedPatternId: "swap" }));
+}
+
+// P4: multihopSwap carries up to 32 pool keys nested in argument 0
+// (ekubo-family/codec.ts:43-62). FieldSource `argument` selects a top-level
+// argument only; a tuple/array never satisfies a scalar candidate field, so
+// every hop candidate decodes to null.
+{
+  const iface = new Interface(["function multihopSwap(((address,address,bytes32),int128,int128,bytes)[] hops,(address,int128,uint256,uint256) initial,address callback) payable returns (bytes32)"]);
+  const definition = { version: 2, sources: ["observed-call"], candidateSources: [],
+    candidate: { kind: "pool", addressField: "pool", fields: { pool: "address", hint: "bytes32" }, key: ["pool"] },
+    calls: [{ id: "multihop",
+      signature: "function multihopSwap(((address,address,bytes32),int128,int128,bytes)[] hops,(address,int128,uint256,uint256) initial,address callback) payable returns (bytes32)",
+      fields: { pool: { from: "target" }, hint: { from: "argument", index: 0 } } }],
+    events: [], labels: [], nomination: "tx-evidence" } as any;
+  const discovery = compileDeclarativeDiscovery(definition);
+  const data = iface.encodeFunctionData("multihopSwap", [
+    [[[TOKEN_IN, TOKEN_OUT, `0x${"00".repeat(32)}`], 0n, 0n, "0x"]],
+    [TOKEN_IN, 1000n, 0n, 0n], "0x0000000000000000000000000000000000000001"]);
+  const observation = { kind: "call", source, target: "0x0000000000000000000000000000000000000R1".replace("R", ""),
+    data, transactionHash: `0x${"22".repeat(32)}` } as any;
+  const candidate = discovery.decodeCandidate({ observation, matchedPatternId: "multihop" });
+  console.log("P4 multihop candidate:", candidate);
+}
+
+// P5: the dodo-v2 discovery mapping in dodo-v2.draft.json is expressible.
+// Two sell calls, the canonical DODOSwap event and the interface surface each
+// produce the same `{pool, sourceKind, hints}` candidate shape.
+{
+  const { DODO_V2_EVENT_INTERFACE, DODO_V2_POOL_INTERFACE } = await import("../src/searcher/venues/swaps/dodo-v2-abi.ts");
+  const POOL = "0x0000000000000000000000000000000000000D02";
+  const definition = { version: 2, sources: ["landed-log", "observed-call"], candidateSources: [],
+    nomination: "address-surface", labels: ["dodo-v2", "custom-swap:dodo-v2"],
+    candidate: { kind: "dodo-v2-pool", addressField: "pool",
+      fields: { pool: "address", sourceKind: "string", hintedTokenIn: "address", hintedTokenOut: "address" },
+      nullableFields: ["hintedTokenIn", "hintedTokenOut"], key: ["pool"], instanceKey: ["pool"] },
+    calls: [
+      { id: "dodo-v2-sell-base-call", signature: "sellBase(address)",
+        fields: { pool: { from: "target" }, sourceKind: { from: "literal", value: "sell-base-call" },
+          hintedTokenIn: { from: "literal", value: null }, hintedTokenOut: { from: "literal", value: null } } },
+      { id: "dodo-v2-sell-quote-call", signature: "sellQuote(address)",
+        fields: { pool: { from: "target" }, sourceKind: { from: "literal", value: "sell-quote-call" },
+          hintedTokenIn: { from: "literal", value: null }, hintedTokenOut: { from: "literal", value: null } } }],
+    events: [{ id: "dodo-v2-swap-log", signature: "DODOSwap(address,address,uint256,uint256,address,address)",
+      fields: { pool: { from: "emitter" }, sourceKind: { from: "literal", value: "swap-log" },
+        hintedTokenIn: { from: "argument", index: 0 }, hintedTokenOut: { from: "argument", index: 1 } } }],
+    surface: { id: "dodo-v2-pool-surface", fingerprint: "dodo-pool-surface-v1",
+      fields: { pool: { from: "emitter" }, sourceKind: { from: "literal", value: "pool-surface" },
+        hintedTokenIn: { from: "literal", value: null }, hintedTokenOut: { from: "literal", value: null } } } };
+  const discovery = compileDeclarativeDiscovery(definition as any);
+  const eventLog = DODO_V2_EVENT_INTERFACE.encodeEventLog(DODO_V2_EVENT_INTERFACE.getEvent("DODOSwap")!,
+    [TOKEN_IN, TOKEN_OUT, 200n, 400n, TRADER, EXECUTOR]);
+  const logCandidate = discovery.decodeCandidate({ observation: { kind: "log", source, address: POOL,
+    topics: eventLog.topics, data: eventLog.data, transactionHash: `0x${"22".repeat(32)}` } as any, matchedPatternId: "dodo-v2-swap-log" });
+  const callCandidate = discovery.decodeCandidate({ observation: { kind: "call", source, target: POOL,
+    data: DODO_V2_POOL_INTERFACE.encodeFunctionData("sellBase", [EXECUTOR]), transactionHash: `0x${"22".repeat(32)}` } as any,
+    matchedPatternId: "dodo-v2-sell-base-call" });
+  const surfaceCandidate = discovery.decodeCandidate({ observation: { kind: "address-surface", source, address: POOL,
+    interfaceFingerprints: ["dodo-pool-surface-v1"] } as any, matchedPatternId: "dodo-v2-pool-surface" });
+  console.log("P5 dodo discovery:", JSON.stringify({ logCandidate, callCandidate, surfaceCandidate }));
+}
