@@ -1,0 +1,31 @@
+{
+  "learning_case_id": "tooldef-20261030-retired-registrar-cloud-bootstrap",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "test_guard_rejected_its_own_cloud_source_loading",
+  "evidence": {
+    "scope": "Offline acceptance test portability; no protocol-side effects or production opportunity claim.",
+    "before": "Cloud shared suite 506/507: retired registrar test threw FORBIDDEN_REGISTRAR_SIDE_EFFECT while loading its own TS source. Local 507/507 passed.",
+    "cause": "Substring /opt/mev-cloud/ deny rule conflated own module loading with external artifact/config access.",
+    "independent_review": "Non-author reviewer confirmed the bootstrap failure and restricted allowlist; root reviewed source and 11 negative subprocess checks.",
+    "after": "Exact source/loader metadata allowed. External artifact/config reads, writes, directory enumeration and network remain denied. Synthetic cloud-prefix copied real CLI reaches the retirement rejection.",
+    "regression": "7 targeted tests pass; cloud full rerun recorded separately, never replaces first failure.",
+    "logs": "logs/swap-json-enabled-20261030/cloud-suite.log; cloud-suite-final.log"
+  },
+  "tooling_defect": {
+    "tool": "settlement-registrar-evidence.test.ts",
+    "issue": "Host-path-dependent false failure before actual retirement guard execution.",
+    "evidence": "Cloud-only real subprocess failure and copied cloud-prefix regression.",
+    "codify_target": "Precise bootstrap allowlist and external side-effect rejection tests",
+    "codify_commit": "570dde129584f0e52bcf9034f15b2e6997d807a2",
+    "status": "fixed"
+  },
+  "replay_gate": {
+    "command": "cd listener && npm run test:family-json",
+    "expected_transition": "Actual and copied-cloud retired CLI reject before external side effects; negative effect attempts still denied."
+  }
+}
