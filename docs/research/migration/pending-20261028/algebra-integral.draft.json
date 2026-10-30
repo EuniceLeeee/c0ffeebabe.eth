@@ -1,0 +1,1212 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "swap:algebra-integral"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_ALGEBRA_INTEGRAL_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "swap:algebra-integral",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "algebra-integral-swap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-transfer"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "algebra-integral:factory-child"
+    ],
+    "poolAdapterIds": [
+      "algebra-integral"
+    ],
+    "edgeAdapterIds": [
+      "algebra-integral-swap"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "algebra-integral-pool",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address",
+          "hintedFactory": "address",
+          "hintedToken0": "address",
+          "hintedToken1": "address",
+          "sourceKind": "string"
+        },
+        "nullableFields": [
+          "hintedFactory",
+          "hintedToken0",
+          "hintedToken1"
+        ],
+        "key": [
+          "pool"
+        ],
+        "instanceKey": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "algebra-integral-pool-swap-call",
+          "signature": "function swap(address recipient,bool zeroToOne,int256 amountRequired,uint160 limitSqrtPrice,bytes data)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            },
+            "hintedFactory": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken0": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken1": {
+              "from": "literal",
+              "value": null
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "pool-call"
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "algebra-integral-factory-pool",
+          "signature": "event Pool(address indexed token0,address indexed token1,address pool)",
+          "fields": {
+            "pool": {
+              "from": "argument",
+              "index": 2
+            },
+            "hintedFactory": {
+              "from": "emitter"
+            },
+            "hintedToken0": {
+              "from": "argument",
+              "index": 0
+            },
+            "hintedToken1": {
+              "from": "argument",
+              "index": 1
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "factory-pool-log"
+            }
+          }
+        },
+        {
+          "id": "algebra-integral-pool-swap-log",
+          "signature": "event Swap(address indexed sender,address indexed recipient,int256 amount0,int256 amount1,uint160 price,uint128 liquidity,int24 tick,uint24 overrideFee,uint24 pluginFee)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            },
+            "hintedFactory": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken0": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken1": {
+              "from": "literal",
+              "value": null
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "pool-swap-log"
+            }
+          }
+        },
+        {
+          "id": "algebra-integral-pool-initialize-log",
+          "signature": "event Initialize(uint160 price,int24 tick)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            },
+            "hintedFactory": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken0": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken1": {
+              "from": "literal",
+              "value": null
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "pool-swap-log"
+            }
+          }
+        },
+        {
+          "id": "algebra-integral-pool-mint-log",
+          "signature": "event Mint(address sender,address indexed owner,int24 indexed bottomTick,int24 indexed topTick,uint128 liquidityAmount,uint256 amount0,uint256 amount1)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            },
+            "hintedFactory": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken0": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken1": {
+              "from": "literal",
+              "value": null
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "pool-swap-log"
+            }
+          }
+        },
+        {
+          "id": "algebra-integral-pool-burn-log",
+          "signature": "event Burn(address indexed owner,int24 indexed bottomTick,int24 indexed topTick,uint128 liquidityAmount,uint256 amount0,uint256 amount1,uint24 pluginFee)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            },
+            "hintedFactory": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken0": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken1": {
+              "from": "literal",
+              "value": null
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "pool-swap-log"
+            }
+          }
+        }
+      ],
+      "surface": {
+        "id": "algebra-integral-pool-surface",
+        "fingerprint": "algebra-integral-pool-surface-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          },
+          "hintedFactory": {
+            "from": "opaque",
+            "path": "factory"
+          },
+          "hintedToken0": {
+            "from": "opaque",
+            "path": "token0"
+          },
+          "hintedToken1": {
+            "from": "opaque",
+            "path": "token1"
+          },
+          "sourceKind": {
+            "from": "literal",
+            "value": "pool-surface"
+          }
+        }
+      },
+      "labels": [
+        "algebra-integral"
+      ],
+      "nomination": "address-surface",
+      "txSeedNominations": true
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.subject"
+                ]
+              }
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": []
+        },
+        "$identity.facts"
+      ]
+    },
+    "bindingProjection": {
+      "pool": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      },
+      "token0": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "token0"
+        ]
+      },
+      "token1": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "token1"
+        ]
+      },
+      "tickSpacing": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "tickSpacing"
+        ]
+      },
+      "factoryBinding": {
+        "factory": {
+          "op": "get",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "factoryBinding"
+              ]
+            },
+            "factory"
+          ]
+        },
+        "reversePool": {
+          "op": "get",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "factoryBinding"
+              ]
+            },
+            "reversePool"
+          ]
+        }
+      },
+      "executedFee": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "executedFee"
+        ]
+      }
+    }
+  },
+  "routes": {
+    "target": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "pool"
+      ]
+    },
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "pool"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "zero-for-one",
+        "enabled": true,
+        "tokenIn": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token0"
+          ]
+        },
+        "tokenOut": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token1"
+          ]
+        },
+        "adapterId": "algebra-integral-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "tickSpacing": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "tickSpacing"
+            ]
+          }
+        }
+      },
+      {
+        "id": "one-for-zero",
+        "enabled": true,
+        "tokenIn": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token1"
+          ]
+        },
+        "tokenOut": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token0"
+          ]
+        },
+        "adapterId": "algebra-integral-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "tickSpacing": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "tickSpacing"
+            ]
+          }
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "familyId"
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "pool"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenIn"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenOut"
+                ]
+              }
+            ]
+          }
+        ],
+        "\u001f"
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "route-target",
+        "direction": "increase"
+      },
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "route-target",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "swap": {
+    "version": 1,
+    "events": [
+      {
+        "id": "algebra-integral-pool-swap-log",
+        "signature": "event Swap(address indexed sender,address indexed recipient,int256 amount0,int256 amount1,uint160 price,uint128 liquidity,int24 tick,uint24 overrideFee,uint24 pluginFee)",
+        "pool": {
+          "op": "address",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$log",
+                "address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$log",
+                  "address"
+                ]
+              }
+            ]
+          },
+          "sender": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "sender"
+                ]
+              }
+            ]
+          },
+          "recipient": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "recipient"
+                ]
+              }
+            ]
+          },
+          "amount0": {
+            "op": "get",
+            "args": [
+              "$args",
+              "amount0"
+            ]
+          },
+          "amount1": {
+            "op": "get",
+            "args": [
+              "$args",
+              "amount1"
+            ]
+          },
+          "zeroForOne": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "zeroToOne"
+                ]
+              },
+              true
+            ]
+          },
+          "amountIn": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "zeroToOne"
+                    ]
+                  },
+                  true
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "amount0"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "amount1"
+                ]
+              }
+            ]
+          },
+          "amountOut": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "zeroToOne"
+                    ]
+                  },
+                  true
+                ]
+              },
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "amount1"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "amount0"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "overrideFee": {
+            "op": "get",
+            "args": [
+              "$args",
+              "overrideFee"
+            ]
+          },
+          "pluginFee": {
+            "op": "get",
+            "args": [
+              "$args",
+              "pluginFee"
+            ]
+          }
+        },
+        "classification": "swap",
+        "match": {
+          "op": "if",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$descriptor"
+                  ]
+                }
+              ]
+            },
+            false,
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$edge",
+                        "target"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        "$log",
+                        "address"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$edge",
+                        "tokenIn"
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$edge",
+                                "tokenIn"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$descriptor",
+                                "token0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$descriptor",
+                            "token0"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$descriptor",
+                            "token1"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$edge",
+                        "tokenOut"
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$edge",
+                                "tokenIn"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$descriptor",
+                                "token0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$descriptor",
+                            "token1"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$descriptor",
+                            "token0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "target"
+            ]
+          },
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenOut"
+            ]
+          },
+          "matchedAdapterId": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "adapterId"
+            ]
+          },
+          "amountIn": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "zeroToOne"
+                    ]
+                  },
+                  true
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "amount0"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "amount1"
+                ]
+              }
+            ]
+          },
+          "amountOut": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "zeroToOne"
+                    ]
+                  },
+                  true
+                ]
+              },
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "amount1"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "amount0"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "algebra-integral-pool-initialize-log",
+        "signature": "event Initialize(uint160 price,int24 tick)",
+        "pool": {
+          "op": "address",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$log",
+                "address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$log",
+                  "address"
+                ]
+              }
+            ]
+          }
+        },
+        "classification": "mutation",
+        "match": false,
+        "impact": null
+      },
+      {
+        "id": "algebra-integral-pool-mint-log",
+        "signature": "event Mint(address sender,address indexed owner,int24 indexed bottomTick,int24 indexed topTick,uint128 liquidityAmount,uint256 amount0,uint256 amount1)",
+        "pool": {
+          "op": "address",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$log",
+                "address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$log",
+                  "address"
+                ]
+              }
+            ]
+          }
+        },
+        "classification": "mutation",
+        "match": false,
+        "impact": null
+      },
+      {
+        "id": "algebra-integral-pool-burn-log",
+        "signature": "event Burn(address indexed owner,int24 indexed bottomTick,int24 indexed topTick,uint128 liquidityAmount,uint256 amount0,uint256 amount1,uint24 pluginFee)",
+        "pool": {
+          "op": "address",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$log",
+                "address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$log",
+                  "address"
+                ]
+              }
+            ]
+          }
+        },
+        "classification": "mutation",
+        "match": false,
+        "impact": null
+      }
+    ],
+    "calls": [
+      {
+        "id": "algebra-integral-pool-swap-call",
+        "signature": "function swap(address recipient,bool zeroToOne,int256 amountRequired,uint160 limitSqrtPrice,bytes data)",
+        "classification": "swap",
+        "valid": {
+          "op": "gt",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$args",
+                "amountRequired"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$observation",
+                  "target"
+                ]
+              }
+            ]
+          },
+          "recipient": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "recipient"
+                ]
+              }
+            ]
+          },
+          "zeroForOne": {
+            "op": "get",
+            "args": [
+              "$args",
+              "zeroToOne"
+            ]
+          },
+          "amountRequired": {
+            "op": "get",
+            "args": [
+              "$args",
+              "amountRequired"
+            ]
+          },
+          "limitSqrtPrice": {
+            "op": "get",
+            "args": [
+              "$args",
+              "limitSqrtPrice"
+            ]
+          },
+          "callbackData": {
+            "op": "get",
+            "args": [
+              "$args",
+              "data"
+            ]
+          }
+        }
+      }
+    ],
+    "canonicalIntakeTargets": [],
+    "victimSupport": "none"
+  },
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "algebra-integral-swap",
+        "lineage": "custom-swap:algebra-integral",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function swap(address recipient,bool zeroToOne,int256 amountRequired,uint160 limitSqrtPrice,bytes data)"
+        }
+      ]
+    }
+  ]
+}

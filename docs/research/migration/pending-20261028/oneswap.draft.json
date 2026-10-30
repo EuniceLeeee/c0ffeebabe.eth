@@ -1,0 +1,135 @@
+{
+  "_status": "parked-partial-draft-not-importable",
+  "_blocker": "G-OS-1 addMarketOrder(address,address,uint112) runtime amount cannot be compiled by the declarative execution v2 ABI codec",
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:oneswap"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_ONESWAP_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:oneswap",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "oneswap-market-order"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "oneswap:amm-orderbook-v1"
+    ],
+    "poolAdapterIds": [
+      "oneswap"
+    ],
+    "edgeAdapterIds": [
+      "oneswap-market-order"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "oneswap-market-order",
+        "lineage": "custom-swap:oneswap",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": true,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function addMarketOrder(address,address,uint112) payable returns(uint256)"
+        }
+      ]
+    }
+  ],
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "oneswap",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address"
+        },
+        "key": [
+          "pool"
+        ],
+        "instanceKey": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "oneswap-market-order",
+          "signature": "function addMarketOrder(address,address,uint112) payable returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "oneswap-NewMarketOrder",
+          "signature": "event NewMarketOrder(uint256)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          }
+        },
+        {
+          "id": "oneswap-DealWithPool",
+          "signature": "event DealWithPool(uint256)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          }
+        },
+        {
+          "id": "oneswap-OrderChanged",
+          "signature": "event OrderChanged(uint256)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          }
+        }
+      ],
+      "labels": [
+        "oneswap",
+        "oneswap-market-order",
+        "custom-swap:oneswap"
+      ],
+      "nomination": "address-surface",
+      "surface": {
+        "id": "oneswap-interface",
+        "fingerprint": "oneswap-amm-orderbook-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          }
+        }
+      }
+    }
+  },
+  "variantFiles": []
+}
