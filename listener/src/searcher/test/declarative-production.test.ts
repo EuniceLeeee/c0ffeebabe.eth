@@ -192,6 +192,23 @@ async function protocolFixture() {
   return { ...f, child, childPath, saveChild };
 }
 
+test("multiple declared models may share one lineage while missing lineage coverage still fails", async () => {
+  const f = await protocolFixture();
+  try {
+    f.doc.manifest.supportedLineages = ["fixture:standard"];
+    f.child.lineageId = "fixture:standard";
+    await f.save(); await f.saveChild();
+    await f.sync("write"); await f.sync("check");
+    const original = await readFile(f.entryPath, "utf8");
+    f.child.id = f.doc.standard.id; await f.saveChild();
+    await assert.rejects(f.sync("write"), /duplicate variant/);
+    assert.equal(await readFile(f.entryPath, "utf8"), original);
+    f.child.id = "child"; await f.saveChild();
+    f.doc.manifest.supportedLineages.push("fixture:uncovered"); await f.save();
+    await assert.rejects(f.sync("write"), /lineage coverage/);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
 test("optional oracle module changes only declared capability presence; absent and empty stay absent", async () => {
   const f = await protocolFixture();
   try {

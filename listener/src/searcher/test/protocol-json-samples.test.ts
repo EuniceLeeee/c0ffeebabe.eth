@@ -62,6 +62,7 @@ test("passing historical labels never become executable case assertions", () => 
   changed((index, root) => { const file = join(root, first(index).casePath), data = JSON.parse(readFileSync(file, "utf8"));
     data.acceptance = "pass"; writeFileSync(file, JSON.stringify(data));
   }, /unknown field/);
-  changed(index => { const pending = index.families.flatMap((family: any) => family.samples)
-    .find((sample: any) => sample.casePath === null); pending.missing = []; }, /missing-field reason/);
+  // A negative fixture must not require a real historical sample to remain pending.
+  changed(index => { index.families[0].samples.push({ ...first(index),
+    id: "synthetic-pending-without-reason", casePath: null, missing: [] }); }, /missing-field reason/);
 });

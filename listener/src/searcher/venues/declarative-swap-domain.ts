@@ -24,7 +24,17 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
       !Array.isArray(raw.canonicalIntakeTargets) || !["none", "detect-only", "local-apply", "overlay", "replay"].includes(raw.victimSupport))
     throw new Error("invalid Swap observation version/capabilities");
   const events = raw.events.map((spec: Data) => {
-    record(spec, ["id", "pool", "payload", "match", "impact", "classification"], ["valid", "signature", "packed", "relatedEvents"]);
+    if (spec.topic !== undefined) {
+      record(spec, ["id", "topic", "classification", "receiptMode"]);
+      if (spec.receiptMode !== "unresolved") throw new Error("opaque topic must remain unresolved");
+    } else {
+      record(spec, ["id", "pool", "payload", "match", "impact", "classification"],
+        ["valid", "signature", "packed", "relatedEvents", "receiptMode", "mutationReason"]);
+      if (spec.receiptMode !== undefined && spec.receiptMode !== "mutation-only") throw new Error("invalid receipt mode");
+      if (spec.receiptMode === "mutation-only" && (typeof spec.mutationReason !== "string" || !spec.mutationReason.trim()))
+        throw new Error("mutation-only observation requires a reason");
+      if (spec.receiptMode === undefined && spec.mutationReason !== undefined) throw new Error("orphan mutation reason");
+    }
     if (typeof spec.id !== "string" || !spec.id.trim() || !["swap", "mutation"].includes(spec.classification)) throw new Error("invalid Swap event identity");
     return { spec, codec: compileDeclarativeEventCodec(spec) };
   });
@@ -80,9 +90,9 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
     try {
       const env = { log, args: entry.codec.decode(log) };
       if (entry.spec.valid !== undefined && values.evaluate(entry.spec.valid, env) !== true) return null;
-      const pool = values.evaluate(entry.spec.pool, env);
+      const pool = entry.spec.topic !== undefined ? log.address : values.evaluate(entry.spec.pool, env);
       if (typeof pool !== "string" || !/^0x(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/.test(pool)) return null;
-      return { ...entry, env, pool: pool.toLowerCase(), payload: values.evaluate(entry.spec.payload, env) };
+      return { ...entry, env, pool: pool.toLowerCase(), payload: entry.spec.topic !== undefined ? undefined : values.evaluate(entry.spec.payload, env) };
     } catch { return null; }
   }
   const ids = Object.freeze(events.filter(e => e.codec.topic).map(e => e.spec.id));
@@ -104,7 +114,8 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
     observation: { patternIds: [...ids, ...calls.map((c: any) => c.spec.id)], decode({ observation }) {
       if (observation.kind === "call") return decodeCall(observation);
       const found = observation.kind === "log" ? decode(observation) : null;
-      return found ? [{ kind: found.spec.classification, canonicalPayload: found.payload }] : [];
+      return found && found.spec.receiptMode !== "unresolved"
+        ? [{ kind: found.spec.classification, canonicalPayload: found.payload }] : [];
     } },
     receiptObservation: createStrictSwapObservation({
       topics: events.flatMap(e => e.codec.topic ? [e.codec.topic] : []), canonicalIntakeTargets: raw.canonicalIntakeTargets.map(getAddress),
@@ -199,9 +210,10 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
           });
           return { receipt: Object.freeze({ events: Object.freeze(relatedEvents), logIndex }) };
         }
-        return Promise.all(ctx.matchedOwnedTriggers.map(async trigger => {
-          const found = decode(ctx.logs[trigger.logIndex]);
+        return Promise.all(ctx.matchedOwnedTriggers.map(trigger => ({ trigger, found: decode(ctx.logs[trigger.logIndex]) }))
+          .filter(({ found }) => found?.spec.receiptMode !== "unresolved").map(async ({ trigger, found }) => {
           if (!found) throw new Error("malformed owned Swap event");
+          if (found.spec.receiptMode === "mutation-only") return { logIndex: trigger.logIndex, mutationOnlyReason: found.spec.mutationReason };
           if (found.spec.classification === "mutation") return { logIndex: trigger.logIndex, mutationOnlyReason: "declared state mutation" };
           const candidates = ctx.edgesByTarget.get(found.pool) ?? ctx.graph;
           const edges = candidates.filter(edge => ctx.graph.includes(edge) && manifest.edgeAdapterIds.includes(edge.adapterId) &&

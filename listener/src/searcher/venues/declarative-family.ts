@@ -40,6 +40,7 @@ type Candidate = FamilyCandidate & Data;
 type Values = ReturnType<typeof compileDeclarativeValues>;
 type Variant = { document: Data; execution: DeclarativeConversionExecution; values: Values; modules: ReturnType<typeof readFamilyModules>;
   quoteFlow?: ReturnType<typeof compileDeclarativeReadFlow>; pricingFlow?: ReturnType<typeof compileDeclarativeReadFlow>;
+  quoteProofEvaluation?: boolean;
   trialState?: ReturnType<typeof compileDeclarativeTrialState<Descriptor, Route, Data>> };
 export interface DeclarativeFamilyTypes {
   readonly candidate: FamilyCandidate;
@@ -126,6 +127,10 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
   const document = frozen(normalized);
   const documents = [document.standard, ...children.map(c => frozen(normalizeDeclarativeVariant(c)))];
   if (new Set(documents.map(v => v.id)).size !== documents.length) throw new Error("duplicate declarative variant");
+  const lineages = new Set(document.manifest.supportedLineages);
+  if (!lineages.size || lineages.size !== document.manifest.supportedLineages.length ||
+      documents.some(v => !lineages.has(v.lineageId)))
+    throw new Error("declarative variant lineage coverage mismatch");
   const variants: Variant[] = documents.map(v => {
     shape(v, ["id", "lineageId", "abi", "constants", "expressions", "match", "context", "boundState", "pricing", "exact", "readPrograms", "execution"],
       ["version", "identity", "identityParameters", "assertions", "programs", "inputs", "types", "modules", "identityKind"], "variant declaration");
@@ -176,6 +181,9 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
       environment: input => environment(variant, input), evidence,
     });
     const quote = modules.blocks.quoteFlow as DeclarativeQuoteFlow;
+    const extendedProof = (value: unknown): boolean => !!value && typeof value === "object" &&
+      ((value as Data).version === 2 || Object.values(value).some(extendedProof));
+    variant.quoteProofEvaluation = extendedProof(quote.chainQuote);
     if (v.exact.stateOnlyReads === true && quote.sourceKind !== "local-math")
       throw new Error("stateOnlyReads requires a local-math quote flow");
     if (quote.sourceKind === "local-math" && !Object.keys(modules.blocks.trialState!).length && !quote.localStateUnsupportedReason)
@@ -199,7 +207,7 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
   const evalRoot = (expression: any, env: Data) => primary.values.evaluate(expression, env);
   const rootRun = (statements: any[] | undefined, env: Data) => primary.values.run(statements ?? [], env);
   function select(descriptor: Data): Variant {
-    const matches = variants.filter(v => v.values.evaluate(v.document.match, { descriptor }));
+    const matches = variants.filter(v => v.values.evaluate(v.document.match, { descriptor }) === true);
     if (matches.length !== 1) throw new Error("descriptor must match exactly one declared variant");
     return matches[0]!;
   }
@@ -684,18 +692,22 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
               : v.values.evaluate(v.document.exact.amountOut, { ...env, quoteResult: output });
             if (typeof amountOut !== "bigint" || amountOut < 0n) throw new Error("exact quote returned invalid output");
             const declaration = v.modules.get<DeclarativeQuoteFlow>("quoteFlow");
+            let proofEnvironment: Data | undefined;
             if (v.quoteFlow && declaration && declaration.sourceKind !== "local-math") {
               verifyDeclarativeQuoteChain({ proof: declaration.chainQuote, sourceKind: declaration.sourceKind,
                 observation: proof => v.quoteFlow!.requestEvidence(flowInput,
                   initialFlowResults(v.quoteFlow!, flowInput, results), dependentEvidence, proof.step, proof.requestId),
                 source: input.source, amountIn: input.amountIn, amountOut,
+                ...(v.quoteProofEvaluation ? { evaluate: v.values.evaluate,
+                  environment: proofEnvironment = v.quoteFlow.completedEnvironment(flowInput,
+                    initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence) } : {}),
                 tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut, executor: input.executor });
             }
             const guardResult = guard(v, input, true, results);
             v.values.run(v.document.exact.outputChecks ?? [], { ...env, amountOut, guardResult });
             if (transition) return frozen(transition);
-            const context = v.quoteFlow ? v.quoteFlow.completedEnvironment(flowInput,
-              initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence) : env;
+            const context = proofEnvironment ?? (v.quoteFlow ? v.quoteFlow.completedEnvironment(flowInput,
+              initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence) : env);
             const fields = evidence({ ...context, ...input, quoteResult: output }, amountOut);
             if (amountOut === 0n && (typeof fields?.unavailableReason !== "string" || !fields.unavailableReason.trim()))
               throw new Error("zero exact output requires an unavailableReason");

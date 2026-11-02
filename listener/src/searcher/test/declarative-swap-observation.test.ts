@@ -92,6 +92,40 @@ test("call declarations reject duplicate selectors, event/call ID collisions and
     assert.throws(() => compile({ ...definition(), calls }));
 });
 
+test("opaque topics classify triggers but never fabricate decoded amounts or resolved receipt impacts", async () => {
+  const topic = toBeHex(98, 32), raw = definition();
+  raw.events = [{ id: "opaque", topic, classification: "swap", receiptMode: "unresolved" }];
+  const log: any = { ...swapLog(), topics: [topic], data: "0x1234" };
+  const family = compile(raw), observation: any = { ...log, kind: "log", source };
+  assert.equal(family.landedEvents.classify({ observation } as any), "swap");
+  assert.deepEqual(family.observation.decode({ observation }), []);
+  const ctx = context([log]);
+  ctx.matchedOwnedTriggers = [{ triggerId: "opaque:0", logIndex: 0, emitter: pool, topic0: topic }];
+  let calls = 0; ctx.tokenQuery = { call: async () => { calls++; throw new Error("unexpected read"); } };
+  const result: any = await family.receiptObservation!.decodeReceiptImpacts(ctx);
+  assert.equal(result.status, "unresolved");
+  assert.equal(calls, 0);
+  for (const bad of [{ ...observation, data: "0x1" }, { ...observation, topics: [topic, "0x00"] },
+    { ...observation, topics: [toBeHex(99, 32)] }])
+    assert.equal(family.landedEvents.classify({ observation: bad } as any), null);
+  raw.events[0].receiptMode = "mutation-only";
+  assert.throws(() => compile(raw), /opaque topic/);
+  delete raw.events[0].receiptMode;
+  assert.throws(() => compile(raw));
+});
+
+test("swap-classified ABI events may explicitly produce mutation-only receipts with a reason", async () => {
+  const raw = definition();
+  raw.events[0].receiptMode = "mutation-only";
+  raw.events[0].mutationReason = "declared fields do not identify a full swap amount";
+  const result = await observe(raw, context([swapLog()]));
+  assert.equal(result.status, "resolved");
+  assert.equal(result.impacts.length, 0);
+  assert.equal(result.mutations.length, 1);
+  raw.events[0].mutationReason = "";
+  assert.throws(() => compile(raw), /requires a reason/);
+});
+
 test("same-receipt context selects final same-pool canonical Sync without consuming extra triggers", async () => {
   const raw = definition(), logs = [syncLog(10n, 20n), swapLog(), syncLog(107n, 196n), syncLog(999n, 999n)];
   logs[3].address = toBeHex(88, 20);

@@ -304,6 +304,7 @@ for (const fixture of fixtures) {
       let exact = 0, quoted = 0, rpc = 0, simulated = 0;
       const events: any[] = [];
       const session: any = { source: fixture.source, fundingActionIds: () => ["fixture-funding"],
+        blocksPrefixInversion() { return false; },
         buildRuntimeAmountLeg({ edge }: any) { return legs[edges.indexOf(edge)]; },
         issueExact() { exact++; throw new Error("unexpected Exact"); },
         buildExecution() { quoted++; throw new Error("quoted fallback"); },
