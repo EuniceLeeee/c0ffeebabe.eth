@@ -7230,42 +7230,108 @@
       "familyId": "protocol:wsteth",
       "samples": [
         {
-          "id": "unconfirmed-wrap-unwrap",
-          "classification": "historical-reference-needs-extraction",
-          "variant": null,
-          "directions": [],
-          "transactionHash": null,
+          "id": "wrap-original-input",
+          "classification": "real-historical-evidence",
+          "variant": "wsteth:steth-active-binding",
+          "directions": [
+            "wrap"
+          ],
+          "transactionHash": "0xb5bbf0a6a6fa0e29e77943fd3b51fd507145c0df4ab0597ed4eee1a244a24421",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 26319753,
+            "hash": "0xefd3117c72b6614caf178c31685c4aa3ea8d1ce2b554762b605f30789eefc263"
           },
-          "stateScope": "reference-only-not-execution",
-          "instanceKey": null,
-          "lineageId": null,
-          "actors": null,
-          "amounts": [],
-          "provenance": [
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+          "lineageId": "wsteth:steth-active-binding",
+          "actors": {
+            "executor": "0x9C7F3400109F04e8044989BBb7D483dc4587053a",
+            "owner": "0x1000000000000000000000000000000000000001",
+            "scope": "historical transaction sender as executor; synthetic origin"
+          },
+          "amounts": [
             {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/README.md",
-              "sha256": "52f3ee134c1b9ba9b33b5290d72ba7792e7b6ebf82b3f83538ce946f4f2f072a"
+              "direction": "wrap",
+              "label": "original-wrap-input",
+              "tokenIn": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+              "tokenOut": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+              "amountIn": "603000000000000000000",
+              "recordedAmountOut": "483132003123191994951",
+              "amountScope": "original-transaction-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--wrap-original-input.json",
+                "sha256": "2eec373b9bd03183a8ec7687920024475ed85f1ccf2daa942a1ada33e39ac41b",
+                "jsonPointer": "/trials/0",
+                "line": 1,
+                "endLine": 1
+              }
             }
           ],
-          "casePath": null,
-          "limitations": [
-            "No confirmed wrap/unwrap transaction exists in the IMPL table or bounded historical records."
+          "casePath": "cases/wsteth--wrap-original-input.json",
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--wrap-original-input.json",
+              "sha256": "2eec373b9bd03183a8ec7687920024475ed85f1ccf2daa942a1ada33e39ac41b",
+              "jsonPointer": "/trials/0",
+              "line": 1,
+              "endLine": 1
+            }
           ],
-          "missing": [
-            "confirmed wstETH wrap/unwrap transaction"
+          "missing": []
+        },
+        {
+          "id": "unwrap-original-input",
+          "classification": "real-historical-evidence",
+          "variant": "wsteth:steth-active-binding",
+          "directions": [
+            "unwrap"
           ],
-          "missingResponsibility": {
-            "confirmed wstETH wrap/unwrap transaction": "migration-window: continue historical lookup; ask user only if unrecoverable"
-          }
+          "transactionHash": "0x603e9a589073f30281ba5c1be20588129a7c8516812f4602247066a74a551175",
+          "source": {
+            "number": 26319029,
+            "hash": "0xa05f345f525994a85281b6de336d62ac6f34f834e1d1e8f573d8880618513f3f"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+          "lineageId": "wsteth:steth-active-binding",
+          "actors": {
+            "executor": "0x0DFD172B4D908dDac1DA2Bf5b474ADcee836c9e0",
+            "owner": "0x1000000000000000000000000000000000000001",
+            "scope": "historical transaction sender as executor; synthetic origin"
+          },
+          "amounts": [
+            {
+              "direction": "unwrap",
+              "label": "original-unwrap-input",
+              "tokenIn": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+              "tokenOut": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+              "amountIn": "30000000000000000000",
+              "recordedAmountOut": "37443182987377674483",
+              "amountScope": "original-transaction-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--unwrap-original-input.json",
+                "sha256": "7c4d98d759f7450b2e430d77051d1732852b7be7f1de4004736dce5d5c37d66b",
+                "jsonPointer": "/trials/0",
+                "line": 1,
+                "endLine": 1
+              }
+            }
+          ],
+          "casePath": "cases/wsteth--unwrap-original-input.json",
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--unwrap-original-input.json",
+              "sha256": "7c4d98d759f7450b2e430d77051d1732852b7be7f1de4004736dce5d5c37d66b",
+              "jsonPointer": "/trials/0",
+              "line": 1,
+              "endLine": 1
+            }
+          ],
+          "missing": []
         }
       ],
-      "missing": [
-        "No confirmed wrap/unwrap transaction found in the original IMPL table or bounded existing sample/test records. Token presence in an unrelated swap or synthetic rate probe is not a protocol-leg sample. Continue historical sample lookup; ask user only if no real transaction can be recovered."
-      ],
-      "completeCases": 0,
+      "missing": [],
+      "completeCases": 2,
       "scope": {
         "migratedJsonPresent": true,
         "appRun2Enabled": true,
