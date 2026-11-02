@@ -7321,10 +7321,10 @@
             }
           ],
           "missing": [
-            "executable unwrap case: acceptance token-balance override on wstETH as tokenIn reverts while eth_call at the same block succeeds"
+            "quoted fragment execution for unwrap: the quoted path reverts with Panic(0x11) while the runtime leg now returns and transfers correctly"
           ],
           "limitations": [
-            "Transaction and amounts are real; execution evidence is blocked by the acceptance runner's balance override, not by the Family JSON."
+            "Root cause of the earlier runtime failure was the JSON credit equality (1-wei stETH rebase rounding), fixed by declaring direction-only credit effects; the remaining quoted-path panic is unrelated to balance overrides."
           ]
         }
       ],
