@@ -7281,7 +7281,7 @@
         },
         {
           "id": "unwrap-original-input",
-          "classification": "real-historical-evidence",
+          "classification": "historical-reference-needs-execution",
           "variant": "wsteth:steth-active-binding",
           "directions": [
             "unwrap"
@@ -7307,31 +7307,29 @@
               "tokenOut": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
               "amountIn": "30000000000000000000",
               "recordedAmountOut": "37443182987377674483",
-              "amountScope": "original-transaction-input-at-block-end",
-              "provenance": {
-                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--unwrap-original-input.json",
-                "sha256": "7c4d98d759f7450b2e430d77051d1732852b7be7f1de4004736dce5d5c37d66b",
-                "jsonPointer": "/trials/0",
-                "line": 1,
-                "endLine": 1
-              }
+              "amountScope": "original-transaction-input-at-block-end"
             }
           ],
-          "casePath": "cases/wsteth--unwrap-original-input.json",
+          "casePath": null,
           "provenance": [
             {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--unwrap-original-input.json",
-              "sha256": "7c4d98d759f7450b2e430d77051d1732852b7be7f1de4004736dce5d5c37d66b",
-              "jsonPointer": "/trials/0",
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/README.md",
+              "sha256": "6f85e5e99e997a27e7d71b4983d989c8dfb07704bf86163295d2e5004ebd2416",
+              "jsonPointer": "/",
               "line": 1,
               "endLine": 1
             }
           ],
-          "missing": []
+          "missing": [
+            "executable unwrap case: acceptance token-balance override on wstETH as tokenIn reverts while eth_call at the same block succeeds"
+          ],
+          "limitations": [
+            "Transaction and amounts are real; execution evidence is blocked by the acceptance runner's balance override, not by the Family JSON."
+          ]
         }
       ],
       "missing": [],
-      "completeCases": 2,
+      "completeCases": 1,
       "scope": {
         "migratedJsonPresent": true,
         "appRun2Enabled": true,
