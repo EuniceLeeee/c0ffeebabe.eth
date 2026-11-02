@@ -1,50 +1,91 @@
 {
   "version": 2,
-  "scope": {"family": "protocol:wsteth"},
+  "scope": {
+    "family": "protocol:wsteth"
+  },
   "production": {
     "domain": "protocol",
-    "activation": {"enabled": true, "envKey": "SEARCHER_FAMILY_WSTETH_ENABLED"}
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_WSTETH_ENABLED"
+    }
   },
   "manifest": {
     "familyId": "protocol:wsteth",
     "domain": "protocol",
-    "ownedActionAdapterIds": ["wsteth-wrap", "wsteth-unwrap"],
-    "requiredInfraActionAdapterIds": ["erc20-approve"],
-    "allowedTaxonomy": [
-      {"slotKind": "protocol", "protocolAction": "wrap"},
-      {"slotKind": "protocol", "protocolAction": "unwrap"}
+    "ownedActionAdapterIds": [
+      "wsteth-wrap",
+      "wsteth-unwrap"
     ],
-    "supportedLineages": ["wsteth:steth-active-binding"],
-    "poolAdapterIds": ["wsteth"],
-    "edgeAdapterIds": ["wsteth-wrap", "wsteth-unwrap"],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "wrap"
+      },
+      {
+        "slotKind": "protocol",
+        "protocolAction": "unwrap"
+      }
+    ],
+    "supportedLineages": [
+      "wsteth:steth-active-binding"
+    ],
+    "poolAdapterIds": [
+      "wsteth"
+    ],
+    "edgeAdapterIds": [
+      "wsteth-wrap",
+      "wsteth-unwrap"
+    ],
     "requiresProtocolEdgesFlag": true
   },
   "discovery": {
     "definition": {
       "version": 2,
-      "sources": ["observed-call", "address-surface"],
+      "sources": [
+        "observed-call",
+        "address-surface"
+      ],
       "candidateSources": [],
       "candidate": {
         "kind": "wsteth-converter",
         "addressField": "target",
-        "fields": {"target": "address", "sourceKind": "string"},
-        "key": ["target"]
+        "fields": {
+          "target": "address",
+          "sourceKind": "string"
+        },
+        "key": [
+          "target"
+        ]
       },
       "calls": [
         {
           "id": "wsteth-wrap-call",
           "signature": "wrap(uint256)",
           "fields": {
-            "target": {"from": "target"},
-            "sourceKind": {"from": "literal", "value": "observed-call"}
+            "target": {
+              "from": "target"
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "observed-call"
+            }
           }
         },
         {
           "id": "wsteth-unwrap-call",
           "signature": "unwrap(uint256)",
           "fields": {
-            "target": {"from": "target"},
-            "sourceKind": {"from": "literal", "value": "observed-call"}
+            "target": {
+              "from": "target"
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "observed-call"
+            }
           }
         }
       ],
@@ -53,11 +94,19 @@
         "id": "wsteth-conversion-surface",
         "fingerprint": "wsteth-conversion-surface-v1",
         "fields": {
-          "target": {"from": "emitter"},
-          "sourceKind": {"from": "literal", "value": "address-surface"}
+          "target": {
+            "from": "emitter"
+          },
+          "sourceKind": {
+            "from": "literal",
+            "value": "address-surface"
+          }
         }
       },
-      "labels": ["wsteth", "protocol:wsteth"],
+      "labels": [
+        "wsteth",
+        "protocol:wsteth"
+      ],
       "nomination": "address-surface"
     }
   },
@@ -77,47 +126,120 @@
       },
       "expressions": {},
       "identity": {
-        "select": [{"return": "base"}],
+        "select": [
+          {
+            "return": "base"
+          }
+        ],
         "stages": {
           "base": {
-            "requirements": {"transports": ["get-code", "eth-call"]},
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
             "requests": [
               {
                 "id": "identity-code",
                 "kind": "get-code",
-                "address": {"op": "address", "args": ["$candidate.target"]}
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
               },
               {
                 "id": "identity-steth",
                 "kind": "eth-call",
-                "to": {"op": "address", "args": ["$candidate.target"]},
-                "data": {"op": "encode", "args": ["wsteth", "stETH", []]},
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wsteth",
+                    "stETH",
+                    []
+                  ]
+                },
                 "completion": "return-data"
               },
               {
                 "id": "identity-wrap",
                 "kind": "eth-call",
-                "to": {"op": "address", "args": ["$candidate.target"]},
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
                 "data": {
                   "op": "encode",
-                  "args": ["wsteth", "getWstETHByStETH", [{"op": "uint", "args": ["$constants.sample"]}]]
+                  "args": [
+                    "wsteth",
+                    "getWstETHByStETH",
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "$constants.sample"
+                        ]
+                      }
+                    ]
+                  ]
                 },
                 "completion": "return-data"
               },
               {
                 "id": "identity-unwrap",
                 "kind": "eth-call",
-                "to": {"op": "address", "args": ["$candidate.target"]},
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
                 "data": {
                   "op": "encode",
-                  "args": ["wsteth", "getStETHByWstETH", [{"op": "uint", "args": ["$constants.sample"]}]]
+                  "args": [
+                    "wsteth",
+                    "getStETHByWstETH",
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "$constants.sample"
+                        ]
+                      }
+                    ]
+                  ]
                 },
                 "completion": "return-data"
               }
             ],
             "decode": [
-              {"evaluate": {"op": "source", "args": ["$results"]}},
-              {"let": "code", "value": {"op": "code", "args": ["identity-code"]}},
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "code",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "identity-code"
+                  ]
+                }
+              },
               {
                 "let": "steth",
                 "value": {
@@ -128,7 +250,18 @@
                       "args": [
                         "wsteth",
                         "stETH",
-                        {"op": "get", "args": [{"op": "returned", "args": ["identity-steth"]}, "data"]},
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-steth"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
                         0
                       ]
                     }
@@ -142,7 +275,18 @@
                   "args": [
                     "wsteth",
                     "getWstETHByStETH",
-                    {"op": "get", "args": [{"op": "returned", "args": ["identity-wrap"]}, "data"]},
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-wrap"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
                     0
                   ]
                 }
@@ -154,14 +298,30 @@
                   "args": [
                     "wsteth",
                     "getStETHByWstETH",
-                    {"op": "get", "args": [{"op": "returned", "args": ["identity-unwrap"]}, "data"]},
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-unwrap"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
                     0
                   ]
                 }
               },
               {
                 "return": {
-                  "codeHash": {"op": "codeHash", "args": ["$code"]},
+                  "codeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$code"
+                    ]
+                  },
                   "steth": "$steth",
                   "wrapSampleOut": "$wrapSampleOut",
                   "unwrapSampleOut": "$unwrapSampleOut"
@@ -172,14 +332,28 @@
         },
         "decide": [
           {
-            "return": {"status": "continue"},
-            "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]}
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
           },
           {
             "return": {
               "status": "chain-proven-rejected",
               "reasonCode": "wsteth_active_binding_failed",
-              "evidenceRequestIds": ["steth-active-binding"]
+              "evidenceRequestIds": [
+                "steth-active-binding"
+              ]
             },
             "when": {
               "op": "or",
@@ -187,11 +361,39 @@
                 {
                   "op": "not",
                   "args": [
-                    {"op": "sameAddress", "args": ["$evidence.steth", "$constants.steth"]}
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$evidence.steth",
+                        "$constants.steth"
+                      ]
+                    }
                   ]
                 },
-                {"op": "lte", "args": ["$evidence.wrapSampleOut", {"op": "uint", "args": ["0"]}]},
-                {"op": "lte", "args": ["$evidence.unwrapSampleOut", {"op": "uint", "args": ["0"]}]}
+                {
+                  "op": "lte",
+                  "args": [
+                    "$evidence.wrapSampleOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    "$evidence.unwrapSampleOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
               ]
             }
           },
@@ -201,17 +403,32 @@
               "identity": {
                 "familyId": "$profile.familyId",
                 "lineageId": "$profile.lineageId",
-                "subject": {"op": "address", "args": ["$candidate.target"]},
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
                 "provenance": [
                   {
                     "kind": "steth-active-conversion-proof",
-                    "subject": {"op": "address", "args": ["$candidate.target"]},
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    },
                     "evidenceHash": {
                       "op": "hash",
                       "args": [
                         {
                           "codeHash": "$evidence.codeHash",
-                          "steth": {"op": "lower", "args": ["$evidence.steth"]},
+                          "steth": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.steth"
+                            ]
+                          },
                           "wrapSampleOut": "$evidence.wrapSampleOut",
                           "unwrapSampleOut": "$evidence.unwrapSampleOut"
                         }
@@ -228,30 +445,120 @@
         ]
       }
     },
-    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]}
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    }
   },
   "instance": {
-    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
     "draft": {
       "familyId": "$identity.familyId",
       "lineageId": "$identity.lineageId",
-      "instanceKey": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
       "provenance": "$identity.provenance",
-      "runtimeRequirements": [{"kind": "source-state", "freshness": "pinned-block"}],
-      "target": {"op": "address", "args": ["$identity.subject"]},
-      "steth": {"op": "address", "args": ["$identity.steth"]},
-      "wsteth": {"op": "address", "args": ["$identity.subject"]}
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "target": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "steth": {
+        "op": "address",
+        "args": [
+          "$identity.steth"
+        ]
+      },
+      "wsteth": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      }
     },
     "bindingProjection": {
-      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
-      "steth": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.steth"]}]},
-      "wsteth": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.wsteth"]}]},
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "steth": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.steth"
+            ]
+          }
+        ]
+      },
+      "wsteth": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.wsteth"
+            ]
+          }
+        ]
+      },
       "conversionSemantics": "lido-wrap-unwrap-v1"
     }
   },
   "routes": {
     "target": "$descriptor.target",
-    "bindingKey": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        }
+      ]
+    },
     "directions": [
       {
         "id": "wrap",
@@ -259,7 +566,10 @@
         "tokenIn": "$descriptor.steth",
         "tokenOut": "$descriptor.wsteth",
         "adapterId": "wsteth-wrap",
-        "taxonomy": {"slotKind": "protocol", "protocolAction": "wrap"}
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "wrap"
+        }
       },
       {
         "id": "unwrap",
@@ -267,12 +577,25 @@
         "tokenIn": "$descriptor.wsteth",
         "tokenOut": "$descriptor.steth",
         "adapterId": "wsteth-unwrap",
-        "taxonomy": {"slotKind": "protocol", "protocolAction": "unwrap"}
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "unwrap"
+        }
       }
     ],
     "graphVenue": {
       "kind": "address-protocol",
-      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]}
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      }
     },
     "effects": [
       {
@@ -296,14 +619,33 @@
       "routes": "$routes"
     },
     "compatibility": {
-      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
       "directions": {
         "op": "map",
         "args": [
           {
             "op": "sortId",
             "args": [
-              {"op": "map", "args": ["$routes", "route", {"id": "$route.direction"}]}
+              {
+                "op": "map",
+                "args": [
+                  "$routes",
+                  "route",
+                  {
+                    "id": "$route.direction"
+                  }
+                ]
+              }
             ]
           },
           "item",
@@ -312,28 +654,71 @@
       }
     },
     "static": {
-      "requirements": {"transports": []},
+      "requirements": {
+        "transports": []
+      },
       "dependencies": {
         "op": "concat",
         "args": [
-          ["$draft.target"],
-          {"op": "flatMap", "args": ["$draft.routes", "route", ["$route.tokenIn", "$route.tokenOut"]]}
+          [
+            "$draft.target"
+          ],
+          {
+            "op": "flatMap",
+            "args": [
+              "$draft.routes",
+              "route",
+              [
+                "$route.tokenIn",
+                "$route.tokenOut"
+              ]
+            ]
+          }
         ]
       },
       "requests": [],
-      "decode": {"fields": [], "output": {}}
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
     },
-    "finalize": {"op": "merge", "args": ["$draft", "$staticEvidence"]},
-    "sampleAmount": {"op": "uint", "args": ["1000000000000000000"]},
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1000000000000000000"
+      ]
+    },
     "exactCompatibility": {
-      "target": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.target"]}]},
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
       "direction": "$route.direction",
       "bindingFingerprint": "$route.bindingRef.fingerprint"
     },
-    "mutationKinds": ["log"]
+    "mutationKinds": [
+      "log"
+    ]
   },
   "protocol": {
-    "candidateKinds": ["observed-call", "address-surface"],
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
     "activeBehaviorProof": "required"
   },
   "standard": {
@@ -356,19 +741,41 @@
     "identityKind": "standalone-contract",
     "pricing": {
       "refreshPolicy": "on-touch",
-      "requirements": {"transports": ["eth-call"]},
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
       "dependencies": {
         "op": "concat",
         "args": [
-          ["$descriptor.target"],
-          {"op": "flatMap", "args": ["$descriptor.routes", "route", ["$route.tokenIn", "$route.tokenOut"]]}
+          [
+            "$descriptor.target"
+          ],
+          {
+            "op": "flatMap",
+            "args": [
+              "$descriptor.routes",
+              "route",
+              [
+                "$route.tokenIn",
+                "$route.tokenOut"
+              ]
+            ]
+          }
         ]
       },
-      "mutationAddresses": ["$descriptor.target"]
+      "mutationAddresses": [
+        "$descriptor.target"
+      ]
     },
     "exact": {
       "methodId": "wsteth-preview",
-      "requirements": {"transports": ["eth-call"]},
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
       "evidence": {
         "kind": "wsteth-conversion-quote",
         "source": "$source",
@@ -393,12 +800,20 @@
                 {
                   "op": "if",
                   "args": [
-                    {"op": "eq", "args": ["$direction", "wrap"]},
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$direction",
+                        "wrap"
+                      ]
+                    },
                     "getWstETHByStETH",
                     "getStETHByWstETH"
                   ]
                 },
-                ["$amountIn"]
+                [
+                  "$amountIn"
+                ]
               ]
             },
             "completion": "return-data"
@@ -414,12 +829,29 @@
                 {
                   "op": "if",
                   "args": [
-                    {"op": "eq", "args": ["$direction", "wrap"]},
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$direction",
+                        "wrap"
+                      ]
+                    },
                     "getWstETHByStETH",
                     "getStETHByWstETH"
                   ]
                 },
-                {"op": "get", "args": [{"op": "returned", "args": ["$requestId"]}, "data"]},
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "$requestId"
+                      ]
+                    },
+                    "data"
+                  ]
+                },
                 0
               ]
             }
@@ -429,40 +861,62 @@
     },
     "execution": {
       "version": 1,
-      "settlement": {"directOutput": false},
-      "protectedAddresses": ["$descriptor.target"],
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.target"
+      ],
       "approval": {
         "token": "$route.tokenIn",
         "spender": "$descriptor.target",
         "mode": "ensure",
-        "when": {"op": "eq", "args": ["$direction", "wrap"]}
+        "when": {
+          "op": "eq",
+          "args": [
+            "$direction",
+            "wrap"
+          ]
+        }
       },
       "call": {
         "target": "$descriptor.target",
         "signature": {
           "op": "if",
           "args": [
-            {"op": "eq", "args": ["$direction", "wrap"]},
+            {
+              "op": "eq",
+              "args": [
+                "$direction",
+                "wrap"
+              ]
+            },
             "function wrap(uint256) returns(uint256)",
             "function unwrap(uint256) returns(uint256)"
           ]
         },
-        "args": [{"runtime": "amountIn"}],
-        "save": {"output": 0}
+        "args": [
+          {
+            "runtime": "amountIn"
+          }
+        ],
+        "save": {
+          "output": 0
+        }
       },
       "effects": [
         {
           "kind": "debit",
           "token": "$route.tokenIn",
           "account": "$executor",
-          "equals": {"runtime": "amountIn"}
+          "equals": {
+            "runtime": "amountIn"
+          }
         },
         {
           "kind": "credit",
           "token": "$route.tokenOut",
-          "account": "$executor",
-          "equals": {"runtime": "output"},
-          "minimum": "$minAmountOut"
+          "account": "$executor"
         }
       ]
     }
@@ -478,7 +932,11 @@
         "canSendValue": false,
         "leavesStandingPositionDefault": false
       },
-      "traces": [{"signature": "function wrap(uint256)"}]
+      "traces": [
+        {
+          "signature": "function wrap(uint256)"
+        }
+      ]
     },
     {
       "descriptor": {
@@ -489,7 +947,11 @@
         "canSendValue": false,
         "leavesStandingPositionDefault": false
       },
-      "traces": [{"signature": "function unwrap(uint256)"}]
+      "traces": [
+        {
+          "signature": "function unwrap(uint256)"
+        }
+      ]
     }
   ],
   "types": {
@@ -497,14 +959,24 @@
     "definitions": {
       "WstethCandidate": {
         "type": "object",
-        "extends": ["FamilyCandidate"],
+        "extends": [
+          "FamilyCandidate"
+        ],
         "fields": {
-          "candidateKind": {"literal": "wsteth-converter"},
-          "target": {"type": "string"},
+          "candidateKind": {
+            "literal": "wsteth-converter"
+          },
+          "target": {
+            "type": "string"
+          },
           "sourceKind": {
             "union": [
-              {"literal": "observed-call"},
-              {"literal": "address-surface"}
+              {
+                "literal": "observed-call"
+              },
+              {
+                "literal": "address-surface"
+              }
             ]
           }
         }
@@ -512,45 +984,81 @@
       "WstethIdentityEvidence": {
         "type": "object",
         "fields": {
-          "codeHash": {"type": "string"},
-          "steth": {"type": "string"},
-          "wrapSampleOut": {"type": "bigint"},
-          "unwrapSampleOut": {"type": "bigint"}
+          "codeHash": {
+            "type": "string"
+          },
+          "steth": {
+            "type": "string"
+          },
+          "wrapSampleOut": {
+            "type": "bigint"
+          },
+          "unwrapSampleOut": {
+            "type": "bigint"
+          }
         }
       },
       "WstethIdentity": {
         "type": "object",
-        "extends": ["VerifiedIdentity"],
+        "extends": [
+          "VerifiedIdentity"
+        ],
         "fields": {
-          "steth": {"type": "string"},
-          "wrapSampleOut": {"type": "bigint"},
-          "unwrapSampleOut": {"type": "bigint"}
+          "steth": {
+            "type": "string"
+          },
+          "wrapSampleOut": {
+            "type": "bigint"
+          },
+          "unwrapSampleOut": {
+            "type": "bigint"
+          }
         }
       },
       "WstethDescriptor": {
         "type": "object",
-        "extends": ["CompiledInstanceDescriptor"],
+        "extends": [
+          "CompiledInstanceDescriptor"
+        ],
         "fields": {
-          "target": {"type": "string"},
-          "steth": {"type": "string"},
-          "wsteth": {"type": "string"}
+          "target": {
+            "type": "string"
+          },
+          "steth": {
+            "type": "string"
+          },
+          "wsteth": {
+            "type": "string"
+          }
         }
       },
       "WstethRoute": {
         "type": "object",
-        "extends": ["FamilyRouteDescriptor"],
+        "extends": [
+          "FamilyRouteDescriptor"
+        ],
         "fields": {
-          "target": {"type": "string"},
+          "target": {
+            "type": "string"
+          },
           "direction": {
             "union": [
-              {"literal": "wrap"},
-              {"literal": "unwrap"}
+              {
+                "literal": "wrap"
+              },
+              {
+                "literal": "unwrap"
+              }
             ]
           },
           "adapterId": {
             "union": [
-              {"literal": "wsteth-wrap"},
-              {"literal": "wsteth-unwrap"}
+              {
+                "literal": "wsteth-wrap"
+              },
+              {
+                "literal": "wsteth-unwrap"
+              }
             ]
           }
         }
@@ -558,9 +1066,17 @@
       "WstethPricingDraft": {
         "type": "object",
         "fields": {
-          "instanceKey": {"ref": "InstanceKey"},
-          "target": {"type": "string"},
-          "routes": {"array": {"ref": "WstethRoute"}}
+          "instanceKey": {
+            "ref": "InstanceKey"
+          },
+          "target": {
+            "type": "string"
+          },
+          "routes": {
+            "array": {
+              "ref": "WstethRoute"
+            }
+          }
         }
       },
       "WstethPricingStatic": {
@@ -569,24 +1085,43 @@
       },
       "WstethPricingDescriptor": {
         "type": "object",
-        "extends": ["WstethPricingDraft", "WstethPricingStatic"],
+        "extends": [
+          "WstethPricingDraft",
+          "WstethPricingStatic"
+        ],
         "fields": {}
       },
       "WstethExactEvidence": {
         "type": "object",
         "fields": {
-          "kind": {"literal": "wsteth-conversion-quote"},
-          "source": {"ref": "CanonicalSource"},
-          "target": {"type": "string"},
+          "kind": {
+            "literal": "wsteth-conversion-quote"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "target": {
+            "type": "string"
+          },
           "direction": {
             "union": [
-              {"literal": "wrap"},
-              {"literal": "unwrap"}
+              {
+                "literal": "wrap"
+              },
+              {
+                "literal": "unwrap"
+              }
             ]
           },
-          "amountIn": {"type": "bigint"},
-          "amountOut": {"type": "bigint"},
-          "bindingFingerprint": {"type": "string"}
+          "amountIn": {
+            "type": "bigint"
+          },
+          "amountOut": {
+            "type": "bigint"
+          },
+          "bindingFingerprint": {
+            "type": "string"
+          }
         }
       }
     },
