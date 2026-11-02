@@ -1,148 +1,128 @@
-# `swap:algebra-integral` — parked declarative draft and blockers (2026-10-30)
+# `swap:algebra-integral` — declarative definition authored (2026-11-02)
 
-Status: **blocked / not migrated**. The handwritten `algebra-integral.production.ts` remains the
-production entry. No live/VM/RPC, signing, public framework TS/test change, production-generator
-run or generated artifact. The temporary validation files used for the sibling family are not
-part of this family.
+Status: **definition authored and validated; production entry not switched.** The handwritten
+`production-families/algebra-integral.production.ts` is still the production entry because the
+production generator was not run (out of scope this round). No public framework TS/test, live, VM,
+RPC, signing or broadcast was touched.
 
-Files parked here:
+Deliverables:
 
-- `algebra-integral.draft.json` — partial `swap-json-v2` draft: scope, manifest, mapped discovery,
-  instance projection and routes, Swap observation/calls/action descriptor. It is **not
-  importable and not a deliverable**: `identity`, `standard`, `pricing`, `exact` and `modules` are
-  omitted because the family cannot be expressed faithfully (see G-A1/G-A2).
-- `algebra-integral.blockers.md` — this file.
+- `listener/src/searcher/venues/swaps/algebra-integral-family/algebra-integral.json` — root
+  `swap-json-v2` definition: manifest/scope/activation, mapped discovery, two-stage
+  factory-reverse-binding identity, instance/routes, shared pricing flow/projection, static
+  local-math Exact, Swap observation/materialisation, generated-entry-compatible action.
+- `listener/src/searcher/venues/swaps/algebra-integral-family/algebra-dynamic-fee.json` — same
+  lineage (`algebra-integral:factory-child`) child variant selected by
+  `executedFee.kind == "cypher-bound-quoter"`: view Quoter quote flow, source-bound Quoter evidence,
+  `each-block` refresh, guard reads.
+- `listener/src/searcher/venues/swaps/algebra-integral-family/declarative-math.ts` — pure models
+  (CREATE2/plugin-word Quoter binding, pricing snapshot, single-range quote, integer pricing rows,
+  unavailable rows) delegating to the retained family math.
+- append-only registry line in `venues/declarative-math-models.ts`.
 
-Framework baseline: merged `47422c97` (directional execution, quoteOutput exports, zero-output
-exact, conditional trialState, frame expressions, receipt observation) on top of the Swap/Credit
-JSON handoff.
+## Gaps from the 2026-10-30 parking note, re-evaluated
 
-## What the draft expresses
+### G-A1 (was decisive) — one lineage, two exact/pricing models: **RESOLVED**
 
-- **Manifest/scope/activation**: family `swap:algebra-integral`, lineage
-  `algebra-integral:factory-child`, activation `SEARCHER_FAMILY_ALGEBRA_INTEGRAL_ENABLED`
-  (registered disabled in the handwritten entry), one owned action `algebra-integral-swap`, one
-  required infra action `erc20-transfer`, `poolAdapterIds ["algebra-integral"]`.
-- **Discovery** (`declarative-discovery.ts` v2 mapping): the pool `swap` call, factory `Pool`,
-  pool `Swap`/`Initialize`/`Mint`/`Burn` logs and the `algebra-integral-pool-surface-v1`
-  address surface; candidate key/instance key = pool; labels `["algebra-integral"]`;
-  address-surface nomination; tx-seed nominations. The `factory-log` source is represented as
-  `landed-log` because mapped discovery's `sources` enum has no `factory-log`
-  (`declarative-discovery.ts:123-127`), the same substitution accepted for univ2/univ3.
-- **Instance/routes**: pool/token0/token1/tickSpacing/factoryBinding/executedFee projection, the
-  two directed routes and the legacy four-part route key
-  `familyId␟lower(pool)␟lower(tokenIn)␟lower(tokenOut)` (`routes.ts:27-48`), graph venue and
-  token-delta effects. The draft under-specifies `poolMaterialization` (omitted) rather than
-  inventing a decode; the handwritten `swap.ts:94-121` factory-`Pool` materialization is
-  canonical ABI and can be added once the identity question is resolved.
-- **Swap observation**: canonical `Swap` event with the trailing `overrideFee`/`pluginFee` words,
-  the mutation events (`Initialize`/`Mint`/`Burn`), the observed `swap` call and
-  `victimSupport: "none"` (`swap.ts:38-52,124-180`). The full event ABI is declarable; the
-  declaration is conservative because the handwritten family uses a V3-shaped receipt observer
-  with empty intake targets (`swap.ts:83-122`).
-- **Action descriptor/trace**: `algebra-integral-swap`, `edgeKind: "swap"`, optional trace on
-  `swap(address,bool,int256,uint160,bytes)` (`action.ts:11-41`).
+f4a16ced allows several variants on one lineage and selects by a descriptor predicate:
+`build-declarative-production.ts:163,319-330` (coverage, not one-child-per-lineage) and
+`declarative-family.ts:130-133,207-211` (lineage coverage; exactly one `match`). The static root and
+the dynamic child share `algebra-integral:factory-child` and differ only by `executedFee.kind`.
 
-## Blocking gaps
+### G-A2 (was decisive) — CREATE2/code/immutable Quoter proof: **RESOLVED**
 
-### G-A1 (decisive) One lineage, two exact/pricing models — variants require distinct lineages
+`declarative-values.ts:185-198` now exposes `abiEncode`, `create2Address` and
+`decodeErrorCanonical`, and `maskHash`/`bytes`/`addressWord` already expose bounded code words.
+The identity stage reads `get-code` for the fixed Quoter and the pool plugin, then a declared model
+(`algebra-integral:quoter-binding`) reproduces the handwritten proof: fixed Quoter runtime hash,
+factory/poolDeployer equality, CREATE2(poolDeployer, keccak(abi.encode(sorted tokens)),
+poolInitCodeHash) == pool, plugin bytecode length/ten masked immutable words/normalised hash and
+plugin factory. Validated against `test/dynamic-fixtures.ts` (no live RPC).
 
-The handwritten identity emits exactly one lineage for every admitted pool
-(`identity.ts:77,316`, `manifest.ts:6-8`). The executed-fee model is a per-descriptor fact:
+### G-A3 (non-decisive) — capture-channel substitution: **REMAINS, accepted**
 
-- static pools use `algebra-single-range-state` local math (`exact.ts:82-90`);
-- dynamic Cypher-plugin pools use the chain `algebra-bound-quoter` with a different method kind,
-  `caller: transaction-origin`, evidence shape and cache projection (`exact.ts:78-80`,
-  `quoter-exact.ts:1-70`);
-- pricing switches refresh policy (`pricing.ts:54`), transports (`pricing.ts:93`), guard reads
-  (`pricing.ts:96-97`) and mid semantics (`pricing.ts:191-197`) on the same
-  `descriptor.executedFee.kind`.
+Mapped discovery has no `factory-log` source (`declarative-discovery.ts:137` allows
+`landed-log`/`observed-call`/`address-surface`) and always installs
+`explicitReverseBindingUnsupported` (`declarative-discovery.ts:103`, `:428`). The JSON therefore
+nominates from landed logs/address surface and identity re-verifies factory/token/tick/fee and
+`poolByPair`. This is the same capture-channel substitution accepted for univ2/univ3/Ella, not an
+admission relaxation. The family contract test that asserts `sources.includes("factory-log")` and
+`reverseBinding.kind === "implementation"` fails for that reason.
 
-Declarative exact methods are fixed per selected variant
-(`declarative-family.ts:594-667`), and variants are selected by descriptor `match`
-(`declarative-family.ts:201-205`). A child variant is the only way to carry a second exact/pricing
-program — but the production generator requires one declaration per lineage and rejects duplicate
-lineages:
+### G-A4 (settlement) — deferred-input: **REMAINS, fail-closed narrowing**
 
-```
-build-declarative-production.ts:163   if (lineages.length !== childFiles.length + 1) throw ...
-build-declarative-production.ts:319-321  duplicate variant identity/lineage -> throw
-```
+`execution.ts:47-70,236-260` supports direct-output plus deferred-input; the declarative declaration
+publishes `settlement.directOutput: true` and default/direct output only. Deferred input with a
+signed `int256` debt callback still needs a parent witness the common compiler does not provide for
+this callback. Same precedent as univ3. Not converted into a weaker check.
 
-Splitting static and dynamic into two variants would either:
+## New deviations observed while validating (framework/API shape, not quote or settlement semantics)
 
-1. reuse `algebra-integral:factory-child` for both — rejected by the generator; or
-2. assign a synthetic lineage to dynamic pools — changes `descriptor.lineageId`, route lineage,
-   binding/fingerprint and central lineage semantics for real production instances. Not faithful.
-
-A single variant cannot hold both exact methods: the selected `exact` is one object with one
-`methodId`/`requirements`/`quoteFlow` (`declarative-family.ts:594-667`), and a child JSON cannot
-override only `exact` without also declaring a distinct identity lineage. This is a framework
-declaration-model gap, not a JSON detail.
-
-### G-A2 (decisive) Dynamic-fee binding needs a code/CREATE2 proof the declarative language cannot express
-
-Dynamic pools are admitted only with a bound official Quoter and Cypher plugin
-(`identity.ts:98-136,281-282`). `quoter-model.ts` proves:
-
-- fixed Quoter runtime code hash (`quoter-model.ts:18-19,63`);
-- plugin bytecode length 15869, immutable words at ten offsets all equal and address-shaped,
-  masked-code keccak equal to a fixed normalized hash, and pool/factory immutables equal
-  (`quoter-model.ts:22-47`);
-- `quoter.factory == pool.factory`,
-  `quoter.poolDeployer == factory.poolDeployer`, and
-  `CREATE2(poolDeployer, keccak(abi.encode(sorted tokens)), poolInitCodeHash) == pool`
-  (`quoter-model.ts:63-78`).
-
-Declarative values can hash code and mask fixed byte ranges (`declarative-values.ts:23,183,226`),
-so the plugin length/immutables/normalized hash are authorable with `maskHash`/`bytes`/
-`addressWord`. The CREATE2 relation is not: the closed op list has no keccak-of-concatenated-bytes
-or CREATE2 derivation, and `hash` is canonical JSON hashing, not keccak
-(`declarative-values.ts:23`). `bytecodeGetter` has only the
-`solidity-0.7-address-bool-mapping` profile (`declarative-bytecode.ts:3-6,27-34`), not an arbitrary
-code/immutable classifier. Dropping CREATE2 is not obviously a no-op: it is the only declaration
-that ties the Quoter's deployer/salt/init-code to the admitted pool, and the framework offers no
-equivalent generic proof. Even if one argues it is implied by the official Quoter's fixed code
-hash plus the factory reverse binding, that is a semantic argument the framework does not make;
-recording it as “equivalent” would be a new security claim, not a migration.
-
-### G-A3 (non-decisive) Custom capture nomination and reverse binding
-
-The handwritten discovery owns `nominateAlgebraIntegral` (recent pool `Swap` log
-re-materialization) and `reverseBindAlgebraIntegral` (address-surface factory read with code
-check) (`nomination.ts:1-51`, `reverse-binding.ts:1-95`; `discovery.ts:74-78`). Declarative v2
-always installs `explicitReverseBindingUnsupported` (`declarative-discovery.ts:308`) and exposes
-only address-surface/tx-evidence nomination. The draft uses address-surface nomination with
-factory/token hints, and identity would still re-verify factory/token/tick/fee and
-`poolByPair` on chain. This is the same substitution accepted for Ella/univ2 (a capture-channel
-change, not an admission relaxation), so it is not the reason the family is parked.
-
-### G-A4 (settlement, same as univ3) Deferred-input is not migrated
-
-The handwritten runtime leg supports `deferred-input` and `direct-output`
-(`execution.ts:47-70,236-260`). Declarative execution's `deferred` model requires uint256
-debt/output callback arguments and a parent witness (`declarative-callback.ts:17-40,210-260`),
-while Algebra's callback is `algebraSwapCallback(int256,int256,bytes)` with signed deltas; the
-framed-settlement path requires a parent expectedOutput witness (`declarative-execution.ts:797-812`;
-design doc §6). The draft would declare only default/direct output, matching the univ3 precedent.
-This is fail-closed narrowing, not a weakened check.
+1. **Execution program layout.** Declarative v2 frames always seed `r14/r15`, add an
+   untouched-native guard and compile the callback sub-program/returned-floor opcodes
+   (`declarative-execution.ts:635-636,415-418`). The handwritten algebra program has 13 flat
+   instructions (`execution.ts:104-150`); the family test's `parseRuntimeProgram` assertions
+   therefore fail even though the quote/debit/receipt semantics are equivalent or stricter.
+2. **Action metadata.** `createDeclarativeProgramAction` fixes `isWrapper:false`,
+   `field2Offset:null` and accepts only `{runtimeAmountProgram}` nodes
+   (`declarative-execution.ts:947-967`); the handwritten algebra action declares
+   `field2Offset:132, isWrapper:true` (`action.ts:19-33`). Encode behaviour for real nodes matches.
+3. **Built-in local-zero id.** The common compiler names it `local-zero`; the test expects
+   `algebra-local-zero` (`declarative-family.ts:610`).
+4. **Pricing static evidence.** Declarative `finalizePricingDescriptor` requires `staticEvidence`
+   (`declarative-family.ts:473-475`); the handwritten contract helper calls it with `{draft}` only.
+   The production lifecycle supplies the evidence.
+5. **Evidence rejection wording / classify input.** With `retainReadEvidence` a tampered amount is
+   rejected before the hash compare as `execution read proof amount mismatch`
+   (`declarative-family.ts:750-757`), and `landedEvents.classify` decodes the full event rather than
+   classifying a truncated `data:"0x"` observation (`declarative-swap-domain.ts:111-113`).
+6. **Pricing fee telemetry.** Projection `feeBps` is an integer
+   (`declarative-pricing-projection.ts:24-31`), so raw hundredths-of-a-bip hints floor to whole bps
+   (static 500 → 5 is exact; odd/dynamic hints lose sub-bps). Mids still use the same integer
+   numerator/denominator ratio.
+7. **Landed `Pool` materialisation** is declared as a mutation event so the factory log can seed
+   `poolMaterialization`; the handwritten observer classifies only swap/mutation events from the
+   pool itself.
 
 ## Validation performed
 
-- The draft is valid JSON and deliberately not importable; no `createDeclarativeSwapRuntime` run is
-  claimed. Compiling would fail on the omitted required `identity`/`standard`/`pricing`/`exact`
-  blocks, which is the intended parked state.
-- Line references above were checked against the current tree. The framework variant/lineage
-  constraints are in `build-declarative-production.ts` and `declarative-family.ts` as cited.
-- No public framework TS/test, production entry, generated artifact or generator output was
-  changed.
+- `compileDeclarativeSwap` + `renderDeclarativeProductionEntry` for root+child: green; generated
+  entry loaded through `defineSwapFamily`/`assertDefinedFamilyPlugin` with 6 discovery patterns,
+  2 identity variants, one owned action and a runtime leg; handwritten entry restored afterwards
+  (`git status` clean for that path).
+- In-memory parity harness against the handwritten plugin and its real/synthetic fixtures:
+  **137 checks passed** — static+dynamic identity/descriptor/rejections, routes/graph, static Exact
+  for 1k/10k/1M and decline/crossing/dynamic-fee cases, dynamic Quoter Exact/evidence, pricing
+  snapshot/mids/reserves/fee, Swap observation payload/classification, fragment/runtime-leg and
+  evidence rejection.
+- Family contract test with the temporary rendered entry: **22 pass / 11 fail**; every failure is
+  one of deviations 1–7 above (execution byte layout, action metadata, local-zero id, pricing
+  `staticEvidence`, wording, discovery channel, classify input). No quote amount, route,
+  identity verdict or settlement effect differed from the retained implementation.
+- `test/refresh.ts` is not runnable unchanged in this tree (it imports the missing
+  `production-families/univ2-standard.production.js` and then expects the retired univ2 lifecycle).
+  A temporary copy with absolute imports, the univ2 leg skipped and the two derived row/edge counts
+  adjusted passed its Algebra assertions **6/6** in both `coarse` and `runtime` paths: dynamic
+  each-block refresh, static on-touch carry, repeated failure withdrawal/recovery, Quoter calls from
+  `transactionOrigin`, effective mids and the exact read round `["exact-quoter","pool-plugin",
+  "plugin-code","quoter-code"]`.
+- `npm run test:family-json`: **652 tests / 651 pass / 0 fail / 1 skip**.
+- `npm run check:protocol-json-samples`: green (input-library integrity only).
+- `tsc -p tsconfig.live.json --noEmit` / `npm run build:live`: only unrelated errors from the
+  concurrently added untracked `venues/swaps/dodo-v2-family/math.ts`; zero algebra errors.
+- `family-capability-manifest:check` now stops at this staged JSON with "refusing to overwrite a
+  handwritten production entry" (it wants to generate `algebra-integral.production.ts`). This is the
+  expected staged-migration state while the production generator is out of scope; the framework
+  window must run `family-capability-manifest:generate` during cut-over (the same is true for the
+  concurrently staged dodo/oneswap JSON). `check:protocol-json-samples` and `test:family-json` are
+  green.
 
-## Revisit conditions
+## Remaining work before cut-over
 
-1. A generic way for one lineage to select a per-descriptor exact/pricing program (for example,
-   variant selection by an instance-controlled fact that does not require a distinct lineage, or
-   an exact program with declared per-descriptor method choice). This is the first blocker.
-2. A declarative code/CREATE2/immutable-word proof profile for plugin-bound Quoters (not a
-   protocol-specific hook). Without it the dynamic variant cannot be admitted faithfully.
-3. Optional: declarative nomination/reverse-binding hooks, and a signed-int256 deferred-settlement
-   model, to remove the capture/settlement substitutions.
+- Framework window: adapt the algebra contract test to the declarative action/execution/pricing API
+  (or restore byte-identical emission) and re-run it green.
+- Decide whether the accepted capture-channel substitution and direct/default-only settlement are
+  acceptable for this Family's production cut-over; both are recorded above rather than narrowed
+  silently.
+- Run the production generator and the normal Ready/graph/exact acceptance after cut-over; this
+  round did not generate or publish anything.

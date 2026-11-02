@@ -1,154 +1,115 @@
-# `univ4-fee-hook` — parked declarative draft and blockers (2026-10-30)
+# `univ4-fee-hook` — parked after f4a16ced re-evaluation (2026-11-02)
 
-Status: **not migrated**. The handwritten `production-families/univ4-fee-hook.production.ts` remains
-the only production entry (activation `enabled:true`,
-`SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED`). No production entry, generated artifact, public
-framework TS/test, live, VM, RPC, signing or broadcast was touched.
+Status: **still parked / not migrated**. The handwritten
+`production-families/univ4-fee-hook.production.ts` remains the only production entry
+(activation `enabled:true`, `SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED`). No production entry,
+generated artifact, public framework TS/test, live, VM, RPC, signing or broadcast was touched.
 
-Framework baseline: merged `47422c97` (directional execution, quoteOutput exports, zero-output exact,
-conditional trialState, callback-frame expressions, receipt observation).
+Baseline: `04553544` (merge of f4a16ced) on `codex/protocol-json-20261029`. The earlier parking
+note is superseded where marked below; the draft `univ4-fee-hook.draft.json` stays evidence only.
 
-Files parked here:
+## Gaps that f4a16ced actually closed
 
-- `univ4-fee-hook.draft.json` — partial `protocol-json-v2` draft. It carries the semantically stable
-  parts (scope/production/manifest, mapped discovery with fee-hook-owned pattern ids, action/trace
-  declaration) plus explicit `_status`/`_blocker`/`_source` keys. It deliberately has **no**
-  `identity`/`instance`/`routes`/`pricing`/`standard`/`swap`/`modules` sections and is therefore not
-  importable: the production loader rejects the marker keys
-  (`listener/src/searcher/build-declarative-production.ts:118-120`) and the missing required blocks.
-  It is evidence, not a deliverable.
-- `univ4-fee-hook.blockers.md` — this file.
+### G-UV4FH-1 (was decisive) — one lineage, two hook models: RESOLVED
 
-## Source of truth read
+`f4a16ced` permits several variant declarations on one lineage and validates coverage instead of a
+one-child-per-lineage count:
 
-`listener/src/searcher/venues/swaps/univ4-fee-hook-family/{manifest,discovery,identity,sat1-identity,sat1,sat1-local,sat1-math,instance,routes,pricing,exact,tiered-exact,execution,action,swap,victim,types}.ts`,
-`test/{sat1,sat1-local,tiered-exact}.ts`, `test/univ4-fee-hook-family-plugin.ts`,
-`production-families/univ4-fee-hook.production.ts`, and the common engine
-(`declarative-{family,discovery,identity,read-flow,execution,callback-frames,swap-domain,quote-proof}.ts`,
-`build-declarative-production.ts`).
+- `listener/src/searcher/build-declarative-production.ts:163` now rejects only
+  `lineages.length > childFiles.length + 1`; `:319-330` de-duplicates variant `id`s but no longer
+  rejects a repeated `lineageId`, and still requires the declared lineage set to be covered.
+- `listener/src/searcher/venues/declarative-family.ts:130-133` accepts repeated lineages while
+  requiring every variant lineage to be declared; `:207-211` selects exactly one variant by
+  `match` and requires a boolean result.
 
-Baseline note: `node --import tsx src/searcher/test/univ4-fee-hook-family-plugin.ts` already fails in
-this tree before any migration change with
-`univ4 fee-hook execution received incompatible exact evidence`
-(`test/univ4-fee-hook-family-plugin.ts:121` → `univ4-fee-hook-family/execution.ts:110`). The
-handwritten contract suite is therefore not green evidence for this family today.
+The audited tiered hook and the SAT1 hook can therefore be two variants of the one
+`univ4:pool-manager-fee-hook-subinstance` lineage, as already exercised by
+`protocols/token-conversion-family/{token-conversion,xwin-allocations-v1}.json` and the new
+`test/declarative-production.test.ts:195` case.
 
-## What the draft already expresses
+### G-UV4FH-2 (was decisive) — one quoteFlow/exact shape per variant: RESOLVED
 
-- **Manifest/scope/activation** exactly match `univ4-fee-hook-family/manifest.ts:35-60` and
-  `production-families/univ4-fee-hook.production.ts:22`: family `univ4-fee-hook`, lineage
-  `univ4:pool-manager-fee-hook-subinstance`, activation
-  `SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED`, six owned fee-hook actions and the three required infra
-  actions (`erc20-transfer`, `weth-deposit-value`, `weth-withdraw-amount`), `singleton-v4`.
-- **Discovery**: the same manager `Initialize`/`Swap`/`ModifyLiquidity` surface instantiated with this
-  family's own pattern ids (required because the landed-event registry keys topics by id,
-  `univ4-family/codec.ts:22-42` and `univ4-fee-hook-family/manifest.ts:27-38`), the
-  `univ4-pool-surface-v1` address surface, fee-hook labels and the same
-  `PositionManager.poolKeys(bytes25)` nomination read flow as the migrated `univ4` JSON. Identity
-  remains the admission gate for the audited hook / sat1 hook subset
-  (`univ4-fee-hook-family/discovery.ts:24-40`); the draft records this as a comment, because mapped
-  discovery has no math-model predicate on the surface and adding one would only duplicate identity.
-- **Action descriptors**: the six fee-hook-owned adapter ids with the same descriptor fields as
-  `univ4-fee-hook-family/action.ts:28-104` (`univ4-fee-hook-settle-value` is the only
-  `canSendValue:true`).
+Modules are read per variant and overlaid over the root declaration
+(`venues/declarative-family-modules.ts:101-108`), and exact/quoteFlow/pricing are selected from the
+variant that matches the descriptor (`venues/declarative-family.ts:158-190,668-704`). A SAT1 child
+can declare `local-math` + `trialState` while the tiered root keeps an `effect-simulation` quote.
 
-## Decisive blockers
+### G-UV4FH-4 (was decisive) — model-dependent identity shape: RESOLVED
 
-### G-UV4FH-1 (decisive) One lineage, two incompatible hook models
+Each variant owns its identity variant (`venues/declarative-family.ts:321-329`), and `applies` is
+evaluated per candidate (`venues/declarative-identity.ts:113`). The fee-hook/SAT1 split is exactly
+the handwritten structure (`univ4-fee-hook-family/identity.ts:42-83,155-206` plus
+`sat1-identity.ts:18-75`). The `sat1Permissions` bit test
+(`univ4-fee-hook-family/sat1.ts:23-25`) is expressible as an identity/discovery predicate through a
+declared math model or an address-pattern match; it no longer needs a new framework hook.
 
-The family has **one** lineage (`manifest.ts:6-8,52`) but **two** descriptor models:
+## Genuinely still unsupported
 
-- the audited tiered dynamic-fee hook (`identity.ts:42-83`, hook address/code hash constants in
-  `manifest.ts:16-21`), and
-- the SAT1 curve hook (`sat1-identity.ts:18-73`, `applies` on `sat1Permissions(hook)`,
-  `sat1.ts:23-25`).
+### G-UV4FH-5 (decisive, new) — declarative actions cannot carry the fee-hook graph nodes
 
-`descriptor.hookModel` then selects pricing, exact and execution semantics
-(`pricing.ts:29-31,58-66,81-104`; `exact.ts:214-223`; `execution.ts:20-37`).
+The declarative action compiler only accepts one-parameter runtime nodes:
 
-Declarative variants are per-lineage, and a family's variant set must cover exactly one lineage per
-variant:
+- `listener/src/searcher/venues/declarative-execution.ts:947-967` —
+  `createDeclarativeProgramAction` sets `isWrapper:false`, `field2Offset:null`, and its `encode`
+  rejects any node whose `params` is not exactly `{runtimeAmountProgram}` (`:962`); it never encodes
+  a graph node from protocol parameters.
 
-- `build-declarative-production.ts:163` — `lineages.length !== childFiles.length + 1` rejects a
-  second variant on the same lineage;
-- `declarative-family.ts:201-205` — a descriptor must match exactly one variant;
-- `declarative-family.ts:316-329` — each variant owns exactly one identity variant, but the family
-  needs two identity proofs (`identity.ts:42-83` + `sat1-identity.ts:18-73`) under one lineage.
+The fee-hook Family currently owns six graph-level action adapters:
+`univ4-fee-hook-family/action.ts:56-104` builds `univ4-fee-hook-{swap,take,sync,settle,settle-value}`
+from the shared V4 encoders and the SAT1 `swap` wrapper at `action.ts:59-77` validates
+`params.hookData`, `zeroForOne`, `amountSpecified === -node.amount`, actor binding and empty
+children. `test/sat1.ts:116-128` exercises that path directly. A declarative entry would either
+drop these adapters or reject every valid node, which is a capability narrowing, not a migration.
+The unlock action is also a wrapper (`adapters/univ4.ts:44-59`, `V4_UNLOCK_FIELD2 = 68`), so even
+the runtime-node re-encoding loses wrapper metadata.
 
-Splitting into two declarative variants would require a second lineage and would change the
-production descriptor/route/graph identity — not a faithful migration.
+### G-UV4FH-3 (narrowed, still a contract mismatch) — single-leg SAT1 trial publication
 
-### G-UV4FH-2 (decisive) One `quoteFlow`/`exact` shape per variant vs two quote sources
+The earlier claim that SAT1 trial state cannot be declared is no longer accurate:
+`declarative-trial-state.ts` now supports expression-valued `reads[].refs`/`initial`, one model,
+and expression-valued `stateChanges`/`stateEffects` (`:45-56,109-173`), and a sequential prefix is
+accepted once trial state is issued (`:108`; the central consumer already calls
+`method.trialState.quote` for prefixes, `adapter-family-runtime.ts:1528-1555`). The hook-shared
+ref key/binding/dependencies and per-actor cooldown map can be authored.
 
-The tiered model's production default Exact is an **executor-program receipt simulation**:
-`tiered-exact.ts:29-66` builds an `effect-delta-simulation` request from the family's runtime program
-and decodes the observed token deltas (`tiered-exact.ts:68-96`, `chainAmountQuote`).
-
-The SAT1 model's production default Exact is a **source-pinned local integer curve** with trial
-state: `sat1-local.ts:106-134` (`sat1-local-exact-in`, `trialState.quote`, state changes/effects) over
-11 `eth-call` reads (`sat1-local.ts:66-94`), plus optional sequential prefix quoting
-(`exact.ts:24-61,140-160`).
-
-A declarative variant declares exactly one `quoteFlow` with one `sourceKind`
-(`declarative-family-modules.ts:18,65-86`) and one request-program exact method id
-(`declarative-family.ts:594-666`). `effect-simulation` and `local-math` cannot be combined in one
-variant, and a chain `view` flow cannot prove the tiered simulation receipt. The two models therefore
-cannot share one declarative variant, while G-UV4FH-1 forbids two variants on one lineage.
-
-### G-UV4FH-3 (decisive) SAT1 trial state and sequential prefix are not declarable
-
-- The SAT1 state cell is hook-shared and carries dynamic per-actor cooldown keys plus the
-  `initializedPools` list (`sat1-local.ts:15,29-40,93`); the state transition is published as
-  `stateChanges`/`stateEffects` (`sat1-local.ts:55-67`) with resource coordinates from
-  `local-state-models/resources.ts`.
-- Declarative trial state requires pre-declared read refs whose evaluated objects must match the
-  change refs (`declarative-trial-state.ts:45-56,163-172`) and requires trial evidence to carry
-  `executor/direction/amountIn/bindingFingerprint` (`declarative-trial-state.ts:148-151`). The SAT1
-  model could be registered as a pure math model (`sat1-math.ts:1-204`), but the hook-shared state
-  refs, per-actor cooldown resource effects and issued-state commit are projector-owned; JSON can
-  only imitate them, not preserve the production risk proof.
-- Sequential prefix: `univ4-fee-hook-family/exact.ts:24-61` requires a complete same-instance prefix
-  and emits a V4 Quoter multi-hop path; declarative exact has no `prefix` input in its flow/replay
-  environment (`declarative-family.ts:668-704`), and trial state rejects a prefix without issued state
-  (`declarative-trial-state.ts:108`).
-
-### G-UV4FH-4 (decisive) Identity decision shape is also model-dependent
-
-The SAT1 identity proof returns a `retryable` decision for the first-100-block entropy window
-(`sat1-identity.ts:56-63`) and different facts (`hookModel:"sat1"`, token/minter/genesis reads,
-`sat1-identity.ts:18-48`), while the audited hook proof returns `hook_code_hash_changed` /
-`pool_not_initialized` with a different fact set (`identity.ts:155-206`). A single declarative identity
-variant could branch in `decide`, but it must also own one `quoteFlow`/`exact` shape (G-UV4FH-2) and
-one pricing projection, so the identity split cannot be resolved independently of the other two
-blockers. The fee-hook/SAT1 candidate filter also needs a bit-mask predicate (`sat1Permissions`) that
-is only available through a math model, not through discovery scalar predicates.
+What still differs is publication shape: `fromReadFlow` always runs the model and always returns
+`stateChanges`/`stateEffects` when the trial-state module is available
+(`venues/declarative-trial-state.ts:159-173`), while the production SAT1 local method publishes them
+only when the consumer already issued trial state
+(`univ4-fee-hook-family/sat1-local.ts:54-64`). The family contract asserts the production shape
+(`univ4-fee-hook-family/test/sat1-local.ts:90`), and `declarative-family.ts:689-692` therefore adds
+transition fields to a single-leg result that the handwritten method never emits. This is a
+result-shape difference (ignored without a prefix) rather than a narrowing, but it is not faithful
+as long as the family test is the oracle and test changes are out of scope.
 
 ## Non-decisive deviations that would remain
 
-If the generic gaps were closed, the following would still need explicit declaration/documentation:
-
-1. **Pricing mid shape**: SAT1 `deriveMids` uses float factors
-   (`pricing.ts:85-97`: `1e18/marginalPrice*0.997`, supply ratios) and depth proxies
-   (`SAT1_MAX_BUY`, remaining fair-supply cap). Declarative projection rows are integer
-   numerator/denominator/depth (`declarative-pricing-projection.ts:19-30`); a rational declaration can
-   approximate but not reproduce the production float mid exactly. Telemetry-only, not a trade gate.
-2. **SAT1 execution hookData**: `hookDataFor` (`sat1.ts:26-46`) derives an actor-bound buyer/seller
-   address and the fee-hook swap action wrapper validates `amountSpecified === -node.amount`
-   (`action.ts:57-83`). Declarative execution can compute the same hookData through a math model, but
-   the graph-level `univ4-fee-hook-swap` node path (params.hookData) has no declarative adapter; only
-   the runtime-program path exists (`declarative-execution.ts:887-891`).
-3. **Fee-hook withdrawal/wrap actions**: the manifest requires `weth-deposit-value` and
-   `weth-withdraw-amount` infra; those exist on the shared surface but the declarative entry has no
-   execution steps that use them. The sat1 `settle-value`/wrap path must be re-expressed if the family
-   is ever migrated.
-4. **Tiered exact evidence**: `tiered-executor-receipt` evidence carries `executor` and
-   `transactionOrigin` (`tiered-exact.ts:88-93`); the declarative evidence hash is re-derived in
-   `buildFragment` (`declarative-family.ts:745-749`) and can carry invocation facts, but the
-   `gasEstimate`/`hookData` details would need the same treatment recorded for `univ4`.
+1. **SAT1 pricing mid/fee telemetry**: production `pricing.ts:66-72` derives a float mid
+   (`1e18/marginalPrice*0.997` or supply-ratio sell) and `feeBps: 30`; declarative rows are integer
+   numerator/denominator/depth (`venues/declarative-pricing-projection.ts:24-31`). A rational can
+   reproduce the mid to float rounding, but odd raw-fee hints lose sub-bps precision because
+   `feeBps` must be an integer. Telemetry only; Exact still uses the local/Quoter model.
+2. **Tiered exact evidence** (`tiered-exact.ts:29-96`) is expressible through the new
+   `declarative-execution-simulation` + `effect-delta-simulation` chain proof
+   (`venues/declarative-simulation.ts:49-100`, `venues/declarative-quote-proof.ts:160-220`), so it
+   is not a blocker; the dropped `gasEstimate` is zero in production anyway.
+3. **Deferred/native settlement**: the fee-hook runtime program reuses the shared V4 unlock
+   callback; declarative supports the default/direct path and framed deferred with a parent
+   witness. Any fee-hook path that relies on deferred input without a witness remains unsupported
+   and must be recorded per direction if the Family is ever migrated.
 
 ## Verdict
 
-Stop per migration policy. G-UV4FH-1 (one lineage/two models), G-UV4FH-2 (one quote source per variant)
-and G-UV4FH-3 (SAT1 trial state/prefix) are structural; any single-variant workaround would narrow or
-rewrite the two production semantics. Revisit when the common framework can declare per-descriptor
-exact/pricing programs (or two lineages for one family) and a generic trial-state resource projection.
+Stop per migration policy. Same-lineage multi-model, per-variant quote sources, per-variant
+identity and CREATE2/ABI value ops are now sufficient for the *definition* shape, but G-UV4FH-5
+loses a supported graph-level execution/action surface, and G-UV4FH-3 still changes the
+single-leg exact result contract. Revisit when declarative actions can encode protocol-parameter
+graph nodes (including wrapper metadata) and when trial-state publication can be conditioned on the
+consumer having issued state.
+
+## Validation performed
+
+- Read the current sources listed above and the new common tests
+  (`declarative-common-models.test.ts`, `declarative-execution-assets.test.ts`,
+  `declarative-quote-proof-extended.test.ts`, `declarative-production.test.ts`).
+- No JSON/TS/entry change was made for this Family; the draft remains non-importable evidence.

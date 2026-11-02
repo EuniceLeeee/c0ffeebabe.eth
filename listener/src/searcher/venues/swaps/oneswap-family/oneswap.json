@@ -1,0 +1,3849 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:oneswap"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_ONESWAP_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:oneswap",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "oneswap-market-order"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "oneswap:amm-orderbook-v1"
+    ],
+    "poolAdapterIds": [
+      "oneswap"
+    ],
+    "edgeAdapterIds": [
+      "oneswap-market-order"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "variantFiles": [],
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "oneswap",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address"
+        },
+        "key": [
+          "pool"
+        ],
+        "instanceKey": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "oneswap-market-order",
+          "signature": "function addMarketOrder(address stock,address money,uint112 amount) payable returns (uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "oneswap-NewMarketOrder",
+          "signature": "event NewMarketOrder(uint256 word)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "sub",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "mul",
+                      "args": [
+                        {
+                          "op": "div",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "256"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "oneswap-DealWithPool",
+          "signature": "event DealWithPool(uint256 word)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "sub",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "mul",
+                      "args": [
+                        {
+                          "op": "div",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "256"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "oneswap-OrderChanged",
+          "signature": "event OrderChanged(uint256 word)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "sub",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "mul",
+                      "args": [
+                        {
+                          "op": "div",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "256"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "surface": {
+        "id": "oneswap-interface",
+        "fingerprint": "oneswap-amm-orderbook-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          }
+        }
+      },
+      "nomination": "address-surface",
+      "labels": [
+        "oneswap",
+        "oneswap-market-order",
+        "custom-swap:oneswap"
+      ],
+      "txSeedNominations": false
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        "$identity.subject"
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "expressions": {},
+      "identity": {
+        "applies": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$candidate",
+                "candidateKind"
+              ]
+            },
+            "oneswap"
+          ]
+        },
+        "select": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$candidate",
+                    "candidateKind"
+                  ]
+                },
+                "oneswap"
+              ]
+            },
+            "error": "oneswap wrong candidate kind"
+          },
+          {
+            "return": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$evidence"
+                      ]
+                    }
+                  ]
+                },
+                "proxy",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "rejection"
+                          ]
+                        }
+                      ]
+                    },
+                    "done",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$evidence",
+                                "phase"
+                              ]
+                            },
+                            "proxy"
+                          ]
+                        },
+                        "factory",
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$evidence",
+                                    "phase"
+                                  ]
+                                },
+                                "factory"
+                              ]
+                            },
+                            "implementation",
+                            "done"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ],
+        "stages": {
+          "proxy": {
+            "requirements": {
+              "transports": [
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "proxy",
+                "kind": "get-code",
+                "address": "$candidate.pool"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "oneswap proxy missing/extra identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "oneswap proxy duplicate identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "oneswap proxy unexpected identity results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "code",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "proxy"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "proxy",
+                "value": {
+                  "op": "model",
+                  "args": [
+                    "proxy",
+                    {
+                      "code": "$code",
+                      "pool": "$candidate.pool"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "unsupported",
+                "value": {
+                  "op": "eq",
+                  "args": [
+                    "$proxy",
+                    null
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "proxy",
+                  "source": "$source",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      {
+                        "op": "get",
+                        "args": [
+                          "$request",
+                          "id"
+                        ]
+                      }
+                    ]
+                  },
+                  "rejection": {
+                    "op": "if",
+                    "args": [
+                      "$unsupported",
+                      "unsupported-oneswap-proxy",
+                      null
+                    ]
+                  },
+                  "facts": {
+                    "op": "if",
+                    "args": [
+                      "$unsupported",
+                      null,
+                      {
+                        "op": "merge",
+                        "args": [
+                          "$proxy",
+                          {
+                            "pool": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$candidate.pool"
+                                  ]
+                                }
+                              ]
+                            },
+                            "codeHash": {
+                              "op": "codeHash",
+                              "args": [
+                                "$code"
+                              ]
+                            },
+                            "implementation": "$constants.zero",
+                            "implementationCodeHash": "",
+                            "factoryCodeHash": ""
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "factory": {
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "factory-code",
+                "kind": "get-code",
+                "address": "$evidence.facts.factory"
+              },
+              {
+                "id": "logic",
+                "kind": "eth-call",
+                "to": "$evidence.facts.factory",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "pairLogic",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "registered-tokens",
+                "kind": "eth-call",
+                "to": "$evidence.facts.factory",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "getTokensFromPair",
+                    [
+                      "$evidence.facts.pool"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "registered-pair",
+                "kind": "eth-call",
+                "to": "$evidence.facts.factory",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "tokensToPair",
+                    [
+                      "$evidence.facts.stock",
+                      "$evidence.facts.money",
+                      "$evidence.facts.isOnlySwap"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "stock",
+                "kind": "eth-call",
+                "to": "$evidence.facts.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "stock",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "money",
+                "kind": "eth-call",
+                "to": "$evidence.facts.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "money",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "oneswap factory missing/extra identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "oneswap factory duplicate identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "oneswap factory unexpected identity results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                },
+                "error": "oneswap foreign identity source"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.facts.pool",
+                    "$candidate.pool"
+                  ]
+                },
+                "error": "oneswap inconsistent proxy identity"
+              },
+              {
+                "let": "factoryCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "factory-code"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "implementation",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "factory",
+                            "pairLogic",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "logic"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "token0",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "factory",
+                            "getTokensFromPair",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "registered-tokens"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "token1",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "factory",
+                            "getTokensFromPair",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "registered-tokens"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "registeredPair",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "factory",
+                            "tokensToPair",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "registered-pair"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "stock",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "pool",
+                            "stock",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "stock"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "money",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "pool",
+                            "money",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "money"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "bad",
+                "value": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$factoryCodeHash",
+                        "$constants.factoryHash"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$registeredPair",
+                        "$evidence.facts.pool"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$token0",
+                        "$evidence.facts.stock"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$token1",
+                        "$evidence.facts.money"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$stock",
+                        "$evidence.facts.stock"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$money",
+                        "$evidence.facts.money"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$implementation",
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "factory",
+                  "source": "$source",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      {
+                        "op": "get",
+                        "args": [
+                          "$request",
+                          "id"
+                        ]
+                      }
+                    ]
+                  },
+                  "rejection": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "ne",
+                        "args": [
+                          "$factoryCodeHash",
+                          "$constants.factoryHash"
+                        ]
+                      },
+                      "unsupported-oneswap-factory-runtime",
+                      {
+                        "op": "if",
+                        "args": [
+                          "$bad",
+                          "oneswap-registration-mismatch",
+                          null
+                        ]
+                      }
+                    ]
+                  },
+                  "facts": {
+                    "op": "merge",
+                    "args": [
+                      "$evidence.facts",
+                      {
+                        "factoryCodeHash": "$factoryCodeHash",
+                        "implementation": "$implementation"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "implementation": {
+            "requirements": {
+              "transports": [
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "implementation-code",
+                "kind": "get-code",
+                "address": "$evidence.facts.implementation"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "oneswap implementation missing/extra identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "oneswap implementation duplicate identity results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "id"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "oneswap implementation unexpected identity results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                },
+                "error": "oneswap foreign identity source"
+              },
+              {
+                "let": "implementationCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "implementation-code"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "complete",
+                  "source": "$source",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      {
+                        "op": "get",
+                        "args": [
+                          "$request",
+                          "id"
+                        ]
+                      }
+                    ]
+                  },
+                  "rejection": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "ne",
+                        "args": [
+                          "$implementationCodeHash",
+                          "$constants.implementationHash"
+                        ]
+                      },
+                      "unsupported-oneswap-implementation",
+                      null
+                    ]
+                  },
+                  "facts": {
+                    "op": "merge",
+                    "args": [
+                      "$evidence.facts",
+                      {
+                        "implementationCodeHash": "$implementationCodeHash"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "done": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": {
+                "op": "get",
+                "args": [
+                  "$evidence",
+                  "rejection"
+                ]
+              },
+              "evidenceRequestIds": {
+                "op": "get",
+                "args": [
+                  "$evidence",
+                  "ids"
+                ]
+              }
+            },
+            "when": {
+              "op": "defined",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "rejection"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "custom-swap:oneswap",
+                "lineageId": "oneswap:amm-orderbook-v1",
+                "subject": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "pool"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "facts": {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "facts"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "oneswap-verified-proxy-factory-registration-implementation",
+                    "subject": {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "facts"
+                          ]
+                        },
+                        "factory"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "facts": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "facts"
+                            ]
+                          },
+                          "source": {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "source"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "complete"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "op": "get",
+          "args": [
+            "$identity",
+            "facts"
+          ]
+        },
+        {
+          "familyId": {
+            "op": "get",
+            "args": [
+              "$identity",
+              "familyId"
+            ]
+          },
+          "lineageId": {
+            "op": "get",
+            "args": [
+              "$identity",
+              "lineageId"
+            ]
+          },
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$identity",
+                      "facts.pool"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            }
+          ],
+          "provenance": {
+            "op": "get",
+            "args": [
+              "$identity",
+              "provenance"
+            ]
+          }
+        }
+      ]
+    },
+    "bindingProjection": {
+      "op": "expression",
+      "args": [
+        "binding",
+        {
+          "d": "$descriptor"
+        }
+      ]
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pool",
+    "bindingKey": "$descriptor.pool",
+    "directions": {
+      "op": "map",
+      "args": [
+        [
+          true,
+          false
+        ],
+        "buy",
+        {
+          "op": "merge",
+          "args": [
+            {
+              "id": {
+                "op": "if",
+                "args": [
+                  "$buy",
+                  "buy",
+                  "sell"
+                ]
+              },
+              "enabled": true,
+              "tokenIn": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$buy",
+                          "$descriptor.money",
+                          "$descriptor.stock"
+                        ]
+                      },
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$constants.weth"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$buy",
+                          "$descriptor.money",
+                          "$descriptor.stock"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "tokenOut": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$buy",
+                          "$descriptor.stock",
+                          "$descriptor.money"
+                        ]
+                      },
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$constants.weth"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$buy",
+                          "$descriptor.stock",
+                          "$descriptor.money"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "adapterId": "oneswap-market-order",
+              "taxonomy": {
+                "slotKind": "swap"
+              },
+              "fields": {
+                "pool": "$descriptor.pool",
+                "buy": "$buy"
+              }
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$descriptor.stock",
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$descriptor.money",
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "executionAssets": {
+                    "input": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                "$buy",
+                                "$descriptor.money",
+                                "$descriptor.stock"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        "native",
+                        "erc20"
+                      ]
+                    },
+                    "output": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                "$buy",
+                                "$descriptor.stock",
+                                "$descriptor.money"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        "native",
+                        "erc20"
+                      ]
+                    }
+                  }
+                },
+                {}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": "$descriptor.pool"
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "custom-swap:oneswap",
+          "$descriptor.pool",
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "direction"
+            ]
+          }
+        ],
+        ":"
+      ]
+    },
+    "descriptorChecks": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.implementationCodeHash",
+            "$constants.implementationHash"
+          ]
+        },
+        "error": "oneswap unsupported implementation behavior"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.factoryCodeHash",
+            "$constants.factoryHash"
+          ]
+        },
+        "error": "oneswap unsupported factory behavior"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.implementationCodeHash",
+            "$constants.implementationHash"
+          ]
+        },
+        "error": "oneswap unsupported implementation behavior"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.factoryCodeHash",
+            "$constants.factoryHash"
+          ]
+        },
+        "error": "oneswap unsupported factory behavior"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "adapterId"
+              ]
+            },
+            "oneswap-market-order"
+          ]
+        },
+        "error": "oneswap wrong action adapter"
+      }
+    ],
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "mutationKinds": [
+      "log",
+      "call"
+    ],
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "finalize": "$draft",
+    "compatibility": {
+      "op": "expression",
+      "args": [
+        "binding",
+        {
+          "d": "$descriptor"
+        }
+      ]
+    },
+    "exactCompatibility": {
+      "binding": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "bindingRef"
+            ]
+          },
+          "fingerprint"
+        ]
+      },
+      "routeKey": {
+        "op": "get",
+        "args": [
+          "$route",
+          "routeKey"
+        ]
+      },
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "sampleAmount": {
+      "op": "get",
+      "args": [
+        {
+          "op": "get",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$snapshot",
+                "quotes"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "routeKey"
+              ]
+            }
+          ]
+        },
+        "amountIn"
+      ]
+    }
+  },
+  "standard": {
+    "id": "proxy-and-bidirectional-factory-registration",
+    "lineageId": "oneswap:amm-orderbook-v1",
+    "abi": {
+      "pool": [
+        "function stock() view returns (address)",
+        "function money() view returns (address)",
+        "function getReserves() view returns (uint112,uint112,uint32)",
+        "function getBooked() view returns (uint112,uint112,uint32)",
+        "function getOrderList(bool,uint32,uint32) view returns (uint256[])",
+        "function addMarketOrder(address,address,uint112) payable returns (uint256)"
+      ],
+      "factory": [
+        "function pairLogic() view returns (address)",
+        "function feeBPS() view returns (uint32)",
+        "function getTokensFromPair(address) view returns (address,address)",
+        "function tokensToPair(address,address,bool) view returns (address)"
+      ],
+      "token": [
+        "function balanceOf(address) view returns (uint256)",
+        "function transfer(address,uint256) returns (bool)"
+      ],
+      "multicall": [
+        "function getEthBalance(address) view returns (uint256)"
+      ]
+    },
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "multicall": "0xcA11bde05977b3631167028862bE2a173976CA11",
+      "implementationHash": "0xc52fb497f537ad9cd34c67b27a1dca7b5d31f13a78b6e004b7ee1101af0171d1",
+      "factoryHash": "0x73f0f18337ad08b19811b3b3d69bc37db992676fc2f6c573df728f628b8968f5",
+      "limit112Max": "5192296858534827628530496329220095",
+      "orderLimit": 65
+    },
+    "expressions": {
+      "binding": {
+        "op": "expression",
+        "args": [
+          "bindingTemplate",
+          {
+            "d": "$descriptor"
+          }
+        ]
+      },
+      "bindingTemplate": {
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$d.pool"
+              ]
+            }
+          ]
+        },
+        "factory": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$d.factory"
+              ]
+            }
+          ]
+        },
+        "stock": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$d.stock"
+              ]
+            }
+          ]
+        },
+        "money": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$d.money"
+              ]
+            }
+          ]
+        },
+        "ones": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$d.ones"
+              ]
+            }
+          ]
+        },
+        "isOnlySwap": "$d.isOnlySwap",
+        "stockUnit": "$d.stockUnit",
+        "priceMul": "$d.priceMul",
+        "priceDiv": "$d.priceDiv",
+        "implementation": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$d.implementation"
+              ]
+            }
+          ]
+        },
+        "codeHash": "$d.codeHash",
+        "implementationCodeHash": "$d.implementationCodeHash",
+        "factoryCodeHash": "$d.factoryCodeHash"
+      }
+    },
+    "match": {
+      "op": "eq",
+      "args": [
+        {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "familyId"
+          ]
+        },
+        "custom-swap:oneswap"
+      ]
+    },
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call",
+          "get-code"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.pool",
+        "$descriptor.stock",
+        "$descriptor.money",
+        "$descriptor.factory",
+        "$descriptor.implementation",
+        "$descriptor.ones"
+      ],
+      "mutationAddresses": [
+        "$descriptor.pool",
+        "$descriptor.stock",
+        "$descriptor.money",
+        "$descriptor.factory",
+        "$descriptor.implementation",
+        "$descriptor.ones"
+      ],
+      "classifyUnavailable": {
+        "op": "get",
+        "args": [
+          "$snapshot",
+          "unavailable"
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "oneswap-orderbook-math",
+      "requirements": {
+        "transports": [
+          "eth-call",
+          "get-code"
+        ]
+      },
+      "stateOnlyReads": true,
+      "retainReadEvidence": true,
+      "checks": [
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "$constants.limit112Max"
+                ]
+              }
+            ]
+          },
+          "error": "oneswap amountIn must be uint112"
+        },
+        {
+          "assert": {
+            "op": "ne",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$executor"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.pool"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "oneswap unsupported executor"
+        },
+        {
+          "assert": {
+            "op": "ne",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$executor"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.stock"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "oneswap unsupported executor"
+        },
+        {
+          "assert": {
+            "op": "ne",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$executor"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.money"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "oneswap unsupported executor"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              "$descriptor.implementationCodeHash",
+              "$constants.implementationHash"
+            ]
+          },
+          "error": "oneswap unsupported implementation behavior"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              "$descriptor.factoryCodeHash",
+              "$constants.factoryHash"
+            ]
+          },
+          "error": "oneswap unsupported factory behavior"
+        }
+      ],
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            "$descriptor.pool",
+            "$descriptor.stock",
+            "$descriptor.money"
+          ]
+        ]
+      },
+      "amountOut": {
+        "op": "get",
+        "args": [
+          "$quoteResult",
+          "amountOut"
+        ]
+      },
+      "evidence": {
+        "kind": "oneswap-orderbook-math",
+        "source": "$source",
+        "executor": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "routeKey": {
+          "op": "get",
+          "args": [
+            "$route",
+            "routeKey"
+          ]
+        },
+        "binding": {
+          "op": "get",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "bindingRef"
+              ]
+            },
+            "fingerprint"
+          ]
+        },
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "amountIntoPool": {
+          "op": "get",
+          "args": [
+            "$quoteResult",
+            "amountIntoPool"
+          ]
+        },
+        "bookOutput": {
+          "op": "get",
+          "args": [
+            "$quoteResult",
+            "bookOutput"
+          ]
+        },
+        "fee": {
+          "op": "get",
+          "args": [
+            "$quoteResult",
+            "fee"
+          ]
+        }
+      },
+      "zeroEvidence": {
+        "kind": "oneswap-orderbook-math",
+        "source": "$source",
+        "executor": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "routeKey": {
+          "op": "get",
+          "args": [
+            "$route",
+            "routeKey"
+          ]
+        },
+        "binding": {
+          "op": "get",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "bindingRef"
+              ]
+            },
+            "fingerprint"
+          ]
+        },
+        "amountIn": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "amountOut": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "amountIntoPool": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "bookOutput": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "fee": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        }
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            "$descriptor.pool",
+            "$descriptor.factory",
+            "$descriptor.implementation",
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenIn"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenOut"
+              ]
+            }
+          ]
+        ]
+      },
+      "steps": [
+        {
+          "id": "transferInput",
+          "when": {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "buy"
+                        ]
+                      },
+                      "$descriptor.money",
+                      "$descriptor.stock"
+                    ]
+                  },
+                  "$constants.zero"
+                ]
+              }
+            ]
+          },
+          "call": {
+            "target": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                "$descriptor.money",
+                "$descriptor.stock"
+              ]
+            },
+            "signature": "function transfer(address,uint256) returns (bool)",
+            "args": [
+              "$descriptor.pool",
+              {
+                "runtime": "amountIn"
+              }
+            ]
+          }
+        },
+        {
+          "id": "marketOrder",
+          "when": {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "buy"
+                        ]
+                      },
+                      "$descriptor.money",
+                      "$descriptor.stock"
+                    ]
+                  },
+                  "$constants.zero"
+                ]
+              }
+            ]
+          },
+          "call": {
+            "target": "$descriptor.pool",
+            "signature": "function addMarketOrder(address,address,uint112) payable returns (uint256)",
+            "args": [
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "buy"
+                    ]
+                  },
+                  "$descriptor.money",
+                  "$descriptor.stock"
+                ]
+              },
+              "$recipient",
+              {
+                "runtime": "amountIn"
+              }
+            ],
+            "save": {
+              "marketReturn": 0
+            }
+          }
+        },
+        {
+          "id": "marketOrderNative",
+          "when": {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "buy"
+                    ]
+                  },
+                  "$descriptor.money",
+                  "$descriptor.stock"
+                ]
+              },
+              "$constants.zero"
+            ]
+          },
+          "call": {
+            "target": "$descriptor.pool",
+            "signature": "function addMarketOrder(address,address,uint112) payable returns (uint256)",
+            "args": [
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "buy"
+                    ]
+                  },
+                  "$descriptor.money",
+                  "$descriptor.stock"
+                ]
+              },
+              "$recipient",
+              {
+                "runtime": "amountIn"
+              }
+            ],
+            "save": {
+              "marketReturn": 0
+            },
+            "value": {
+              "runtime": "amountIn"
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "buy"
+                      ]
+                    },
+                    "$descriptor.money",
+                    "$descriptor.stock"
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            [
+              {
+                "kind": "debit",
+                "asset": "native",
+                "account": "$executor",
+                "equals": {
+                  "runtime": "amountIn"
+                }
+              }
+            ],
+            [
+              {
+                "kind": "debit",
+                "token": {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "tokenIn"
+                  ]
+                },
+                "account": "$executor",
+                "equals": {
+                  "runtime": "amountIn"
+                }
+              }
+            ]
+          ]
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "buy"
+                      ]
+                    },
+                    "$descriptor.stock",
+                    "$descriptor.money"
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            [
+              {
+                "kind": "credit",
+                "asset": "native",
+                "account": "$recipient",
+                "equals": {
+                  "runtime": "marketReturn"
+                }
+              }
+            ],
+            [
+              {
+                "kind": "credit",
+                "token": {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "tokenOut"
+                  ]
+                },
+                "account": "$recipient",
+                "equals": {
+                  "runtime": "marketReturn"
+                }
+              }
+            ]
+          ]
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                "$externalRecipient",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$route",
+                                    "buy"
+                                  ]
+                                },
+                                "$descriptor.money",
+                                "$descriptor.stock"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$route",
+                                    "buy"
+                                  ]
+                                },
+                                "$descriptor.stock",
+                                "$descriptor.money"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            [
+              {
+                "kind": "unchanged-token",
+                "token": {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "tokenIn"
+                  ]
+                },
+                "account": "$recipient"
+              },
+              {
+                "kind": "unchanged-token",
+                "token": {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "tokenOut"
+                  ]
+                },
+                "account": "$executor"
+              }
+            ],
+            []
+          ]
+        }
+      ]
+    }
+  },
+  "swap": {
+    "version": 1,
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only",
+    "events": [
+      {
+        "id": "oneswap-NewMarketOrder",
+        "signature": "event NewMarketOrder(uint256 word)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$log",
+            "address"
+          ]
+        },
+        "match": true,
+        "valid": {
+          "op": "lte",
+          "args": [
+            {
+              "op": "sub",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "word"
+                  ]
+                },
+                {
+                  "op": "mul",
+                  "args": [
+                    {
+                      "op": "div",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "word"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "256"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "name": "NewMarketOrder",
+          "buy": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "word"
+                    ]
+                  },
+                  {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "div",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$args",
+                              "word"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "256"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "256"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          "word": {
+            "op": "get",
+            "args": [
+              "$args",
+              "word"
+            ]
+          }
+        },
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        },
+        "classification": "swap",
+        "receiptMode": "mutation-only",
+        "mutationReason": "oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"
+      },
+      {
+        "id": "oneswap-DealWithPool",
+        "signature": "event DealWithPool(uint256 word)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$log",
+            "address"
+          ]
+        },
+        "match": true,
+        "valid": {
+          "op": "lte",
+          "args": [
+            {
+              "op": "sub",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "word"
+                  ]
+                },
+                {
+                  "op": "mul",
+                  "args": [
+                    {
+                      "op": "div",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "word"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "256"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "name": "DealWithPool",
+          "buy": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "word"
+                    ]
+                  },
+                  {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "div",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$args",
+                              "word"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "256"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "256"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          "word": {
+            "op": "get",
+            "args": [
+              "$args",
+              "word"
+            ]
+          }
+        },
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        },
+        "classification": "swap",
+        "receiptMode": "mutation-only",
+        "mutationReason": "oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"
+      },
+      {
+        "id": "oneswap-OrderChanged",
+        "signature": "event OrderChanged(uint256 word)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$log",
+            "address"
+          ]
+        },
+        "match": true,
+        "valid": {
+          "op": "lte",
+          "args": [
+            {
+              "op": "sub",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "word"
+                  ]
+                },
+                {
+                  "op": "mul",
+                  "args": [
+                    {
+                      "op": "div",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "word"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "256"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "name": "OrderChanged",
+          "buy": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "word"
+                    ]
+                  },
+                  {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "div",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$args",
+                              "word"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "256"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "256"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          "word": {
+            "op": "get",
+            "args": [
+              "$args",
+              "word"
+            ]
+          }
+        },
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        },
+        "classification": "swap",
+        "receiptMode": "mutation-only",
+        "mutationReason": "oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"
+      }
+    ]
+  },
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "oneswap-market-order",
+        "lineage": "custom-swap:oneswap",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": true,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function addMarketOrder(address,address,uint112)"
+        }
+      ]
+    }
+  ],
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "proxy": {
+          "model": "oneswap:proxy",
+          "version": 1
+        },
+        "state": {
+          "model": "oneswap:state",
+          "version": 1
+        },
+        "quote": {
+          "model": "oneswap:quote",
+          "version": 1
+        },
+        "pricing": {
+          "model": "oneswap:pricing",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "Maker payments and orderbook/native mutations require actual sequential runtime simulation; no local prefix approximation.",
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call",
+              "get-code"
+            ]
+          },
+          "requests": [
+            {
+              "id": "reserves",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getReserves",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "booked",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getBooked",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "fee",
+              "kind": "eth-call",
+              "to": "$descriptor.factory",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "factory",
+                  "feeBPS",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "logic",
+              "kind": "eth-call",
+              "to": "$descriptor.factory",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "factory",
+                  "pairLogic",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "implementation-code",
+              "kind": "get-code",
+              "address": "$descriptor.implementation"
+            },
+            {
+              "id": "balance-stock",
+              "kind": "eth-call",
+              "to": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.stock",
+                      "$constants.zero"
+                    ]
+                  },
+                  "$constants.multicall",
+                  "$descriptor.stock"
+                ]
+              },
+              "data": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.stock",
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "encode",
+                    "args": [
+                      "multicall",
+                      "getEthBalance",
+                      [
+                        "$descriptor.pool"
+                      ]
+                    ]
+                  },
+                  {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "balanceOf",
+                      [
+                        "$descriptor.pool"
+                      ]
+                    ]
+                  }
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "balance-money",
+              "kind": "eth-call",
+              "to": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.money",
+                      "$constants.zero"
+                    ]
+                  },
+                  "$constants.multicall",
+                  "$descriptor.money"
+                ]
+              },
+              "data": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.money",
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "encode",
+                    "args": [
+                      "multicall",
+                      "getEthBalance",
+                      [
+                        "$descriptor.pool"
+                      ]
+                    ]
+                  },
+                  {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "balanceOf",
+                      [
+                        "$descriptor.pool"
+                      ]
+                    ]
+                  }
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "sells",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getOrderList",
+                  [
+                    false,
+                    0,
+                    65
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "buys",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getOrderList",
+                  [
+                    true,
+                    0,
+                    65
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "return": {
+                "op": "model",
+                "args": [
+                  "state",
+                  {
+                    "descriptor": "$descriptor",
+                    "results": "$results",
+                    "source": "$source"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "model",
+        "args": [
+          "quote",
+          {
+            "descriptor": "$descriptor",
+            "state": "$steps.state",
+            "buy": {
+              "op": "get",
+              "args": [
+                "$route",
+                "buy"
+              ]
+            },
+            "amountIn": "$amountIn",
+            "executor": "$executor"
+          }
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call",
+              "get-code"
+            ]
+          },
+          "requests": [
+            {
+              "id": "reserves",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getReserves",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "booked",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getBooked",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "fee",
+              "kind": "eth-call",
+              "to": "$descriptor.factory",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "factory",
+                  "feeBPS",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "logic",
+              "kind": "eth-call",
+              "to": "$descriptor.factory",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "factory",
+                  "pairLogic",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "implementation-code",
+              "kind": "get-code",
+              "address": "$descriptor.implementation"
+            },
+            {
+              "id": "balance-stock",
+              "kind": "eth-call",
+              "to": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.stock",
+                      "$constants.zero"
+                    ]
+                  },
+                  "$constants.multicall",
+                  "$descriptor.stock"
+                ]
+              },
+              "data": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.stock",
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "encode",
+                    "args": [
+                      "multicall",
+                      "getEthBalance",
+                      [
+                        "$descriptor.pool"
+                      ]
+                    ]
+                  },
+                  {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "balanceOf",
+                      [
+                        "$descriptor.pool"
+                      ]
+                    ]
+                  }
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "balance-money",
+              "kind": "eth-call",
+              "to": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.money",
+                      "$constants.zero"
+                    ]
+                  },
+                  "$constants.multicall",
+                  "$descriptor.money"
+                ]
+              },
+              "data": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.money",
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "encode",
+                    "args": [
+                      "multicall",
+                      "getEthBalance",
+                      [
+                        "$descriptor.pool"
+                      ]
+                    ]
+                  },
+                  {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "balanceOf",
+                      [
+                        "$descriptor.pool"
+                      ]
+                    ]
+                  }
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "sells",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getOrderList",
+                  [
+                    false,
+                    0,
+                    65
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "buys",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getOrderList",
+                  [
+                    true,
+                    0,
+                    65
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "return": {
+                "op": "model",
+                "args": [
+                  "state",
+                  {
+                    "descriptor": "$descriptor",
+                    "results": "$results",
+                    "source": "$source"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "model",
+        "args": [
+          "pricing",
+          {
+            "descriptor": "$descriptor",
+            "state": "$steps.state",
+            "routes": "$routes"
+          }
+        ]
+      }
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [],
+      "rows": {
+        "op": "get",
+        "args": [
+          "$snapshot",
+          "rows"
+        ]
+      }
+    },
+    "liveStateProjection": {
+      "version": 1,
+      "result": "$snapshot"
+    }
+  }
+}

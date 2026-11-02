@@ -1,121 +1,51 @@
-# `custom-swap:oneswap` — parked declarative draft and blockers (2026-10-30)
+# `custom-swap:oneswap` — parked declarative draft and blockers (2026-10-30) — RESOLVED 2026-11-02
 
-Status: **not migrated**. The handwritten `oneswap.production.ts` remains the only production
-entry (activation `enabled: false`, `SEARCHER_FAMILY_ONESWAP_ENABLED`). No production entry,
-generated artifact, live/VM/RPC run, signing or broadcast was performed.
+Status: **migrated** on framework `f4a16ced` (branch head `04553544`). This file is retained as the
+gap-resolution record for the earlier parked draft; the live migration report is
+[`../oneswap-20261102.md`](../oneswap-20261102.md).
 
-Framework baseline: merged `47422c97` (directional execution, quoteOutput exports, zero-output
-exact with `unavailableReason`, conditional trialState, callback-frame expressions, receipt
-observation enrichment).
+Delivered: `venues/swaps/oneswap-family/oneswap.json` + `venues/swaps/oneswap-family/declarative-math.ts`
++ append-only `oneswapMathModels` registration. The handwritten `oneswap.production.ts` remains in the
+tree pending central generation; `oneswap.draft.json` is historical and is not imported.
 
-Files parked here:
+## Gap resolution
 
-- `oneswap.draft.json` — **partial, non-importable** draft. It carries only the parts that are
-  semantically stable (scope/production/manifest, mapped discovery, action/trace declaration).
-  It deliberately has `_status`/`_blocker` keys and no `identity`/`instance`/`routes`/`pricing`/
-  `standard` sections, so the production loader and generator must reject it.
-- `oneswap.blockers.md` — this file.
+### G-OS-1 — `uint112` execution amount — RESOLVED
 
-## Source of truth read
+`declarative-call-codec.ts` now accepts runtime references on any checked `uintN`/`intN` ABI leaf when
+`checkedIntegers` is enabled (`:35-40,57-62,87-99`), records the leaf width, and the execution emitter
+emits a range check before the CALL (`declarative-execution.ts:680-700`); signed values must be fully
+sign-extended (`:687-699`). The v2 step/effect shape supplies the conditional ERC-20 transfer,
+`msg.value` and per-side effects (`declarative-execution.ts:501-527,621-631`). The JSON declares exactly
+the retained program: `transfer(pool,amountIn)` for ERC-20 input, `addMarketOrder(rawIn,recipient,uint112)`
+with `value: {runtime:"amountIn"}` for native input, exact input debit and return-equal credit.
 
-`listener/src/searcher/venues/swaps/oneswap-family/{action,capture,codec,discovery,exact,execution,identity,instance,manifest,math,pricing,proxy,routes,runtime-execution,state,swap,types}.ts`
-and `test/{contract,fixtures,historical-ready,historical-recipient}.ts`.
+Probe: the migrated JSON builds the runtime program for both directions; the native route contains one
+`addMarketOrder` CALL with a value register and no transfer, the ERC-20 route contains transfer + CALL
+without value (in-memory opcode walk; see the report).
 
-## What the partial draft already expresses (validated in-memory)
+### G-OS-2 — `"swap"` classification with mutation-only receipt — RESOLVED
 
-`compileDeclarativeDiscovery(oneswap.draft.json#discovery.definition)` compiles and produces:
+`declarative-swap-domain.ts:31-36` accepts `receiptMode:"mutation-only"` with a non-empty
+`mutationReason`, and `:216` returns that reason for `"swap"`-classified events instead of requiring a
+full `PoolImpact`. The JSON declares the three events as `classification:"swap"` with the retained
+reason ("oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"),
+so `landedEvents.classify`/`isSwapLog` telemetry keeps the legacy `swap` classification while the
+receipt contribution remains unresolved/mutation-only. The `impact` entry is an unreachable
+`$missing.impact` placeholder because the mutation-only branch returns first.
 
-- one call pattern `oneswap-market-order` with selector `0xa6e81533` from
-  `function addMarketOrder(address,address,uint112) payable returns(uint256)`; a canonical
-  call observation for the recorded ABI decodes to `{candidateKind:"oneswap",pool:<call target>}`;
-- the three canonical events `NewMarketOrder(uint256)`, `DealWithPool(uint256)` and
-  `OrderChanged(uint256)`, each mapped to the emitting pool;
-- the `oneswap-interface` address surface (`oneswap-amm-orderbook-v1`) and candidate/instance
-  key = lower pool address.
-- scope/lineage/activation/action descriptor exactly match
-  `oneswap-family/manifest.ts:6-10`, `action.ts:6-14` and `production-families/oneswap.production.ts:15`
-  (`enabled:false`, `SEARCHER_FAMILY_ONESWAP_ENABLED`, owned action `oneswap-market-order`).
+### G-OS-3 — remaining domains authored
 
-## G-OS-1 (decisive) — the execution amount is `uint112`; declarative v2 rejects it
+The orderbook state/quote was authored as pure math models that delegate to the retained
+`state.decodeState` and `math.quoteAmount` implementations (`oneswap:state`, `oneswap:quote`,
+`oneswap:pricing`, `oneswap:proxy`). Quote/pricing parity was checked in memory against the handwritten
+functions, including the contract vectors, fee rounding, maker-fill, incomplete-prefix rejection and
+uint112 bounds.
 
-The family's only swap operation is
+## Validation
 
-```solidity
-function addMarketOrder(address stock, address money, uint112 amount) payable returns (uint256)
-```
-
-(`oneswap-family/codec.ts:15`). The handwritten runtime program transfers the ERC-20 input to the
-pool, then patches the **third** ABI word (`offset 68`) with the runtime amount and, for native
-input, also sends `amountIn` as `msg.value`
-(`oneswap-family/runtime-execution.ts:33-36`, `codec.ts:19`; the native/ERC-20 split is at
-`runtime-execution.ts:19-28,37-44`).
-
-The declarative v2 call compiler derives patches with `encodeDeclarativeCall`, whose scalar leaves
-are restricted to `uint256`, `int256` and `bytes32`
-(`listener/src/searcher/venues/declarative-call-codec.ts:35-40`);
-a runtime reference on any other ABI type throws
-`runtime ABI references require uint256 or bytes32 leaves (full-width int256 also supported)`
-(`declarative-call-codec.ts:53-58`). Executed probe:
-
-```
-encodeDeclarativeCall(
-  "function addMarketOrder(address,address,uint112) payable returns(uint256)",
-  [pool, recipient, { runtime: "amountIn" }],
-) -> runtime ABI references require uint256 or bytes32 leaves (full-width int256 also supported)
-```
-
-The v1 execution path is not a faithful fallback. It permits dynamic scalar words (so `uint112`
-would pass `scalarWord`/the v1 offset loop), but v1 supports exactly one call and no step conditions
-(`listener/src/searcher/venues/declarative-execution.ts:468`), while native/ERC-20 debit semantics,
-`value`, and per-call `when` are only defined for v2
-(`declarative-execution.ts:381-388,404-413`). Oneswap needs at least:
-
-- optional `transfer(rawIn, pool, amountIn)` before the market call for ERC-20 input
-  (`runtime-execution.ts:33`), and no transfer for native input;
-- `msg.value = amountIn` only for native input (`runtime-execution.ts:34-36`);
-- debit/receipt checks for both native and ERC-20 sides (`runtime-execution.ts:27-44`).
-
-There is no JSON-only workaround: the selector is fixed by `addMarketOrder(address,address,uint112)`,
-so declaring a `uint256` variant would execute different calldata; passing a literal is impossible
-because the amount is invocation-local; and omitting execution would leave Exact quoting without a
-settlement path (not a migration).
-
-## G-OS-2 (secondary, same class as the precision-pool deviation) — swap classification vs mutation-only receipt
-
-The handwritten family classifies all three events as `"swap"` for landed observation
-(`oneswap-family/swap.ts:7`) but its strict receipt decoder returns `mutationOnlyReason` for every
-matched trigger (`swap.ts:14-18`). The declarative Swap domain only selects the mutation-only branch
-for an event whose `classification` is `"mutation"`
-(`listener/src/searcher/venues/declarative-swap-domain.ts:202-205`); a `"swap"`-classified event must
-evaluate a full `PoolImpact` (`:206-222`) or the receipt becomes `unresolved`
-(`swap-observation.ts:278-287`). Declaring the events as `"mutation"` preserves the resolved
-mutation-only receipt but changes `landedEvents.classify`/`isSwapLog` telemetry
-(`searcher/strict-production-family-declarations.ts:347`) and the reason text
-(`"declared state mutation"` vs the legacy per-family reason). This is the same fail-closed/
-legacy-shape deviation recorded for `precision-pool`; it is not the reason this family is parked.
-
-## G-OS-3 — remaining domains are probably expressible but were not authored
-
-The orderbook quote is a bounded pure function of state (`oneswap-family/math.ts:4-98`): expand the
-27-bit price mantissa/exponent, `intoPoolTillPrice` (Taylor branch/truncation/stockUnit rounding),
-maker fills, aggregate output fee and incomplete-prefix rejection. A declarative `math` model can
-carry it (the engine supports arbitrary stateless model entries), and pricing/exact can bind it over
-the 9 state reads in `state.ts:10-15`; the 64-word order-list chains and proxy/factory identity can
-use `maskHash`/`bytes`/`word` expressions. None of that was authored because G-OS-1 makes the family
-non-deliverable; authoring it would create a large draft that still cannot settle a swap.
-
-## Validation performed
-
-- `compileDeclarativeDiscovery` on the parked definition: PASS (pattern/candidate/key output above).
-- Source/action/scope transcription checked against the files listed above; no framework TS/test or
-  generated artifact changed.
-- No `compileDeclarativeSwap`/`defineSwapFamily` registration is claimed: the draft is intentionally
-  incomplete, and the handwritten entry remains active.
-
-## Re-entry condition
-
-A shared declarative call capability that (a) patches a fixed-width `uintN`/`intN` ABI leaf with
-explicit range checking, and (b) supports the same conditional value/transfer/effect shape as v2
-(`declarative-call-codec.ts:35-58` + v2 step/effect compiler), would unblock G-OS-1. G-OS-2 needs a
-domain declaration for a `"swap"`-classified event whose receipt contribution is mutation-only (or a
-custom mutation reason). Until then the family must stay parked; do not narrow execution or Exact.
+- `compileDeclarativeSwap`/`defineSwapFamily`, in-memory harness, temporary rendered entry + family
+  contract test (8/11 with three documented legacy-shape deltas), `tsc`/`build:live` (no oneswap
+  errors; tree currently blocked only by the concurrent dodo-v2 math), `test:family-json`
+  (652/651/0/1): see [`../oneswap-20261102.md`](../oneswap-20261102.md) for commands and evidence.
+- No production generator, RPC/VM, live, signing or broadcast was run.

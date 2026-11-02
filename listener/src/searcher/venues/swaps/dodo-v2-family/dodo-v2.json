@@ -1,0 +1,4577 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:dodo-v2"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_DODO_V2_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:dodo-v2",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "dodo-v2-swap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-transfer"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "dodo-v2:registry-member"
+    ],
+    "poolAdapterIds": [
+      "dodo-v2",
+      "custom-swap:dodo-v2"
+    ],
+    "edgeAdapterIds": [
+      "dodo-v2-swap"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "dodo-v2-pool",
+        "addressField": "pool",
+        "fields": {
+          "pool": "address",
+          "sourceKind": "string",
+          "hintedTokenIn": "address",
+          "hintedTokenOut": "address"
+        },
+        "nullableFields": [
+          "hintedTokenIn",
+          "hintedTokenOut"
+        ],
+        "key": [
+          "pool"
+        ],
+        "instanceKey": [
+          "pool"
+        ]
+      },
+      "calls": [
+        {
+          "id": "dodo-v2-sell-base-call",
+          "signature": "sellBase(address)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "sell-base-call"
+            },
+            "hintedTokenIn": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedTokenOut": {
+              "from": "literal",
+              "value": null
+            }
+          }
+        },
+        {
+          "id": "dodo-v2-sell-quote-call",
+          "signature": "sellQuote(address)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "sell-quote-call"
+            },
+            "hintedTokenIn": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedTokenOut": {
+              "from": "literal",
+              "value": null
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "id": "dodo-v2-swap-log",
+          "signature": "event DODOSwap(address fromToken,address toToken,uint256 fromAmount,uint256 toAmount,address trader,address receiver)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "swap-log"
+            },
+            "hintedTokenIn": {
+              "from": "argument",
+              "index": 0
+            },
+            "hintedTokenOut": {
+              "from": "argument",
+              "index": 1
+            }
+          }
+        }
+      ],
+      "labels": [
+        "dodo-v2",
+        "custom-swap:dodo-v2"
+      ],
+      "nomination": "address-surface",
+      "surface": {
+        "id": "dodo-v2-pool-surface",
+        "fingerprint": "dodo-pool-surface-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          },
+          "sourceKind": {
+            "from": "literal",
+            "value": "pool-surface"
+          },
+          "hintedTokenIn": {
+            "from": "literal",
+            "value": null
+          },
+          "hintedTokenOut": {
+            "from": "literal",
+            "value": null
+          }
+        }
+      }
+    }
+  },
+  "identity": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "identity": {
+        "applies": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$candidate",
+                "candidateKind"
+              ]
+            },
+            "dodo-v2-pool"
+          ]
+        },
+        "select": [
+          {
+            "return": "behavior",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "registry",
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "pool-behavior"
+              ]
+            }
+          },
+          {
+            "assert": false,
+            "error": "dodo-v2 registry identity proof has already completed"
+          }
+        ],
+        "stages": {
+          "behavior": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ],
+              "caller": "verified-actor"
+            },
+            "requests": [
+              {
+                "id": "pool-base-token",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "_BASE_TOKEN_",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "pool-quote-token",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "_QUOTE_TOKEN_",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "pool-pmm-behavior",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "getPMMStateForCall",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "pool-actor-fee-behavior",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "caller": {
+                  "kind": "verified-actor",
+                  "evidenceId": "dodo-v2-quote-actor"
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "getUserFeeRate",
+                    [
+                      "$constants.actor"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "baseToken",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "pool",
+                    "_BASE_TOKEN_",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pool-base-token"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "quoteToken",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "pool",
+                    "_QUOTE_TOKEN_",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pool-quote-token"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$baseToken",
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$quoteToken",
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$baseToken",
+                            "$quoteToken"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "dodo-v2 pool returned an invalid base/quote pair"
+              },
+              {
+                "assert": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$candidate.hintedTokenIn",
+                            "$baseToken"
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$candidate.hintedTokenOut",
+                            "$quoteToken"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$candidate.hintedTokenIn",
+                            "$quoteToken"
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$candidate.hintedTokenOut",
+                            "$baseToken"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "dodo-v2 candidate token hints do not match pool behavior",
+                "when": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$candidate.hintedTokenIn"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$candidate.hintedTokenOut"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "pmmValues",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "pool",
+                    "getPMMStateForCall",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pool-pmm-behavior"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "pmm",
+                "value": {
+                  "op": "model",
+                  "args": [
+                    "pmmState",
+                    {
+                      "values": "$pmmValues"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "feeValues",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "pool",
+                    "getUserFeeRate",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pool-actor-fee-behavior"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "fees",
+                "value": {
+                  "op": "model",
+                  "args": [
+                    "feeRates",
+                    {
+                      "values": "$feeValues"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "behaviorProofHash",
+                "value": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "pool": {
+                        "op": "address",
+                        "args": [
+                          "$candidate.pool"
+                        ]
+                      },
+                      "baseToken": {
+                        "op": "address",
+                        "args": [
+                          "$baseToken"
+                        ]
+                      },
+                      "quoteToken": {
+                        "op": "address",
+                        "args": [
+                          "$quoteToken"
+                        ]
+                      },
+                      "quoteActor": "0x1000000000000000000000000000000000000001",
+                      "pmm": {
+                        "i": "$pmm.i",
+                        "K": "$pmm.K",
+                        "B": "$pmm.B",
+                        "Q": "$pmm.Q",
+                        "B0": "$pmm.B0",
+                        "Q0": "$pmm.Q0",
+                        "R": "$pmm.R"
+                      },
+                      "fees": {
+                        "lpFeeRate": "$fees.lpFeeRate",
+                        "mtFeeRate": "$fees.mtFeeRate"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "pool-behavior",
+                  "registry": {
+                    "op": "address",
+                    "args": [
+                      "$profile.registry"
+                    ]
+                  },
+                  "pool": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.pool"
+                    ]
+                  },
+                  "baseToken": {
+                    "op": "address",
+                    "args": [
+                      "$baseToken"
+                    ]
+                  },
+                  "quoteToken": {
+                    "op": "address",
+                    "args": [
+                      "$quoteToken"
+                    ]
+                  },
+                  "behaviorProofHash": "$behaviorProofHash"
+                }
+              }
+            ]
+          },
+          "registry": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "registry-get-dodo-pool",
+                "kind": "eth-call",
+                "to": "$profile.registry",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "registry",
+                    "getDODOPool",
+                    [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$evidence",
+                          "baseToken"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          "$evidence",
+                          "quoteToken"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "listed",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "registry",
+                    "getDODOPool",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "registry-get-dodo-pool"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "listedPools",
+                "value": {
+                  "op": "map",
+                  "args": [
+                    "$listed",
+                    "p",
+                    {
+                      "op": "address",
+                      "args": [
+                        "$p"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "registry-binding",
+                      "listedPools": "$listedPools"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "pool-behavior"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "registry_reverse_binding_failed",
+              "evidenceRequestIds": [
+                "registry-get-dodo-pool"
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "some",
+                  "args": [
+                    "$evidence.listedPools",
+                    "listed",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$listed",
+                        "$evidence.pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "registryBinding",
+            "value": {
+              "registry": {
+                "op": "address",
+                "args": [
+                  "$profile.registry"
+                ]
+              },
+              "listedPool": {
+                "op": "address",
+                "args": [
+                  "$evidence.pool"
+                ]
+              }
+            }
+          },
+          {
+            "let": "quoteActorBinding",
+            "value": {
+              "actor": "0x1000000000000000000000000000000000000001",
+              "role": "verified-actor",
+              "feeSemantics": "getUserFeeRate(actor)",
+              "querySemantics": "querySellBase/querySellQuote(actor,effectiveInput)",
+              "inputSemantics": "balance-reserve-mt-fee-v1"
+            }
+          },
+          {
+            "let": "evidenceHash",
+            "value": {
+              "op": "hash",
+              "args": [
+                {
+                  "registryBinding": "$registryBinding",
+                  "pool": {
+                    "op": "address",
+                    "args": [
+                      "$evidence.pool"
+                    ]
+                  },
+                  "baseToken": {
+                    "op": "address",
+                    "args": [
+                      "$evidence.baseToken"
+                    ]
+                  },
+                  "quoteToken": {
+                    "op": "address",
+                    "args": [
+                      "$evidence.quoteToken"
+                    ]
+                  },
+                  "quoteActorBinding": "$quoteActorBinding",
+                  "behaviorProofHash": "$evidence.behaviorProofHash"
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.pool"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "registry-reverse-behavior-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$profile.registry"
+                      ]
+                    },
+                    "evidenceHash": "$evidenceHash"
+                  }
+                ],
+                "facts": {
+                  "pool": {
+                    "op": "address",
+                    "args": [
+                      "$evidence.pool"
+                    ]
+                  },
+                  "baseToken": {
+                    "op": "address",
+                    "args": [
+                      "$evidence.baseToken"
+                    ]
+                  },
+                  "quoteToken": {
+                    "op": "address",
+                    "args": [
+                      "$evidence.quoteToken"
+                    ]
+                  },
+                  "registryBinding": "$registryBinding",
+                  "quoteActorBinding": "$quoteActorBinding"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.subject"
+                ]
+              }
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            },
+            {
+              "kind": "execution-actor",
+              "role": "verified-actor"
+            },
+            {
+              "kind": "quote-completion",
+              "mode": "return-data"
+            }
+          ]
+        },
+        "$identity.facts"
+      ]
+    },
+    "bindingProjection": {
+      "pool": "$descriptor.pool",
+      "baseToken": "$descriptor.baseToken",
+      "quoteToken": "$descriptor.quoteToken",
+      "registryBinding": {
+        "registry": {
+          "op": "get",
+          "args": [
+            "$descriptor.registryBinding",
+            "registry"
+          ]
+        },
+        "listedPool": {
+          "op": "get",
+          "args": [
+            "$descriptor.registryBinding",
+            "listedPool"
+          ]
+        }
+      },
+      "quoteActorBinding": {
+        "actor": {
+          "op": "get",
+          "args": [
+            "$descriptor.quoteActorBinding",
+            "actor"
+          ]
+        },
+        "role": {
+          "op": "get",
+          "args": [
+            "$descriptor.quoteActorBinding",
+            "role"
+          ]
+        },
+        "feeSemantics": {
+          "op": "get",
+          "args": [
+            "$descriptor.quoteActorBinding",
+            "feeSemantics"
+          ]
+        },
+        "querySemantics": {
+          "op": "get",
+          "args": [
+            "$descriptor.quoteActorBinding",
+            "querySemantics"
+          ]
+        },
+        "inputSemantics": {
+          "op": "get",
+          "args": [
+            "$descriptor.quoteActorBinding",
+            "inputSemantics"
+          ]
+        }
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pool",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.pool"
+          ]
+        }
+      ]
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.familyId",
+          "\u001f",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.pool"
+                ]
+              }
+            ]
+          },
+          "\u001f",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$route.tokenIn"
+                ]
+              }
+            ]
+          },
+          "\u001f",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$route.tokenOut"
+                ]
+              }
+            ]
+          }
+        ],
+        ""
+      ]
+    },
+    "directions": [
+      {
+        "id": "sell-base",
+        "enabled": true,
+        "tokenIn": "$descriptor.baseToken",
+        "tokenOut": "$descriptor.quoteToken",
+        "adapterId": "dodo-v2-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": "$descriptor.pool"
+        }
+      },
+      {
+        "id": "sell-quote",
+        "enabled": true,
+        "tokenIn": "$descriptor.quoteToken",
+        "tokenOut": "$descriptor.baseToken",
+        "adapterId": "dodo-v2-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": "$descriptor.pool"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.pool"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "route-target",
+        "direction": "increase"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "route-target",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "descriptorChecks": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.baseToken",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.quoteToken",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.baseToken",
+                    "$descriptor.quoteToken"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "dodo-v2 descriptor requires distinct base/quote tokens"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "instanceKey": "$descriptor.instanceKey",
+          "pool": "$descriptor.pool",
+          "baseToken": "$descriptor.baseToken",
+          "quoteToken": "$descriptor.quoteToken",
+          "registryBinding": "$descriptor.registryBinding",
+          "quoteActorBinding": "$descriptor.quoteActorBinding"
+        },
+        {
+          "routes": {
+            "op": "map",
+            "args": [
+              "$routes",
+              "r",
+              {
+                "routeKey": "$r.routeKey",
+                "direction": "$r.direction",
+                "tokenIn": "$r.tokenIn",
+                "tokenOut": "$r.tokenOut"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "compatibility": {
+      "op": "merge",
+      "args": [
+        {
+          "pool": "$descriptor.pool",
+          "baseToken": "$descriptor.baseToken",
+          "quoteToken": "$descriptor.quoteToken",
+          "quoteActorBinding": "$descriptor.quoteActorBinding"
+        },
+        {
+          "directions": {
+            "op": "map",
+            "args": [
+              {
+                "op": "sortId",
+                "args": [
+                  {
+                    "op": "map",
+                    "args": [
+                      "$routes",
+                      "r",
+                      {
+                        "id": "$r.routeKey",
+                        "routeKey": "$r.routeKey",
+                        "direction": "$r.direction",
+                        "tokenIn": "$r.tokenIn",
+                        "tokenOut": "$r.tokenOut"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "r",
+              {
+                "routeKey": "$r.routeKey",
+                "direction": "$r.direction",
+                "tokenIn": "$r.tokenIn",
+                "tokenOut": "$r.tokenOut"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$draft.baseToken",
+        "$draft.quoteToken"
+      ],
+      "requests": [
+        {
+          "id": "static-base-decimals",
+          "kind": "eth-call",
+          "to": {
+            "op": "get",
+            "args": [
+              "$draft",
+              "baseToken"
+            ]
+          },
+          "data": {
+            "op": "encode",
+            "args": [
+              "token",
+              "decimals",
+              []
+            ]
+          },
+          "completion": "return-data"
+        },
+        {
+          "id": "static-quote-decimals",
+          "kind": "eth-call",
+          "to": {
+            "op": "get",
+            "args": [
+              "$draft",
+              "quoteToken"
+            ]
+          },
+          "data": {
+            "op": "encode",
+            "args": [
+              "token",
+              "decimals",
+              []
+            ]
+          },
+          "completion": "return-data"
+        }
+      ],
+      "decode": [
+        {
+          "let": "baseDecimals",
+          "value": {
+            "op": "decodeCanonical",
+            "args": [
+              "token",
+              "decimals",
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "returned",
+                    "args": [
+                      "static-base-decimals"
+                    ]
+                  },
+                  "data"
+                ]
+              },
+              0
+            ]
+          }
+        },
+        {
+          "let": "quoteDecimals",
+          "value": {
+            "op": "decodeCanonical",
+            "args": [
+              "token",
+              "decimals",
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "returned",
+                    "args": [
+                      "static-quote-decimals"
+                    ]
+                  },
+                  "data"
+                ]
+              },
+              0
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  0
+                ]
+              },
+              "$baseDecimals"
+            ]
+          },
+          "error": "dodo-v2 static base decimals are invalid"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$baseDecimals",
+              {
+                "op": "uint",
+                "args": [
+                  36
+                ]
+              }
+            ]
+          },
+          "error": "dodo-v2 static base decimals are invalid"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  0
+                ]
+              },
+              "$quoteDecimals"
+            ]
+          },
+          "error": "dodo-v2 static quote decimals are invalid"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$quoteDecimals",
+              {
+                "op": "uint",
+                "args": [
+                  36
+                ]
+              }
+            ]
+          },
+          "error": "dodo-v2 static quote decimals are invalid"
+        },
+        {
+          "return": {
+            "baseOneToken": {
+              "op": "pow",
+              "args": [
+                10,
+                "$baseDecimals"
+              ]
+            },
+            "quoteOneToken": {
+              "op": "pow",
+              "args": [
+                10,
+                "$quoteDecimals"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        {
+          "baseOneToken": {
+            "op": "get",
+            "args": [
+              "$staticEvidence",
+              "baseOneToken"
+            ]
+          },
+          "quoteOneToken": {
+            "op": "get",
+            "args": [
+              "$staticEvidence",
+              "quoteOneToken"
+            ]
+          }
+        }
+      ]
+    },
+    "sampleAmount": "$descriptor.baseOneToken",
+    "exactCompatibility": {
+      "pool": "$descriptor.pool",
+      "baseToken": "$descriptor.baseToken",
+      "quoteToken": "$descriptor.quoteToken",
+      "direction": "$route.direction",
+      "tokenIn": "$route.tokenIn",
+      "tokenOut": "$route.tokenOut",
+      "registryBinding": "$descriptor.registryBinding",
+      "quoteActorBinding": "$descriptor.quoteActorBinding",
+      "executor": {
+        "op": "address",
+        "args": [
+          "$executor"
+        ]
+      },
+      "transactionOrigin": {
+        "op": "address",
+        "args": [
+          "$transactionOrigin"
+        ]
+      }
+    },
+    "stateKey": "$route.instanceKey",
+    "mutationKinds": [
+      "log"
+    ]
+  },
+  "swap": {
+    "version": 1,
+    "events": [
+      {
+        "id": "dodo-v2-swap-log",
+        "signature": "event DODOSwap(address fromToken,address toToken,uint256 fromAmount,uint256 toAmount,address trader,address receiver)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": {
+            "op": "address",
+            "args": [
+              "$log.address"
+            ]
+          },
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$args.fromToken"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$args.toToken"
+            ]
+          },
+          "amountIn": "$args.fromAmount",
+          "amountOut": "$args.toAmount",
+          "trader": {
+            "op": "address",
+            "args": [
+              "$args.trader"
+            ]
+          },
+          "receiver": {
+            "op": "address",
+            "args": [
+              "$args.receiver"
+            ]
+          }
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$args.fromToken",
+                "$edge.tokenIn"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$args.toToken",
+                "$edge.tokenOut"
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": "$edge.target",
+          "tokenIn": "$edge.tokenIn",
+          "tokenOut": "$edge.tokenOut",
+          "amountIn": "$args.fromAmount",
+          "amountOut": "$args.toAmount",
+          "matchedAdapterId": "$edge.adapterId",
+          "poolToken0": "$edge.poolToken0",
+          "poolToken1": "$edge.poolToken1"
+        }
+      }
+    ],
+    "calls": [],
+    "canonicalIntakeTargets": [
+      "0xa356867fDCEa8e71AEaF87805808803806231FdC"
+    ],
+    "victimSupport": "detect-only",
+    "poolMaterialization": {
+      "result": {
+        "op": "if",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$observation",
+                          "data"
+                        ]
+                      }
+                    ]
+                  },
+                  386
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$observation",
+                          "topics"
+                        ]
+                      }
+                    ]
+                  },
+                  1
+                ]
+              }
+            ]
+          },
+          {
+            "pool": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "address"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "observedTokenIn": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    },
+                    12,
+                    20
+                  ]
+                }
+              ]
+            },
+            "observedTokenOut": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    },
+                    44,
+                    20
+                  ]
+                }
+              ]
+            }
+          },
+          null
+        ]
+      }
+    }
+  },
+  "standard": {
+    "id": "registry-member-0",
+    "lineageId": "dodo-v2:registry-member",
+    "identityKind": "registry-member",
+    "identityParameters": {
+      "registry": "0x72d220cE168C4f361dD4deE5D826a01AD8598f6C"
+    },
+    "inputs": [
+      "steps"
+    ],
+    "identity": {
+      "applies": {
+        "op": "eq",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$candidate",
+              "candidateKind"
+            ]
+          },
+          "dodo-v2-pool"
+        ]
+      },
+      "select": [
+        {
+          "return": "behavior",
+          "when": {
+            "op": "not",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$evidence"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "return": "registry",
+          "when": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$evidence",
+                  "phase"
+                ]
+              },
+              "pool-behavior"
+            ]
+          }
+        },
+        {
+          "assert": false,
+          "error": "dodo-v2 registry identity proof has already completed"
+        }
+      ],
+      "stages": {
+        "behavior": {
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ],
+            "caller": "verified-actor"
+          },
+          "requests": [
+            {
+              "id": "pool-base-token",
+              "kind": "eth-call",
+              "to": "$candidate.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "_BASE_TOKEN_",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "pool-quote-token",
+              "kind": "eth-call",
+              "to": "$candidate.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "_QUOTE_TOKEN_",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "pool-pmm-behavior",
+              "kind": "eth-call",
+              "to": "$candidate.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getPMMStateForCall",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "pool-actor-fee-behavior",
+              "kind": "eth-call",
+              "to": "$candidate.pool",
+              "caller": {
+                "kind": "verified-actor",
+                "evidenceId": "dodo-v2-quote-actor"
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getUserFeeRate",
+                  [
+                    "$constants.actor"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "baseToken",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pool",
+                  "_BASE_TOKEN_",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "pool-base-token"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "quoteToken",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pool",
+                  "_QUOTE_TOKEN_",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "pool-quote-token"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$baseToken",
+                          "0x0000000000000000000000000000000000000000"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$quoteToken",
+                          "0x0000000000000000000000000000000000000000"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$baseToken",
+                          "$quoteToken"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "dodo-v2 pool returned an invalid base/quote pair"
+            },
+            {
+              "assert": {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$candidate.hintedTokenIn",
+                          "$baseToken"
+                        ]
+                      },
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$candidate.hintedTokenOut",
+                          "$quoteToken"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$candidate.hintedTokenIn",
+                          "$quoteToken"
+                        ]
+                      },
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$candidate.hintedTokenOut",
+                          "$baseToken"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "dodo-v2 candidate token hints do not match pool behavior",
+              "when": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "defined",
+                    "args": [
+                      "$candidate.hintedTokenIn"
+                    ]
+                  },
+                  {
+                    "op": "defined",
+                    "args": [
+                      "$candidate.hintedTokenOut"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "pmmValues",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pool",
+                  "getPMMStateForCall",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "pool-pmm-behavior"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "pmm",
+              "value": {
+                "op": "model",
+                "args": [
+                  "pmmState",
+                  {
+                    "values": "$pmmValues"
+                  }
+                ]
+              }
+            },
+            {
+              "let": "feeValues",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pool",
+                  "getUserFeeRate",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "pool-actor-fee-behavior"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "fees",
+              "value": {
+                "op": "model",
+                "args": [
+                  "feeRates",
+                  {
+                    "values": "$feeValues"
+                  }
+                ]
+              }
+            },
+            {
+              "let": "behaviorProofHash",
+              "value": {
+                "op": "hash",
+                "args": [
+                  {
+                    "pool": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    },
+                    "baseToken": {
+                      "op": "address",
+                      "args": [
+                        "$baseToken"
+                      ]
+                    },
+                    "quoteToken": {
+                      "op": "address",
+                      "args": [
+                        "$quoteToken"
+                      ]
+                    },
+                    "quoteActor": "0x1000000000000000000000000000000000000001",
+                    "pmm": {
+                      "i": "$pmm.i",
+                      "K": "$pmm.K",
+                      "B": "$pmm.B",
+                      "Q": "$pmm.Q",
+                      "B0": "$pmm.B0",
+                      "Q0": "$pmm.Q0",
+                      "R": "$pmm.R"
+                    },
+                    "fees": {
+                      "lpFeeRate": "$fees.lpFeeRate",
+                      "mtFeeRate": "$fees.mtFeeRate"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "phase": "pool-behavior",
+                "registry": {
+                  "op": "address",
+                  "args": [
+                    "$profile.registry"
+                  ]
+                },
+                "pool": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.pool"
+                  ]
+                },
+                "baseToken": {
+                  "op": "address",
+                  "args": [
+                    "$baseToken"
+                  ]
+                },
+                "quoteToken": {
+                  "op": "address",
+                  "args": [
+                    "$quoteToken"
+                  ]
+                },
+                "behaviorProofHash": "$behaviorProofHash"
+              }
+            }
+          ]
+        },
+        "registry": {
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "registry-get-dodo-pool",
+              "kind": "eth-call",
+              "to": "$profile.registry",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "registry",
+                  "getDODOPool",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "baseToken"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "quoteToken"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "listed",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "registry",
+                  "getDODOPool",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "registry-get-dodo-pool"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "listedPools",
+              "value": {
+                "op": "map",
+                "args": [
+                  "$listed",
+                  "p",
+                  {
+                    "op": "address",
+                    "args": [
+                      "$p"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "op": "merge",
+                "args": [
+                  "$evidence",
+                  {
+                    "phase": "registry-binding",
+                    "listedPools": "$listedPools"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "decide": [
+        {
+          "return": {
+            "status": "continue"
+          },
+          "when": {
+            "op": "not",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$evidence"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "return": {
+            "status": "continue"
+          },
+          "when": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$evidence",
+                  "phase"
+                ]
+              },
+              "pool-behavior"
+            ]
+          }
+        },
+        {
+          "return": {
+            "status": "chain-proven-rejected",
+            "reasonCode": "registry_reverse_binding_failed",
+            "evidenceRequestIds": [
+              "registry-get-dodo-pool"
+            ]
+          },
+          "when": {
+            "op": "not",
+            "args": [
+              {
+                "op": "some",
+                "args": [
+                  "$evidence.listedPools",
+                  "listed",
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$listed",
+                      "$evidence.pool"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "let": "registryBinding",
+          "value": {
+            "registry": {
+              "op": "address",
+              "args": [
+                "$profile.registry"
+              ]
+            },
+            "listedPool": {
+              "op": "address",
+              "args": [
+                "$evidence.pool"
+              ]
+            }
+          }
+        },
+        {
+          "let": "quoteActorBinding",
+          "value": {
+            "actor": "0x1000000000000000000000000000000000000001",
+            "role": "verified-actor",
+            "feeSemantics": "getUserFeeRate(actor)",
+            "querySemantics": "querySellBase/querySellQuote(actor,effectiveInput)",
+            "inputSemantics": "balance-reserve-mt-fee-v1"
+          }
+        },
+        {
+          "let": "evidenceHash",
+          "value": {
+            "op": "hash",
+            "args": [
+              {
+                "registryBinding": "$registryBinding",
+                "pool": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.pool"
+                  ]
+                },
+                "baseToken": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.baseToken"
+                  ]
+                },
+                "quoteToken": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.quoteToken"
+                  ]
+                },
+                "quoteActorBinding": "$quoteActorBinding",
+                "behaviorProofHash": "$evidence.behaviorProofHash"
+              }
+            ]
+          }
+        },
+        {
+          "return": {
+            "status": "verified",
+            "identity": {
+              "familyId": "$profile.familyId",
+              "lineageId": "$profile.lineageId",
+              "subject": {
+                "op": "address",
+                "args": [
+                  "$evidence.pool"
+                ]
+              },
+              "provenance": [
+                {
+                  "kind": "registry-reverse-behavior-proof",
+                  "subject": {
+                    "op": "address",
+                    "args": [
+                      "$profile.registry"
+                    ]
+                  },
+                  "evidenceHash": "$evidenceHash"
+                }
+              ],
+              "facts": {
+                "pool": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.pool"
+                  ]
+                },
+                "baseToken": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.baseToken"
+                  ]
+                },
+                "quoteToken": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.quoteToken"
+                  ]
+                },
+                "registryBinding": "$registryBinding",
+                "quoteActorBinding": "$quoteActorBinding"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "abi": {
+      "pool": [
+        "function _BASE_TOKEN_() view returns (address)",
+        "function _QUOTE_TOKEN_() view returns (address)",
+        "function _BASE_RESERVE_() view returns (uint256)",
+        "function _QUOTE_RESERVE_() view returns (uint256)",
+        "function getPMMStateForCall() view returns (uint256 i,uint256 K,uint256 B,uint256 Q,uint256 B0,uint256 Q0,uint256 R)",
+        "function getUserFeeRate(address user) view returns (uint256 lpFeeRate,uint256 mtFeeRate)",
+        "function getBaseInput() view returns (uint256 input)",
+        "function getQuoteInput() view returns (uint256 input)",
+        "function getMtFeeTotal() view returns (uint256 mtFeeBase,uint256 mtFeeQuote)",
+        "function querySellBase(address trader,uint256 payBaseAmount) view returns (uint256 receiveQuoteAmount)",
+        "function querySellQuote(address trader,uint256 payQuoteAmount) view returns (uint256 receiveBaseAmount)",
+        "function sellBase(address to) returns (uint256 receiveQuoteAmount)",
+        "function sellQuote(address to) returns (uint256 receiveBaseAmount)"
+      ],
+      "registry": [
+        "function getDODOPool(address baseToken,address quoteToken) view returns (address[] pools)"
+      ],
+      "token": [
+        "function balanceOf(address account) view returns (uint256)",
+        "function decimals() view returns (uint8)",
+        "function transfer(address,uint256) returns(bool)"
+      ],
+      "multicall": [
+        "function aggregate3((address target,bool allowFailure,bytes callData)[] calls) view returns ((bool success,bytes returnData)[] returnData)"
+      ],
+      "events": [
+        "event DODOSwap(address fromToken,address toToken,uint256 fromAmount,uint256 toAmount,address trader,address receiver)"
+      ]
+    },
+    "constants": {
+      "actor": "0x1000000000000000000000000000000000000001",
+      "actorEvidence": "dodo-v2-quote-actor",
+      "multicall": "0xcA11bde05977b3631167028862bE2a173976CA11",
+      "intake": "0xa356867fDCEa8e71AEaF87805808803806231FdC",
+      "zero": "0x0000000000000000000000000000000000000000"
+    },
+    "expressions": {},
+    "readPrograms": {},
+    "match": {
+      "op": "not",
+      "args": [
+        {
+          "op": "or",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor.registryBinding",
+                    "registry"
+                  ]
+                },
+                "0x5336edE8F971339F6c0e304c66ba16F1296A2Fbe"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor.registryBinding",
+                    "registry"
+                  ]
+                },
+                "0x6fdDB76c93299D985f4d3FC7ac468F9A168577A4"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor.registryBinding",
+                    "registry"
+                  ]
+                },
+                "0x710409D2121B7C8EA4aCAdd6803FDE2D85DF6473"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "context": {},
+    "boundState": "$descriptor",
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ],
+        "caller": "verified-actor"
+      },
+      "dependencies": [
+        "$descriptor.pool",
+        "$descriptor.baseToken",
+        "$descriptor.quoteToken",
+        {
+          "op": "get",
+          "args": [
+            "$descriptor.registryBinding",
+            "registry"
+          ]
+        },
+        {
+          "op": "get",
+          "args": [
+            "$descriptor.quoteActorBinding",
+            "actor"
+          ]
+        },
+        "0xcA11bde05977b3631167028862bE2a173976CA11"
+      ],
+      "mutationAddresses": [
+        "$descriptor.pool"
+      ],
+      "mutationPredicate": {
+        "op": "eq",
+        "args": [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "at",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$observation",
+                      "topics"
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          },
+          "0x"
+        ]
+      },
+      "classifyUnavailable": {
+        "op": "objectEntries",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$snapshot",
+              "unavailable"
+            ]
+          }
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "actor-bound-query",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ],
+        "caller": "transaction-origin"
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "gte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  0
+                ]
+              }
+            ]
+          },
+          "error": "dodo-v2 exact amountIn cannot be negative"
+        },
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$transactionOrigin"
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$transactionOrigin",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$transactionOrigin"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$transactionOrigin"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "dodo-v2 exact transaction origin is missing or invalid"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$executor"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lower",
+                "args": [
+                  "$executor"
+                ]
+              }
+            ]
+          },
+          "error": "dodo-v2 exact executor is invalid"
+        }
+      ],
+      "zeroEvidence": {
+        "kind": "dodo-v2-actor-bound-query",
+        "source": "$source",
+        "pool": "$descriptor.pool",
+        "transactionOrigin": {
+          "op": "address",
+          "args": [
+            "$transactionOrigin"
+          ]
+        },
+        "executor": {
+          "op": "address",
+          "args": [
+            "$executor"
+          ]
+        },
+        "direction": "$route.direction",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "amountIn": "$amountIn",
+        "effectiveInput": {
+          "op": "uint",
+          "args": [
+            0
+          ]
+        },
+        "amountOut": "$amountOut",
+        "quotePath": "zero-input"
+      },
+      "evidence": {
+        "op": "merge",
+        "args": [
+          {
+            "kind": "dodo-v2-actor-bound-query",
+            "source": "$source",
+            "pool": "$descriptor.pool",
+            "transactionOrigin": {
+              "op": "address",
+              "args": [
+                "$transactionOrigin"
+              ]
+            },
+            "executor": {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            },
+            "direction": "$route.direction",
+            "tokenIn": "$route.tokenIn",
+            "tokenOut": "$route.tokenOut",
+            "amountIn": "$amountIn",
+            "effectiveInput": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$steps"
+                  ]
+                },
+                "$steps.effective.effectiveInput",
+                "$exactEvidence.effectiveInput"
+              ]
+            },
+            "amountOut": "$amountOut",
+            "quotePath": "actor-query"
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$amountOut",
+                  {
+                    "op": "uint",
+                    "args": [
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "unavailableReason": "dodo-v2-zero-actor-query"
+              },
+              {}
+            ]
+          }
+        ]
+      }
+    },
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.pool",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "and",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$transactionOrigin"
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$transactionOrigin",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$transactionOrigin"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$transactionOrigin"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "dodo-v2 runtime requires transaction origin"
+        }
+      ],
+      "steps": [
+        {
+          "id": "transferInput",
+          "call": {
+            "target": "$route.tokenIn",
+            "signature": "function transfer(address,uint256) returns(bool)",
+            "args": [
+              "$descriptor.pool",
+              {
+                "runtime": "amountIn"
+              }
+            ]
+          }
+        },
+        {
+          "id": "sell",
+          "call": {
+            "target": "$descriptor.pool",
+            "signature": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "direction"
+                      ]
+                    },
+                    "sell-base"
+                  ]
+                },
+                "function sellBase(address) returns(uint256)",
+                "function sellQuote(address) returns(uint256)"
+              ]
+            },
+            "args": [
+              "$recipient"
+            ],
+            "save": {
+              "sellOut": 0
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "sellOut"
+          }
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "pmmState": {
+          "model": "dodo-v2:pmm-state",
+          "version": 1
+        },
+        "feeRates": {
+          "model": "dodo-v2:fee-rates",
+          "version": 1
+        },
+        "inputPosition": {
+          "model": "dodo-v2:input-position",
+          "version": 1
+        },
+        "effectiveInput": {
+          "model": "dodo-v2:effective-input",
+          "version": 1
+        },
+        "probeSelection": {
+          "model": "dodo-v2:probe-selection",
+          "version": 1
+        },
+        "probeQuote": {
+          "model": "dodo-v2:probe-quote",
+          "version": 1
+        },
+        "pricingSnapshot": {
+          "model": "dodo-v2:pricing-snapshot",
+          "version": 1
+        }
+      }
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [],
+      "rows": {
+        "op": "map",
+        "args": [
+          {
+            "op": "map",
+            "args": [
+              {
+                "op": "filter",
+                "args": [
+                  "$routes",
+                  "route",
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "defined",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$snapshot",
+                                  "unavailable"
+                                ]
+                              },
+                              "$route.routeKey"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "route",
+              {
+                "routeKey": "$route.routeKey",
+                "amountIn": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$snapshot.quotes",
+                        "$route.routeKey"
+                      ]
+                    },
+                    "amountIn"
+                  ]
+                },
+                "amountOut": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$snapshot.quotes",
+                        "$route.routeKey"
+                      ]
+                    },
+                    "amountOut"
+                  ]
+                }
+              }
+            ]
+          },
+          "row",
+          {
+            "routeKey": "$row.routeKey",
+            "numerator": "$row.amountOut",
+            "denominator": "$row.amountIn",
+            "depth": {
+              "op": "min",
+              "args": [
+                {
+                  "op": "mul",
+                  "args": [
+                    "$row.amountIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        10000
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "mul",
+                  "args": [
+                    "$row.amountOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        10000
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "reserveA": {
+              "op": "mul",
+              "args": [
+                "$row.amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    10000
+                  ]
+                }
+              ]
+            },
+            "reserveB": {
+              "op": "mul",
+              "args": [
+                "$row.amountOut",
+                {
+                  "op": "uint",
+                  "args": [
+                    10000
+                  ]
+                }
+              ]
+            },
+            "feeBps": {
+              "op": "uint",
+              "args": [
+                0
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "current",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ],
+            "caller": "verified-actor"
+          },
+          "requests": [
+            {
+              "id": "current-base-token",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "_BASE_TOKEN_",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-quote-token",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "_QUOTE_TOKEN_",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-pmm-state",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getPMMStateForCall",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-actor-fee",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "caller": {
+                "kind": "verified-actor",
+                "evidenceId": "dodo-v2-quote-actor"
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getUserFeeRate",
+                  [
+                    "$constants.actor"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-input-semantics",
+              "kind": "eth-call",
+              "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "multicall",
+                  "aggregate3",
+                  [
+                    [
+                      [
+                        "$descriptor.baseToken",
+                        false,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "token",
+                            "balanceOf",
+                            [
+                              "$descriptor.pool"
+                            ]
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.quoteToken",
+                        false,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "token",
+                            "balanceOf",
+                            [
+                              "$descriptor.pool"
+                            ]
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        false,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "_BASE_RESERVE_",
+                            []
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        false,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "_QUOTE_RESERVE_",
+                            []
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        true,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "getBaseInput",
+                            []
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        true,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "getQuoteInput",
+                            []
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        true,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "getMtFeeTotal",
+                            []
+                          ]
+                        }
+                      ]
+                    ]
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "source",
+              "value": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$results",
+                      0
+                    ]
+                  },
+                  "source"
+                ]
+              }
+            },
+            {
+              "let": "onchainBase",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pool",
+                  "_BASE_TOKEN_",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-base-token"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "onchainQuote",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pool",
+                  "_QUOTE_TOKEN_",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-quote-token"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$onchainBase",
+                      "$descriptor.baseToken"
+                    ]
+                  },
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$onchainQuote",
+                      "$descriptor.quoteToken"
+                    ]
+                  }
+                ]
+              },
+              "error": "dodo-v2 pool token identity changed"
+            },
+            {
+              "let": "pmmValues",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pool",
+                  "getPMMStateForCall",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-pmm-state"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "pmm",
+              "value": {
+                "op": "model",
+                "args": [
+                  "pmmState",
+                  {
+                    "values": "$pmmValues"
+                  }
+                ]
+              }
+            },
+            {
+              "let": "feeValues",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pool",
+                  "getUserFeeRate",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-actor-fee"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "fees",
+              "value": {
+                "op": "model",
+                "args": [
+                  "feeRates",
+                  {
+                    "values": "$feeValues"
+                  }
+                ]
+              }
+            },
+            {
+              "let": "rows",
+              "value": {
+                "op": "map",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      {
+                        "op": "decodeAll",
+                        "args": [
+                          "multicall",
+                          "aggregate3",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "current-input-semantics"
+                                ]
+                              },
+                              "data"
+                            ]
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "row",
+                  {
+                    "success": {
+                      "op": "get",
+                      "args": [
+                        "$row",
+                        "success"
+                      ]
+                    },
+                    "returnData": {
+                      "op": "get",
+                      "args": [
+                        "$row",
+                        "returnData"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "let": "input",
+              "value": {
+                "op": "model",
+                "args": [
+                  "inputPosition",
+                  {
+                    "pool": "$descriptor.pool",
+                    "rows": "$rows"
+                  }
+                ]
+              }
+            },
+            {
+              "let": "selections",
+              "value": {
+                "op": "map",
+                "args": [
+                  "$routes",
+                  "route",
+                  {
+                    "routeKey": "$route.routeKey",
+                    "direction": "$route.direction",
+                    "selection": {
+                      "op": "model",
+                      "args": [
+                        "probeSelection",
+                        {
+                          "oneToken": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "sell-base"
+                                ]
+                              },
+                              "$descriptor.baseOneToken",
+                              "$descriptor.quoteOneToken"
+                            ]
+                          },
+                          "currentInput": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "sell-base"
+                                ]
+                              },
+                              "$input.base.surplus",
+                              "$input.quote.surplus"
+                            ]
+                          },
+                          "inputDeficit": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "sell-base"
+                                ]
+                              },
+                              "$input.base.deficit",
+                              "$input.quote.deficit"
+                            ]
+                          },
+                          "reserve": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "sell-base"
+                                ]
+                              },
+                              "$pmm.B",
+                              "$pmm.Q"
+                            ]
+                          },
+                          "pmm": "$pmm",
+                          "sellBase": {
+                            "op": "eq",
+                            "args": [
+                              "$route.direction",
+                              "sell-base"
+                            ]
+                          },
+                          "pool": "$descriptor.pool",
+                          "lpFeeRate": "$fees.lpFeeRate",
+                          "mtFeeRate": "$fees.mtFeeRate"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "source": "$source",
+                "pmm": "$pmm",
+                "lpFeeRate": "$fees.lpFeeRate",
+                "mtFeeRate": "$fees.mtFeeRate",
+                "base": "$input.base",
+                "quote": "$input.quote",
+                "selections": "$selections"
+              }
+            }
+          ]
+        },
+        {
+          "id": "probes",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ],
+            "caller": "verified-actor"
+          },
+          "requests": {
+            "op": "flatMap",
+            "args": [
+              "$steps.current.selections",
+              "s",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$s.selection",
+                          "kind"
+                        ]
+                      },
+                      "bounded-onchain-probe"
+                    ]
+                  },
+                  [
+                    {
+                      "id": {
+                        "op": "join",
+                        "args": [
+                          [
+                            "current-bounded-probe:",
+                            {
+                              "op": "hash",
+                              "args": [
+                                {
+                                  "routeKey": "$s.routeKey"
+                                }
+                              ]
+                            }
+                          ],
+                          ""
+                        ]
+                      },
+                      "kind": "eth-call",
+                      "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+                      "caller": {
+                        "kind": "verified-actor",
+                        "evidenceId": "dodo-v2-quote-actor"
+                      },
+                      "data": {
+                        "op": "encode",
+                        "args": [
+                          "multicall",
+                          "aggregate3",
+                          [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$s.selection.candidates",
+                                "candidate",
+                                [
+                                  "$descriptor.pool",
+                                  true,
+                                  {
+                                    "op": "encode",
+                                    "args": [
+                                      "pool",
+                                      {
+                                        "op": "if",
+                                        "args": [
+                                          {
+                                            "op": "eq",
+                                            "args": [
+                                              "$s.direction",
+                                              "sell-base"
+                                            ]
+                                          },
+                                          "querySellBase",
+                                          "querySellQuote"
+                                        ]
+                                      },
+                                      [
+                                        "0x1000000000000000000000000000000000000001",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            "$candidate",
+                                            "effectiveInput"
+                                          ]
+                                        }
+                                      ]
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        ]
+                      },
+                      "completion": "return-data"
+                    }
+                  ],
+                  []
+                ]
+              }
+            ]
+          },
+          "decode": [
+            {
+              "let": "probes",
+              "value": {
+                "op": "map",
+                "args": [
+                  {
+                    "op": "filter",
+                    "args": [
+                      "$steps.current.selections",
+                      "s",
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$s.selection",
+                              "kind"
+                            ]
+                          },
+                          "bounded-onchain-probe"
+                        ]
+                      }
+                    ]
+                  },
+                  "s",
+                  {
+                    "op": "merge",
+                    "args": [
+                      {
+                        "routeKey": "$s.routeKey"
+                      },
+                      {
+                        "op": "model",
+                        "args": [
+                          "probeQuote",
+                          {
+                            "pool": "$descriptor.pool",
+                            "tokenIn": {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    "$s.direction",
+                                    "sell-base"
+                                  ]
+                                },
+                                "$descriptor.baseToken",
+                                "$descriptor.quoteToken"
+                              ]
+                            },
+                            "tokenOut": {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    "$s.direction",
+                                    "sell-base"
+                                  ]
+                                },
+                                "$descriptor.quoteToken",
+                                "$descriptor.baseToken"
+                              ]
+                            },
+                            "plan": "$s.selection",
+                            "rows": {
+                              "op": "map",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    {
+                                      "op": "decodeAll",
+                                      "args": [
+                                        "multicall",
+                                        "aggregate3",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "at",
+                                              "args": [
+                                                "$results",
+                                                "$index"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                "row",
+                                {
+                                  "success": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "success"
+                                    ]
+                                  },
+                                  "returnData": {
+                                    "op": "get",
+                                    "args": [
+                                      "$row",
+                                      "returnData"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "op": "model",
+                "args": [
+                  "pricingSnapshot",
+                  {
+                    "pool": "$descriptor.pool",
+                    "core": "$steps.current",
+                    "selections": "$steps.current.selections",
+                    "probes": "$probes",
+                    "routes": {
+                      "op": "map",
+                      "args": [
+                        "$routes",
+                        "r",
+                        {
+                          "routeKey": "$r.routeKey",
+                          "direction": "$r.direction",
+                          "tokenIn": "$r.tokenIn",
+                          "tokenOut": "$r.tokenOut"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.probes"
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "chainQuote": {
+        "version": 2,
+        "choices": [
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "sell-base"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$steps.initial.effectiveInput",
+                    "$quote.amountIn"
+                  ]
+                }
+              ]
+            },
+            "proof": {
+              "version": 2,
+              "step": "initial",
+              "requestId": "exact-actor-query",
+              "signature": "function querySellBase(address trader,uint256 payBaseAmount) view returns (uint256 receiveQuoteAmount)",
+              "amountPath": [
+                1
+              ],
+              "outputPath": [
+                0
+              ],
+              "requestBinding": {
+                "target": "$descriptor.pool",
+                "caller": {
+                  "kind": "transaction-origin"
+                }
+              }
+            }
+          },
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "sell-base"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$steps.initial.effectiveInput",
+                    "$quote.amountIn"
+                  ]
+                }
+              ]
+            },
+            "proof": {
+              "version": 2,
+              "step": "effective",
+              "requestId": "exact-effective-actor-query",
+              "signature": "function querySellBase(address trader,uint256 payBaseAmount) view returns (uint256 receiveQuoteAmount)",
+              "amountPath": [
+                1
+              ],
+              "outputPath": [
+                0
+              ],
+              "requestBinding": {
+                "target": "$descriptor.pool",
+                "caller": {
+                  "kind": "transaction-origin"
+                }
+              },
+              "inputBinding": {
+                "value": {
+                  "op": "add",
+                  "args": [
+                    "$steps.initial.position.surplus",
+                    {
+                      "op": "sub",
+                      "args": [
+                        "$quote.amountIn",
+                        "$steps.initial.position.deficit"
+                      ]
+                    }
+                  ]
+                },
+                "checks": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$quote.amountIn",
+                      "$steps.initial.position.deficit"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "sell-quote"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$steps.initial.effectiveInput",
+                    "$quote.amountIn"
+                  ]
+                }
+              ]
+            },
+            "proof": {
+              "version": 2,
+              "step": "initial",
+              "requestId": "exact-actor-query",
+              "signature": "function querySellQuote(address trader,uint256 payQuoteAmount) view returns (uint256 receiveBaseAmount)",
+              "amountPath": [
+                1
+              ],
+              "outputPath": [
+                0
+              ],
+              "requestBinding": {
+                "target": "$descriptor.pool",
+                "caller": {
+                  "kind": "transaction-origin"
+                }
+              }
+            }
+          },
+          {
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "sell-quote"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$steps.initial.effectiveInput",
+                    "$quote.amountIn"
+                  ]
+                }
+              ]
+            },
+            "proof": {
+              "version": 2,
+              "step": "effective",
+              "requestId": "exact-effective-actor-query",
+              "signature": "function querySellQuote(address trader,uint256 payQuoteAmount) view returns (uint256 receiveBaseAmount)",
+              "amountPath": [
+                1
+              ],
+              "outputPath": [
+                0
+              ],
+              "requestBinding": {
+                "target": "$descriptor.pool",
+                "caller": {
+                  "kind": "transaction-origin"
+                }
+              },
+              "inputBinding": {
+                "value": {
+                  "op": "add",
+                  "args": [
+                    "$steps.initial.position.surplus",
+                    {
+                      "op": "sub",
+                      "args": [
+                        "$quote.amountIn",
+                        "$steps.initial.position.deficit"
+                      ]
+                    }
+                  ]
+                },
+                "checks": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$quote.amountIn",
+                      "$steps.initial.position.deficit"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "id": "initial",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ],
+            "caller": "transaction-origin"
+          },
+          "requests": [
+            {
+              "id": "exact-pmm-state",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "caller": {
+                "kind": "transaction-origin"
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getPMMStateForCall",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "exact-actor-fee",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "caller": {
+                "kind": "transaction-origin"
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "getUserFeeRate",
+                  [
+                    "$transactionOrigin"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "exact-input-semantics",
+              "kind": "eth-call",
+              "to": "0xcA11bde05977b3631167028862bE2a173976CA11",
+              "caller": {
+                "kind": "transaction-origin"
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "multicall",
+                  "aggregate3",
+                  [
+                    [
+                      [
+                        "$descriptor.baseToken",
+                        false,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "token",
+                            "balanceOf",
+                            [
+                              "$descriptor.pool"
+                            ]
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.quoteToken",
+                        false,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "token",
+                            "balanceOf",
+                            [
+                              "$descriptor.pool"
+                            ]
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        false,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "_BASE_RESERVE_",
+                            []
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        false,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "_QUOTE_RESERVE_",
+                            []
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        true,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "getBaseInput",
+                            []
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        true,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "getQuoteInput",
+                            []
+                          ]
+                        }
+                      ],
+                      [
+                        "$descriptor.pool",
+                        true,
+                        {
+                          "op": "encode",
+                          "args": [
+                            "pool",
+                            "getMtFeeTotal",
+                            []
+                          ]
+                        }
+                      ]
+                    ]
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "exact-actor-query",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "caller": {
+                "kind": "transaction-origin"
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$route",
+                              "direction"
+                            ]
+                          },
+                          "sell-base"
+                        ]
+                      },
+                      "querySellBase",
+                      "querySellQuote"
+                    ]
+                  },
+                  [
+                    "$transactionOrigin",
+                    "$amountIn"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "rows",
+              "value": {
+                "op": "map",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      {
+                        "op": "decodeAll",
+                        "args": [
+                          "multicall",
+                          "aggregate3",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "exact-input-semantics"
+                                ]
+                              },
+                              "data"
+                            ]
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "row",
+                  {
+                    "success": {
+                      "op": "get",
+                      "args": [
+                        "$row",
+                        "success"
+                      ]
+                    },
+                    "returnData": {
+                      "op": "get",
+                      "args": [
+                        "$row",
+                        "returnData"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "let": "input",
+              "value": {
+                "op": "model",
+                "args": [
+                  "inputPosition",
+                  {
+                    "pool": "$descriptor.pool",
+                    "rows": "$rows"
+                  }
+                ]
+              }
+            },
+            {
+              "let": "position",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "direction"
+                        ]
+                      },
+                      "sell-base"
+                    ]
+                  },
+                  "$input.base",
+                  "$input.quote"
+                ]
+              }
+            },
+            {
+              "let": "effectiveInput",
+              "value": {
+                "op": "model",
+                "args": [
+                  "effectiveInput",
+                  {
+                    "pool": "$descriptor.pool",
+                    "position": "$position",
+                    "transferAmount": "$amountIn"
+                  }
+                ]
+              }
+            },
+            {
+              "let": "adjusted",
+              "value": {
+                "op": "ne",
+                "args": [
+                  "$effectiveInput",
+                  "$amountIn"
+                ]
+              }
+            },
+            {
+              "let": "pmm",
+              "value": {
+                "op": "if",
+                "args": [
+                  "$adjusted",
+                  {
+                    "op": "model",
+                    "args": [
+                      "pmmState",
+                      {
+                        "values": {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "pool",
+                            "getPMMStateForCall",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "exact-pmm-state"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  null
+                ]
+              }
+            },
+            {
+              "let": "fees",
+              "value": {
+                "op": "if",
+                "args": [
+                  "$adjusted",
+                  {
+                    "op": "model",
+                    "args": [
+                      "feeRates",
+                      {
+                        "values": {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "pool",
+                            "getUserFeeRate",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "exact-actor-fee"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  null
+                ]
+              }
+            },
+            {
+              "let": "grossOut",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "not",
+                    "args": [
+                      "$adjusted"
+                    ]
+                  },
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "bytes",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "exact-actor-query"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0,
+                          32
+                        ]
+                      }
+                    ]
+                  },
+                  null
+                ]
+              }
+            },
+            {
+              "return": {
+                "pmm": "$pmm",
+                "fees": "$fees",
+                "input": "$input",
+                "position": "$position",
+                "effectiveInput": "$effectiveInput",
+                "adjusted": "$adjusted",
+                "grossOut": "$grossOut"
+              }
+            }
+          ]
+        },
+        {
+          "id": "effective",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ],
+            "caller": "transaction-origin"
+          },
+          "requests": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$steps.initial.effectiveInput",
+                  "$amountIn"
+                ]
+              },
+              [],
+              [
+                {
+                  "id": "exact-effective-actor-query",
+                  "kind": "eth-call",
+                  "to": "$descriptor.pool",
+                  "caller": {
+                    "kind": "transaction-origin"
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "pool",
+                      {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$route",
+                                  "direction"
+                                ]
+                              },
+                              "sell-base"
+                            ]
+                          },
+                          "querySellBase",
+                          "querySellQuote"
+                        ]
+                      },
+                      [
+                        "$transactionOrigin",
+                        "$steps.initial.effectiveInput"
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ]
+            ]
+          },
+          "decode": [
+            {
+              "return": {
+                "effectiveInput": "$steps.initial.effectiveInput",
+                "out": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$results"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$steps.initial.grossOut",
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$results",
+                                    0
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0,
+                            32
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.effective.out"
+    },
+    "liveStateProjection": {
+      "version": 1,
+      "result": {
+        "kind": "dodo-v2-pmm-live",
+        "pool": "$descriptor.pool",
+        "baseToken": "$descriptor.baseToken",
+        "quoteToken": "$descriptor.quoteToken",
+        "quoteActor": {
+          "op": "get",
+          "args": [
+            "$descriptor.quoteActorBinding",
+            "actor"
+          ]
+        },
+        "pmm": {
+          "i": "$snapshot.pmm.i",
+          "K": "$snapshot.pmm.K",
+          "B": "$snapshot.pmm.B",
+          "Q": "$snapshot.pmm.Q",
+          "B0": "$snapshot.pmm.B0",
+          "Q0": "$snapshot.pmm.Q0",
+          "R": "$snapshot.pmm.R"
+        },
+        "lpFeeRate": "$snapshot.lpFeeRate",
+        "mtFeeRate": "$snapshot.mtFeeRate",
+        "baseInput": {
+          "surplus": "$snapshot.baseInput.surplus",
+          "deficit": "$snapshot.baseInput.deficit"
+        },
+        "quoteInput": {
+          "surplus": "$snapshot.quoteInput.surplus",
+          "deficit": "$snapshot.quoteInput.deficit"
+        },
+        "blockNumber": "$snapshot.source.number"
+      }
+    }
+  },
+  "variantFiles": [
+    "./registry-member-1.json",
+    "./registry-member-2.json",
+    "./registry-member-3.json"
+  ],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "dodo-v2-swap",
+        "lineage": "dodo-v2",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function sellBase(address)"
+        },
+        {
+          "signature": "function sellQuote(address)"
+        }
+      ]
+    }
+  ]
+}

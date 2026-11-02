@@ -1,0 +1,150 @@
+/**
+ * Ekubo re-evaluation probe for framework f4a16ced (2026-11-02).
+ *
+ * Read-only, synthetic fixtures. It proves which former blockers are now
+ * expressible and which boundary remains:
+ *  - G-E1: tuple arguments + derived `poolId` candidate fields;
+ *  - G-E2: bounded multihop fan-out with per-hop tuple/derived candidates;
+ *  - G-E4: packed bytes32 quote output via v2 `outputWord` + per-direction
+ *    `choices` (and the required `inputBinding` for a signed `int128` input);
+ *  - G-E3: reverse binding is still hard-coded explicitly-unsupported.
+ *
+ * Run from the workspace root:
+ *   mkdir -p listener/.migration-probe
+ *   cp docs/research/migration/pending-20261028/ekubo-new-capabilities-probe-20261102.ts.draft \
+ *      listener/.migration-probe/ekubo-new-capabilities-probe.ts
+ *   cd listener && node --import tsx .migration-probe/ekubo-new-capabilities-probe.ts
+ *
+ * This is a capability probe, not an Ekubo migration, acceptance run or
+ * production behaviour claim.
+ */
+import assert from "node:assert/strict";
+import { ethers } from "ethers";
+import { compileDeclarativeDiscovery } from "../src/searcher/venues/declarative-discovery.ts";
+import { compileDeclarativeValues } from "../src/searcher/venues/declarative-values.ts";
+import { quoteProofGroups, verifyDeclarativeQuoteProof } from "../src/searcher/venues/declarative-quote-proof.ts";
+import { EKUBO_CORE, EKUBO_ROUTER, decodeEkuboBalanceUpdate, exactInputAmountOut } from "../src/searcher/venues/swaps/ekubo/abi.ts";
+
+const O = (op: string, ...args: any[]) => ({ op, args });
+const get = (o: any, k: any) => O("get", o, k);
+const at = (o: any, i: any) => O("at", o, i);
+const eq = (a: any, b: any) => O("eq", a, b);
+const gte = (a: any, b: any) => O("gte", a, b);
+const lte = (a: any, b: any) => O("lte", a, b);
+const U = (x: any) => O("uint", String(x));
+const enc = (types: string[], values: any[]) => O("abiEncode", types, values);
+const poolIdFrom = (base: any[]) => O("codeHash", enc(["address", "address", "bytes32"], base));
+
+// Same fragments as venues/swaps/ekubo/abi.ts.
+const ROUTER = new ethers.Interface([
+  "function multihopSwap((((address token0,address token1,bytes32 config) poolKey,uint96 sqrtRatioLimit,uint256 skipAhead)[] route,(address token,int128 amount) tokenAmount) swap,int256 calculatedAmountThreshold) payable returns (bytes32[] balanceUpdates)",
+  "function swap((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead,int256 calculatedAmountThreshold,address recipient) payable returns (bytes32 balanceUpdate)",
+  "function quote((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead) returns (bytes32 balanceUpdate,bytes32 stateAfter)",
+]);
+const INIT = new ethers.Interface(["event PoolInitialized(bytes32 poolId,(address token0,address token1,bytes32 config) poolKey,int32 tick,uint96 fee)"]);
+const source = { number: 26_000_000, hash: `0x${"22".repeat(32)}`, generation: 1 };
+const key = { token0: "0x0000000000000000000000000000000000000001", token1: "0x0000000000000000000000000000000000000002", config: `0x${"00".repeat(32)}` };
+const abi = ethers.AbiCoder.defaultAbiCoder();
+const poolId = ethers.keccak256(abi.encode(["address", "address", "bytes32"], [key.token0, key.token1, key.config]));
+
+// G-E1 / G-E2: one candidate schema for the swap call, the multihop fan-out
+// and the PoolInitialized log. `subject` is the real target/emitter address;
+// the pool id is derived from the tuple, never injected.
+const definition = {
+  version: 2,
+  sources: ["landed-log", "observed-call"],
+  candidateSources: ["canonical-registry"],
+  candidate: { kind: "ekubo-pool-key", addressField: "subject",
+    fields: { subject: "address", token0: "address", token1: "address", config: "bytes32", poolId: "bytes32" },
+    key: ["subject", "poolId"], instanceKey: ["subject", "poolId"] },
+  calls: [
+    { id: "ekubo-vanilla-exact-input", signature: ROUTER.getFunction("swap")!.format("sighash"),
+      fields: {
+        subject: { from: "target" },
+        token0: { from: "argument", index: 0, path: [0] },
+        token1: { from: "argument", index: 0, path: [1] },
+        config: { from: "argument", index: 0, path: [2] },
+        poolId: { from: "expression", value: poolIdFrom(["$args.0.0", "$args.0.1", "$args.0.2"]) },
+      } },
+    { id: "ekubo-router-full-input-multihop", signature: ROUTER.getFunction("multihopSwap")!.format("sighash"),
+      fanOut: { argument: 0, path: [0], maxItems: 32 },
+      predicates: [
+        eq(at("$item", 1), U(0)), eq(at("$item", 2), U(0)),
+        gte(at(at(get("$args", 0), 1), 1), U(1)),
+        lte(at(at(get("$args", 0), 1), 1), U((1n << 127n) - 1n)),
+      ],
+      fields: {
+        subject: { from: "target" },
+        token0: { from: "item", path: [0, 0] },
+        token1: { from: "item", path: [0, 1] },
+        config: { from: "item", path: [0, 2] },
+        poolId: { from: "expression", value: poolIdFrom(["$item.0.0", "$item.0.1", "$item.0.2"]) },
+      } },
+  ],
+  events: [
+    { id: "ekubo-core-pool-initialized", signature: INIT.getEvent("PoolInitialized")!.format("sighash"),
+      predicates: [eq(poolIdFrom(["$args.1.0", "$args.1.1", "$args.1.2"]), get("$args", 0))],
+      fields: {
+        subject: { from: "emitter" },
+        token0: { from: "argument", index: 1, path: [0] },
+        token1: { from: "argument", index: 1, path: [1] },
+        config: { from: "argument", index: 1, path: [2] },
+        poolId: { from: "expression", value: poolIdFrom(["$args.1.0", "$args.1.1", "$args.1.2"]) },
+      } },
+  ],
+  labels: ["ekubo"],
+  nomination: "tx-evidence",
+} as const;
+const values = compileDeclarativeValues({ abi: {}, constants: {}, expressions: {} });
+const discovery: any = compileDeclarativeDiscovery(definition as any, values);
+assert.equal(discovery.callPatterns.length, 33); // 1 swap + 32 bounded hop patterns
+assert.equal(discovery.reverseBinding.kind, "explicitly-unsupported");
+console.log("G-E1/G-E2 patterns:", discovery.callPatterns.length, "call,", discovery.logPatterns.length, "log");
+
+const swapData = ROUTER.encodeFunctionData("swap", [key, false, 123n, 0n, 0n, 1n, "0x0000000000000000000000000000000000000009"]);
+assert.equal(discovery.decodeCandidate({ observation: { kind: "call", target: EKUBO_ROUTER, data: swapData, source }, matchedPatternId: "ekubo-vanilla-exact-input" }).poolId, poolId);
+const hops = [0, 1, 2].map(i => [[i === 0 ? key.token0 : `0x000000000000000000000000000000000000000${i + 1}`, `0x000000000000000000000000000000000000000${i + 2}`, `0x${"00".repeat(32)}`], 0n, 0n]);
+const multiData = ROUTER.encodeFunctionData("multihopSwap", [{ route: hops, tokenAmount: [key.token0, 1000n] }, (1n << 255n) - 1n]);
+for (let hop = 0; hop < 3; hop++) {
+  assert.equal(discovery.decodeCandidate({ observation: { kind: "call", target: EKUBO_ROUTER, data: multiData, source }, matchedPatternId: hop === 0 ? "ekubo-router-full-input-multihop" : `ekubo-router-full-input-multihop-${hop}` }).poolId,
+    ethers.keccak256(abi.encode(["address", "address", "bytes32"], hops[hop]![0])));
+}
+assert.equal(discovery.decodeCandidate({ observation: { kind: "call", target: EKUBO_ROUTER, data: multiData, source }, matchedPatternId: "ekubo-router-full-input-multihop-31" }), null);
+const init = INIT.encodeEventLog(INIT.getEvent("PoolInitialized")!, [poolId, key, 0, 1n]);
+assert.equal(discovery.decodeCandidate({ observation: { kind: "log", address: EKUBO_CORE, topics: init.topics, data: init.data, source }, matchedPatternId: "ekubo-core-pool-initialized" }).poolId, poolId);
+console.log("G-E1 tuple/derived candidates: swap + 3 multihop hops + PoolInitialized matched");
+
+// G-E4: quote(poolKey,bool,int128,uint96,uint256) returns (bytes32,bytes32);
+// the amount is the signed delta packed in the balance update.
+const proof: any = { version: 2, choices: [
+  { when: eq("$direction", "token0-in"), proof: { version: 2, step: "quote", requestId: "quote",
+    signature: ROUTER.getFunction("quote")!.format("full"), amountPath: [2], outputPath: [0], completion: "returned",
+    requestBinding: { target: "$target", caller: { kind: "none" } },
+    inputBinding: { value: "$quote.amountIn", checks: [gte("$quote.amountIn", U(1))] },
+    outputWord: { offset: 0, width: 128, signed: true, negate: true } } },
+  { when: eq("$direction", "token1-in"), proof: { version: 2, step: "quote", requestId: "quote",
+    signature: ROUTER.getFunction("quote")!.format("full"), amountPath: [2], outputPath: [0], completion: "returned",
+    requestBinding: { target: "$target", caller: { kind: "none" } },
+    inputBinding: { value: "$quote.amountIn", checks: [gte("$quote.amountIn", U(1))] },
+    outputWord: { offset: 128, width: 128, signed: true, negate: true } } },
+] };
+const groups = quoteProofGroups(proof, "view");
+assert.equal(groups.length, 2);
+const amountIn = 123n;
+for (const [index, direction] of [[0, "token0-in"], [1, "token1-in"]] as const) {
+  const isToken1 = direction === "token1-in";
+  const request = { id: "quote", kind: "eth-call", to: EKUBO_ROUTER, data: ROUTER.encodeFunctionData("quote", [key, isToken1, amountIn, 0n, 0n]), completion: "return-data" };
+  const mask = (1n << 128n) - 1n;
+  const packed = ethers.toBeHex((((isToken1 ? -50n : amountIn) & mask) << 128n) | ((isToken1 ? amountIn : -50n) & mask), 32);
+  const result = { id: "quote", ok: true, completion: "returned", source,
+    data: ROUTER.encodeFunctionResult("quote", [packed, `0x${"33".repeat(32)}`]),
+    provenance: { kind: "unit-probe", fingerprint: "synthetic" } };
+  const decoded = decodeEkuboBalanceUpdate(ROUTER.decodeFunctionResult("quote", result.data)[0] as string);
+  const amountOut = exactInputAmountOut(decoded, isToken1);
+  verifyDeclarativeQuoteProof({ proof: groups[index]![0] as any, sourceKind: "view", request, result, source, amountIn, amountOut,
+    tokenIn: key.token0, tokenOut: key.token1, executor: "0x0000000000000000000000000000000000000009",
+    evaluate: values.evaluate, environment: { target: EKUBO_ROUTER, direction } });
+  console.log(`G-E4 packed quote proof ${direction}: amountOut=${amountOut}`);
+}
+console.log("G-E3 reverse binding:", discovery.reverseBinding.kind, discovery.reverseBinding.reason);
+console.log("EKUBO PROBE PASSED (capability probe only)");

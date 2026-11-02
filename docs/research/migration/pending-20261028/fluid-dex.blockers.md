@@ -1,152 +1,79 @@
-# `fluid-dex` — parked declarative draft and blockers (2026-10-30)
+# `fluid-dex` — re-evaluation against framework `f4a16ced` (2026-11-02): still blocked
 
 Status: **blocked / not migrated**. The handwritten `fluid-dex.production.ts` remains the
-production entry. No live/VM/RPC, no signing, no public framework TS/test change, no
-production generator run, no generated artifact.
+production entry. No live/VM/RPC, no generator run, no public framework TS/test change, no
+generated artifact. The parked draft `fluid-dex.draft.json` is unchanged and still **not
+importable**: the sections listed below were already omitted/disabled in it.
 
-Files parked here:
+This file supersedes the 2026-10-30 parking report. Four of the five previously decisive gaps are
+now expressible on this baseline; one capability — the **runtime revert-quoter used by the
+`quote-output` settlement preparation** — is still absent, and it is load-bearing for both
+advertised settlement paths. Dropping it would narrow a real capability, so the family stays
+parked rather than being cut over partially.
 
-- `fluid-dex.draft.json` — partial `swap-json-v2` draft. It is **not importable and not a
-  deliverable**: the blocked sections are omitted or explicitly disabled (see below), and
-  no placeholder ABI or placeholder identity was invented.
-- `fluid-dex.blockers.md` — this file.
+## Re-evaluation of the previous gaps
 
-Framework baseline: merged `47422c97` (directional execution, quoteOutput exports,
-zero-output exact with unavailableReason, conditional trialState, frame expressions, receipt
-observation enrichment) on top of the Swap/Credit JSON handoff.
+| Previous gap | New baseline evidence | Verdict |
+|---|---|---|
+| **G-FL-1** topic-only landed event with no public ABI (`swap.ts:21-37`, `codec.ts:16-19`, `discovery.ts:24-33`) | `declarative-event-codec.ts:12-24` accepts a `topic`-only event; `declarative-swap-domain.ts:27-30` requires `receiptMode: "unresolved"`; `declarative-discovery.ts:305-321` accepts a topic-only discovery pattern (`nominationOnly`/trigger identity). | **resolved** — declaration exists (`events[].topic`, `receiptMode: "unresolved"`). |
+| **G-FL-2** "resolved with zero impacts" receipt result (`swap.ts:26,34-36`; central wrapper `test/strict-receipt-authority.ts:311-333`) | `declarative-swap-domain.ts:111-119` classifies the opaque trigger but `observation.decode` returns `[]`, and the shared strict wrapper reports the group `unresolved` (`declarative-swap-domain.ts:213-216` skips `receiptMode: "unresolved"`). The legacy observer also reports the group unresolved. | **resolved** — the legacy result is `unresolved`, not a zero-impact `resolved`, so the topic-only declaration is faithful. |
+| **G-FL-3** identity `assets`/central metadata hook (`identity.ts:48-52,68-80,186-220,222-229`; probe sizes `:124-139`; asset code `:270`) | `declarative-identity.ts:44-50,115-122` adds the optional `identity.assets` hook and exposes decoded `assets` to stages; `adapter-family-runtime.ts:3703-3710` wires the existing `createIdentityAssetMetadataPlan` authority. | **resolved** — the hook and `assets` decode environment now exist. |
+| **G-FL-4** declared-revert custom-error quote (`pricing.ts:96-111`, `exact.ts:38-56`, `codec.ts:119-163`, identity probes `identity.ts:149-164`) | `declarative-quote-proof.ts:14-18,70-75,121-142` supports `errorSignature` + `completion: "reverted-as-declared"` (canonical `decodeErrorResult` selector/payload checks); `declarative-values.ts:193-198` exposes pure `decodeErrorCanonical` for identity/pricing decode. `effects: ["revert-data"]` remains declarable in requirements. | **resolved** — a chain quote proof for the Fluid `FluidDexSwapResult(uint256)` revert is now declarable. |
+| **G-FL-5** runtime `quote-output` preparation depends on the same revert decoder (`execution.ts:17-37`, `raw-execution.ts:58-65`) | Declarative `quoteOutput` is a static call/math list: steps must be `static: true` ABI-return-word calls or registered runtime math (`declarative-execution.ts:93-156,190-227`), and the emitter has no `revertBytes` path (`:661-713`). `RuntimeAmountProgram.call({revertBytes})` is not reachable from JSON. | **UNSUPPORTED — decisive gap remains.** |
 
-## What is faithfully expressible (and validated in-memory)
+### The remaining blocking gap (G-FL-5, narrowed to what is actually missing)
 
-- **Manifest/scope/activation**: family `fluid-dex`, lineage `fluid-dex:factory-child`,
-  activation `SEARCHER_FAMILY_FLUID_DEX_ENABLED` (enabled), one owned action
-  `fluid-dex-swap`, no infra actions, `poolAdapterIds ["fluid-dex"]`,
-  `edgeAdapterIds ["fluid-dex-swap"]`.
-- **Discovery** (`declarative-discovery.ts` v2 mapping): `swapIn(bool,uint256,uint256,address)`
-  call pattern (candidate address from call target), `dex-token-domain` candidate source, the
-  `fluid-dex:constantsView+swapIn` address surface (candidate address from emitter),
-  labels `["fluid-dex","fluid"]`, address-surface nomination, candidate/instance key = pool.
-  Validated: canonical call and address-surface candidates decode to the pool; bogus calldata
-  returns `null`.
-- **Instance/binding projection**: pool, raw constants tokens, graph tokens, decimals,
-  `factoryBinding {factory,dexId,reverseDex}` and `quoteBinding {target,recipient:
-  ADDRESS_DEAD,completion:"return-or-revert-data",successEncoding:"FluidDexSwapResult(uint256)-revert"}`
-  plus the two pinned-block runtime requirements (`instance.ts:9-18,50-71`). Validated with a
-  synthetic descriptor.
-- **Routes**: both directions (`swap0-to-1` / `swap1-to-0`), the legacy
-  `familyId␟pool␟tokenIn␟tokenOut␟0-1|1-0` key (`routes.ts:37-69`), native/erc20
-  `executionAssets` derived from the raw constants tokens (Fluid native sentinel,
-  `codec.ts:6-13`), `swap0To1`/pool route fields, `{kind:"address-pool"}` venue. Validated.
-- **Price projection shape**: `pricingProjection.rows` can express the legacy
-  `quotedPoolMid` values (`pricing.ts:124-138`: mid = amountOut/amountIn,
-  reserveA = amountIn×10⁴, reserveB = amountOut×10⁴, depth = min), `refreshPolicy:
-  "each-block"`, `stateKey = route.routeKey`, `mutationKinds ["log"]`, pool/quote-target
-  dependencies and the pool-only mutation addresses. Not run end-to-end because the state
-  read itself is blocked (G-FL-4).
-- **Execution shape**: v2 steps can express the payable `swapIn` call with the runtime input
-  patch, recipient/minOut arguments, exact-clear approval, native/erc20 debit-credit effects
-  and `directOutput`. The draft compiles both the native-input and token-input runtime legs
-  through `buildDeclarativeExecutionProgram`/`buildDeclarativeRuntimeLeg` (validated).
+`fluidDexRuntimeQuote` (`raw-execution.ts:58-65`) issues `swapIn` with `revertBytes: 36` and
+decodes the `FluidDexSwapResult(uint256)` payload in the runtime program. Both settlement paths
+depend on it:
 
-## Gaps (blocking)
+- `quote-output`: `execution.ts:22-23` returns `finish(fluidDexRuntimeQuote(pool, swap0To1))`,
+  i.e. the settlement *result* is exactly the runtime revert-quote.
+- `direct-output`: `raw-execution.ts:29` runs the same `fluidDexRuntimeQuote(...).bytes()` inside
+  the direct program to establish the expected output before payment, and `execution.ts:27-29`
+  advertises `settlement: { quoteOutput: true, directOutput: true }` for **both** paths.
 
-**G-FL-1. Topic-only landed event has no canonical ABI.**
-`fluid-dex-family/swap.ts:21-37` declares the receipt observer from
-`FLUID_DEX_SWAP_TOPIC` only (`codec.ts:16-19`: "receipt-verified topic has no public stable
-event ABI"), with `observation.decode: () => []` (`swap.ts:26`). Discovery mirrors it with a
-non-ABI signature string `"FluidDexSwap(receipt-verified-topic)"` (`discovery.ts:30-32`).
-Declarative mapped discovery requires a parseable `EventFragment`
-(`declarative-discovery.ts:213-225`; `EventFragment.from("FluidDexSwap(receipt-verified-topic)")`
-throws `invalid event fragment`), and the declarative Swap domain requires every event to be
-either one canonical ABI event or a bounded anonymous packed layout
-(`declarative-event-codec.ts:10-27`; `declarative-swap-domain.ts:23-34`). There is no
-topic-only declaration, so neither the landed-log discovery pattern nor `swap.events` can be
-authored without inventing an ABI. The draft therefore omits `landed-log` from discovery and
-leaves `swap.events` empty (intentionally invalid).
+A declarative execution cannot prepare that quote: the `quoteOutput` module only supports static
+calls whose ABI *return* words are saved (`declarative-execution.ts:121,200`), or runtime math
+over such captures; there is no `revertBytes`/`return-or-revert-data` runtime call. Declaring no
+`quoteOutput` module makes `settlement.quoteOutput` false and makes
+`buildDeclarativeRuntimeLeg` reject `{kind:"quote-output"}` (`:904-906`), so the migration would
+silently drop an advertised settlement capability and the "actual output equals the declared
+revert quote" invariant on the direct path. Additionally, the quote-output path is rejected for
+native routes (`:904-906`), and Fluid routes carry native input/output
+(`execution.ts:24-26`), so the "special native settlement" coverage called out in the framework
+note (`docs/research/design/family-common-capabilities-20261102.md:176`) is also still missing.
 
-**G-FL-2. "No receipt impact" cannot be declared.**
-The legacy observer returns `[]` for every matched trigger
-(`swap.ts:34-36`, `createStrictSwapObservation` wrapper) so the strict session reports the
-group as unresolved (`test/strict-receipt-authority.ts:311-333`). The declarative Swap
-domain always maps each owned trigger to either a `PoolImpact` or a `mutationOnlyReason`
-(`declarative-swap-domain.ts:202-223`) and always emits a `canonicalPayload` for a decoded
-observation (`:104-108`). A declarative event can fail closed (throwing yields `unresolved`),
-but it cannot express the "resolved with zero impacts/no mutations" legacy result for a
-topic-only event, and it cannot express "observation returns no decoded events" without
-failing the same decode used by `landedEvents.classify`. This is a declaration-shape gap,
-not an optional trimming.
+To unblock, the shared execution/codec layer needs a bounded, declared runtime **revert-data
+quote preparation** (equivalent of `RuntimeAmountProgram.call({revertBytes})` plus canonical
+custom-error decode) available to `modules.quoteOutput`, and quote-output settlement support for
+the native asset boundary. Until then the handwritten entry stays authoritative.
 
-**G-FL-3. Identity asset metadata hook is not declarable.**
-The legacy identity variant declares `assets(input)` and uses central
-`IdentityAssetMetadata` for graph denominations, decimals, ERC20 code evidence and the
-native sentinel mapping (`identity.ts:48-52,68-80,186-220,222-229`; probe sizes use
-`assetDecimals` at `:124-139`; asset code evidence is referenced by
-`identityAssetRequestId` at `:270`). The declarative identity document has no `assets` hook
-and its decode environment exposes only candidate/evidence/step/results/profile/constants
-(`declarative-identity.ts:31-116`, environment at `:90-91`). Without asset metadata the draft
-cannot faithfully produce `token0/token1` graph tokens (WETH alias for Fluid's native
-sentinel), `token0Decimals/token1Decimals`, the ERC20 code rejection, or the per-direction
-probe amounts; adding family-owned reads would replace a central authority, not migrate it.
-The draft therefore omits `identity.definition` (intentionally invalid).
+## What is now confidently expressible (for the eventual migration)
 
-**G-FL-4. Declared-revert custom-error quote cannot become verified quote evidence.**
-Both pricing and exact call `swapIn` with `ADDRESS_DEAD` and expect a
-`FluidDexSwapResult(uint256)` custom-error revert (`pricing.ts:89-123`, `exact.ts:31-70`,
-`codec.ts:119-163`; identity probes at `identity.ts:124-164,231-246`). Declarative read
-flows decode results through `returned`/`decode`, which require completion `"returned"`
-(`declarative-values.ts:199` → `protocols/standard-family/common.ts:123-131`). A custom-error
-revert can be read with the raw `result` op plus `bytes`/`uint` ops, but the exact path then
-needs a chain-quote proof: `quoteFlow.sourceKind` is limited to `view` /
-`effect-simulation` / `local-math` (`declarative-family-modules.ts:64-88`);
-`view` proof requires canonical ABI **return** encoding and optionally
-`completion:"reverted-as-declared"` only through `decodeFunctionResult`
-(`declarative-quote-proof.ts:46-53,91-103`), which a custom-error payload does not satisfy;
-`effect-simulation` requires observed token deltas (`:106-117`). Claiming `local-math` would
-be false (the amount comes from chain execution), and `exact.unavailableReason` would delete
-a real capability. So no faithful pricing/exact declaration exists today.
+- Manifest/scope/activation, discovery (swapIn call pattern, topic-only landed event, address
+  surface), instance/binding projection, routes (`stateKey = route.routeKey`, one directed route
+  per pricing group), pricing static/current state reads, pricing projection (`quotedPoolMid`
+  shape) and refresh policy, exact chain quote (declared revert, custom error canonical decode),
+  identity assets hook and active proofs (declared revert + `decodeErrorCanonical`),
+  topic-only receipt observation, and the direct/default execution steps/effects (payable
+  `swapIn` with runtime input patch, recipient/minOut arguments, exact-clear approval,
+  native/erc20 debit-credit effects).
+- The only thing that cannot be declared is the runtime quote preparation above, which is why
+  the family is not migrated.
 
-**G-FL-5. Runtime `quote-output` preparation depends on the same revert decoder.**
-`execution.ts:17-37` serves `quote-output`/`direct-output` settlements with
-`fluidDexRuntimeQuote` (`raw-execution.ts:55-64`), which issues a `revertBytes: 36` call and
-decodes the custom-error payload in the runtime program. Declarative `quoteOutput` steps are
-static calls that can only `save` ABI **return** words (`declarative-execution.ts:124-146,
-194-206,601-638`); `RuntimeAmountProgram.call({revertBytes})` is not reachable from JSON.
-`supportsDeclarativeSettlement` additionally rejects `quote-output` for native routes
-(`declarative-execution.ts:857-868`). The default/direct legs are expressible (validated),
-but the family's quote-output settlement path is not.
+## Files
 
-**Secondary, same root cause (not separately blocking).** Declarative identity stages accept
-arbitrary request objects, but the active-quote probe results are `return-or-revert-data`
-(`identity.ts:53-66,124-164`); decoding them needs the raw-result + custom-error path above,
-and the reverse-binding decode also consumes `input.assets` (G-FL-3).
+- `docs/research/migration/pending-20261028/fluid-dex.blockers.md` (this file, updated)
+- `docs/research/migration/pending-20261028/fluid-dex.draft.json` (unchanged partial draft; still
+  not importable — `identity.definition` / `swap.events` / `modules.*` omissions as recorded in
+  the previous revision, plus the now-resolvable sections that would be authored during the real
+  migration)
 
-## Draft contents / omitted parts
+## Validation
 
-Authored in `fluid-dex.draft.json`: scope/production/manifest, discovery definition without
-`landed-log`, instance/binding projection, routes, root pricing skeleton (draft/compat/
-static/finalize/sampleAmount/exactCompatibility/mutationKinds/stateKey + standard pricing
-policy), execution v2 (both directions), action adapter, and an `exact` block that is
-explicitly `{unavailableReason: ...}` so nothing pretends to quote.
-
-Intentionally omitted/invalid: `identity.definition` (G-FL-3), `swap.events` (G-FL-1/2),
-`modules.pricingFlow` / `modules.quoteFlow` / pricing projection (G-FL-4; the projection rows
-are authored only in this report, not in the JSON, to avoid a state read that cannot exist),
-and `quoteOutput` (G-FL-5). The draft is therefore not registered, not generated and not
-imported anywhere.
-
-## Verdict
-
-Stop per migration policy: `fluid-dex` is **not faithfully expressible** on the current
-framework. The missing pieces are declaration capabilities, not optional trimming:
-
-1. a topic-only (no public ABI) landed-event declaration that preserves the owned trigger,
-   `classify` and "resolved with no impact" receipt semantics;
-2. an identity `assets`/central-asset-metadata read hook (native sentinel mapping, decimals,
-   ERC20 code evidence) in the declarative identity document;
-3. a declarative chain-quote proof for declared custom-error revert completions (and the
-   matching read-flow/`quoteOutput` decode), so pricing/exact and the runtime quote-output
-   preparation keep their actual amount source;
-4. if quote-output is migrated later, native-route settlement support for that path.
-
-Revisit when (1)–(3) exist. Until then the handwritten TS entry stays authoritative. The
-existing central regression `test/strict-receipt-authority.ts:311-333` continues to pass
-against that entry and must be re-run after any future fluid migration.
+No production code, JSON, generated artifact or test was changed in this re-evaluation. The
+verdict is based on reading the current shared modules listed above; the framework note itself
+lists "runtime revert-quoter" as not implemented for Fluid DEX
+(`docs/research/design/family-common-capabilities-20261102.md:176`). Re-run the central
+regression `test/strict-receipt-authority.ts:311-333` only after a future fluid migration.
