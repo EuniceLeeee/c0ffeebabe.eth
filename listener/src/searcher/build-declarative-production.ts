@@ -160,7 +160,7 @@ function renderDataFamilyEntry(input: {
   const childFiles = doc.variantFiles.map((name: string) => resolve(dirname(definitionFile), name));
   if (childFiles.includes(definitionFile) || new Set(childFiles).size !== childFiles.length)
     throw new Error("duplicate or cyclic child JSON reference");
-  if (lineages.length !== childFiles.length + 1) throw new Error("variant references do not cover declared lineages");
+  if (lineages.length > childFiles.length + 1) throw new Error("variant references do not cover declared lineages");
   const compiler = resolve(root, `src/searcher/venues/declarative-${domain}.ts`);
   const relativeImport = (file: string) => {
     localPath(sourceRoot, file);
@@ -317,7 +317,7 @@ export async function syncDeclarativeProductionEntries(input: {
           if (Object.hasOwn(child, "variantFiles") || Object.hasOwn(child, "production"))
             throw new Error("nested or cyclic variant JSON references are unsupported");
           if (child.version !== 1 || typeof child.id !== "string" || typeof child.lineageId !== "string" ||
-              !document.manifest.supportedLineages.includes(child.lineageId) || ids.has(child.id) || lineages.has(child.lineageId))
+              !document.manifest.supportedLineages.includes(child.lineageId) || ids.has(child.id))
             throw new Error("invalid or duplicate variant identity/lineage");
           variantDeclaration(child);
           if (Object.hasOwn(child, "types")) {
@@ -326,6 +326,8 @@ export async function syncDeclarativeProductionEntries(input: {
           }
           ids.add(child.id); lineages.add(child.lineageId);
         }
+        if (lineages.size !== document.manifest.supportedLineages.length)
+          throw new Error("variant identity/lineage coverage is incomplete");
         if (entry.typesFile) typeArtifacts.set(entry.typesFile, renderDeclarativeFamilyTypes(document.types, childTypes));
         for (const dependency of entry.dependencyFiles) await regular(dependency);
       } else {

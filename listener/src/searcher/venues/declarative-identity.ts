@@ -16,6 +16,7 @@ export interface DeclarativeIdentityDocument {
   readonly programs?: Record<string, readonly Value[]>;
   readonly identity: {
     readonly applies?: Value;
+    readonly assets?: Value;
     readonly select: readonly Value[];
     readonly stages: Record<string, { requirements: Value; optionalFailures?: string[]; requests: Value; decode: readonly Value[] }>;
     readonly decide: readonly Value[];
@@ -40,17 +41,23 @@ export function compileDeclarativeIdentity<C extends FamilyCandidate, I extends 
   validateDeclarativeValue(raw);
   if (Object.keys(raw).some(key => !["version", "inputs", "scope", "abi", "constants", "discovery", "expressions", "programs", "identity"].includes(key)))
     throw new Error("unknown definition field");
+  const hasAssets = raw.identity.assets !== undefined;
+  const checkBinding = (name: string) => {
+    if (hasAssets && name === "assets") throw new Error("identity metadata binding is reserved");
+    binding(name);
+  };
   const roots = new Set(["requests", "step", "executionRoundingRawUnits", "candidate", "evidence", "results", "profile", "constants", "missing", "index", "error"]);
-  for (const name of raw.inputs ?? []) { binding(name); roots.add(name); }
+  if (hasAssets) roots.add("assets");
+  for (const name of raw.inputs ?? []) { checkBinding(name); roots.add(name); }
   function visit(value: Value, fn: (value: Value) => void): void {
     fn(value);
     if (value && typeof value === "object") Object.values(value).forEach(v => visit(v, fn));
   }
   visit(raw, node => {
     if (!node || typeof node !== "object") return;
-    if (typeof node.let === "string") { binding(node.let); roots.add(node.let); }
-    if (["map", "flatMap", "filter", "some", "every"].includes(node.op)) { binding(node.args[1]); roots.add(node.args[1]); }
-    if (node.op === "expression" || node.op === "program") Object.keys(node.args[1] ?? {}).forEach(key => { binding(key); roots.add(key); });
+    if (typeof node.let === "string") { checkBinding(node.let); roots.add(node.let); }
+    if (["map", "flatMap", "filter", "some", "every"].includes(node.op)) { checkBinding(node.args[1]); roots.add(node.args[1]); }
+    if (node.op === "expression" || node.op === "program") Object.keys(node.args[1] ?? {}).forEach(key => { checkBinding(key); roots.add(key); });
   });
   function constant(path: string): Value {
     let value: Value = raw.constants;
@@ -105,11 +112,14 @@ export function compileDeclarativeIdentity<C extends FamilyCandidate, I extends 
   return {
     id: profile.id, kind: profile.kind ?? "standalone-contract", lineageId: profile.lineageId, applies: candidate => doc.identity.applies === undefined || evaluate(doc.identity.applies, environment({ candidate, step: 0 })) === true,
     requirements: step => freeze(evaluate(stage(step).requirements, environment(step))),
+    ...(doc.identity.assets === undefined ? {} : {
+      assets: (step: Value) => freeze(evaluate(doc.identity.assets, environment(step))),
+    }),
     buildRequests,
-    decode: ({ step, results }) => {
+    decode: ({ step, results, assets }) => {
       const selected = stage(step);
       for (const result of results) if (!result.ok && !selected.optionalFailures?.includes(result.id)) throw new RequiredAdapterRequestError(result);
-      return freeze(run(selected.decode, { ...environment(step, results), requests: buildRequests(step) }));
+      return freeze(run(selected.decode, { ...environment(step, results), ...(hasAssets ? { assets } : {}), requests: buildRequests(step) }));
     },
     decide: step => { return freeze(run(doc.identity.decide, environment(step))); },
   };

@@ -79,6 +79,36 @@ test("declared chain quote cannot use a missing step or a constant zero-I/O proo
   assert.throws(() => fixture(doc));
 });
 
+test("production Exact binds computed call input to source-bound reads without changing requested input", () => {
+  const doc: any = clone(root), flow: any = quoteFlow();
+  doc.standard.abi.fixtureQuote = ["function preview(uint256) view returns(uint256)"];
+  flow.steps[0].decode = [{ return: decoded("flow-relationship") }];
+  flow.steps[1].requests = reads("flow-quote", "$target",
+    op("encode", "fixtureQuote", "preview", [op("sub", "$amountIn", "$steps.relationship")]) as any);
+  flow.chainQuote = { version: 2, choices: [{ when: op("eq", "$direction", "deposit"), proof: {
+    version: 2, step: "quote", requestId: "flow-quote", signature: "function preview(uint256) view returns(uint256)",
+    amountPath: [0], outputPath: [0], requestBinding: { target: "$target", caller: { kind: "none" } },
+    inputBinding: { value: op("sub", "$quote.amountIn", "$steps.relationship"),
+      checks: [op("gte", "$quote.amountIn", "$steps.relationship")] },
+  } }] };
+  doc.standard.modules = { quoteFlow: flow };
+  const f = fixture(doc), program = (f.runtime.definition.exact.methods(f.input as any)[1] as any).program;
+  const initial = [result("flow-relationship", 7n)];
+  const second = program.buildDependentProgram({ programInput: f.input, completedRound: 0, initialResults: initial, priorEvidence: [] });
+  assert.equal(quoteAbi.decodeFunctionData("preview", second.requests[0].data)[0], 163n);
+  const completed = second.decode([result("flow-quote", 326n)]);
+  const output = program.decode({ programInput: f.input, initialResults: initial, dependentEvidence: [completed] });
+  assert.equal(output.amountOut, 326n);
+  assert.equal(output.evidence.amountIn, 170n, "quote input remains original; derived call amount is a separate fact");
+  assert.equal(f.input.amountIn, 170n);
+  const poisoned = clone(doc);
+  poisoned.standard.modules.quoteFlow.chainQuote.choices[0].proof.requestBinding.target = address(99);
+  const bad = fixture(poisoned);
+  assert.throws(() => (bad.runtime.definition.exact.methods(bad.input as any)[1] as any).program.decode({
+    programInput: bad.input, initialResults: initial, dependentEvidence: [completed],
+  }), /target or caller/);
+});
+
 test("local math quote provenance cannot be mislabelled as a chain-produced amount quote", () => {
   const doc: any = clone(root); doc.standard.modules = { quoteFlow: { ...quoteFlow(), sourceKind: "local-math",
     localStateUnsupportedReason: "fixture has no sequential state model" } };

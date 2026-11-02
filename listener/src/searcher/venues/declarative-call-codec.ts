@@ -32,11 +32,11 @@ function tupleValues(type: ParamType, value: any): readonly any[] {
       Object.keys(value).length !== type.components!.length) throw new Error("declared tuple fields");
   return type.components!.map(c => value[c.name]);
 }
-function scalar(type: ParamType): boolean {
-  // Full-width signed leaves carry the already checked runtime word. Narrow
-  // signed/unsigned types remain forbidden: patching them needs explicit ABI
-  // range/sign-extension checks, not truncation.
-  return type.type === "uint256" || type.type === "int256" || type.type === "bytes32";
+function scalar(type: ParamType, checkedIntegers: boolean): boolean {
+  // Width metadata is available only to a consumer that emits runtime checks.
+  // Unchecked consumers (including callback layout probes) keep the old surface.
+  return type.type === "uint256" || type.type === "int256" || type.type === "bytes32" ||
+    checkedIntegers && /^(?:u?int)[0-9]+$/.test(type.type);
 }
 
 /** ABI layout is derived from the ABI encoder's canonical head/tail offsets.
@@ -45,7 +45,8 @@ function scalar(type: ParamType): boolean {
 export function encodeDeclarativeCall(
   signature: string,
   args: readonly unknown[],
-): { readonly data: string; readonly patches: readonly { offset: number; reference: string; signed?: true }[] } {
+  options: { readonly checkedIntegers?: true } = {},
+): { readonly data: string; readonly patches: readonly { offset: number; reference: string; signed?: true; bits?: number }[] } {
   const abi = new Interface([signature]);
   const functions = abi.fragments.filter(f => f.type === "function");
   if (functions.length !== 1) throw new Error("declared call requires one function");
@@ -53,7 +54,7 @@ export function encodeDeclarativeCall(
   if (!Array.isArray(args) || args.length !== fn.inputs.length) throw new Error("declared call arguments");
   function placeholder(type: ParamType, value: any): any {
     if (reference(value)) {
-      if (Object.keys(value).length !== 1 || typeof value.runtime !== "string" || !scalar(type))
+      if (Object.keys(value).length !== 1 || typeof value.runtime !== "string" || !scalar(type, options.checkedIntegers === true))
         throw new Error("runtime ABI references require uint256 or bytes32 leaves (full-width int256 also supported)");
       if (type.type === "address") return ZeroAddress;
       if (type.type === "bool") return false;
@@ -69,7 +70,7 @@ export function encodeDeclarativeCall(
     return value;
   }
   const data = abi.encodeFunctionData(fn, args.map((v, i) => placeholder(fn.inputs[i]!, v)));
-  const bytes = getBytes(data), patches: { offset: number; reference: string; signed?: true }[] = [];
+  const bytes = getBytes(data), patches: { offset: number; reference: string; signed?: true; bits?: number }[] = [];
   function offset(at: number): number {
     if (at < 4 || at + 32 > bytes.length) throw new Error("declared ABI offset bounds");
     const result = BigInt(hexlify(bytes.slice(at, at + 32)));
@@ -86,7 +87,9 @@ export function encodeDeclarativeCall(
   function walk(type: ParamType, value: any, at: number): void {
     if (reference(value)) {
       if (at < 4 || at + 32 > bytes.length) throw new Error("declared ABI patch bounds");
-      patches.push({ offset: at, reference: value.runtime, ...(type.type === "int256" ? { signed: true as const } : {}) }); return;
+      const bits = /^(?:u?int)[0-9]+$/.test(type.type) ? Number(type.type.match(/[0-9]+$/)![0]) : 256;
+      patches.push({ offset: at, reference: value.runtime, ...(type.type.startsWith("int") ? { signed: true as const } : {}),
+        ...(bits < 256 ? { bits } : {}) }); return;
     }
     if (type.baseType === "tuple") fields(type.components!, tupleValues(type, value), at);
     else if (type.baseType === "array") {

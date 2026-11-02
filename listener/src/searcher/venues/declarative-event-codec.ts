@@ -8,7 +8,20 @@ function keys(value: any, required: string[]): void {
 /** Canonical ABI events or a bounded, singleton-owned packed anonymous layout.
  * Decoding alone never admits an instance; the observer must bind it to Ready. */
 export function compileDeclarativeEventCodec(spec: Data) {
-  if ((spec.signature === undefined) === (spec.packed === undefined)) throw new Error("event requires one ABI or packed layout");
+  if ([spec.signature, spec.packed, spec.topic].filter(value => value !== undefined).length !== 1)
+    throw new Error("event requires one ABI, packed layout or opaque topic");
+  if (spec.topic !== undefined) {
+    if (typeof spec.topic !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(spec.topic)) throw new Error("invalid event topic");
+    const topic = spec.topic.toLowerCase();
+    const matches = (log: DeclarativeEventLog) => log.topics.length >= 1 && log.topics.length <= 4 &&
+      log.topics.every(item => /^0x[0-9a-fA-F]{64}$/.test(item)) && log.topics[0].toLowerCase() === topic &&
+      /^0x(?:[0-9a-fA-F]{2})*$/.test(log.data) && log.data.length <= 131074;
+    return { topic, anonymous: undefined, matches,
+      decode(log: DeclarativeEventLog): Data {
+        if (!matches(log)) throw new Error("opaque event boundary mismatch");
+        return {}; // A topic proves a trigger only, never decoded amounts or identity.
+      } };
+  }
   if (spec.signature !== undefined) {
     const abi = new Interface([spec.signature]);
     if (abi.fragments.length !== 1 || abi.fragments[0].type !== "event") throw new Error("Swap observation requires one event ABI");

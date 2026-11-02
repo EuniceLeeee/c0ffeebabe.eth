@@ -1,5 +1,5 @@
-import { id, getAddress, Interface, FunctionFragment, EventFragment, MaxUint256 } from "ethers";
-import type { CallPattern, DiscoverySemantics, FamilyCandidate, UnifiedObservation } from "./adapter-family-plugin.js";
+import { id, getAddress, Interface, FunctionFragment, EventFragment, MaxUint256, type ParamType } from "ethers";
+import type { CallPattern, LogPattern, DiscoverySemantics, FamilyCandidate, UnifiedObservation } from "./adapter-family-plugin.js";
 import { explicitReverseBindingUnsupported } from "./adapter-family-plugin.js";
 import { compileAddressDiscovery } from "./address-discovery.js";
 import { createAddressSurfaceNomination } from "./address-surface-nomination.js";
@@ -21,19 +21,30 @@ interface AddressDiscoveryDefinition {
 }
 type FieldType = "address" | "uint" | "bytes32" | "bool" | "string" | "number";
 type FieldSource =
-  | { readonly from: "argument"; readonly index: number }
+  | { readonly from: "argument"; readonly index: number; readonly path?: readonly number[] }
+  | { readonly from: "item"; readonly path?: readonly number[] }
+  | { readonly from: "expression"; readonly value: unknown }
   | { readonly from: "target" | "sender" | "emitter" }
   | { readonly from: "opaque" | "observation"; readonly path: string }
   | { readonly from: "literal"; readonly value: string | boolean | null };
 interface MappedPattern {
   readonly id: string;
   /** Full ABI fragment accepted; indexed event arguments must be specified. */
-  readonly signature: string;
+  readonly signature?: string;
+  /** Trigger-only log identity when no canonical event ABI is known. */
+  readonly topic?: string;
   readonly fields: Readonly<Record<string, FieldSource>>;
   readonly predicates?: readonly unknown[];
   /** A real log may nominate its transaction without carrying a complete candidate. */
   readonly nominationOnly?: boolean;
+  /** One existing catalog match per bounded array element. No multi-result
+   * central interface or synthetic observation is introduced. */
+  readonly fanOut?: { readonly argument: number; readonly path?: readonly number[]; readonly maxItems: number };
 }
+type CompiledCall = { declaration: MappedPattern; pattern: CallPattern; itemIndex?: number;
+  decode: (observation: Extract<UnifiedObservation, { kind: "call" }>) => unknown[] };
+type CompiledLog = { declaration: MappedPattern; pattern: LogPattern; itemIndex?: number;
+  decode: (observation: Extract<UnifiedObservation, { kind: "log" }>) => unknown[] };
 export interface DeclarativeMappedDiscovery {
   readonly version: 2;
   readonly sources: readonly string[];
@@ -93,6 +104,9 @@ export function compileDeclarativeDiscovery<C extends FamilyCandidate>(definitio
   });
 }
 
+const MAX_FAN_OUT = 128;
+const MAX_EXPANDED_PATTERNS = 1024;
+const MAX_FAN_OUT_DATA_BYTES = 65536;
 const forbidden = new Set(["__proto__", "constructor", "prototype", "candidateKind"]);
 function shape(value: unknown, required: readonly string[], optional: readonly string[], label: string): asserts value is Record<string, any> {
   if (!value || typeof value !== "object" || Array.isArray(value) || required.some(key => !Object.hasOwn(value, key)) ||
@@ -152,13 +166,73 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
   const ids = [...d.calls, ...d.events, ...(d.surface ? [d.surface] : [])].map(p => p.id);
   if (new Set(ids).size !== ids.length || ids.some(id => typeof id !== "string" || !id)) throw new Error("duplicate or invalid discovery pattern");
   const values = readValues ?? compileDeclarativeValues({ abi: {}, constants: {}, expressions: {} });
-  function validateMap(mapping: Readonly<Record<string, FieldSource>>, kind: "call" | "log" | "surface", argCount: number) {
+  function pathType(type: ParamType | undefined, path: readonly number[] = []): ParamType {
+    if (!Array.isArray(path) || path.length > 16 || path.some(index => !Number.isSafeInteger(index) || index < 0))
+      throw new Error("invalid discovery ABI path");
+    for (const index of path) {
+      if (type?.baseType === "tuple") type = type.components?.[index];
+      else if (type?.baseType === "array" && (type.arrayLength === -1 || index < type.arrayLength!)) type = type.arrayChildren ?? undefined;
+      else type = undefined;
+    }
+    if (!type) throw new Error("discovery ABI path out of bounds");
+    return type;
+  }
+  function nested(value: unknown, path: readonly number[] = []): unknown {
+    for (const index of path) {
+      if (!Array.isArray(value) || index >= value.length) throw new Error("discovery ABI value out of bounds");
+      value = value[index];
+    }
+    return value;
+  }
+  function validateExpression(expression: unknown, fanOut: boolean, allowCandidate: boolean): void {
+    const roots = new Set(["args", "observation", "constants", ...(allowCandidate ? ["candidate"] : []), ...(fanOut ? ["item", "itemIndex"] : [])]);
+    const visit = (value: unknown, allowed: ReadonlySet<string>): void => {
+      if (typeof value === "string" && value.startsWith("$")) {
+        const [root, field] = value.slice(1).split(".");
+        if (!allowed.has(root!) ||
+            root === "candidate" && field !== undefined && !fields.includes(field))
+          throw new Error("unknown discovery expression reference");
+      }
+      if (value && typeof value === "object") {
+        const operation = value as { op?: string; args?: unknown[] };
+        if (["map", "flatMap", "filter", "some", "every"].includes(operation.op ?? "")) {
+          const args = operation.args!, name = args[1];
+          if (typeof name !== "string") throw new Error("invalid discovery expression binding");
+          fieldName(name);
+          if (roots.has(name) || name === "index") throw new Error("reserved discovery expression binding");
+          visit(args[0], allowed); visit(args[2], new Set([...allowed, name, "index"]));
+        } else Object.values(value).forEach(child => visit(child, allowed));
+      }
+    };
+    visit(expression, roots);
+  }
+  function fanOutType(pattern: MappedPattern, inputs: readonly ParamType[]): ParamType | undefined {
+    if (pattern.fanOut === undefined) return undefined;
+    const fan = pattern.fanOut;
+    shape(fan, ["argument", "maxItems"], ["path"], "fan-out");
+    if (!Number.isSafeInteger(fan.argument) || fan.argument < 0 || fan.argument >= inputs.length ||
+        !Number.isSafeInteger(fan.maxItems) || fan.maxItems < 1 || fan.maxItems > MAX_FAN_OUT)
+      throw new Error("invalid discovery fan-out bounds");
+    const array = pathType(inputs[fan.argument], fan.path);
+    if (array.baseType !== "array" || array.arrayLength !== -1 && array.arrayLength! > fan.maxItems)
+      throw new Error("discovery fan-out must select a bounded ABI array");
+    return array.arrayChildren!;
+  }
+  function validateMap(mapping: Readonly<Record<string, FieldSource>>, kind: "call" | "log" | "surface", inputs: readonly ParamType[], itemType?: ParamType) {
     shape(mapping, fields.filter(field => !optional.has(field)), [...optional], "field mapping");
     for (const field of Object.keys(mapping)) {
       const source = mapping[field]!;
       if (source?.from === "argument") {
-        shape(source, ["from", "index"], [], "argument mapping");
-        if (!Number.isSafeInteger(source.index) || source.index < 0 || source.index >= argCount) throw new Error("discovery argument index out of bounds");
+        shape(source, ["from", "index"], ["path"], "argument mapping");
+        if (!Number.isSafeInteger(source.index) || source.index < 0 || source.index >= inputs.length) throw new Error("discovery argument index out of bounds");
+        pathType(inputs[source.index], source.path);
+      } else if (source?.from === "item") {
+        shape(source, ["from"], ["path"], "item mapping");
+        if (!itemType) throw new Error("discovery item requires fan-out");
+        pathType(itemType, source.path);
+      } else if (source?.from === "expression") {
+        shape(source, ["from", "value"], [], "derived mapping");
+        validateExpression(source.value, itemType !== undefined, false);
       } else if (source?.from === "literal") {
         shape(source, ["from", "value"], [], "literal mapping");
         if (source.value !== null || !nullable.has(field)) scalar(d.candidate.fields[field]!, source.value);
@@ -176,58 +250,98 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
       }
     }
   }
-  function validatePredicates(predicates: readonly unknown[] | undefined) {
+  function validatePredicates(predicates: readonly unknown[] | undefined, fanOut = false) {
     if (predicates === undefined) return;
     if (!Array.isArray(predicates)) throw new Error("invalid discovery predicates");
-    const visit = (value: unknown): void => {
-      if (typeof value === "string" && value.startsWith("$")) {
-        const [root, field] = value.slice(1).split(".");
-        if (!["args", "candidate", "observation"].includes(root!) || root === "candidate" && field !== undefined && !fields.includes(field))
-          throw new Error("unknown discovery predicate reference");
-      }
-      if (value && typeof value === "object") Object.values(value).forEach(visit);
-    };
-    predicates.forEach(visit);
+    predicates.forEach(predicate => validateExpression(predicate, fanOut, true));
   }
-  const calls = d.calls.map(p => {
-    shape(p, ["id", "signature", "fields"], ["predicates"], "call pattern");
-    const fn = FunctionFragment.from(p.signature), abi = new Interface([fn]);
-    validateMap(p.fields, "call", fn.inputs.length); validatePredicates(p.predicates);
+  function expand<T extends { declaration: MappedPattern; pattern: { id: string } }>(entry: T): (T & { itemIndex?: number })[] {
+    if (entry.declaration.fanOut === undefined) return [entry];
+    return Array.from({ length: entry.declaration.fanOut.maxItems }, (_, itemIndex) => ({ ...entry, itemIndex,
+      pattern: { ...entry.pattern, id: itemIndex === 0 ? entry.pattern.id : `${entry.pattern.id}-${itemIndex}` } }));
+  }
+  // Expanded pattern IDs revisit the same real observation. Cache canonical ABI
+  // decoding by its bytes, not by caller/target or source, which are read afresh.
+  function cachedDecode<T extends Extract<UnifiedObservation, { kind: "call" | "log" }>>(pattern: MappedPattern, decode: (observation: T) => unknown[]) {
+    const cache = new WeakMap<T, { data: string; topics: readonly string[]; args: unknown[] }>();
+    return (observation: T) => {
+      if (!pattern.fanOut) return decode(observation);
+      if (observation.data.length > 2 + MAX_FAN_OUT_DATA_BYTES * 2) throw new Error("discovery fan-out calldata budget");
+      const topics = observation.kind === "log" ? observation.topics : [];
+      const previous = cache.get(observation);
+      if (previous?.data === observation.data && previous.topics.length === topics.length && previous.topics.every((topic, i) => topic === topics[i]))
+        return previous.args;
+      const args = decode(observation);
+      const items = nested(args[pattern.fanOut.argument], pattern.fanOut.path);
+      if (!Array.isArray(items) || items.length === 0 || items.length > pattern.fanOut.maxItems) throw new Error("discovery fan-out item budget");
+      cache.set(observation, { data: observation.data, topics: [...topics], args });
+      return args;
+    };
+  }
+  const calls = d.calls.flatMap<CompiledCall>((p: MappedPattern) => {
+    shape(p, ["id", "signature", "fields"], ["predicates", "fanOut"], "call pattern");
+    const fn = FunctionFragment.from(p.signature!), abi = new Interface([fn]);
+    const itemType = fanOutType(p, fn.inputs);
+    validateMap(p.fields, "call", fn.inputs, itemType); validatePredicates(p.predicates, itemType !== undefined);
     const candidateAddress = p.fields[d.candidate.addressField]!;
     if (candidateAddress.from !== "target" && candidateAddress.from !== "argument") throw new Error("call candidate address must be target or argument");
-    if (candidateAddress.from === "argument" && fn.inputs[candidateAddress.index]!.type !== "address") throw new Error("call candidate argument must be address");
+    if (candidateAddress.from === "argument" && ((candidateAddress.path?.length ?? 0) !== 0 || fn.inputs[candidateAddress.index]!.type !== "address")) throw new Error("call candidate argument must be address");
     const pattern: CallPattern = { id: p.id, selector: fn.selector as `0x${string}`, signature: fn.format("sighash"),
-      candidateAddress: candidateAddress.from === "target" ? { from: "call-target" } : { from: "argument", index: candidateAddress.index },
-      argumentProjection: fields.filter(field => p.fields[field]?.from === "argument").map(field => {
+      candidateAddress: candidateAddress.from === "argument" ? { from: "argument", index: candidateAddress.index } : { from: "call-target" },
+      argumentProjection: fields.filter(field => p.fields[field]?.from === "argument" && !(p.fields[field] as Extract<FieldSource, { from: "argument" }>).path?.length).map(field => {
         const index = (p.fields[field] as Extract<FieldSource, { from: "argument" }>).index;
         return { index, type: fn.inputs[index]!.format("sighash"), name: field };
       }) };
-    return { declaration: p, pattern, decode: (o: Extract<UnifiedObservation, { kind: "call" }>) => {
+    return expand({ declaration: p, pattern, decode: cachedDecode(p, (o: Extract<UnifiedObservation, { kind: "call" }>) => {
       const args = abi.decodeFunctionData(fn, o.data);
       if (abi.encodeFunctionData(fn, args).toLowerCase() !== o.data.toLowerCase()) throw new Error("noncanonical discovery calldata");
       return Array.from(args);
-    } };
+    }) });
   });
-  const events = d.events.map(p => {
-    shape(p, ["id", "signature", "fields"], ["predicates", "nominationOnly"], "event pattern");
+  const events = d.events.flatMap<CompiledLog>((p: MappedPattern) => {
+    shape(p, ["id", "fields"], ["signature", "topic", "predicates", "nominationOnly", "fanOut"], "event pattern");
+    if (Object.hasOwn(p, "signature") === Object.hasOwn(p, "topic")) throw new Error("discovery event requires exactly one ABI or topic");
     if (p.nominationOnly !== undefined && typeof p.nominationOnly !== "boolean") throw new Error("invalid nomination-only pattern");
-    const event = EventFragment.from(p.signature), abi = new Interface([event]);
+    if (p.topic !== undefined) {
+      scalar("bytes32", p.topic);
+      if (p.fanOut !== undefined || Object.values(p.fields).some(field => !["emitter", "observation", "literal"].includes(field.from)))
+        throw new Error("topic-only discovery cannot decode arguments or expand candidates");
+      if (p.nominationOnly) {
+        shape(p.fields, [], [], "nomination-only fields");
+        if (p.predicates !== undefined) throw new Error("nomination-only patterns cannot assert candidate predicates");
+      } else { validateMap(p.fields, "log", []); validatePredicates(p.predicates); }
+      const topic = p.topic.toLowerCase();
+      return expand({ declaration: p, pattern: { id: p.id, topic: topic as `0x${string}`, signature: `topic:${topic}` },
+        decode: (o: Extract<UnifiedObservation, { kind: "log" }>) => {
+          if (!Array.isArray(o.topics) || o.topics.length < 1 || o.topics.length > 4 ||
+              o.topics.some(value => !/^0x[0-9a-fA-F]{64}$/.test(value)) || o.topics[0]!.toLowerCase() !== topic ||
+              !/^0x(?:[0-9a-fA-F]{2})*$/.test(o.data) || o.data.length > 2 + MAX_FAN_OUT_DATA_BYTES * 2)
+            throw new Error("invalid topic-only discovery log");
+          return [];
+        } });
+    }
+    const event = EventFragment.from(p.signature!), abi = new Interface([event]);
     if (event.anonymous) throw new Error("anonymous discovery events are unsupported");
-    if (p.nominationOnly) { shape(p.fields, [], [], "nomination-only fields"); if (p.predicates !== undefined) throw new Error("nomination-only patterns cannot assert candidate predicates"); }
-    else { validateMap(p.fields, "log", event.inputs.length); validatePredicates(p.predicates); }
-    return { declaration: p, pattern: { id: p.id, topic: event.topicHash as `0x${string}`, signature: event.format("sighash") },
-      decode: (o: Extract<UnifiedObservation, { kind: "log" }>) => {
+    const itemType = fanOutType(p, event.inputs);
+    if (p.nominationOnly) { shape(p.fields, [], [], "nomination-only fields"); if (p.predicates !== undefined || p.fanOut !== undefined) throw new Error("nomination-only patterns cannot assert candidate predicates or fan out"); }
+    else { validateMap(p.fields, "log", event.inputs, itemType); validatePredicates(p.predicates, itemType !== undefined); }
+    return expand({ declaration: p, pattern: { id: p.id, topic: event.topicHash as `0x${string}`, signature: event.format("sighash") },
+      decode: cachedDecode(p, (o: Extract<UnifiedObservation, { kind: "log" }>) => {
         const args = abi.decodeEventLog(event, o.data, [...o.topics]);
         const encoded = abi.encodeEventLog(event, args);
         if (encoded.data.toLowerCase() !== o.data.toLowerCase() || encoded.topics.length !== o.topics.length ||
             encoded.topics.some((topic, i) => topic.toLowerCase() !== o.topics[i].toLowerCase())) throw new Error("noncanonical discovery event");
         return Array.from(args);
-      } };
+      }) });
   });
+  const expandedIds = [...calls, ...events].map(entry => entry.pattern.id);
+  if (([...d.calls, ...d.events].some(pattern => pattern.fanOut) && expandedIds.length > MAX_EXPANDED_PATTERNS) ||
+      new Set([...expandedIds, ...(d.surface ? [d.surface.id] : [])]).size !== expandedIds.length + (d.surface ? 1 : 0))
+    throw new Error("duplicate or excessive expanded discovery patterns");
   if (d.surface) {
     shape(d.surface, ["id", "fingerprint", "fields"], ["predicates"], "surface");
     if (typeof d.surface.fingerprint !== "string" || !d.surface.fingerprint) throw new Error("invalid discovery fingerprint");
-    validateMap(d.surface.fields, "surface", 0); validatePredicates(d.surface.predicates);
+    validateMap(d.surface.fields, "surface", []); validatePredicates(d.surface.predicates);
   }
   if (d.nomination === "address-surface" && !d.surface) throw new Error("surface nomination requires a surface");
   if (d.nomination === "tx-evidence" && !calls.length && !events.length) throw new Error("transaction nomination requires patterns");
@@ -245,12 +359,14 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
     }
     return value;
   }
-  function candidate(mapping: Readonly<Record<string, FieldSource>>, observation: UnifiedObservation, args: readonly unknown[]): C {
+  function candidate(mapping: Readonly<Record<string, FieldSource>>, observation: UnifiedObservation, args: readonly unknown[], item?: unknown, itemIndex?: number): C {
     const result: Record<string, unknown> = { candidateKind: d.candidate.kind };
     for (const field of fields) {
       const source = mapping[field];
       if (!source) continue;
-      const raw = source.from === "literal" ? source.value : source.from === "argument" ? args[source.index]
+      const raw = source.from === "literal" ? source.value : source.from === "argument" ? nested(args[source.index], source.path)
+        : source.from === "item" ? nested(item, source.path)
+        : source.from === "expression" ? values.evaluate(source.value, { args, observation, item, itemIndex })
         : source.from === "target" && observation.kind === "call" ? observation.target
         : source.from === "sender" && observation.kind === "call" ? observation.sender
         : source.from === "emitter" && (observation.kind === "log" || observation.kind === "address-surface") ? observation.address
@@ -274,8 +390,12 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
         const args = observation.kind === "call"
           ? calls.find(p => p.pattern.id === matchedPatternId)!.decode(observation)
           : events.find(p => p.pattern.id === matchedPatternId)!.decode(observation);
-        const result = candidate(entry.declaration.fields, observation, args);
-        if (!(entry.declaration.predicates ?? []).every((predicate: unknown) => values.evaluate(predicate, { observation, args, candidate: result }) === true)) return null;
+        const fan = entry.declaration.fanOut;
+        const items = fan ? nested(args[fan.argument], fan.path) as unknown[] : undefined;
+        if (fan && entry.itemIndex! >= items!.length) return null;
+        const item = items?.[entry.itemIndex!];
+        const result = candidate(entry.declaration.fields, observation, args, item, entry.itemIndex);
+        if (!(entry.declaration.predicates ?? []).every((predicate: unknown) => values.evaluate(predicate, { observation, args, item, itemIndex: entry.itemIndex, candidate: result }) === true)) return null;
         return result;
       } catch { return null; }
   };

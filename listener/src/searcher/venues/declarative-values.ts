@@ -1,6 +1,6 @@
 import { classifyDeclarativeBytecodeGetter } from "./declarative-bytecode.js";
 import { executorFromObservedSimulation, decodeDeclarativeExecutionSimulationReceipt } from "./declarative-simulation.js";
-import { Interface, getAddress, keccak256, ZeroAddress } from "ethers";
+import { AbiCoder, Interface, getAddress, getCreate2Address, keccak256, ZeroAddress } from "ethers";
 import type { AdapterRequestResult } from "./adapter-request-program.js";
 import { RequiredAdapterRequestError } from "./adapter-request-failure.js";
 import { hashCanonical } from "./canonical-value.js";
@@ -20,8 +20,9 @@ export interface DeclarativeValuesDocument {
   readonly expressions: Record<string, Value>;
   readonly programs?: Record<string, readonly Value[]>;
 }
-const ops = new Set(["bytecodeGetter", "simulationActor", "programReceipt", "mul", "max", "program", "number", "lower", "unique", "decodeAll", "decodeCanonical", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "model", "requestFailure"]);
+const ops = new Set(["abiEncode", "create2Address", "decodeErrorCanonical", "bytecodeGetter", "simulationActor", "programReceipt", "mul", "max", "program", "number", "lower", "unique", "decodeAll", "decodeCanonical", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "model", "requestFailure"]);
 const arity: Record<string, [number, number]> = Object.fromEntries([
+  ["abiEncode", [2, 2]], ["create2Address", [3, 3]], ["decodeErrorCanonical", [3, 3]],
   ["simulationActor", [1, 1]], ["programReceipt", [1, 1]], ["mul", [2, 2]], ["max", [2, 2]],
   ...["number", "lower", "unique", "successful", "word", "bool", "objectEntries", "objectFromEntries"].map(k => [k, [1, 1]]), ["program", [2, 2]], ["pow", [2, 2]], ["bytecodeGetter", [2, 2]], ["decodeAll", [3, 3]], ["decodeCanonical", [3, 4]],
   ...["uint", "address", "hash", "codeHash", "defined", "not", "length", "string", "sortId", "result", "returned", "code", "shape", "wordSurface", "source", "effects", "tokenDelta", "supplyDelta", "event", "requestFailure"].map(k => [k, [1, 1]]),
@@ -181,6 +182,20 @@ export function compileDeclarativeValues(
       case "sameAddress": return sameAddress(e(0), e(1));
       case "hash": return hashCanonical(e(0));
       case "codeHash": return keccak256(e(0));
+      case "abiEncode": {
+        const types = e(0), values = e(1);
+        if (!Array.isArray(types) || !Array.isArray(values) || types.length !== values.length ||
+            types.length > 64 || types.some(type => typeof type !== "string" || type.length > 256))
+          throw new Error("invalid declared ABI types/values");
+        return AbiCoder.defaultAbiCoder().encode(types, values);
+      }
+      case "create2Address": return getCreate2Address(e(0), e(1), e(2));
+      case "decodeErrorCanonical": {
+        const iface = abi[e(0)], name = e(1), bytes = e(2), decoded = iface.decodeErrorResult(name, bytes);
+        if (iface.encodeErrorResult(name, decoded).toLowerCase() !== bytes.toLowerCase())
+          throw new Error("noncanonical ABI error data");
+        return Array.from(decoded);
+      }
       case "merge": return Object.assign({}, ...args.map((v: Value) => evaluateInternal(v, env)));
       case "omit": { const value = { ...e(0) }; for (const key of e(1)) delete value[key]; return value; }
       case "concat": return args.flatMap((v: Value) => evaluateInternal(v, env));
