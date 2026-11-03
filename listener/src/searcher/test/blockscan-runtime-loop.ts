@@ -521,7 +521,7 @@ test("historical effective continuation is read-only, verified-data-only and can
   finally { await f.loop.shutdown(); }
 });
 
-for (const where of ["header", "activity"] as const) test(`live observes five different ${where} throttled heads without publishing missing state`, async context => {
+for (const where of ["header", "activity"] as const) test(`live observes one hundred different ${where} throttled heads without publishing missing state`, async context => {
   context.mock.method(console, "log", () => {});
   let simulations = 0;
   const f = loopFixture(() => ({ transport: { async simulate() { simulations++; throw new Error("failed activity must not simulate"); } },
@@ -537,22 +537,22 @@ for (const where of ["header", "activity"] as const) test(`live observes five di
   });
   stop.installDrain(() => f.loop.shutdown());
   try {
-    for (let block = 101; block <= 105; block++) {
+    for (let block = 101; block <= 200; block++) {
       await assert.rejects(f.loop.runHead(block, {
         sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now(),
-      }), error => error === throttle || block === 105 && error instanceof RevmFatalError);
-      assert.equal(f.runtimeAbort.signal.aborted, block === 105);
+      }), error => error === throttle || block === 200 && error instanceof RevmFatalError);
+      assert.equal(f.runtimeAbort.signal.aborted, block === 200);
       assert.equal(records.length, block - 100, "header/activity/catch siblings count one source");
       assert.equal(f.inputs.filter(input => input.kind === "runtime").length, 0, "incomplete activity never enters pricing");
       assert.equal(simulations, 0);
     }
     await turn(); assert.deepEqual(exits, [1]);
-    await f.loop.runHead(106, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
-    assert.equal(reads, 5, "terminal runtime cannot admit the sixth head");
+    await f.loop.runHead(201, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+    assert.equal(reads, 100, "terminal runtime cannot admit the hundred-and-first head");
   } finally { await f.loop.shutdown(); }
 });
 
-test("live temporary source fatal fences/drains its client and resumes new sources until the fifth head", async context => {
+test("live temporary source fatal fences/drains its client and resumes new sources until the hundredth head", async context => {
   context.mock.method(console, "log", () => {});
   const c = clients(), f = loopFixture(c.factory);
   const exits: number[] = [], records: LiveRpcThrottleRecord[] = [];
@@ -574,13 +574,13 @@ test("live temporary source fatal fences/drains its client and resumes new sourc
   };
   stop.installDrain(() => f.loop.shutdown());
   try {
-    for (let index = 0; index < 5; index++) {
+    for (let index = 0; index < 100; index++) {
       if (index !== 1) f.loop.schedule(101 + index); // Head 102 was queued during the first drain.
       await until(() => c.made[index]?.closes === 1);
       assert.equal(c.made.length, index + 1);
       assert(controls[index]!.aborted, "the current pass, not just its client, is retired");
-      assert.equal(c.runtimeAbort.signal.aborted, index === 4);
-      assert.deepEqual(exits, [], "even a terminal fifth-head stop must join physical drain");
+      assert.equal(c.runtimeAbort.signal.aborted, index === 99);
+      assert.deepEqual(exits, [], "even a terminal hundredth-head stop must join physical drain");
       if (index === 0) {
         f.loop.schedule(102); await turn(); assert.equal(c.made.length, 1, "successor waits for source drain");
       }
@@ -589,9 +589,9 @@ test("live temporary source fatal fences/drains its client and resumes new sourc
       else await f.loop.waitForIdle();
     }
     await turn(); assert.deepEqual(exits, [1]);
-    assert.deepEqual(records.map(event => event.failedBlocks), [1, 2, 3, 4, 5]);
+    assert.deepEqual(records.map(event => event.failedBlocks), Array.from({ length: 100 }, (_, index) => index + 1));
     assert.deepEqual(c.reports, [], "temporary source failures do not use the legacy immediate fatal");
-    f.loop.schedule(106); await turn(); assert.equal(c.made.length, 5);
+    f.loop.schedule(201); await turn(); assert.equal(c.made.length, 100);
     assert(c.made.every(client => client.requests.length === 1 && client.closes === 1));
   } finally {
     for (const client of c.made) client.release();
