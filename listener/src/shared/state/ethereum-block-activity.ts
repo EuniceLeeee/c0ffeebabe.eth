@@ -170,7 +170,9 @@ function authorizationActivity(value: unknown): readonly string[] | null {
   // NOT 0x00. Its digest matches the pinned geth SigHash above.
   const authority = verifyAuthorization({ chainId, address: target, nonce },
     { yParity: yParity === 0n ? 0 : 1, r: toBeHex(r, 32), s: toBeHex(s, 32) }).toLowerCase();
-  return [authority, target];
+  // Authorization writes the authority's code/nonce, not the delegation target
+  // (including the zero-address revocation target).
+  return [authority];
 }
 
 function record(value: unknown): value is Record<string, unknown> {

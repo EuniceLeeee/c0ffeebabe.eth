@@ -156,10 +156,10 @@ for (const type of [0, 1, 2, 3]) for (const authorizationList of [undefined, nul
 // the pinned geth signing domain instead of signing with the verifier's helper.
 const authorizationKey = new SigningKey(`0x${"11".repeat(32)}`);
 const authority = computeAddress(authorizationKey.publicKey).toLowerCase();
-function authorization(chainId = 1n, nonce = 0n, target = COLD): Record<string, unknown> {
+function authorization(chainId = 1n, nonce = 0n, target = COLD, key = authorizationKey): Record<string, unknown> {
   const digest = keccak256(concat(["0x05", encodeRlp([toBeArray(chainId), target, toBeArray(nonce)])]));
   assert.equal(digest, hashAuthorization({ chainId, address: target, nonce }), "EIP-7702 signing domain matches pinned geth");
-  const signature = authorizationKey.sign(digest);
+  const signature = key.sign(digest);
   return { chainId: quantity(chainId), address: target, nonce: quantity(nonce), yParity: quantity(signature.yParity),
     r: quantity(BigInt(signature.r)), s: quantity(BigInt(signature.s)) };
 }
@@ -171,14 +171,35 @@ for (const chainId of [0n, 1n, 2n, (1n << 256n) - 1n]) for (const nonce of [0n, 
   const result = ethereumBlockActivityCoverage(1n, block([type4]));
   assert(result, "validly signed non-applying chain/nonce tuple is conservatively covered");
   assert(result.passiveTouchedAddresses.includes(authority), "recovered cold authority is dirty outside traced calls");
-  assert(result.passiveTouchedAddresses.includes(COLD), "delegation target is conservatively dirty");
+  assert(!result.passiveTouchedAddresses.includes(COLD), "authorization does not write the nonzero delegation target");
+  assert.deepEqual(result.passiveTouchedAddresses, [...SYSTEM, ...CURRENT_PRECOMPILES, MINER, WITHDRAWAL, authority].sort());
   assert.deepEqual(type4, original, "authorization recovery does not mutate evidence");
 }
-const clearing = ethereumBlockActivityCoverage(1n, block([{ ...transaction(4),
+const clearingTransaction = { ...transaction(4),
   authorizationList: [authorization(1n, 0n, address("0")), authorization(), authorization()],
-}]));
-assert(clearing && clearing.passiveTouchedAddresses.includes(address("0")) && clearing.passiveTouchedAddresses.includes(authority));
+};
+const clearing = ethereumBlockActivityCoverage(1n, block([clearingTransaction]));
+assert(clearing && clearing.passiveTouchedAddresses.includes(authority));
+assert(!clearing.passiveTouchedAddresses.includes(address("0")), "revocation clears the authority, not the zero-address target");
+assert.deepEqual(clearing.passiveTouchedAddresses, [...SYSTEM, ...CURRENT_PRECOMPILES, MINER, WITHDRAWAL, authority].sort());
 assert.equal(clearing.passiveTouchedAddresses.filter(value => value === authority).length, 1, "repeated authority is deduplicated");
+const otherAuthorizationKey = new SigningKey(`0x${"22".repeat(32)}`);
+const otherAuthority = computeAddress(otherAuthorizationKey.publicKey).toLowerCase();
+const multipleAuthorities = ethereumBlockActivityCoverage(1n, block([{ ...transaction(4),
+  authorizationList: [authorization(), authorization(1n, 1n, authority, otherAuthorizationKey), authorization()],
+}]));
+assert(multipleAuthorities);
+assert.deepEqual(multipleAuthorities.passiveTouchedAddresses,
+  [...SYSTEM, ...CURRENT_PRECOMPILES, MINER, WITHDRAWAL, authority, otherAuthority].sort(),
+  "all authorities remain dirty and deduplicated, including one also used as a delegation target");
+for (const zeroActivity of [
+  { ...block([clearingTransaction]), miner: address("0") },
+  { ...block([clearingTransaction]), withdrawals: [{ index: "0x1", validatorIndex: "0x2", address: address("0"), amount: "0x1" }] },
+]) {
+  const result = ethereumBlockActivityCoverage(1n, zeroActivity);
+  assert(result && result.passiveTouchedAddresses.includes(address("0")), "actual zero miner/withdrawal activity stays dirty during revocation");
+  assert(result.passiveTouchedAddresses.includes(authority), "zero-address activity does not replace authorization activity");
+}
 for (const change of [{ to: null }, { accessList: undefined }, { maxFeePerGas: undefined }, { maxPriorityFeePerGas: undefined },
   { authorizationList: undefined }, { authorizationList: null }, { authorizationList: [] }, { authorizationList: Array(1) },
   { maxFeePerBlobGas: "0x1" }, { blobVersionedHashes: [] },
