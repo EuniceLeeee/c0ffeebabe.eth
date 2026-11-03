@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { isVerifiedReorgActivity, revalidateReorgActivityTarget, type VerifiedReorgActivity } from "./blockscan-reorg-activity.js";
 import {
   FlashFundingSnapshot,
   type AdapterRuntimePrepareResult,
@@ -126,6 +127,8 @@ export interface StrictCanonicalActivityProof {
   /** Present only after the activity reader verified every canonical transition
    * from this published source through source; never a target-only touched set. */
   readonly previousSource?: { readonly number: number; readonly hash: string };
+  /** Separate, complete old+new branch proof; never a naked forward range. */
+  readonly reorg?: VerifiedReorgActivity;
   readonly touchedStateKeys: ReadonlySet<string>;
   readonly complete: true;
 }
@@ -249,10 +252,27 @@ export class StrictCurrentRuntimeCoordinator
     return this.publishedPricing;
   }
 
+  private reorgBase: BlockScanStateSnapshot | null = null;
+
+  /** Revoke execution/cache authority, but retain immutable pricing data until
+   * a verified two-branch update replaces it. This is not a cold-start reset. */
+  async retirePricingForReorg(source: { readonly number: number; readonly hash: string }): Promise<void> {
+    const previous = this.publishedPricing;
+    assert(previous?.effectiveMids?.complete && previous.sourceBlock === source.number &&
+      previous.sourceBlockHash.toLowerCase() === source.hash.toLowerCase(), "reorg retirement source changed");
+    if (this.reorgBase === previous) return;
+    this.reorgBase = previous;
+    this.pricingEpoch++;
+    this.fundingEpoch++;
+    this.bootstrapEffectiveDraft = null;
+    this.exactQuoteCache?.resetState();
+    this.resetSessions();
+  }
+
   /** A cursor, not another exported/deep-copied table. The raw basis must stay
    * unchanged throughout a journal; a reset cannot silently start a new one. */
   continuationPricing() {
-    return { raw: this.bootstrapRawPricing, pricing: this.publishedPricing };
+    return { raw: this.bootstrapRawPricing, pricing: this.reorgBase === null ? this.publishedPricing : null };
   }
 
   private continuationDisabled: string[] = [];
@@ -263,7 +283,7 @@ export class StrictCurrentRuntimeCoordinator
   }
 
   exportHistoricalBaseline(): HistoricalPricingBaseline {
-    assert(this.bootstrapRawPricing && this.publishedPricing?.effectiveMids?.complete,
+    assert(this.reorgBase === null && this.bootstrapRawPricing && this.publishedPricing?.effectiveMids?.complete,
       "complete published pricing required for historical baseline");
     return { version: 1, raw: this.bootstrapRawPricing, pricing: this.publishedPricing,
       lineage: exportEffectiveMidReplayState(this.publishedPricing.effectiveMids),
@@ -315,6 +335,7 @@ export class StrictCurrentRuntimeCoordinator
   }
 
   async resetDynamicStateForReplay(): Promise<void> {
+    this.reorgBase = null;
     this.pricingEpoch++;
     this.fundingEpoch++;
     this.publishedPricing = null;
@@ -329,6 +350,15 @@ export class StrictCurrentRuntimeCoordinator
   private rawBasisFor(graph: VerifiedGraphView, previous: BlockScanStateSnapshot | null,
     activity?: StrictCanonicalActivityProof): BlockScanStateSnapshot | null {
     const raw = this.bootstrapRawPricing;
+    if (this.reorgBase !== null) {
+      const proof = activity?.reorg;
+      assert(raw && previous === this.reorgBase && proof && matchesReorgActivity(previous, graph, activity!) &&
+        (raw.sourceBlock < proof.commonAncestor.number || (raw.sourceBlock === proof.commonAncestor.number &&
+          raw.sourceBlockHash.toLowerCase() === proof.commonAncestor.hash.toLowerCase())) &&
+        strictGraphPublicationFingerprint(raw.graph) === strictGraphPublicationFingerprint(graph),
+      "reorg recovery lacks complete branch proof or retained canonical raw basis");
+      return raw;
+    }
     if (!this.effectivePricing || raw === null || previous === null ||
         strictGraphPublicationFingerprint(raw.graph) !== strictGraphPublicationFingerprint(graph) ||
         graph.sourceBlock < previous.sourceBlock || graph.generation < previous.generation ||
@@ -342,6 +372,7 @@ export class StrictCurrentRuntimeCoordinator
   startFundingPreparation(
     request: StrictFundingPreparationInput,
   ): StrictFundingPreparation {
+    assert(this.reorgBase === null, "reorg recovery bars Funding until pricing is repaired");
     const input = Object.freeze({
       ...request,
       fundingTokens: Object.freeze([...request.fundingTokens]),
@@ -415,6 +446,10 @@ export class StrictCurrentRuntimeCoordinator
     const { built } = await this.preparePricing(sessionPromise, input.graph, previous, rawBasis,
       pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend,
       input.canonicalActivity, simulationTransport);
+    if (this.reorgBase !== null) {
+      assert(input.canonicalActivity?.reorg, "reorg publication requires branch proof");
+      await revalidateReorgActivityTarget(input.canonicalActivity.reorg);
+    }
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const published = this.publishPricing(built, pricingEpoch);
     return completePricingResult(published.snapshot);
@@ -423,6 +458,7 @@ export class StrictCurrentRuntimeCoordinator
   async prepare(
     input: PrepareStrictRuntimeInput,
   ): Promise<AdapterRuntimePrepareResult> {
+    assert(this.reorgBase === null, "reorg recovery requires pricing-only preparation");
     const simulationTransport = input.simulationTransport;
     const startedAtMs = Date.now();
     const settleDeadlineAtMs = Math.min(
@@ -648,6 +684,7 @@ export class StrictCurrentRuntimeCoordinator
     this.bootstrapEffectiveDraft = null;
     if (built.rawBasis !== undefined) this.bootstrapRawPricing = built.rawBasis;
     this.publishedPricing = built.snapshot;
+    this.reorgBase = null;
     try {
       this.onPricingPublication?.(built.publication);
     } catch {
@@ -723,6 +760,7 @@ export class StrictCurrentRuntimeCoordinator
   async prepareCurrentNExactExecutionContext(
     input: PrepareCurrentNExactExecutionContextInput,
   ): Promise<CurrentNExactExecutionContextResult> {
+    assert(this.reorgBase === null, "reorg recovery bars Exact execution until pricing is repaired");
     const simulationTransport = input.simulationTransport;
     const startedAtMs = Date.now();
     const settleDeadlineAtMs = Math.min(
@@ -789,6 +827,7 @@ function activityAllowsEffectiveCarry(previous: BlockScanStateSnapshot | null,
 ): activity is StrictCanonicalActivityProof {
   if (previous === null || activity?.complete !== true ||
       !sameCanonicalSource(activity.source, sourceFor(graph))) return false;
+  if (activity.reorg !== undefined) return matchesReorgActivity(previous, graph, activity);
   const base = activity.previousSource;
   if (base !== undefined && (base.number !== previous.sourceBlock ||
       base.hash.toLowerCase() !== previous.sourceBlockHash.toLowerCase())) return false;
@@ -801,6 +840,18 @@ function activityAllowsEffectiveCarry(previous: BlockScanStateSnapshot | null,
   if (base !== undefined) return graph.sourceBlock > previous.sourceBlock && graph.generation > previous.generation;
   return graph.sourceBlock === previous.sourceBlock + 1 && graph.generation > previous.generation &&
     activity.parentHash?.toLowerCase() === previous.sourceBlockHash.toLowerCase();
+}
+
+function matchesReorgActivity(previous: BlockScanStateSnapshot, graph: VerifiedGraphView,
+  activity: StrictCanonicalActivityProof): boolean {
+  const proof = activity.reorg;
+  return proof !== undefined && isVerifiedReorgActivity(proof) && activity.complete === true &&
+    sameCanonicalSource(activity.source, sourceFor(graph)) && graph.generation > previous.generation &&
+    graph.sourceBlock > previous.sourceBlock &&
+    proof.previousSource.number === previous.sourceBlock && proof.previousSource.hash === previous.sourceBlockHash.toLowerCase() &&
+    proof.target.number === graph.sourceBlock && proof.target.hash === graph.sourceBlockHash.toLowerCase() &&
+    activity.previousSource?.number === previous.sourceBlock && activity.previousSource.hash.toLowerCase() === proof.previousSource.hash &&
+    [...proof.touchedStateKeys].every(key => activity.touchedStateKeys.has(key));
 }
 
 /** The current publication owns effective coverage; raw retains its startup

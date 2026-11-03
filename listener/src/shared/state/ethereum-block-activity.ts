@@ -1,11 +1,17 @@
+import { toBeHex, verifyAuthorization } from "ethers";
+
 /** Evidence profile, not a runtime fork-discovery mechanism.
  * Reviewed go-ethereum revision (all paths below are at this immutable revision):
  * https://raw.githubusercontent.com/ethereum/go-ethereum/48a7c17281a617ddc0fac7bda277b3641e4c1fc0/params/config.go
  * params/protocol_params.go: SystemAddress and four system-call destinations.
  * core/state_processor.go: PreExecution/PostExecution and system-call implementations.
  * core/state_transition.go: authorization writes precede the ordinary EVM call.
+ * core/types/tx_setcode.go: SigHash uses 0x05 || RLP([chainId,address,nonce]);
+ * Authority and crypto/crypto.go require recoverable, canonical low-s signatures.
  * consensus/beacon/consensus.go: withdrawal balance credits; no PoS block reward.
  * core/types/block.go + internal/ethapi/api.go: supported header/transaction envelopes.
+ * core/vm/contracts.go: complete Prague/Osaka precompile address sets. Some full
+ * parity trace providers omit precompile frames; their addresses are always dirty.
  */
 export const ETHEREUM_BLOCK_ACTIVITY_PROFILE = Object.freeze({
   gethRevision: "48a7c17281a617ddc0fac7bda277b3641e4c1fc0",
@@ -30,6 +36,10 @@ const SYSTEM_ADDRESSES = Object.freeze([
   "0x00000961Ef480Eb55e80D19ad83579A64c007002",
   "0x0000BBdDc7CE488642fb579F8B00f3a590007251",
 ].map(address => address.toLowerCase()));
+// The full fork-defined infrastructure set, not a list inferred from sampled calls.
+const PRAGUE_PRECOMPILE_ADDRESSES = Object.freeze(Array.from({ length: 0x11 },
+  (_, index) => `0x${(index + 1).toString(16).padStart(40, "0")}`));
+const OSAKA_ADDITIONAL_PRECOMPILE = "0x0000000000000000000000000000000000000100";
 const HASH = /^0x[0-9a-fA-F]{64}$/;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const BYTES = /^0x(?:[0-9a-fA-F]{2})*$/;
@@ -41,19 +51,23 @@ const BLOCK_FIELDS = new Set([...HEADER_HASH_FIELDS, "number", "timestamp", "min
   "transactions", "uncles", "withdrawals", "size", "totalDifficulty"]);
 const TX_FIELDS = new Set(["hash", "type", "blockHash", "blockNumber", "blockTimestamp", "transactionIndex", "from", "to",
   "nonce", "gas", "gasPrice", "value", "input", "v", "r", "s", "chainId", "accessList", "yParity",
-  "maxFeePerGas", "maxPriorityFeePerGas", "maxFeePerBlobGas", "blobVersionedHashes"]);
+  "maxFeePerGas", "maxPriorityFeePerGas", "maxFeePerBlobGas", "blobVersionedHashes", "authorizationList"]);
 const ACCESS_FIELDS = new Set(["address", "storageKeys"]);
 const WITHDRAWAL_FIELDS = new Set(["index", "validatorIndex", "address", "amount"]);
+const AUTHORIZATION_FIELDS = new Set(["chainId", "address", "nonce", "yParity", "r", "s"]);
+const SECP256K1_ORDER = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 
 /**
  * Passive activity only; callers still need the hash-pinned complete logs/call trace.
  * Accepts observed, full-transaction JSON-RPC blocks under the pinned mainnet
  * Prague/Osaka profile, including BPO1/BPO2 (blob changes, no new system targets).
- * All five system accounts are conservatively dirty even for an empty block.
+ * All five system accounts and the complete active precompile set are
+ * conservatively dirty even for an empty block.
  *
  * Null means no carry proof, not a failure of raw pricing. Unknown fields/types,
- * missing fork fields, and any authorizationList/type-4 transaction fail closed.
- * This is a shape/coverage check, NOT a consensus/hash/signature verifier. Caller
+ * missing fork fields and malformed/unrecoverable authorizations fail closed.
+ * Type-4 authority signatures are recovered because their writes are not calls;
+ * this is otherwise a shape/coverage check, NOT a consensus/block verifier. Caller
  * authenticates the observation and deployment's fork profile. Bogota is nil at
  * the pin; Amsterdam is not configured on mainnet there. A future fork with the
  * SAME envelope cannot be detected here: review/disable this profile on consensus
@@ -77,14 +91,22 @@ export function ethereumBlockActivityCoverage(chainId: bigint, block: unknown): 
         !Array.isArray(block.transactions) || !Array.isArray(block.withdrawals)) return null;
 
     const transactionHashes: string[] = [], seenHashes = new Set<string>();
+    const passive = new Set([...SYSTEM_ADDRESSES, ...PRAGUE_PRECOMPILE_ADDRESSES, block.miner.toLowerCase()]);
+    if (timestamp >= ETHEREUM_BLOCK_ACTIVITY_PROFILE.osakaTime) passive.add(OSAKA_ADDITIONAL_PRECOMPILE);
     for (const [index, tx] of block.transactions.entries()) {
       if (!validTransaction(tx, block.hash as string, number, timestamp, index)) return null;
+      if (tx.type === "0x4") {
+        for (const authorization of tx.authorizationList as unknown[]) {
+          const activity = authorizationActivity(authorization);
+          if (activity === null) return null;
+          for (const address of activity) passive.add(address);
+        }
+      }
       const hash = (tx.hash as string).toLowerCase();
       if (seenHashes.has(hash)) return null;
       seenHashes.add(hash);
       transactionHashes.push(hash);
     }
-    const passive = new Set([...SYSTEM_ADDRESSES, block.miner.toLowerCase()]);
     for (const withdrawal of block.withdrawals) {
       if (!record(withdrawal) || !knownFields(withdrawal, WITHDRAWAL_FIELDS) || !matches(ADDRESS, withdrawal.address) ||
           ["index", "validatorIndex", "amount"].some(field => quantity(withdrawal[field], 64) === null)) return null;
@@ -99,9 +121,9 @@ export function ethereumBlockActivityCoverage(chainId: bigint, block: unknown): 
 }
 
 function validTransaction(tx: unknown, blockHash: string, number: bigint, timestamp: bigint, index: number): tx is Record<string, unknown> {
-  if (!record(tx) || "authorizationList" in tx || !knownFields(tx, TX_FIELDS)) return false;
+  if (!record(tx) || !knownFields(tx, TX_FIELDS)) return false;
   const type = quantity(tx.type, 8);
-  if (type === null || type > 3n || !matches(HASH, tx.hash) || !matches(HASH, tx.blockHash) ||
+  if (type === null || type > 4n || !matches(HASH, tx.hash) || !matches(HASH, tx.blockHash) ||
       tx.blockHash.toLowerCase() !== blockHash.toLowerCase() || quantity(tx.blockNumber, 64) !== number ||
       quantity(tx.transactionIndex, 64) !== BigInt(index) || !matches(ADDRESS, tx.from) ||
       (tx.to !== null && !matches(ADDRESS, tx.to)) || !matches(BYTES, tx.input) ||
@@ -122,11 +144,33 @@ function validTransaction(tx: unknown, blockHash: string, number: bigint, timest
   if (type < 2n) {
     if ("maxFeePerGas" in tx || "maxPriorityFeePerGas" in tx) return false;
   } else if (quantity(tx.maxFeePerGas) === null || quantity(tx.maxPriorityFeePerGas) === null) return false;
+  if (type === 4n) {
+    if (!matches(ADDRESS, tx.to) || !Array.isArray(tx.authorizationList) || tx.authorizationList.length === 0) return false;
+  } else if ("authorizationList" in tx) return false;
   if (type !== 3n) return !("maxFeePerBlobGas" in tx || "blobVersionedHashes" in tx);
   if (!matches(ADDRESS, tx.to) || quantity(tx.maxFeePerBlobGas) === null ||
       !Array.isArray(tx.blobVersionedHashes) || tx.blobVersionedHashes.length === 0) return false;
   for (const hash of tx.blobVersionedHashes) if (!matches(/^0x01[0-9a-fA-F]{62}$/, hash)) return false;
   return true;
+}
+
+/** EIP-7702's authority code/nonce write occurs before ordinary traced execution.
+ * Recover every well-formed signature, including wrong-chain or stale-nonce tuples:
+ * over-invalidation is safe and avoids extra state reads/another execution pipeline.
+ * Unrecoverable tuples fail closed rather than treating an unknown authority as clean.
+ */
+function authorizationActivity(value: unknown): readonly string[] | null {
+  if (!record(value) || !knownFields(value, AUTHORIZATION_FIELDS) || !matches(ADDRESS, value.address)) return null;
+  const chainId = quantity(value.chainId), nonce = quantity(value.nonce, 64);
+  const yParity = quantity(value.yParity, 8), r = quantity(value.r), s = quantity(value.s);
+  if (chainId === null || nonce === null || (yParity !== 0n && yParity !== 1n) ||
+      r === null || r === 0n || r >= SECP256K1_ORDER || s === null || s === 0n || s > SECP256K1_ORDER / 2n) return null;
+  const target = value.address.toLowerCase();
+  // ethers hashAuthorization uses integer-to-minimal-bytes RLP: zero is empty,
+  // NOT 0x00. Its digest matches the pinned geth SigHash above.
+  const authority = verifyAuthorization({ chainId, address: target, nonce },
+    { yParity: yParity === 0n ? 0 : 1, r: toBeHex(r, 32), s: toBeHex(s, 32) }).toLowerCase();
+  return [authority, target];
 }
 
 function record(value: unknown): value is Record<string, unknown> {

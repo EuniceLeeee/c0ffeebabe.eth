@@ -6,10 +6,14 @@ export type BlockTouchedObservation =
   | Omit<Extract<UnifiedObservation, { kind: "call" }>, "source">;
 
 /** A stable, root/generation-bound interpreter; replace it when its bindings change. */
-export type BlockTouchedStateKeyResolver = (
+export type BlockTouchedStateKeyResolver = ((
   observation: BlockTouchedObservation,
   block: { readonly number: number; readonly hash: string },
-) => readonly string[];
+) => readonly string[]) & {
+  /** Non-call state writes have no log/calldata to interpret. Conservatively
+   * refresh declared dependency owners; never fabricate a Family observation. */
+  readonly passiveStateKeys?: (addresses: readonly string[], block: { readonly number: number; readonly hash: string }) => readonly string[];
+};
 
 interface BlockTouchedLog {
   readonly address: string;
@@ -283,6 +287,15 @@ async function readTouchedBlock(
   }
 
   for (const address of pinned?.passiveTouchedAddresses ?? []) touched.add(address);
+  if (pinned?.passiveTouchedAddresses !== undefined && resolver?.passiveStateKeys !== undefined) {
+    assertOpen();
+    const keys = resolver.passiveStateKeys(pinned.passiveTouchedAddresses, { number: blockNumber, hash: pinned.hash });
+    if (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || key.length === 0)) {
+      throw new Error("activity resolver returned malformed passive state keys");
+    }
+    for (const key of keys) touched.add(key.toLowerCase());
+    assertOpen();
+  }
   return touched;
 }
 

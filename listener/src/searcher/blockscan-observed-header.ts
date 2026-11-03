@@ -22,10 +22,14 @@ export interface BlockScanObservedHeader extends CanonicalHeader {
 export async function readBlockScanObservedHeader(
   rpcUrl: string,
   chainId: bigint,
-  blockNumber: number,
+  blockNumber: number | string,
   control?: StateCallControl,
 ): Promise<BlockScanObservedHeader> {
-  if (!Number.isSafeInteger(blockNumber) || blockNumber < 0) throw new Error("invalid source header number");
+  const byHash = typeof blockNumber === "string";
+  if (byHash ? !/^0x[0-9a-fA-F]{64}$/.test(blockNumber)
+    : !Number.isSafeInteger(blockNumber) || blockNumber < 0) {
+    throw new Error(byHash ? "invalid source header hash" : "invalid source header number");
+  }
   const { signal, deadlineAtMs } = control ?? {};
   if (deadlineAtMs !== undefined && !Number.isFinite(deadlineAtMs)) throw new Error("invalid source header deadline");
   const controller = new AbortController();
@@ -52,8 +56,8 @@ export async function readBlockScanObservedHeader(
     let response: JsonRpcHttpResponse;
     try {
       response = await postJsonRpc(rpcUrl, {
-        jsonrpc: "2.0", id: 1, method: "eth_getBlockByNumber",
-        params: [`0x${blockNumber.toString(16)}`, true],
+        jsonrpc: "2.0", id: 1, method: byHash ? "eth_getBlockByHash" : "eth_getBlockByNumber",
+        params: [byHash ? blockNumber : `0x${blockNumber.toString(16)}`, true],
       }, controller.signal);
     } catch (error) {
       assertOpen();
@@ -89,7 +93,15 @@ export async function readBlockScanObservedHeader(
       }
       throw Object.assign(new Error(`source header RPC error code ${code}`), { code });
     }
-    const header = parseBlockScanObservedHeader(body.result, blockNumber, chainId);
+    let expectedNumber: number;
+    if (byHash) {
+      const result = body.result as Record<string, unknown> | null;
+      if (result === null) throw new BlockScanHeaderUnavailableError("missing source header");
+      if (typeof result?.number !== "string" || !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/.test(result.number)) throw new Error("invalid source header height");
+      expectedNumber = Number(BigInt(result.number));
+    } else expectedNumber = blockNumber;
+    const header = parseBlockScanObservedHeader(body.result, expectedNumber, chainId);
+    if (byHash && header.hash !== blockNumber.toLowerCase()) throw new Error("source header hash mismatch");
     assertOpen();
     return header;
   } finally {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { SigningKey, computeAddress, concat, encodeRlp, hashAuthorization, keccak256, toBeArray } from "ethers";
 import { ETHEREUM_BLOCK_ACTIVITY_PROFILE, ethereumBlockActivityCoverage } from "../../shared/state/ethereum-block-activity.js";
 
 // Complete synthetic RPC envelopes, not cryptographic block/signature witnesses.
@@ -14,6 +15,10 @@ const SYSTEM = [
   "0x00000961Ef480Eb55e80D19ad83579A64c007002",
   "0x0000BBdDc7CE488642fb579F8B00f3a590007251",
 ].map(value => value.toLowerCase());
+const PRAGUE_PRECOMPILES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+  .map(value => `0x${value.toString(16).padStart(40, "0")}`);
+const OSAKA_ADDITION = `0x${"100".padStart(40, "0")}`;
+const CURRENT_PRECOMPILES = [...PRAGUE_PRECOMPILES, OSAKA_ADDITION];
 
 function transaction(type = 2, index = 0): Record<string, unknown> {
   return {
@@ -58,7 +63,7 @@ const coverage = ethereumBlockActivityCoverage(1n, full);
 assert(coverage);
 assert.deepEqual(full, before, "input is not mutated");
 assert.deepEqual(coverage.transactionHashes, (full.transactions as Record<string, unknown>[]).map(tx => tx.hash));
-assert.deepEqual(coverage.passiveTouchedAddresses, [...SYSTEM, MINER, WITHDRAWAL].sort());
+assert.deepEqual(coverage.passiveTouchedAddresses, [...SYSTEM, ...CURRENT_PRECOMPILES, MINER, WITHDRAWAL].sort());
 for (const system of SYSTEM) assert(coverage.passiveTouchedAddresses.includes(system), "all consensus system targets are always dirty");
 assert(!coverage.passiveTouchedAddresses.includes(SENDER) && !coverage.passiveTouchedAddresses.includes(TARGET),
   "ordinary transaction activity still belongs to the separate complete call-trace proof");
@@ -68,7 +73,7 @@ assert.throws(() => (coverage.passiveTouchedAddresses as string[]).push(COLD), T
 (full.transactions as Record<string, unknown>[])[0]!.hash = PARENT_HASH;
 (full.withdrawals as Record<string, unknown>[])[0]!.address = COLD;
 full.miner = COLD;
-assert.deepEqual(coverage.passiveTouchedAddresses, [...SYSTEM, MINER, WITHDRAWAL].sort(), "returned addresses are detached");
+assert.deepEqual(coverage.passiveTouchedAddresses, [...SYSTEM, ...CURRENT_PRECOMPILES, MINER, WITHDRAWAL].sort(), "returned addresses are detached");
 assert.notEqual(coverage.transactionHashes[0], PARENT_HASH, "returned hashes are detached");
 
 const mixedCase = block([{ ...transaction(), hash: hash("A"), blockHash: hash("A"), blockTimestamp: quantity(1_800_000_000) }]);
@@ -82,13 +87,17 @@ mixedCase.withdrawals = [
 const normalized = ethereumBlockActivityCoverage(1n, mixedCase);
 assert(normalized);
 assert.deepEqual(normalized.transactionHashes, [BLOCK_HASH]);
-assert.deepEqual(normalized.passiveTouchedAddresses, [...SYSTEM, MINER, WITHDRAWAL].sort(), "normalize, sort and deduplicate addresses");
+assert.deepEqual(normalized.passiveTouchedAddresses, [...SYSTEM, ...CURRENT_PRECOMPILES, MINER, WITHDRAWAL].sort(), "normalize, sort and deduplicate addresses");
 
 for (const timestamp of [1746612311n, 1764798550n, 1764798551n, 1765290071n, 1767747671n]) {
   const empty = ethereumBlockActivityCoverage(1n, { ...block([]), timestamp: quantity(timestamp), withdrawals: [] });
   assert(empty, "complete empty blocks are covered across the reviewed Prague/Osaka/BPO boundaries");
   assert.deepEqual(empty.transactionHashes, []);
-  assert.deepEqual(empty.passiveTouchedAddresses, [...SYSTEM, MINER].sort());
+  const precompiles = timestamp < ETHEREUM_BLOCK_ACTIVITY_PROFILE.osakaTime ? PRAGUE_PRECOMPILES : CURRENT_PRECOMPILES;
+  assert.deepEqual(empty.passiveTouchedAddresses, [...SYSTEM, ...precompiles, MINER].sort());
+  for (const precompile of PRAGUE_PRECOMPILES) assert(empty.passiveTouchedAddresses.includes(precompile), "every Prague precompile is dirty even in empty blocks");
+  assert.equal(empty.passiveTouchedAddresses.includes(OSAKA_ADDITION), timestamp >= ETHEREUM_BLOCK_ACTIVITY_PROFILE.osakaTime,
+    "Osaka's additional precompile activates exactly at the pinned timestamp");
 }
 rejects("pre-Prague is outside this evidence profile", { ...block(), timestamp: quantity(1746612310n) });
 assert(ethereumBlockActivityCoverage(1n, { ...block(), timestamp: quantity(2_000_000_000) }),
@@ -143,10 +152,51 @@ for (const type of [0, 1, 2, 3]) for (const authorizationList of [undefined, nul
     transaction(2, 0), { ...transaction(type, 1), authorizationList }, transaction(2, 2),
   ]));
 }
-rejects("type-4 cold authorization cannot be covered by top-level from/to or logs", block([
-  transaction(2, 0), { ...transaction(2, 1), type: "0x4", to: TARGET,
-    authorizationList: [{ chainId: "0x1", address: COLD, nonce: "0x0", yParity: "0x1", r: "0x1", s: "0x1" }] },
-]));
+// Public deterministic test key, not a production signer. Independently construct
+// the pinned geth signing domain instead of signing with the verifier's helper.
+const authorizationKey = new SigningKey(`0x${"11".repeat(32)}`);
+const authority = computeAddress(authorizationKey.publicKey).toLowerCase();
+function authorization(chainId = 1n, nonce = 0n, target = COLD): Record<string, unknown> {
+  const digest = keccak256(concat(["0x05", encodeRlp([toBeArray(chainId), target, toBeArray(nonce)])]));
+  assert.equal(digest, hashAuthorization({ chainId, address: target, nonce }), "EIP-7702 signing domain matches pinned geth");
+  const signature = authorizationKey.sign(digest);
+  return { chainId: quantity(chainId), address: target, nonce: quantity(nonce), yParity: quantity(signature.yParity),
+    r: quantity(BigInt(signature.r)), s: quantity(BigInt(signature.s)) };
+}
+assert.equal(hashAuthorization({ chainId: 0n, address: COLD, nonce: 0n }),
+  keccak256(`0x05d78094${COLD.slice(2)}80`), "zero chain/nonce RLP encode as empty bytes, not 0x00");
+for (const chainId of [0n, 1n, 2n, (1n << 256n) - 1n]) for (const nonce of [0n, 1n, (1n << 64n) - 1n]) {
+  const type4 = { ...transaction(4), authorizationList: [authorization(chainId, nonce)] };
+  const original = structuredClone(type4);
+  const result = ethereumBlockActivityCoverage(1n, block([type4]));
+  assert(result, "validly signed non-applying chain/nonce tuple is conservatively covered");
+  assert(result.passiveTouchedAddresses.includes(authority), "recovered cold authority is dirty outside traced calls");
+  assert(result.passiveTouchedAddresses.includes(COLD), "delegation target is conservatively dirty");
+  assert.deepEqual(type4, original, "authorization recovery does not mutate evidence");
+}
+const clearing = ethereumBlockActivityCoverage(1n, block([{ ...transaction(4),
+  authorizationList: [authorization(1n, 0n, address("0")), authorization(), authorization()],
+}]));
+assert(clearing && clearing.passiveTouchedAddresses.includes(address("0")) && clearing.passiveTouchedAddresses.includes(authority));
+assert.equal(clearing.passiveTouchedAddresses.filter(value => value === authority).length, 1, "repeated authority is deduplicated");
+for (const change of [{ to: null }, { accessList: undefined }, { maxFeePerGas: undefined }, { maxPriorityFeePerGas: undefined },
+  { authorizationList: undefined }, { authorizationList: null }, { authorizationList: [] }, { authorizationList: Array(1) },
+  { maxFeePerBlobGas: "0x1" }, { blobVersionedHashes: [] },
+]) rejects("malformed type-4 envelope", block([{ ...transaction(4), authorizationList: [authorization()], ...change }]));
+const curveN = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+for (const change of [
+  { chainId: "0x01" }, { chainId: quantity(1n << 256n) }, { address: "0x1" },
+  { nonce: "0x00" }, { nonce: quantity(1n << 64n) }, { yParity: "0x2" }, { yParity: "0x1b" },
+  { r: "0x0" }, { r: quantity(curveN) }, { s: "0x0" }, { s: quantity(curveN / 2n + 1n) },
+  { unknownFutureAuthorizationField: true }, { [Symbol("unknown")]: true },
+]) rejects("malformed or invalid authorization cannot establish coverage", block([{ ...transaction(4), authorizationList: [{ ...authorization(), ...change }] }]));
+for (const field of ["chainId", "address", "nonce", "yParity", "r", "s"]) {
+  const missing = authorization(); delete missing[field];
+  rejects(`missing authorization ${field}`, block([{ ...transaction(4), authorizationList: [missing] }]));
+}
+// A bad tuple can coexist with an otherwise valid transaction on-chain; refusal
+// means no carry proof, not a claim that the chain rejected the transaction.
+rejects("unrecoverable authorization fails closed", block([{ ...transaction(4), authorizationList: [{ ...authorization(), r: "0x5" }] }]));
 for (const change of [{ to: null }, { maxFeePerBlobGas: undefined }, { blobVersionedHashes: [] },
   { blobVersionedHashes: [hash("0")] }, { blobVersionedHashes: Array(1) }]) {
   rejects("malformed blob envelope", block([{ ...transaction(3), ...change }]));
@@ -167,4 +217,4 @@ const throwing = block();
 Object.defineProperty(throwing, "timestamp", { get() { throw new Error("malformed getter"); } });
 rejects("malformed accessor returns null rather than throwing", throwing);
 
-console.log(`ethereum-block-activity PASS (${rejected} rejection controls; pinned fork/system coverage, full envelopes, authorization exclusion, immutable data)`);
+console.log(`ethereum-block-activity PASS (${rejected} rejection controls; pinned fork/system coverage, full envelopes, authorization recovery, immutable data)`);
