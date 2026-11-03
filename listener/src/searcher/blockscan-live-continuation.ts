@@ -123,6 +123,10 @@ export function compatibleLiveContinuationIdentity(context: unknown, manifestPat
     "blockscan-startup-filter", "blockscan-startup-catchup", "blockscan-bigquery-activity",
     "blockscan-touched-state", "strict-production-runtime-session", "blockscan-reorg-activity",
     "blockscan-observed-header"].map(name => `searcher/${name}.ts`));
+  // Only an explicitly reviewed transport-scheduling migration is eligible;
+  // this is not automatic permission to reuse prices across quote-semantic edits.
+  // The complete inventories, exact changes and independent review still bind it.
+  eligible.add("searcher/pinned-reth-quote-backend.ts");
   eligible.add("searcher/simulator/eth-simulate-v1.ts");
   eligible.add("searcher/simulator/direct-revert-hop.ts");
   // Activity coverage is re-established over the entire restored B→T range;
