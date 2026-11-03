@@ -40,6 +40,7 @@ export interface RethTransportRetryBatch {
 
 export interface RethTransportRetryState {
   transportRetriesAtOne?: number;
+  transportBackoffAtOne?: number;
   transportRetryBatch?: RethTransportRetryBatch;
 }
 
@@ -109,7 +110,9 @@ export class RethTransportScheduler {
       readonly retryDelayMs?: number;
       /**
        * Throttle/timeout retries still allowed once this batch's ladder has
-       * degraded to concurrency 1. A metered provider can refuse one batch for
+       * degraded to concurrency 1 and a single-item batch. Splitting a larger
+       * failed envelope must reach one item before spending this floor budget.
+       * A metered provider can refuse one batch for
        * minutes while the caller still holds a valid budget; giving up after a
        * handful of attempts turns a recoverable throughput dip into a dead
        * pass. Only the throttled batch pays this, never the whole scope.
@@ -121,7 +124,7 @@ export class RethTransportScheduler {
   ) {
     if (
       !Number.isSafeInteger(options.capacity) ||
-      options.capacity < 2
+      options.capacity < 1
     ) {
       throw new Error(
         `invalid reth transport capacity ${options.capacity}`,
@@ -130,7 +133,8 @@ export class RethTransportScheduler {
     if (
       !Number.isSafeInteger(options.producerReserved) ||
       options.producerReserved < 1 ||
-      options.producerReserved >= options.capacity
+      (options.producerReserved >= options.capacity &&
+        !(options.capacity === 1 && options.producerReserved === 1))
     ) {
       throw new Error(
         `invalid producer reserve ${options.producerReserved}`,
@@ -154,7 +158,7 @@ export class RethTransportScheduler {
         const batch = items[0]?.transportRetryBatch;
         const reduce = (n: number) => Math.max(1, Math.floor(n / 2 ** (batch?.level ?? 0)));
         return Object.freeze({version: batch?.version ?? 0, batchSize: reduce(batchSize),
-          concurrency: reduce(concurrency), ...(batch ? {batch} : {})});
+          concurrency: this.capacity === 1 ? 1 : reduce(concurrency), ...(batch ? {batch} : {})});
       },
       retryDelayMs: (items: readonly RethTransportRetryState[] = []) => items[0]?.transportRetryBatch?.delayMs ?? 0,
       retry: (error: unknown, items: readonly RethTransportRetryState[], attempt: RethTransportAttempt) => {
@@ -167,14 +171,24 @@ export class RethTransportScheduler {
         // In-flight split siblings from one tier lower their own group once.
         if (attempt.version === batch.version) {
           batch.version++;
-          batch.level++;
+          // With one request already in flight, lower the failed payload,
+          // not unrelated fresh envelopes: 64 -> 16 -> 4 -> 1 on HTTP/RPC 429.
+          // Socket timeouts retain their existing halving ladder.
+          batch.level += attempt.concurrency === 1 && !isRethTransportTimeout(error) && isRpcThrottleError(error) ? 2 : 1;
         }
-        const exhausted = attempt.concurrency === 1 &&
+        const atFloor = attempt.concurrency === 1 &&
+          (attempt.batchSize === 1 || items.length === 1);
+        const exhausted = atFloor &&
           items.some(item => (item.transportRetriesAtOne ?? 0) >= maxRetriesAtOne);
-        if (!exhausted && attempt.concurrency === 1) for (const item of items) {
+        if (!exhausted && atFloor) for (const item of items) {
           item.transportRetriesAtOne = (item.transportRetriesAtOne ?? 0) + 1;
         }
-        const atOne = Math.max(...items.map(item => item.transportRetriesAtOne ?? 0));
+        // Preserve the original exponential waiting after concurrency reaches
+        // one; splitting and the single-item retry budget are separate clocks.
+        if (!exhausted && attempt.concurrency === 1) for (const item of items) {
+          item.transportBackoffAtOne = (item.transportBackoffAtOne ?? 0) + 1;
+        }
+        const atOne = Math.max(...items.map(item => item.transportBackoffAtOne ?? 0));
         const delayMs = Math.min(
           (options.retryDelayMs ?? 1_000) * 2 ** Math.max(0, atOne - 1),
           maxRetryDelayMs,
@@ -287,6 +301,10 @@ export class RethTransportScheduler {
 
   private canAdmit(lane: RethTransportLane): boolean {
     if (this.activeTotal >= this.capacity) return false;
+    // A one-permit diagnostic/live configuration still serves every lane.
+    // drain() keeps producer priority, without reserving the sole idle slot
+    // forever and deadlocking Exact or discovery.
+    if (this.capacity === 1) return true;
     if (
       lane === "producer-critical" ||
       lane === "producer-bulk"

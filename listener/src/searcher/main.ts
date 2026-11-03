@@ -818,6 +818,14 @@ export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = proce
   // Deliberately no rounding/fallback: the live transport constructor owns
   // validation of non-integer/non-finite state concurrency, as before.
   const stateRpcBatchConcurrency = Math.max(1, Number(env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4"));
+  const configuredTransportCapacity = stateRpcBatchConcurrency + exactRpcBatchConcurrency;
+  const transportCapacityOverride = env.SEARCHER_RPC_TRANSPORT_MAX_CONCURRENCY;
+  const transportCapacity = transportCapacityOverride === undefined ? configuredTransportCapacity : Number(transportCapacityOverride);
+  if (transportCapacityOverride !== undefined &&
+      (!Number.isSafeInteger(configuredTransportCapacity) || !Number.isSafeInteger(transportCapacity) ||
+        transportCapacity < 1 || transportCapacity > configuredTransportCapacity)) {
+    throw new Error("SEARCHER_RPC_TRANSPORT_MAX_CONCURRENCY must be a positive integer no greater than configured transport capacity");
+  }
   // A throttled batch degrades to concurrency 1 and keeps retrying there; only
   // that batch pays the patience, never the whole live scope. The backoff is
   // capped so a long refusal cannot turn into an unbounded stall.
@@ -834,7 +842,9 @@ export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = proce
     sourceSimulationTimeoutMs: Number(env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
     exactRefineHardBudgetMs, exactConcurrency, exactProbeTimeoutMs, exactRpcBatchSize, exactRpcBatchConcurrency,
     stateRpcBatchConcurrency, transport: Object.freeze({
-      capacity: stateRpcBatchConcurrency + exactRpcBatchConcurrency, producerReserved: stateRpcBatchConcurrency,
+      capacity: transportCapacity,
+      producerReserved: transportCapacityOverride === undefined ? stateRpcBatchConcurrency
+        : Math.min(stateRpcBatchConcurrency, Math.max(1, transportCapacity - 1)),
       maxRetriesAtOne: throttleRetriesAtOne, maxRetryDelayMs: throttleMaxDelayMs,
     }) });
 }
