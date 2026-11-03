@@ -961,11 +961,18 @@ export class PinnedRethQuoteBackend
         // rejections from surfacing as unhandled.
       });
     }
-    if (!this.closed) {
+    if (!this.closed && this.inFlightBatches < concurrencyLimit) {
       const now = Date.now();
-      const next = this.pending.reduce((time, item) => item.settled ? time :
-        Math.min(time, (item.transportRetryBatch?.notBeforeMs ?? 0) > now
-          ? item.transportRetryBatch!.notBeforeMs : Infinity), Infinity);
+      const next = this.pending.reduce((time, item) => {
+        const group = item.transportRetryBatch;
+        if (item.settled || !group) return time;
+        const limits = this.transportLoad!.limits(this.maxBatchSize, this.maxConcurrentBatches, [item]);
+        // Active completion wakes saturated groups. Otherwise retain even a
+        // cooldown that elapsed since the eligibility check above: dropping it
+        // would leave pending work with neither an active batch nor a wakeup.
+        if ((this.activeRetryBatches.get(group) ?? 0) >= limits.concurrency) return time;
+        return Math.min(time, group.notBeforeMs);
+      }, Infinity);
       if (Number.isFinite(next)) {
         let resolve!: () => void;
         const promise = new Promise<void>(done => { resolve = done; });
