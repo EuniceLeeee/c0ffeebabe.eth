@@ -38,7 +38,7 @@ JSON 化的 Family 经过公共解释器；未迁移的 Family 继续使用原 T
 
 `build-declarative-production.ts` 的 `renderDataFamilyEntry()` 已支持 Protocol、Swap、Credit，旧文档的“仅 Protocol”判断已不适用：
 
-**代码出处** [build-declarative-production.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/build-declarative-production.ts#L113-L119) · `renderDataFamilyEntry()`
+**代码出处：** [build-declarative-production.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/build-declarative-production.ts#L113-L119) · `renderDataFamilyEntry()`
 
 ```typescript
 dataOnly(doc);
@@ -91,7 +91,7 @@ const required = [
 
 生成的 ERC4626 入口实际调用：
 
-**代码出处** [erc4626.production.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/production-families/erc4626.production.ts#L14-L14) · 模块顶层的 `plugin` 注册
+**代码出处：** [erc4626.production.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/production-families/erc4626.production.ts#L14-L14) · 模块顶层的 `plugin` 注册
 
 ```typescript
 export const plugin = defineProtocolFamily(
@@ -105,7 +105,7 @@ export const plugin = defineProtocolFamily(
 
 `declarative-protocol.ts`、`declarative-swap.ts`、`declarative-credit.ts` 只校验入口领域并提供对应类型。共同调用 `declarative-family.ts → createDeclarativeFamilyRuntime()`：
 
-**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L773-L783) · `createDeclarativeFamilyRuntime() → definition`
+**代码出处：** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L773-L783) · `createDeclarativeFamilyRuntime() → definition`
 
 ```typescript
 const definition = {
@@ -158,7 +158,7 @@ const definition = {
 
 `declarative-modules.ts → createDeclarativeModuleCatalog().read()` 把缺失模块显示为 `{}`，保留旧 JSON 的兼容性：
 
-**代码出处** [declarative-modules.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L60-L67) · `createDeclarativeModuleCatalog() → read()`
+**代码出处：** [declarative-modules.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L60-L67) · `createDeclarativeModuleCatalog() → read()`
 
 ```typescript
 const block = Object.hasOwn(raw, key) ? raw[key] : {};
@@ -178,7 +178,7 @@ if (!contract)
 
 依赖决定能否编译：
 
-**代码出处** [declarative-modules.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L78-L90) · `createDeclarativeModuleCatalog() → read() → visit()`
+**代码出处：** [declarative-modules.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L78-L90) · `createDeclarativeModuleCatalog() → read() → visit()`
 
 ```typescript
 if (visiting.has(key))
@@ -239,7 +239,7 @@ const row = freeze({
 
 同一个 lineage 现在可以有多个模型，但每个 variant `id` 必须唯一，主/子定义必须覆盖声明的 lineage。运行时不猜模型：
 
-**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L209-L213) · `createDeclarativeFamilyRuntime() → select()`
+**代码出处：** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L209-L213) · `createDeclarativeFamilyRuntime() → select()`
 
 ```typescript
 function select(descriptor: Data): Variant {
@@ -264,7 +264,7 @@ function select(descriptor: Data): Variant {
 
 `compileDeclarativeDiscovery()` 把签名变成已有发现引擎使用的 pattern：
 
-**代码出处** [declarative-discovery.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L96-L103) · `compileDeclarativeDiscovery()`
+**代码出处：** [declarative-discovery.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L96-L103) · `compileDeclarativeDiscovery()`
 
 ```typescript
 callPatterns: d.calls.map((c) => ({
@@ -366,7 +366,7 @@ Discovery v2 支持嵌套 ABI 路径、派生标量、有限候选展开，仍�
 
 公共展开核心：
 
-**代码出处** [declarative-discovery.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L258-L262) · `compileMappedDiscovery() → expand()`
+**代码出处：** [declarative-discovery.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L258-L262) · `compileMappedDiscovery() → expand()`
 
 ```typescript
 function expand<
@@ -436,7 +436,7 @@ function expand<
 
 公共模板替换的是数据槽，不是动态函数：
 
-**代码出处** [declarative-definition.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-definition.ts#L36-L39) · `expandConversionDefinition() → expand()`
+**代码出处：** [declarative-definition.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-definition.ts#L36-L39) · `expandConversionDefinition() → expand()`
 
 ```typescript
 if (Object.prototype.hasOwnProperty.call(value, "parameter")) {
@@ -511,7 +511,7 @@ if (Object.prototype.hasOwnProperty.call(value, "parameter")) {
 
 `normalizeDeclarativeVariant()` 将可读的 reads、models 规范化；`expandConversionAdmission()` 生成公共解释器消费的阶段和结果：
 
-**代码出处** [declarative-variant.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-variant.ts#L157-L169) · `normalizeDeclarativeVariant()`
+**代码出处：** [declarative-variant.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-variant.ts#L157-L169) · `normalizeDeclarativeVariant()`
 
 ```typescript
 for (const stage of ["match", "surface", "dependencies", "active"]) {
@@ -555,7 +555,7 @@ validateDeclarativeValue(expanded);
 
 `declarative-identity.ts` 用 `select` 决定当前阶段，再解释该阶段的 requests：
 
-**代码出处** [declarative-identity.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L99-L111) · `compileDeclarativeIdentity() → stage() / buildRequests()`
+**代码出处：** [declarative-identity.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L99-L111) · `compileDeclarativeIdentity() → stage() / buildRequests()`
 
 ```typescript
 const stage = (step: Value) => {
@@ -583,7 +583,7 @@ function buildRequests(step: Value): readonly AdapterRequest[] {
 
 请求交给现有 issuer 执行，回来后解码、判断是否继续或完成：
 
-**代码出处** [declarative-identity.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L119-L124) · `compileDeclarativeIdentity() → decode() / decide()`
+**代码出处：** [declarative-identity.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L119-L124) · `compileDeclarativeIdentity() → decode() / decide()`
 
 ```typescript
 decode: ({ step, results, assets }) => {
@@ -625,7 +625,7 @@ decide: (step) => {
 
 行为模拟也复用同一份执行声明。`declarative-simulation.ts → buildDeclarativeExecutionSimulation()` 先编译 runtime leg，再产出标准模拟请求：
 
-**代码出处** [declarative-simulation.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-simulation.ts#L66-L80) · `buildDeclarativeExecutionSimulation()`
+**代码出处：** [declarative-simulation.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-simulation.ts#L66-L80) · `buildDeclarativeExecutionSimulation()`
 
 ```typescript
 const tokens = [
@@ -683,7 +683,7 @@ return Object.freeze({
 
 **主文件：** `declarative-family.ts`。公共层直接消费 `instance` 定义：
 
-**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L341-L352) · `createDeclarativeFamilyRuntime() → instance`
+**代码出处：** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L341-L352) · `createDeclarativeFamilyRuntime() → instance`
 
 ```typescript
 const instance: InstanceSemantics<Identity, Descriptor> = {
@@ -787,7 +787,7 @@ Descriptor 保存从 identity 得到的 vault/asset/share、lineage、已证明�
 
 公共投影核心：
 
-**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L246-L263) · `createDeclarativeFamilyRuntime() → projectRoutes()`
+**代码出处：** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L246-L263) · `createDeclarativeFamilyRuntime() → projectRoutes()`
 
 ```typescript
 rootRun(document.routes.descriptorChecks, env);
@@ -839,7 +839,7 @@ if (
 
 每次报价或执行前都重新核对调用的路线：
 
-**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L275-L282) · `createDeclarativeFamilyRuntime() → assertInvocation()`
+**代码出处：** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L275-L282) · `createDeclarativeFamilyRuntime() → assertInvocation()`
 
 ```typescript
 function assertInvocation(descriptor: Descriptor, route: Route): void {
@@ -864,7 +864,7 @@ function assertInvocation(descriptor: Descriptor, route: Route): void {
 
 `declarative-values.ts → compileDeclarativeValues()` 提供 `evaluate()` 和 `run()`：前者求值字段、条件、集合与 ABI 参数，后者执行已校验的声明语句。JSON 里的 `$descriptor.asset` 是绑定字段引用；`op` 只能来自公共层已支持的集合。
 
-**代码出处** [declarative-values.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-values.ts#L111-L126) · `compileDeclarativeValues() → evaluateInternal()`
+**代码出处：** [declarative-values.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-values.ts#L111-L126) · `compileDeclarativeValues() → evaluateInternal()`
 
 ```typescript
 if (++budget > 100000)
@@ -950,7 +950,7 @@ if (!x || typeof x !== "object") return x;
 
 公共当前读取有两种已存在的声明形式：简单 `readPrograms.quote`，或可选 `modules.pricingFlow`：
 
-**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L489-L499) · `createDeclarativeFamilyRuntime() → pricing.current.buildRequests()`
+**代码出处：** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L489-L499) · `createDeclarativeFamilyRuntime() → pricing.current.buildRequests()`
 
 ```typescript
 buildRequests(input) {
@@ -1005,7 +1005,7 @@ buildRequests(input) {
 
 公共 `declarative-read-flow.ts` 推进下一步的核心：
 
-**代码出处** [declarative-read-flow.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-read-flow.ts#L156-L164) · `compileDeclarativeReadFlow() → program.buildDependentProgram()`
+**代码出处：** [declarative-read-flow.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-read-flow.ts#L156-L164) · `compileDeclarativeReadFlow() → program.buildDependentProgram()`
 
 ```typescript
 requirements: (input: ReadFlowInput) =>
@@ -1062,7 +1062,7 @@ buildDependentProgram({
 
 `declarative-math.ts → createDeclarativeMathRegistry().bind()` 从静态注册表取 model，并检查输入输出：
 
-**代码出处** [declarative-math.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-math.ts#L39-L47) · `createDeclarativeMathRegistry() → bind()`
+**代码出处：** [declarative-math.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-math.ts#L39-L47) · `createDeclarativeMathRegistry() → bind()`
 
 ```typescript
 const model = entries.get(`${binding.model}@${binding.version}`);
@@ -1096,7 +1096,7 @@ JSON 使用 `{"op":"model","args":["spotPrice", "输入表达式"]}` 形式引�
 
 `refreshPolicy` 可以是 `on-touch` 或 `each-block`。`dependencies` 表示状态依赖，`mutationAddresses / mutationKinds / mutationPredicate` 把观察映射到受影响 state key：
 
-**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L582-L592) · `createDeclarativeFamilyRuntime() → pricing.mutation.affectedStateKeys()`
+**代码出处：** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L582-L592) · `createDeclarativeFamilyRuntime() → pricing.mutation.affectedStateKeys()`
 
 ```typescript
 affectedStateKeys(input) {
@@ -1182,7 +1182,7 @@ affectedStateKeys(input) {
 
 `declarative-family.ts` 根据所选 variant 生成 `ExactQuoteSemantics.methods()`；request-program 的请求来自定义：
 
-**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L646-L657) · `createDeclarativeFamilyRuntime() → exact.methods() → program.buildRequests()`
+**代码出处：** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L646-L657) · `createDeclarativeFamilyRuntime() → exact.methods() → program.buildRequests()`
 
 ```typescript
 buildRequests(input) {
@@ -1217,7 +1217,7 @@ buildRequests(input) {
 
 `declarative-quote-proof.ts` 对 view proof 绑定调用目标、caller、输入和输出：
 
-**代码出处** [declarative-quote-proof.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-quote-proof.ts#L183-L199) · `verifyDeclarativeQuoteProof()`
+**代码出处：** [declarative-quote-proof.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-quote-proof.ts#L183-L199) · `verifyDeclarativeQuoteProof()`
 
 ```typescript
 if (proof.requestBinding) {
@@ -1284,7 +1284,7 @@ if (decoded.callAmount !== expectedInput || decoded.output !== amountOut)
 
 Protocol 的可选 `modules.oracleVictim` 由领域模块统一消费：
 
-**代码出处** [declarative-protocol-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-protocol-domain.ts#L12-L18) · `compileDeclarativeProtocolDomain()`
+**代码出处：** [declarative-protocol-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-protocol-domain.ts#L12-L18) · `compileDeclarativeProtocolDomain()`
 
 ```typescript
 if (Object.hasOwn(raw, "oracleVictim"))
@@ -1306,7 +1306,7 @@ return {
 
 Swap 在 `swap.events/calls/receiptReads` 中定义观察。没有 ABI 的 topic 必须保持 unresolved：
 
-**代码出处** [declarative-swap-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-swap-domain.ts#L27-L37) · `compileDeclarativeSwap() → events.map()`
+**代码出处：** [declarative-swap-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-swap-domain.ts#L27-L37) · `compileDeclarativeSwap() → events.map()`
 
 ```typescript
 if (spec.topic !== undefined) {
@@ -1346,7 +1346,7 @@ if (spec.topic !== undefined) {
 
 Credit 使用 `credit.risk.evidence/proof` 与 position 合同。它的公共实现先重建同源证据，再验证实际 position simulation：
 
-**代码出处** [declarative-credit-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-credit-domain.ts#L166-L177) · `compileDeclarativeCreditDomain() → verifyProof()`
+**代码出处：** [declarative-credit-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-credit-domain.ts#L166-L177) · `compileDeclarativeCreditDomain() → verifyProof()`
 
 ```typescript
 const { request, result } = reconstructed.proof,
@@ -1390,7 +1390,7 @@ if (
 
 无论插件由 JSON 编译还是手写 TS，中央的 `buildFamilyRuntimeAmountLeg()` 都取同一个槽：
 
-**代码出处** [adapter-family-runtime.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/adapter-family-runtime.ts#L2787-L2796) · `buildFamilyRuntimeAmountLeg()`
+**代码出处：** [adapter-family-runtime.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/adapter-family-runtime.ts#L2787-L2796) · `buildFamilyRuntimeAmountLeg()`
 
 ```typescript
 const builder = input.family.plugin.execution.buildRuntimeLeg;
@@ -1425,7 +1425,7 @@ quoted 路径从同 session 签发的 Exact handle 取金额和证据，再调�
 
 `declarative-family.ts` 的 runtime 实现选择模型、构造环境，然后调用公共执行编译器：
 
-**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L735-L740) · `createDeclarativeFamilyRuntime() → execution.buildRuntimeLeg()`
+**代码出处：** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L735-L740) · `createDeclarativeFamilyRuntime() → execution.buildRuntimeLeg()`
 
 ```typescript
 const v = select(input.descriptor);
@@ -1492,7 +1492,7 @@ quoted 实现先验证 Exact/risk 证据，再调用同一个 `executionProgram(
 
 v2 多步声明写 `steps` 数组。步骤可包含条件、普通 call、math 或 frame；公共层展开集合并挑选命中的步骤：
 
-**代码出处** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L243-L259) · `selectExecutionSteps()`
+**代码出处：** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L243-L259) · `selectExecutionSteps()`
 
 ```typescript
 const declarations = definition.steps.flatMap((step: Value) => {
@@ -1539,7 +1539,7 @@ if (
 
 `declarative-call-codec.ts → encodeDeclarativeCall()` 先按 ABI 编码占位值，再递归查 tuple/array 的真实偏移，记录动态 patch：
 
-**代码出处** [declarative-call-codec.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-call-codec.ts#L87-L100) · `encodeDeclarativeCall() → walk()`
+**代码出处：** [declarative-call-codec.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-call-codec.ts#L87-L100) · `encodeDeclarativeCall() → walk()`
 
 ```typescript
 function walk(type: ParamType, value: any, at: number): void {
@@ -1606,7 +1606,7 @@ function walk(type: ParamType, value: any, at: number): void {
 
 公共编译器在调用前后测量对应账户余额，计算 delta，再应用约束：
 
-**代码出处** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L485-L496) · `buildDeclarativeExecutionProgram() → assertEffects()`
+**代码出处：** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L485-L496) · `buildDeclarativeExecutionProgram() → assertEffects()`
 
 ```typescript
 const before = `${prefix}${index}Before`,
@@ -1673,7 +1673,7 @@ if (
 
 公共 runtime 包装入口：
 
-**代码出处** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L928-L937) · `buildDeclarativeRuntimeLeg()`
+**代码出处：** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L928-L937) · `buildDeclarativeRuntimeLeg()`
 
 ```typescript
 export function buildDeclarativeRuntimeLeg(
@@ -1721,7 +1721,7 @@ export function buildDeclarativeRuntimeLeg(
 
 frame 内的 selector 校验由公共层自动加入，JSON 不能覆盖：
 
-**代码出处** [declarative-callback-frames.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-callback-frames.ts#L285-L288) · `emitDeclarativeCallbackFrame()`
+**代码出处：** [declarative-callback-frames.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-callback-frames.ts#L285-L288) · `emitDeclarativeCallbackFrame()`
 
 ```typescript
 // Selector capture is internal and cannot be supplied/overwritten by JSON.
@@ -1758,7 +1758,7 @@ Family JSON 声明底层调用的 native 语义及参数，公共层承担统一
 
 根 `actionAdapters` 提供所属 action 的描述与 trace 匹配签名，公共层生成 ActionAdapter。最终 `encode()` 消费已生成的程序：
 
-**代码出处** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L959-L966) · `createDeclarativeProgramAction() → action.matchTrace() / action.encode()`
+**代码出处：** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L959-L966) · `createDeclarativeProgramAction() → action.matchTrace() / action.encode()`
 
 ```typescript
 matchTrace: (target, selector) =>
@@ -1788,7 +1788,7 @@ encode(node, _executor, inner) {
 
 统一执行入口先构造 runtime，再单独报价与构造 quoted，避免 runtime 偷偷借报价结果：
 
-**代码出处** [protocol-json-acceptance.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/test/protocol-json-acceptance.ts#L131-L143) · `runProtocolJsonAcceptance()`
+**代码出处：** [protocol-json-acceptance.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/test/protocol-json-acceptance.ts#L131-L143) · `runProtocolJsonAcceptance()`
 
 ```typescript
 assert(
