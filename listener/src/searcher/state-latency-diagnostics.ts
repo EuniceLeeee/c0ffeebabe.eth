@@ -13,6 +13,7 @@ export interface StateLatencyHost {
   now(): number;
   wallNow(): number;
   cpu(): CpuSample;
+  threadCpu?(): CpuSample | null;
   heap(): HeapSample;
   observeGc(accept: (entries: readonly GcEntry[]) => void): { takeRecords(): readonly GcEntry[]; disconnect(): void };
   pulse(callback: () => void, intervalMs: number): () => void;
@@ -24,6 +25,11 @@ const PULSE_MS = 100, MAX_SAMPLES = 8, MAX_ENTRIES_PER_DELIVERY = 256, MAX_SLOW_
 const nativeHost: StateLatencyHost = {
   now: () => performance.now(), wallNow: () => Date.now(),
   cpu: () => process.cpuUsage(), heap: () => process.memoryUsage(),
+  threadCpu: () => {
+    if (!isMainThread) return null;
+    const threadCpuUsage = (process as NodeJS.Process & { threadCpuUsage?: () => CpuSample }).threadCpuUsage;
+    return typeof threadCpuUsage === "function" ? threadCpuUsage.call(process) : null;
+  },
   observeGc(accept) {
     const observer = new PerformanceObserver(list => accept(list.getEntries() as GcEntry[]));
     observer.observe({ entryTypes: ["gc"] });
@@ -33,7 +39,10 @@ const nativeHost: StateLatencyHost = {
   defer(callback) { const immediate = setImmediate(callback); immediate.unref(); return () => clearImmediate(immediate); },
   emit: summary => console.log(`[searcher/state-latency-diagnostics] ${JSON.stringify(summary)}`),
 };
-interface Snapshot { readonly monotonicMs: number; readonly wallMs: number; readonly cpu: CpuSample; readonly heap: HeapSample }
+interface Snapshot {
+  readonly monotonicMs: number; readonly wallMs: number; readonly cpu: CpuSample; readonly heap: HeapSample;
+  readonly mainThreadCpuMicros: CpuSample | null;
+}
 interface GcOverlap { startMonotonicMs: number; durationMs: number; overlapMs: number; kind: number | null; flags: number | null }
 interface LoopWindow { startMonotonicMs: number; endMonotonicMs: number; elapsedMs: number; lateByMs: number; overlapWindowMs: number }
 interface Sample {
@@ -78,7 +87,8 @@ export class StateLatencyDiagnostics {
   }
 
   private snapshot(): Snapshot {
-    return { monotonicMs: this.host.now(), wallMs: this.host.wallNow(), cpu: { ...this.host.cpu() }, heap: { ...this.host.heap() } };
+    return { monotonicMs: this.host.now(), wallMs: this.host.wallNow(), cpu: { ...this.host.cpu() }, heap: { ...this.host.heap() },
+      mainThreadCpuMicros: diagnosticCpu(() => this.host.threadCpu?.()) };
   }
 
   begin(sourceBlock: number, timelineStartedAtMs: number): StateLatencySample | undefined {
@@ -155,6 +165,7 @@ export class StateLatencyDiagnostics {
         startedMonotonicMs: before.monotonicMs, finishedMonotonicMs: after.monotonicMs,
         wallMs: Math.max(0, after.monotonicMs - before.monotonicMs), excludesBackdatedSchedulerWait: true },
       processCpu: { userMs: (after.cpu.user - before.cpu.user) / 1_000, systemMs: (after.cpu.system - before.cpu.system) / 1_000 },
+      mainThreadCpu: diagnosticCpuDelta("main-thread", before.mainThreadCpuMicros, after.mainThreadCpuMicros),
       processHeap: { before: before.heap, after: after.heap, heapUsedDelta: after.heap.heapUsed - before.heap.heapUsed },
       gc: { visibility: "observed-entries-only-not-proof-of-absence", flush, observedOverlappingEntries: sample.gcCount,
         entryDurationOverlapMs: sample.gcOverlapMs, slowest: sample.gcSlowest,
