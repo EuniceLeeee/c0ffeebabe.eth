@@ -38,6 +38,8 @@ JSON 化的 Family 经过公共解释器；未迁移的 Family 继续使用原 T
 
 `build-declarative-production.ts` 的 `renderDataFamilyEntry()` 已支持 Protocol、Swap、Credit，旧文档的“仅 Protocol”判断已不适用：
 
+**代码出处** [build-declarative-production.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/build-declarative-production.ts#L113-L119) · `renderDataFamilyEntry()`
+
 ```typescript
 dataOnly(doc);
 const domain = doc.production.domain as "protocol" | "swap" | "credit";
@@ -68,8 +70,6 @@ const required = [
 ];
 ```
 
-源码：[build-declarative-production.ts · 113–119 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/build-declarative-production.ts#L113-L119)。
-
 **实际节选：ERC4626 主 JSON。** 标准变体直接放在 `standard`；Custodian、InfiniFi 是独立子文件，不需要另造一个标准子 JSON。
 
 ```json
@@ -91,19 +91,21 @@ const required = [
 
 生成的 ERC4626 入口实际调用：
 
+**代码出处** [erc4626.production.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/production-families/erc4626.production.ts#L14-L14) · 模块顶层的 `plugin` 注册
+
 ```typescript
 export const plugin = defineProtocolFamily(
   compileDeclarativeProtocol<FamilyTypes>(definition, [child0, child1]),
 );
 ```
 
-源码：[erc4626.production.ts · 14–14 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/production-families/erc4626.production.ts#L14-L14)。
-
 这个 `.production.ts` 是公共生成器产物，仍需保留。它不包含协议实现；Family 作者维护 JSON，生成器负责 import、类型、activation 和注册调用。
 
 ### 1.2 三个薄包装最终进入同一个核心
 
 `declarative-protocol.ts`、`declarative-swap.ts`、`declarative-credit.ts` 只校验入口领域并提供对应类型。共同调用 `declarative-family.ts → createDeclarativeFamilyRuntime()`：
+
+**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L773-L783) · `createDeclarativeFamilyRuntime() → definition`
 
 ```typescript
 const definition = {
@@ -142,8 +144,6 @@ const definition = {
 };
 ```
 
-源码：[declarative-family.ts · 773–783 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L773-L783)。
-
 | 领域模块 | 实际入口 | 领域差异 |
 | --- | --- | --- |
 | `declarative-protocol-domain.ts` | `compileDeclarativeProtocolDomain()` | candidate kinds、行为证明要求、可选 oracle victim |
@@ -157,6 +157,8 @@ const definition = {
 ### 1.3 可选模块：格式能统一，能力不会凭空出现
 
 `declarative-modules.ts → createDeclarativeModuleCatalog().read()` 把缺失模块显示为 `{}`，保留旧 JSON 的兼容性：
+
+**代码出处** [declarative-modules.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L60-L67) · `createDeclarativeModuleCatalog() → read()`
 
 ```typescript
 const block = Object.hasOwn(raw, key) ? raw[key] : {};
@@ -174,9 +176,9 @@ if (!contract)
   throw new Error(`unknown declarative module version: ${key}`);
 ```
 
-源码：[declarative-modules.ts · 60–67 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L60-L67)。
-
 依赖决定能否编译：
+
+**代码出处** [declarative-modules.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L78-L90) · `createDeclarativeModuleCatalog() → read() → visit()`
 
 ```typescript
 if (visiting.has(key))
@@ -209,8 +211,6 @@ const row = freeze({
 }) as ModuleCoverage;
 ```
 
-源码：[declarative-modules.ts · 78–90 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L78-L90)。
-
 这是**内存中的统一视图**，不会自动回写源 JSON，更不会替作者补业务定义。
 
 ```json
@@ -239,6 +239,8 @@ const row = freeze({
 
 同一个 lineage 现在可以有多个模型，但每个 variant `id` 必须唯一，主/子定义必须覆盖声明的 lineage。运行时不猜模型：
 
+**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L209-L213) · `createDeclarativeFamilyRuntime() → select()`
+
 ```typescript
 function select(descriptor: Data): Variant {
   const matches = variants.filter(
@@ -249,8 +251,6 @@ function select(descriptor: Data): Variant {
   return matches[0]!;
 }
 ```
-
-源码：[declarative-family.ts · 209–213 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L209-L213)。
 
 这要求各变体 `match` 恰好命中一个。不能靠换一个 ID 绕过真实身份。
 
@@ -263,6 +263,8 @@ function select(descriptor: Data): Variant {
 **主文件：** `declarative-discovery.ts`。**产物：** `DiscoverySemantics`，不是已准入实例。
 
 `compileDeclarativeDiscovery()` 把签名变成已有发现引擎使用的 pattern：
+
+**代码出处** [declarative-discovery.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L96-L103) · `compileDeclarativeDiscovery()`
 
 ```typescript
 callPatterns: d.calls.map((c) => ({
@@ -294,8 +296,6 @@ reverseBinding: explicitReverseBindingUnsupported(
   "no reverse-binding registry declared (explicit unsupported)",
 ),
 ```
-
-源码：[declarative-discovery.ts · 96–103 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L96-L103)。
 
 **实际节选：ERC4626。**
 
@@ -366,6 +366,8 @@ Discovery v2 支持嵌套 ABI 路径、派生标量、有限候选展开，仍�
 
 公共展开核心：
 
+**代码出处** [declarative-discovery.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L258-L262) · `compileMappedDiscovery() → expand()`
+
 ```typescript
 function expand<
   T extends { declaration: MappedPattern; pattern: { id: string } },
@@ -387,8 +389,6 @@ function expand<
   );
 }
 ```
-
-源码：[declarative-discovery.ts · 258–262 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L258-L262)。
 
 一个声明上限 N 产生 N 个匹配位置，实际数组较短时多余位置不产生候选；超过上限整条拒绝，不截断。当前单处上限 128、总 pattern 上限 1024，fan-out 数据上限 64 KiB。派生 poolId 可以用 `abiEncode/codeHash`，但 subject 不能由任意表达式伪造。
 
@@ -436,6 +436,8 @@ function expand<
 
 公共模板替换的是数据槽，不是动态函数：
 
+**代码出处** [declarative-definition.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-definition.ts#L36-L39) · `expandConversionDefinition() → expand()`
+
 ```typescript
 if (Object.prototype.hasOwnProperty.call(value, "parameter")) {
   if (Object.keys(value).length !== 1)
@@ -443,8 +445,6 @@ if (Object.prototype.hasOwnProperty.call(value, "parameter")) {
   return lookup(value.parameter);
 }
 ```
-
-源码：[declarative-definition.ts · 36–39 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-definition.ts#L36-L39)。
 
 ### 3.2 Custodian 与 InfiniFi：不同身份关系，同一个展开器
 
@@ -511,6 +511,8 @@ if (Object.prototype.hasOwnProperty.call(value, "parameter")) {
 
 `normalizeDeclarativeVariant()` 将可读的 reads、models 规范化；`expandConversionAdmission()` 生成公共解释器消费的阶段和结果：
 
+**代码出处** [declarative-variant.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-variant.ts#L157-L169) · `normalizeDeclarativeVariant()`
+
 ```typescript
 for (const stage of ["match", "surface", "dependencies", "active"]) {
   const config = definition.admission[stage];
@@ -547,13 +549,13 @@ const expanded = {
 validateDeclarativeValue(expanded);
 ```
 
-源码：[declarative-variant.ts · 157–169 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-variant.ts#L157-L169)。
-
 这里的 runtime class/hash 是身份资料的一部分；是否支持方向仍要看关联关系、权限、容量和 active proof。常量中的基础设施地址不是实例 allowlist。标准定义内出现 StakedUSDat 的特殊实现识别资料，也不代表 StakedUSDat 被并入 ERC4626；它仍有独立 Family 身份和入口。
 
 ### 3.3 TS 怎样执行这些阶段
 
 `declarative-identity.ts` 用 `select` 决定当前阶段，再解释该阶段的 requests：
+
+**代码出处** [declarative-identity.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L99-L111) · `compileDeclarativeIdentity() → stage() / buildRequests()`
 
 ```typescript
 const stage = (step: Value) => {
@@ -579,9 +581,9 @@ function buildRequests(step: Value): readonly AdapterRequest[] {
 }
 ```
 
-源码：[declarative-identity.ts · 99–111 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L99-L111)。
-
 请求交给现有 issuer 执行，回来后解码、判断是否继续或完成：
+
+**代码出处** [declarative-identity.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L119-L124) · `compileDeclarativeIdentity() → decode() / decide()`
 
 ```typescript
 decode: ({ step, results, assets }) => {
@@ -601,8 +603,6 @@ decide: (step) => {
   return freeze(run(doc.identity.decide, environment(step)));
 },
 ```
-
-源码：[declarative-identity.ts · 119–124 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L119-L124)。
 
 `decide` 产生 continue、verified、retryable 或拒绝等合同结果。协议的返回错误码、条件和 reason 可以写在 JSON；RPC 失败和业务拒绝仍须按请求结果区分，不能把所有错误都变成通过或永久拒绝。
 
@@ -624,6 +624,8 @@ decide: (step) => {
 公共 identity 仅在声明时挂接 hook；`adapter-family-runtime.ts` 的现有 metadata authority 负责读取并传回 `assets`。没有声明时不新增读取，旧 JSON 仍可使用自己的局部变量名 `assets`。
 
 行为模拟也复用同一份执行声明。`declarative-simulation.ts → buildDeclarativeExecutionSimulation()` 先编译 runtime leg，再产出标准模拟请求：
+
+**代码出处** [declarative-simulation.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-simulation.ts#L66-L80) · `buildDeclarativeExecutionSimulation()`
 
 ```typescript
 const tokens = [
@@ -673,8 +675,6 @@ return Object.freeze({
 });
 ```
 
-源码：[declarative-simulation.ts · 66–80 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-simulation.ts#L66-L80)。
-
 内部的 `declarative-execution-simulation` 在 Family 编译层被转成上述普通请求；中央不认识这个伪请求类型，也不需要协议分支。模拟器返回的数据经请求/来源绑定后才能形成证明。只有 code hash、函数存在、接口返回正常，都不等于实际扣款/到账已验证。
 
 ## 4. 实例与方向：把已验证身份投影成稳定绑定
@@ -682,6 +682,8 @@ return Object.freeze({
 ### 4.1 Identity → Descriptor
 
 **主文件：** `declarative-family.ts`。公共层直接消费 `instance` 定义：
+
+**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L341-L352) · `createDeclarativeFamilyRuntime() → instance`
 
 ```typescript
 const instance: InstanceSemantics<Identity, Descriptor> = {
@@ -709,8 +711,6 @@ const instance: InstanceSemantics<Identity, Descriptor> = {
   staticBindingProjection: projection,
 };
 ```
-
-源码：[declarative-family.ts · 341–352 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L341-L352)。
 
 **实际节选：ERC4626 实例键和身份绑定投影。**
 
@@ -787,6 +787,8 @@ Descriptor 保存从 identity 得到的 vault/asset/share、lineage、已证明�
 
 公共投影核心：
 
+**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L246-L263) · `createDeclarativeFamilyRuntime() → projectRoutes()`
+
 ```typescript
 rootRun(document.routes.descriptorChecks, env);
 const fingerprint = hashCanonical(projection(descriptor));
@@ -833,11 +835,11 @@ if (
   throw new Error("duplicate declared route key");
 ```
 
-源码：[declarative-family.ts · 246–263 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L246-L263)。
-
 方向可以是固定数组，也可以用公共表达式从 descriptor 生成；结果仍须满足唯一 route key、不同 token、合法领域和绑定合同。`executionAssets` 显式说明底层腿使用 ERC20 还是 native，不靠 token 名字猜。
 
 每次报价或执行前都重新核对调用的路线：
+
+**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L275-L282) · `createDeclarativeFamilyRuntime() → assertInvocation()`
 
 ```typescript
 function assertInvocation(descriptor: Descriptor, route: Route): void {
@@ -854,8 +856,6 @@ function assertInvocation(descriptor: Descriptor, route: Route): void {
 }
 ```
 
-源码：[declarative-family.ts · 275–282 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L275-L282)。
-
 随后 `routes.projectGraph()` 只返回 `routeActionAdapterId / executionTarget / venueIdentity / centralScoreKey`。Ready/Graph 的发布权仍在中央，JSON 不能直接宣称自己已经 admitted。
 
 ## 5. 价格更新：读取、数学、变化依赖各有明确位置
@@ -863,6 +863,8 @@ function assertInvocation(descriptor: Descriptor, route: Route): void {
 ### 5.1 公共值解释器怎样读 JSON
 
 `declarative-values.ts → compileDeclarativeValues()` 提供 `evaluate()` 和 `run()`：前者求值字段、条件、集合与 ABI 参数，后者执行已校验的声明语句。JSON 里的 `$descriptor.asset` 是绑定字段引用；`op` 只能来自公共层已支持的集合。
+
+**代码出处** [declarative-values.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-values.ts#L111-L126) · `compileDeclarativeValues() → evaluateInternal()`
 
 ```typescript
 if (++budget > 100000)
@@ -890,8 +892,6 @@ if (typeof x === "string" && x.startsWith("$")) {
 if (Array.isArray(x)) return x.map((v) => evaluateInternal(v, env));
 if (!x || typeof x !== "object") return x;
 ```
-
-源码：[declarative-values.ts · 111–126 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-values.ts#L111-L126)。
 
 操作包括 `encode/decodeCanonical`、有界集合/条件、`abiEncode/create2Address/decodeErrorCanonical` 等。无 `eval`、任意模块加载或 handler 回调；每次求值有预算。错误引用、循环表达式和非无损 JSON 会被拒绝。
 
@@ -950,6 +950,8 @@ if (!x || typeof x !== "object") return x;
 
 公共当前读取有两种已存在的声明形式：简单 `readPrograms.quote`，或可选 `modules.pricingFlow`：
 
+**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L489-L499) · `createDeclarativeFamilyRuntime() → pricing.current.buildRequests()`
+
 ```typescript
 buildRequests(input) {
   const v = select(input.descriptor);
@@ -977,8 +979,6 @@ buildRequests(input) {
 },
 ```
 
-源码：[declarative-family.ts · 489–499 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L489-L499)。
-
 公共层核对结果来源，组装 snapshot，再调用 `deriveMids()`。若有 `pricingProjection`，由 `declarative-pricing-projection.ts` 验证其 rows 与路线的对应关系；没有时使用已绑定的采样报价生成 mid。raw mid 与指定金额 effective 不是同一个值，effective 继续消费 Exact 能力。
 
 ### 5.3 多步调用：步骤由 JSON 列出，TS 只推进依赖
@@ -1004,6 +1004,8 @@ buildRequests(input) {
 源码：[balancer-v1.json](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/swaps/balancer-v1-family/balancer-v1.json)。
 
 公共 `declarative-read-flow.ts` 推进下一步的核心：
+
+**代码出处** [declarative-read-flow.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-read-flow.ts#L156-L164) · `compileDeclarativeReadFlow() → program.buildDependentProgram()`
 
 ```typescript
 requirements: (input: ReadFlowInput) =>
@@ -1034,8 +1036,6 @@ buildDependentProgram({
 },
 ```
 
-源码：[declarative-read-flow.ts · 156–164 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-read-flow.ts#L156-L164)。
-
 结果按 request ID、轮次和 canonical source 严格重建，不接受缺轮、重复结果或跨块拼接。TS 没有写“该协议固定调用两次”；不过公共读取预算和各领域 issuer 的轮次上限仍然有效，不能把“可配置步数”写成无限调用。
 
 ### 5.4 本地数学是独立模块，JSON 只绑定入口
@@ -1062,6 +1062,8 @@ buildDependentProgram({
 
 `declarative-math.ts → createDeclarativeMathRegistry().bind()` 从静态注册表取 model，并检查输入输出：
 
+**代码出处** [declarative-math.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-math.ts#L39-L47) · `createDeclarativeMathRegistry() → bind()`
+
 ```typescript
 const model = entries.get(`${binding.model}@${binding.version}`);
 if (!model)
@@ -1086,8 +1088,6 @@ return [
 ];
 ```
 
-源码：[declarative-math.ts · 39–47 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-math.ts#L39-L47)。
-
 JSON 使用 `{"op":"model","args":["spotPrice", "输入表达式"]}` 形式引用别名；这里的“输入表达式”是格式说明，不是可直接运行的数据。数学 TS 不接收 RPC 或调度器。
 
 交易内数学另走 `modules.executionMath`、`declarative-runtime-math.ts` 与静态 model 注册表：数学模型展开为受支持的 VM 运算，公共编译器分配寄存器。不能把链外 TypeScript 函数塞进链上程序。
@@ -1095,6 +1095,8 @@ JSON 使用 `{"op":"model","args":["spotPrice", "输入表达式"]}` 形式引�
 ### 5.5 触碰刷新与可用性
 
 `refreshPolicy` 可以是 `on-touch` 或 `each-block`。`dependencies` 表示状态依赖，`mutationAddresses / mutationKinds / mutationPredicate` 把观察映射到受影响 state key：
+
+**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L582-L592) · `createDeclarativeFamilyRuntime() → pricing.mutation.affectedStateKeys()`
 
 ```typescript
 affectedStateKeys(input) {
@@ -1120,8 +1122,6 @@ affectedStateKeys(input) {
     : [];
 },
 ```
-
-源码：[declarative-family.ts · 582–592 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L582-L592)。
 
 这些声明由已有价格生命周期消费。缺失/失败的读取、`classifyUnavailable` 的状态性拒绝与无变化复用分别处理；不能仅凭定义写了 dependencies 就声称整个生产刷新链已验证。
 
@@ -1182,6 +1182,8 @@ affectedStateKeys(input) {
 
 `declarative-family.ts` 根据所选 variant 生成 `ExactQuoteSemantics.methods()`；request-program 的请求来自定义：
 
+**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L646-L657) · `createDeclarativeFamilyRuntime() → exact.methods() → program.buildRequests()`
+
 ```typescript
 buildRequests(input) {
   assertInvocation(input.descriptor, input.route);
@@ -1207,8 +1209,6 @@ buildRequests(input) {
 },
 ```
 
-源码：[declarative-family.ts · 646–657 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L646-L657)。
-
 报价结果携带 source、amountIn/out、route/binding、适用 caller 等证据。`decodeExact()` 检查原始整数值，并运行协议声明的 outputChecks。正输入返回零输出时必须有明确 unavailableReason；不能把零报价当成一次可执行兑换。
 
 ### 6.2 链式报价证明与特殊返回
@@ -1216,6 +1216,8 @@ buildRequests(input) {
 `modules.quoteFlow` 可选 `view / effect-simulation / local-math`。前两种需要实际请求证据，不能仅在 JSON 中写一个输出数字。
 
 `declarative-quote-proof.ts` 对 view proof 绑定调用目标、caller、输入和输出：
+
+**代码出处** [declarative-quote-proof.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-quote-proof.ts#L183-L199) · `verifyDeclarativeQuoteProof()`
 
 ```typescript
 if (proof.requestBinding) {
@@ -1242,8 +1244,6 @@ if (proof.inputBinding) {
 if (decoded.callAmount !== expectedInput || decoded.output !== amountOut)
   throw new Error("chain quote proof input or output amount mismatch");
 ```
-
-源码：[declarative-quote-proof.ts · 183–199 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-quote-proof.ts#L183-L199)。
 
 **格式示意：v2 链式证明。**
 
@@ -1284,6 +1284,8 @@ if (decoded.callAmount !== expectedInput || decoded.output !== amountOut)
 
 Protocol 的可选 `modules.oracleVictim` 由领域模块统一消费：
 
+**代码出处** [declarative-protocol-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-protocol-domain.ts#L12-L18) · `compileDeclarativeProtocolDomain()`
+
 ```typescript
 if (Object.hasOwn(raw, "oracleVictim"))
   throw new Error(
@@ -1302,9 +1304,9 @@ return {
 } as ProtocolDomainSemantics;
 ```
 
-源码：[declarative-protocol-domain.ts · 12–18 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-protocol-domain.ts#L12-L18)。
-
 Swap 在 `swap.events/calls/receiptReads` 中定义观察。没有 ABI 的 topic 必须保持 unresolved：
+
+**代码出处** [declarative-swap-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-swap-domain.ts#L27-L37) · `compileDeclarativeSwap() → events.map()`
 
 ```typescript
 if (spec.topic !== undefined) {
@@ -1340,11 +1342,11 @@ if (spec.topic !== undefined) {
 }
 ```
 
-源码：[declarative-swap-domain.ts · 27–37 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-swap-domain.ts#L27-L37)。
-
 `victimSupport` 的 none/detect-only/local-apply/overlay/replay 有各自必需声明；看见日志不等于具备 victim replay。mutation-only 需要说明原因，不伪造金额影响。
 
 Credit 使用 `credit.risk.evidence/proof` 与 position 合同。它的公共实现先重建同源证据，再验证实际 position simulation：
+
+**代码出处** [declarative-credit-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-credit-domain.ts#L166-L177) · `compileDeclarativeCreditDomain() → verifyProof()`
 
 ```typescript
 const { request, result } = reconstructed.proof,
@@ -1380,8 +1382,6 @@ if (
   );
 ```
 
-源码：[declarative-credit-domain.ts · 166–177 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-credit-domain.ts#L166-L177)。
-
 当前声明式 Credit 不自动提供普通兑换 runtime leg；`buildFragment()` 需要 risk proof。它也不等于新增借款策略授权。三领域共享验证/读取原语，领域的必要语义仍分别检查。
 
 ## 7. quoted / runtime：同一动作定义，两个接口
@@ -1389,6 +1389,8 @@ if (
 ### 7.1 中央只调用标准接口
 
 无论插件由 JSON 编译还是手写 TS，中央的 `buildFamilyRuntimeAmountLeg()` 都取同一个槽：
+
+**代码出处** [adapter-family-runtime.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/adapter-family-runtime.ts#L2787-L2796) · `buildFamilyRuntimeAmountLeg()`
 
 ```typescript
 const builder = input.family.plugin.execution.buildRuntimeLeg;
@@ -1417,13 +1419,13 @@ const leg = builder(
 );
 ```
 
-源码：[adapter-family-runtime.ts · 2787–2796 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/adapter-family-runtime.ts#L2787-L2796)。
-
 quoted 路径从同 session 签发的 Exact handle 取金额和证据，再调用 `plugin.execution.buildFragment()`；不允许拿另一条路线、另一调用者的报价替换。`StrictProductionRuntimeSession` 是这两个入口的上层包装，Family 不自建执行调度器。
 
 ### 7.2 JSON 插件如何接这两个接口
 
 `declarative-family.ts` 的 runtime 实现选择模型、构造环境，然后调用公共执行编译器：
+
+**代码出处** [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L735-L740) · `createDeclarativeFamilyRuntime() → execution.buildRuntimeLeg()`
 
 ```typescript
 const v = select(input.descriptor);
@@ -1440,8 +1442,6 @@ return buildDeclarativeRuntimeLeg(v.execution, env, v.values, {
   math: v.modules.get<BoundRuntimeMath>("executionMath"),
 });
 ```
-
-源码：[declarative-family.ts · 735–740 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L735-L740)。
 
 quoted 实现先验证 Exact/risk 证据，再调用同一个 `executionProgram()`，返回含 `runtimeAmountProgram` 的 fragment node。两条路径共享执行声明，但证据入口不同；runtime 构造不先调用链外 Exact 填下一跳金额。
 
@@ -1492,6 +1492,8 @@ quoted 实现先验证 Exact/risk 证据，再调用同一个 `executionProgram(
 
 v2 多步声明写 `steps` 数组。步骤可包含条件、普通 call、math 或 frame；公共层展开集合并挑选命中的步骤：
 
+**代码出处** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L243-L259) · `selectExecutionSteps()`
+
 ```typescript
 const declarations = definition.steps.flatMap((step: Value) => {
   if (step.op === undefined) return [step];
@@ -1531,13 +1533,13 @@ if (
   throw new Error("selected execution requires a state-changing step");
 ```
 
-源码：[declarative-execution.ts · 243–259 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L243-L259)。
-
 `steps/effects` 顶层仍为数组，其中元素可使用已有 `map/concat` 产生有限列表。最终各至多 64 项，且仍受 VM 寄存器和指令预算约束。调用几步由 JSON 定义，不为每个协议写固定步骤 TS。
 
 ### 7.4 runtime 参数如何进入 calldata
 
 `declarative-call-codec.ts → encodeDeclarativeCall()` 先按 ABI 编码占位值，再递归查 tuple/array 的真实偏移，记录动态 patch：
+
+**代码出处** [declarative-call-codec.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-call-codec.ts#L87-L100) · `encodeDeclarativeCall() → walk()`
 
 ```typescript
 function walk(type: ParamType, value: any, at: number): void {
@@ -1569,8 +1571,6 @@ function walk(type: ParamType, value: any, at: number): void {
   }
 }
 ```
-
-源码：[declarative-call-codec.ts · 87–100 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-call-codec.ts#L87-L100)。
 
 `declarative-execution.ts → emit()` 将 patch 连接到本次执行的 runtime word。窄 `uintN/intN` 只有检查型消费者才能使用；CALL 前验证无符号范围和完整符号扩展，不做截断。普通未启用检查的 codec 消费者保持原有限制。
 
@@ -1605,6 +1605,8 @@ function walk(type: ParamType, value: any, at: number): void {
 源码：[erc4626.json](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/protocols/erc4626-family/erc4626.json)。
 
 公共编译器在调用前后测量对应账户余额，计算 delta，再应用约束：
+
+**代码出处** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L485-L496) · `buildDeclarativeExecutionProgram() → assertEffects()`
 
 ```typescript
 const before = `${prefix}${index}Before`,
@@ -1659,8 +1661,6 @@ if (
   check(reference(delta), "gte", effect.minimum);
 ```
 
-源码：[declarative-execution.ts · 485–496 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L485-L496)。
-
 因此“返回 output”与“实际到账”是两个事实。JSON 可按真实语义声明等值、下限或方向，但不能用零扣款冒充兑换、消耗旧库存补足输出或放宽最终偿还。
 
 普通 ERC20 多输出要求唯一 `role: "route-output"`，额外资产为 `side-output` 且各有 minimum/equals。它们分别验证新到账；side-output 不自动成为下一跳或利润。当前不支持把多输出与 native/callback/延迟付款混用，也不支持无限大篮子。
@@ -1672,6 +1672,8 @@ if (
 `declarativeSettlementCapabilities()` 根据实际动作与资产边界生成能力；`supportsDeclarativeSettlement()` 对本次请求判定；不支持时返回 null，不能默默把外部收款变成付给 executor。
 
 公共 runtime 包装入口：
+
+**代码出处** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L928-L937) · `buildDeclarativeRuntimeLeg()`
 
 ```typescript
 export function buildDeclarativeRuntimeLeg(
@@ -1703,8 +1705,6 @@ export function buildDeclarativeRuntimeLeg(
 }
 ```
 
-源码：[declarative-execution.ts · 928–937 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L928-L937)。
-
 | 定义 | 含义 | 当前限制 |
 | --- | --- | --- |
 | `settlement.directOutput` | 调用可将本腿输出交给指定接收者 | 必须验证实际接收者与新到账；原生币边界另有约束 |
@@ -1720,6 +1720,8 @@ export function buildDeclarativeRuntimeLeg(
 简单 deferred 由 `declarative-callback.ts` 编译；结构化 frame 由 `declarative-callback-frames.ts` 编译。JSON 定义 ABI、捕获字段、caller/selector、债务、付款目标和步骤，公共层负责校验、生成程序和接 continuation。
 
 frame 内的 selector 校验由公共层自动加入，JSON 不能覆盖：
+
+**代码出处** [declarative-callback-frames.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-callback-frames.ts#L285-L288) · `emitDeclarativeCallbackFrame()`
 
 ```typescript
 // Selector capture is internal and cannot be supplied/overwritten by JSON.
@@ -1742,8 +1744,6 @@ for (const [name, value] of Object.entries(cb.captures))
   ops.push({ kind: "seed", name, value });
 ```
 
-源码：[declarative-callback-frames.ts · 285–288 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-callback-frames.ts#L285-L288)。
-
 caller/target、传入参数绑定、债务与付款顺序还在该文件其余校验/emit 路径验证；上面只是其中一段，不是完整 callback 安全模型。一般 hook/unlock 回调不自动等于“先出款后付款”，必须由实际行为与声明证明。
 
 `quoteOutput` 的局部变量只能通过显式 exports 暴露给执行步骤；未导出的内部捕获不能被 JSON 步骤引用。`executionMath` 只能展开数学运算，不能借此夹带 call、approval 或 callback。
@@ -1757,6 +1757,8 @@ Family JSON 声明底层调用的 native 语义及参数，公共层承担统一
 ### 8.4 action 编码同样公共化
 
 根 `actionAdapters` 提供所属 action 的描述与 trace 匹配签名，公共层生成 ActionAdapter。最终 `encode()` 消费已生成的程序：
+
+**代码出处** [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L959-L966) · `createDeclarativeProgramAction() → action.matchTrace() / action.encode()`
 
 ```typescript
 matchTrace: (target, selector) =>
@@ -1778,8 +1780,6 @@ encode(node, _executor, inner) {
 },
 ```
 
-源码：[declarative-execution.ts · 959–966 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L959-L966)。
-
 所以删除旧 Family `execution.ts` 时，还要迁移原 action 的注册和所有权引用。生成入口与公共 action 编码器仍是生产依赖，不能一起删。
 
 ### 8.5 同一套测试，按能力覆盖
@@ -1787,6 +1787,8 @@ encode(node, _executor, inner) {
 **代码引擎共用，真实样本按 Family/方向/变体保存。** 主入口是 `test:family-json`；Protocol/Swap 同状态单腿入口是 `accept:family-json`（兼容名称 `accept:protocol-json`），共同消费 `protocol-json-acceptance.ts`。`check:protocol-json-samples` 与 `check:swap-json-samples` 只检查样本完整性，不执行交易。
 
 统一执行入口先构造 runtime，再单独报价与构造 quoted，避免 runtime 偷偷借报价结果：
+
+**代码出处** [protocol-json-acceptance.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/test/protocol-json-acceptance.ts#L131-L143) · `runProtocolJsonAcceptance()`
 
 ```typescript
 assert(
@@ -1842,8 +1844,6 @@ if (quote.status !== "resolved")
   throw new Error("amount quote unavailable");
 ```
 
-源码：[protocol-json-acceptance.ts · 131–143 行](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/test/protocol-json-acceptance.ts#L131-L143)。
-
 这个 runner 读取源块/hash/actor、核对实际 Graph，并分别执行 quoted/runtime 及适用 direct-output。没有覆盖全部方向时保留 incomplete。当前它显式拒绝把 callback 单腿测试当成回调结算验收；回调使用现有公共 callback 套件。Credit 另有领域风险证明测试，不能拿普通兑换 runner 强塞过去。
 
 数学、source、余额、回调和模块等回归属于同一公共测试体系的不同模块；不是每个 Family 都再写一套测试引擎。真实 TX、金额、方向和边界期望留在测试目录 JSON。迁移验收完成后，旧专属测试中有效的事实转到公共套件/样本，再删除重复旧测试及无引用的旧实现。当前文档更新没有执行删除，也不宣称历史样本已重新验收。
@@ -1854,102 +1854,7 @@ if (quote.status !== "resolved")
 
 本批仍未提供大篮子嵌套程序、通用 runtime-evidence producer/EIP-712 授权机制、全部 reverse binding 或所有 runtime revert-quoter。需要它们的族应保留具体缺项；其余族可继续使用已具备的基础能力。
 
-## 公共模块与原 Family 文件的对应位置
-
-| 原职责 | JSON 定义 | 公共实现 |
-| --- | --- | --- |
-| `manifest.ts` / 生产入口 | `manifest / production / variantFiles` | `build-declarative-production.ts`、`declarative-family.ts` |
-| 手写类型 | `types.definitions / contracts` | `declarative-types.ts` 生成类型 |
-| `abi.ts` | `abi`、call/event signature | `declarative-values.ts`、`declarative-call-codec.ts`、`declarative-event-codec.ts` |
-| `discovery.ts` / capture | `discovery.definition` | `declarative-discovery.ts`、`declarative-nomination.ts`、`capture-materialization.ts` |
-| `identity.ts` | `identity.definition` 或 `admission/models/requestSets` | `declarative-definition.ts`、`declarative-variant.ts`、`declarative-conversion-admission.ts`、`declarative-identity.ts` |
-| runtime class / 合约字节码资料 | code/storage 读取、`bytes/maskHash/codeHash` 定义 | `declarative-values.ts`、`declarative-variant.ts`；`declarative-bytecode.ts` 识别有限 getter 形状，不单凭 class 放行 |
-| 数学与试算数据保护 | 数学输入/输出、trial state | `declarative-immutable.ts` 冻结并校验数据与受控 Map；它不是 Solidity immutable 解析器 |
-| `instance.ts` | `instance`、可选 `instanceEvidence` | `declarative-family.ts`、`declarative-instance-evidence.ts` |
-| `routes.ts` | `routes`、direction/taxonomy/asset boundaries | `declarative-family.ts`，中央绑定/发布 |
-| `pricing.ts` | `pricing`、`pricingFlow / pricingProjection / liveStateProjection` | `declarative-family.ts`、`declarative-read-flow.ts`、`declarative-pricing-projection.ts` |
-| `exact.ts` | `exact`、`quoteFlow / trialState` | `declarative-family.ts`、`declarative-quote-proof.ts`、`declarative-trial-state.ts` |
-| `math.ts` | `modules.math.entries` | 独立数学 TS＋`declarative-math.ts`；注册在 `declarative-math-models.ts` |
-| 交易内数学 | `modules.executionMath.entries` | `declarative-runtime-math.ts`、`declarative-runtime-math-models.ts` |
-| `execution.ts` | `execution`、`effects`、`quoteOutput / executionProjection` | `declarative-execution.ts`、`declarative-call-codec.ts` |
-| callback/结算 | `deferred / frame / framedSettlement` | `declarative-callback.ts`、`declarative-callback-frames.ts`、共用资产边界 |
-| 主动行为模拟 | 模拟请求、观察与效果约束 | `declarative-simulation.ts`＋现有 issuer/backend |
-| `protocol.ts` | `protocol`、可选 `oracleVictim` | `declarative-protocol-domain.ts`、`declarative-oracle-victim.ts` |
-| `swap.ts` | `swap.events/calls/receiptReads/victimSupport` | `declarative-swap-domain.ts` |
-| Credit 风险/仓位 | `credit.risk / position` | `declarative-credit-domain.ts` |
-| action adapter | `actionAdapters` | `createDeclarativeProgramAction()` |
-| 可选能力演进 | `modules`，缺省为空 | `declarative-modules.ts`、`declarative-family-modules.ts` |
-| 测试 | 测试目录内真实样本、方向、金额、边界数据 | 公共 `test:family-json` 与领域对应事实验收模块 |
-
 `declarative-protocol.ts / declarative-swap.ts / declarative-credit.ts` 是领域薄入口；`declarative-protocol-modules.ts` 是旧名称兼容导出。它们不是各自复制一份生命周期实现。JSON 的顶层 domain、子定义 version、execution version、可选模块 version 各有自己的合同，不能混成一个版本号。
-
-## 实际函数调用顺序
-
-箭头表示真实调用/装配关系，不表示一个同步函数会从发现一直跑到执行。
-
-```text
-1. 生产注册
-   build-declarative-production.syncDeclarativeProductionEntries()
-     → renderDeclarativeProductionEntry() → renderDataFamilyEntry()
-     → 生成 production entry / 可选类型
-   生成入口 → compileDeclarativeProtocol / Swap / Credit()
-     → createDeclarativeFamilyRuntime()
-     → normalizeDeclarativeVariant() / readFamilyModules()
-     → defineProtocolFamily / SwapFamily / CreditFamily()
-     → FamilyCapabilityCatalog
-
-2. 发现
-   compileDeclarativeDiscovery()
-     → compileAddressDiscovery() 或 compileMappedDiscovery()
-     → capture / nomination / decodeCandidate()
-     → 候选交给既有 identity 生命周期
-
-3. 身份
-   expandConversionDefinition() 或 expandConversionAdmission()
-     → compileDeclarativeIdentity()
-     → requirements() → buildRequests() → 中央 issuer
-     → decode() → decide() → VerifiedIdentity
-
-4. 实例与方向
-   instance.instanceKey() → compileDraft()
-     → 可选 instanceEvidence → finalizeDescriptor()
-   routes.project() → projectRoutes() → projectGraph()
-     → 已绑定实例与方向交给中央 Ready/Graph 发布
-
-5. 价格
-   pricing.compileDraft() → staticEvidence → finalizePricingDescriptor()
-   pricing.current.buildRequests() / buildDependentProgram()
-     → readPrograms 或 compileDeclarativeReadFlow()
-     → 中央 issuer → decodeSnapshot() → deriveMids()
-   pricing.mutation.compile() → 受影响 state key
-
-6. Exact
-   executeFamilyExactQuote() → plugin.exact.methods()
-     → 请求程序或 local trial-state
-     → decodeExact() → 可选 verifyDeclarativeQuoteChain()
-     → 同来源、同输入的 Exact 证据/句柄
-   Credit → compileDeclarativeCreditDomain() → risk proof
-
-7. 模拟执行时选择 Family 函数
-   StrictProductionRuntimeSession.buildRuntimeAmountLeg()
-     → buildFamilyRuntimeAmountLeg()
-     → plugin.execution.buildRuntimeLeg()
-     → buildDeclarativeRuntimeLeg()
-   StrictProductionRuntimeSession.buildExecution()
-     → buildFamilyExecutionFragment()
-     → plugin.execution.buildFragment()
-     → executionProgram()
-   两者 → buildDeclarativeExecutionProgram()
-     → encodeDeclarativeCall() → emit() → RuntimeAmountProgram
-
-8. 结算与编码
-   supportsDeclarativeSettlement() / declarativeSettlementCapabilities()
-   deferred → emitDeclarativeDeferredExecution()
-   frame → emitDeclarativeCallbackFrame()
-   中央共用 applyRuntimeAssetBoundary / applyQuotedAssetBoundary
-   quoted node → createDeclarativeProgramAction().action.encode()
-     → encodeRuntimeAmountNode()
-```
 
 ## 完整定义与源码入口
 
@@ -1962,3 +1867,110 @@ if (quote.status !== "resolved")
 - [公共 Family 核心](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts)
 - [能力字段目录](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family-modules.ts)
 - [公共能力补丁及尚未支持的边界](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/docs/research/design/family-common-capabilities-20261102.md)
+
+
+## 实际函数调用顺序
+
+箭头表示各阶段内部的调用或装配关系。章节编号与正文一致。
+
+生产注册大纲笔记「辅助下完成大纲」对应 `renderDataFamilyEntry()` 和 `createDeclarativeFamilyRuntime()`。
+
+```text
+1. 生产注册
+   build-declarative-production.syncDeclarativeProductionEntries()
+     → renderDeclarativeProductionEntry() → renderDataFamilyEntry()
+     → 生成 production entry / 可选类型
+   生成入口 → compileDeclarativeProtocol / Swap / Credit()
+     → createDeclarativeFamilyRuntime()
+     → normalizeDeclarativeVariant() / readFamilyModules()
+     → defineProtocolFamily / SwapFamily / CreditFamily()
+     → FamilyCapabilityCatalog()
+
+2. 候选发现
+   compileDeclarativeDiscovery()
+     → compileAddressDiscovery() 或 compileMappedDiscovery()
+     → capture / nomination / decodeCandidate()
+     → 候选交给既有 identity 生命周期
+
+3. 身份与行为证明
+   expandConversionDefinition() 或 expandConversionAdmission()
+     → compileDeclarativeIdentity()
+     → requirements() → buildRequests() → 中央 issuer
+     → decode() → decide() → VerifiedIdentity
+
+4. 实例与方向绑定
+   instance.instanceKey() → compileDraft()
+     → 可选 instanceEvidence → finalizeDescriptor()
+   routes.project() → projectRoutes() → projectGraph()
+     → 已绑定实例与方向交给中央 Ready/Graph 发布
+
+5. 价格更新
+   pricing.compileDraft() → staticEvidence → finalizePricingDescriptor()
+   pricing.current.buildRequests() / buildDependentProgram()
+     → readPrograms 或 compileDeclarativeReadFlow()
+     → 中央 issuer → decodeSnapshot() → deriveMids()
+   pricing.mutation.compile() → 受影响 state key
+
+6. 指定金额 Exact
+   executeFamilyExactQuote() → plugin.exact.methods()
+     → 请求程序或 local trial-state
+     → decodeExact() → 可选 verifyDeclarativeQuoteChain()
+     → 同来源、同输入的 Exact 证据/句柄
+   Credit → compileDeclarativeCreditDomain() → risk proof
+
+7. quoted / runtime 执行
+   StrictProductionRuntimeSession.buildRuntimeAmountLeg()
+     → buildFamilyRuntimeAmountLeg()
+     → plugin.execution.buildRuntimeLeg()
+     → buildDeclarativeRuntimeLeg()
+   StrictProductionRuntimeSession.buildExecution()
+     → buildFamilyExecutionFragment()
+     → plugin.execution.buildFragment()
+     → executionProgram()
+   两者 → buildDeclarativeExecutionProgram()
+     → encodeDeclarativeCall() → emit() → RuntimeAmountProgram
+
+8. 收款、回调、原生币与共用测试
+   supportsDeclarativeSettlement() / declarativeSettlementCapabilities()
+   deferred → emitDeclarativeDeferredExecution()
+   frame → emitDeclarativeCallbackFrame()
+   中央共用 applyRuntimeAssetBoundary / applyQuotedAssetBoundary
+   quoted node → createDeclarativeProgramAction().action.encode()
+     → encodeRuntimeAmountNode()
+```
+
+## 正文代码出处索引
+
+按正文小节排列。点击文件名可打开该段源码，后面标明所属函数。
+
+| 正文小节 | TS 文件与所属函数 |
+| --- | --- |
+| 1.1 主 JSON 选择领域，生成薄入口 | [build-declarative-production.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/build-declarative-production.ts#L113-L119) · `renderDataFamilyEntry()`<br>[erc4626.production.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/production-families/erc4626.production.ts#L14-L14) · 模块顶层的 `plugin` 注册 |
+| 1.2 三个薄包装最终进入同一个核心 | [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L773-L783) · `createDeclarativeFamilyRuntime() → definition` |
+| 1.3 可选模块：格式能统一，能力不会凭空出现 | [declarative-modules.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L60-L67) · `createDeclarativeModuleCatalog() → read()`<br>[declarative-modules.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-modules.ts#L78-L90) · `createDeclarativeModuleCatalog() → read() → visit()` |
+| 1.4 变体、类型与指纹 | [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L209-L213) · `createDeclarativeFamilyRuntime() → select()` |
+| 2.1 地址型发现：selector、topic、surface | [declarative-discovery.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L96-L103) · `compileDeclarativeDiscovery()` |
+| 2.2 多 token / tuple / 数组候选 | [declarative-discovery.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-discovery.ts#L258-L262) · `compileMappedDiscovery() → expand()` |
+| 3.1 两种声明入口，落到同一个身份解释器 | [declarative-definition.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-definition.ts#L36-L39) · `expandConversionDefinition() → expand()` |
+| 3.2 Custodian 与 InfiniFi：不同身份关系，同一个展开器 | [declarative-variant.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-variant.ts#L157-L169) · `normalizeDeclarativeVariant()` |
+| 3.3 TS 怎样执行这些阶段 | [declarative-identity.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L99-L111) · `compileDeclarativeIdentity() → stage() / buildRequests()`<br>[declarative-identity.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-identity.ts#L119-L124) · `compileDeclarativeIdentity() → decode() / decide()` |
+| 3.4 可选资产 metadata 与行为模拟 | [declarative-simulation.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-simulation.ts#L66-L80) · `buildDeclarativeExecutionSimulation()` |
+| 4.1 Identity → Descriptor | [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L341-L352) · `createDeclarativeFamilyRuntime() → instance` |
+| 4.2 Descriptor → 支持方向 → Graph 投影 | [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L246-L263) · `createDeclarativeFamilyRuntime() → projectRoutes()`<br>[declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L275-L282) · `createDeclarativeFamilyRuntime() → assertInvocation()` |
+| 5.1 公共值解释器怎样读 JSON | [declarative-values.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-values.ts#L111-L126) · `compileDeclarativeValues() → evaluateInternal()` |
+| 5.2 静态资料与当前快照分开 | [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L489-L499) · `createDeclarativeFamilyRuntime() → pricing.current.buildRequests()` |
+| 5.3 多步调用：步骤由 JSON 列出，TS 只推进依赖 | [declarative-read-flow.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-read-flow.ts#L156-L164) · `compileDeclarativeReadFlow() → program.buildDependentProgram()` |
+| 5.4 本地数学是独立模块，JSON 只绑定入口 | [declarative-math.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-math.ts#L39-L47) · `createDeclarativeMathRegistry() → bind()` |
+| 5.5 触碰刷新与可用性 | [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L582-L592) · `createDeclarativeFamilyRuntime() → pricing.mutation.affectedStateKeys()` |
+| 6.1 标准 ERC4626 直接声明 preview 调用 | [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L646-L657) · `createDeclarativeFamilyRuntime() → exact.methods() → program.buildRequests()` |
+| 6.2 链式报价证明与特殊返回 | [declarative-quote-proof.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-quote-proof.ts#L183-L199) · `verifyDeclarativeQuoteProof()` |
+| 6.4 Protocol、Swap、Credit 的独有能力 | [declarative-protocol-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-protocol-domain.ts#L12-L18) · `compileDeclarativeProtocolDomain()`<br>[declarative-swap-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-swap-domain.ts#L27-L37) · `compileDeclarativeSwap() → events.map()`<br>[declarative-credit-domain.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-credit-domain.ts#L166-L177) · `compileDeclarativeCreditDomain() → verifyProof()` |
+| 7.1 中央只调用标准接口 | [adapter-family-runtime.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/adapter-family-runtime.ts#L2787-L2796) · `buildFamilyRuntimeAmountLeg()` |
+| 7.2 JSON 插件如何接这两个接口 | [declarative-family.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-family.ts#L735-L740) · `createDeclarativeFamilyRuntime() → execution.buildRuntimeLeg()` |
+| 7.3 ABI 函数、批准、参数从哪里来 | [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L243-L259) · `selectExecutionSteps()` |
+| 7.4 runtime 参数如何进入 calldata | [declarative-call-codec.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-call-codec.ts#L87-L100) · `encodeDeclarativeCall() → walk()` |
+| 7.5 实际扣款与到账独立核对 | [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L485-L496) · `buildDeclarativeExecutionProgram() → assertEffects()` |
+| 8.1 声明能力不等于所有请求都能使用 | [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L928-L937) · `buildDeclarativeRuntimeLeg()` |
+| 8.2 callback 的公共实现做什么 | [declarative-callback-frames.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-callback-frames.ts#L285-L288) · `emitDeclarativeCallbackFrame()` |
+| 8.4 action 编码同样公共化 | [declarative-execution.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/venues/declarative-execution.ts#L959-L966) · `createDeclarativeProgramAction() → action.matchTrace() / action.encode()` |
+| 8.5 同一套测试，按能力覆盖 | [protocol-json-acceptance.ts](https://github.com/EuniceLeeee/c0ffeebabe.eth/blob/f4a16ced70acf3b1b4d634ab26480ec42ec2a96d/listener/src/searcher/test/protocol-json-acceptance.ts#L131-L143) · `runProtocolJsonAcceptance()` |
