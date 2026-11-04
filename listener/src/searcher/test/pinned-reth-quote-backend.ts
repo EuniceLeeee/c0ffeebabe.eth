@@ -1367,7 +1367,7 @@ async function latencyDiagnosticTests(): Promise<void> {
           const row = records[0]!;
           check.deepEqual(Object.keys(row).sort(), ["sourceBlockHash", "lane", "scopeLabel", "method",
             "items", "startedAtMs", "wallMs", "status", "statusCode", "batchId",
-            "permitQueueWaitMs", "createdAtMs", "http"].sort());
+            "permitQueueWaitMs", "schedulerPermitWaitMs", "schedulerResumeDelayMs", "createdAtMs", "http"].sort());
           check.equal(row.sourceBlockHash, HASH);
           check.equal(row.lane, "producer-bulk");
           check.equal(row.scopeLabel, "diagnostic test");
@@ -1377,6 +1377,9 @@ async function latencyDiagnosticTests(): Promise<void> {
           check.equal(row.statusCode, 200);
           check.ok(typeof row.startedAtMs === "number" && row.startedAtMs >= startedAtMs);
           check.ok(typeof row.wallMs === "number" && row.wallMs >= 0);
+          check.ok(typeof row.schedulerPermitWaitMs === "number" && row.schedulerPermitWaitMs >= 0);
+          check.ok(typeof row.schedulerResumeDelayMs === "number" && row.schedulerResumeDelayMs >= 0);
+          check.ok(Math.abs(row.schedulerPermitWaitMs + row.schedulerResumeDelayMs - (row.permitQueueWaitMs as number)) < 1e-6);
           const serialized = JSON.stringify(records);
           for (const excluded of [rpcUrl, request.data, "0xabcdef", OK_A, OK_B, RESULT]) {
             check.ok(!serialized.includes(excluded), "timing must not expose RPC URL, call payload or returned body");
@@ -1385,6 +1388,8 @@ async function latencyDiagnosticTests(): Promise<void> {
           check.equal(dispatch.batchId, row.batchId);
           check.equal(dispatch.sourceBlockHash, HASH);
           check.equal(dispatch.permitQueueWaitMs, row.permitQueueWaitMs);
+          check.equal(dispatch.schedulerPermitWaitMs, row.schedulerPermitWaitMs);
+          check.equal(dispatch.schedulerResumeDelayMs, row.schedulerResumeDelayMs);
           const calls = dispatch.calls as Array<Record<string, unknown>>;
           check.equal(calls.length, 2, "memo hit must not manufacture another physical item");
           check.deepEqual(calls.map(call => call.target), [OK_A, OK_B]);

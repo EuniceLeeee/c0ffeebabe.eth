@@ -669,16 +669,18 @@ export class StrictCurrentRuntimeCoordinator
     };
     assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
     if (!effectiveMids.complete) throw new Error("effective pricing incomplete or mismatched source");
-    return { session, built: buildEffectivePricingSnapshot(built.snapshot, graph,
-      session.pricingIndex(), effectiveMids, rawBasis === null ? null : previous, this.effectiveCoverageKeyCache) };
+    return { session, built: diagnosePricingSync(graph, "coverage-assembly", () =>
+      buildEffectivePricingSnapshot(built.snapshot, graph,
+        session.pricingIndex(), effectiveMids, rawBasis === null ? null : previous, this.effectiveCoverageKeyCache)) };
   }
 
   private publishPricing(built: StrictPricingBuildResult, pricingEpoch: number): StrictPricingBuildResult {
     if (pricingEpoch !== this.pricingEpoch) throw new Error("pricing publication retired during prepare");
     // Only the successful atomic publication can retire an instance. Failed,
     // incomplete, cancelled or superseded drafts must not poison the next try.
-    this.recordFailedEffectiveInstances(built.snapshot);
-    const organized = this.organizePricing?.(built.snapshot) ?? built.snapshot;
+    diagnosePricingSync(built.snapshot.graph, "failure-index", () => this.recordFailedEffectiveInstances(built.snapshot));
+    const organized = diagnosePricingSync(built.snapshot.graph, "organize-view", () =>
+      this.organizePricing?.(built.snapshot) ?? built.snapshot);
     if (organized !== built.snapshot) built = Object.freeze({ ...built, snapshot: organized,
       publication: Object.freeze({ ...built.publication, snapshot: organized }) });
     this.bootstrapEffectiveDraft = null;
@@ -686,7 +688,7 @@ export class StrictCurrentRuntimeCoordinator
     this.publishedPricing = built.snapshot;
     this.reorgBase = null;
     try {
-      this.onPricingPublication?.(built.publication);
+      diagnosePricingSync(built.snapshot.graph, "publication-observer", () => this.onPricingPublication?.(built.publication));
     } catch {
       // Historical evidence is fail-open and cannot suppress pricing.
     }
@@ -1558,6 +1560,29 @@ function sourceFor(graph: VerifiedGraphView): CanonicalSource {
     hash: graph.sourceBlockHash,
     generation: graph.generation,
   });
+}
+
+/** Synchronous wall time, not exclusive CPU: GC and process contention overlap. */
+function diagnosePricingSync<T>(graph: VerifiedGraphView, phase: string, work: () => T): T {
+  if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS !== "1") return work();
+  const startedAt = performance.now();
+  let status = "failed";
+  try {
+    const result = work();
+    status = "returned";
+    return result;
+  } finally {
+    const finishedAt = performance.now();
+    try {
+      console.log(`[searcher/pricing-local-phase] ${JSON.stringify({
+        sourceBlock: graph.sourceBlock, sourceBlockHash: graph.sourceBlockHash,
+        generation: graph.generation, phase, status,
+        startedAtMs: performance.timeOrigin + startedAt,
+        finishedAtMs: performance.timeOrigin + finishedAt,
+        wallMs: Math.max(0, finishedAt - startedAt), timingModel: "sync-wall-includes-gc",
+      })}`);
+    } catch { /* Diagnostics cannot affect publication or its failure boundary. */ }
+  }
 }
 
 function controlFor(

@@ -16,7 +16,11 @@ export type RethTransportLane =
   | "discovery";
 
 export interface RethTransportLease {
+  /** Legacy total: admission wait plus JS continuation-resume delay. */
   readonly queueWaitMs: number;
+  /** Diagnostic-only split; older/forwarding schedulers may omit these. */
+  readonly permitWaitMs?: number;
+  readonly resumeDelayMs?: number;
   readonly activeTotal: number;
   readonly activeByLane: Readonly<Record<RethTransportLane, number>>;
   /** Shared authority survives run-only forwarding wrappers and new scopes. */
@@ -71,6 +75,7 @@ interface SchedulerWaiter {
   readonly lane: RethTransportLane;
   readonly signal: AbortSignal;
   readonly queuedAtMs: number;
+  readonly timing?: { grantedAtMs?: number };
   readonly resolve: (release: () => void) => void;
   readonly reject: (reason?: unknown) => void;
   readonly onAbort: () => void;
@@ -223,9 +228,18 @@ export class RethTransportScheduler {
     work: (lease: RethTransportLease) => Promise<T>,
   ): Promise<T> {
     const queuedAtMs = performance.now();
-    const release = await this.acquire(lane, signal, queuedAtMs);
+    // Capture the flag once per waiter, not again after a potentially long
+    // queue. Disabled diagnostics allocate no timing object or grant timestamp.
+    const timing = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1"
+      ? {} as { grantedAtMs?: number } : undefined;
+    const release = await this.acquire(lane, signal, queuedAtMs, timing);
+    const resumedAtMs = performance.now();
     const lease = Object.freeze({
-      queueWaitMs: Math.max(0, performance.now() - queuedAtMs),
+      queueWaitMs: Math.max(0, resumedAtMs - queuedAtMs),
+      ...(timing?.grantedAtMs === undefined ? {} : {
+        permitWaitMs: Math.max(0, timing.grantedAtMs - queuedAtMs),
+        resumeDelayMs: Math.max(0, resumedAtMs - timing.grantedAtMs),
+      }),
       activeTotal: this.activeTotal,
       activeByLane: Object.freeze({ ...this.activeByLane }),
       load: this.load,
@@ -269,6 +283,7 @@ export class RethTransportScheduler {
     lane: RethTransportLane,
     signal: AbortSignal,
     queuedAtMs: number,
+    timing?: { grantedAtMs?: number },
   ): Promise<() => void> {
     if (signal.aborted) {
       return Promise.reject(
@@ -292,6 +307,7 @@ export class RethTransportScheduler {
         lane,
         signal,
         queuedAtMs,
+        timing,
         resolve,
         reject,
         onAbort,
@@ -350,6 +366,7 @@ export class RethTransportScheduler {
         waiter.signal.removeEventListener("abort", waiter.onAbort);
         this.activeTotal++;
         this.activeByLane[lane]++;
+        if (waiter.timing !== undefined) waiter.timing.grantedAtMs = performance.now();
         waiter.resolve(this.releaseOnce(lane));
         admitted = true;
         break;

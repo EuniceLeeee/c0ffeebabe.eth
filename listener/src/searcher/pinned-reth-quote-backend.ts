@@ -1178,6 +1178,7 @@ export class PinnedRethQuoteBackend
               lane: this.transportLane, scopeLabel: this.scopeLabel, method,
               createdAtMs: batchStartedAtMs, startedAtMs: wireStartedAtMs,
               permitQueueWaitMs: lease.queueWaitMs, schedulerActiveTotal: lease.activeTotal,
+              schedulerPermitWaitMs: lease.permitWaitMs, schedulerResumeDelayMs: lease.resumeDelayMs,
               calls: items.map(item => ({
                 rpcId: item.id, target: item.req.to.toLowerCase(),
                 from: item.req.from?.toLowerCase() ?? null,
@@ -1205,6 +1206,7 @@ export class PinnedRethQuoteBackend
                 status: response === undefined ? "transport-failed" : "returned",
                 statusCode: response?.statusCode ?? null,
                 permitQueueWaitMs: lease.queueWaitMs,
+                schedulerPermitWaitMs: lease.permitWaitMs, schedulerResumeDelayMs: lease.resumeDelayMs,
                 createdAtMs: batchStartedAtMs,
                 http: httpTiming ?? null,
               })}`);

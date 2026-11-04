@@ -37,6 +37,7 @@ import {
 } from "./detector/blockscan-nminus1-fallback.js";
 import { BlockScanFamilyStageBudget } from "./detector/blockscan-family-budget.js";
 import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
+import { createStateLatencyDiagnostics, type StateLatencySample } from "./state-latency-diagnostics.js";
 import { runOrderedBlockScanPipeline } from "./blockscan-ordered-pipeline.js";
 import { SubmissionPreference, type DeferredSubmission } from "./execution/submission-preference.js";
 import type { ProfitMode } from "../shared/profit-mode.js";
@@ -931,6 +932,7 @@ export interface CurrentSourceRuntimeCoordinator {
  * owns scheduling, worker orchestration and the unchanged stage sequence.
  */
 export class BlockScanRuntimeLoop {
+  private readonly stateLatencyDiagnostics: ReturnType<typeof createStateLatencyDiagnostics>;
   private generation = 0;
   private pendingGeneration = 0;
   private producerCriticalActive = false;
@@ -1026,6 +1028,9 @@ export class BlockScanRuntimeLoop {
           passReason: head.reason,
         });
       },
+    );
+    this.stateLatencyDiagnostics = createStateLatencyDiagnostics(
+      deps.enabled && process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1",
     );
   }
 
@@ -1937,11 +1942,15 @@ export class BlockScanRuntimeLoop {
     } catch (error) {
       stopError = error;
     }
-    await drained;
-    if (this.coarsePricingActive) {
-      await this.coarsePricingActive;
+    try {
+      await drained;
+      if (this.coarsePricingActive) {
+        await this.coarsePricingActive;
+      }
+      if (stopError !== undefined) throw stopError;
+    } finally {
+      this.stateLatencyDiagnostics?.close();
     }
-    if (stopError !== undefined) throw stopError;
   }
 
   private async observeControlledHeader(
@@ -2355,7 +2364,11 @@ export class BlockScanRuntimeLoop {
     const timing = passTimeline.timing;
     const stageBoundaries = passTimeline.boundaries;
     const beginStage = passTimeline.begin.bind(passTimeline);
-    const finishStage = passTimeline.finish.bind(passTimeline);
+    let stateLatencySample: StateLatencySample | undefined;
+    const finishStage: typeof passTimeline.finish = (name, status) => {
+      passTimeline.finish(name, status);
+      if (name === "state") stateLatencySample?.finish(status ?? "ran", observedSourceBlockHash);
+    };
     const mergeAtomicStage = passTimeline.mergeAtomic.bind(passTimeline);
     const hotPassDeadlineAtMs = passStartedAtMs + (
       blockScanGraph.length >= this.deps.largeGraphEdgeThreshold
@@ -2682,6 +2695,7 @@ export class BlockScanRuntimeLoop {
       stage: string,
     ): Promise<BlockScanSourceHeader> =>
       this.observeControlledHeader(canonicalBlock, passDeadlineAtMs, passSignal, stage, blockNumber);
+    stateLatencySample = this.stateLatencyDiagnostics?.begin(blockNumber, passStartedAtMs);
     beginStage("state", {
       atMs: passStartedAtMs,
       atPerf: passStarted,
@@ -4840,6 +4854,7 @@ export class BlockScanRuntimeLoop {
         this.deps.onPassSettled?.();
         recordPass();
       } finally {
+        stateLatencySample?.finish("failed", observedSourceBlockHash);
         if (
           passMode !== "evidence-only" &&
           enumerationFinished &&
