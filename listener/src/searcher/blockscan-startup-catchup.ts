@@ -14,6 +14,97 @@ export interface ActivityRangeControl {
   readonly deadlineAtMs?: number;
 }
 
+type ActivityAnchor = ActivityRangeControl["previousSource"];
+interface StartupActivityCheckpoint {
+  readonly base: ActivityAnchor;
+  cursor: ActivityAnchor;
+  targetNumber: number;
+  readonly touched: Set<string>;
+}
+
+/** One runtime/interpretation owns one retained prefix, not a cache per target.
+ * Completed chunks are data only: neither a partial union nor a new price
+ * source is exposed. Reuse is checked against canonical headers each time. */
+export class StartupActivityCollector<Header extends ActivityAnchor> {
+  private checkpoint: StartupActivityCheckpoint | undefined;
+  private collecting = false;
+
+  constructor(private readonly reader: {
+    readonly readHeader: (number: number, range: ActivityRangeControl) => Promise<Header>;
+    readonly readRange: (number: number, header: Header, range: ActivityRangeControl) => Promise<ReadonlySet<string>>;
+  }) {}
+
+  async collect(input: { readonly target: Header; readonly range: ActivityRangeControl }): Promise<ReadonlySet<string>> {
+    // Do not replace an aborted-but-still-draining owner: its callbacks must
+    // settle before a successor can install or extend a checkpoint.
+    if (this.collecting) throw new Error("startup activity collection already active");
+    this.collecting = true;
+    const { range } = input;
+    const target = { ...input.target };
+    const base = { ...range.previousSource };
+    const check = (): void => {
+      range.signal?.throwIfAborted();
+      if (range.deadlineAtMs !== undefined && Date.now() >= range.deadlineAtMs) throw new Error("startup activity deadline exceeded");
+    };
+    const same = (a: ActivityAnchor, b: ActivityAnchor): boolean =>
+      a.number === b.number && a.hash.toLowerCase() === b.hash.toLowerCase();
+    const canonical = async (anchor: ActivityAnchor): Promise<void> => {
+      check();
+      const header = await this.reader.readHeader(anchor.number, range);
+      check();
+      if (!same(header, anchor)) throw new BlockActivityRangeInvalidatedError("startup activity checkpoint canonical anchor mismatch");
+    };
+    try {
+      check();
+      if (!Number.isSafeInteger(base.number) || base.number < 0 || !Number.isSafeInteger(target.number) ||
+          target.number < base.number || !/^0x[0-9a-f]{64}$/i.test(base.hash) || !/^0x[0-9a-f]{64}$/i.test(target.hash)) {
+        throw new Error("invalid startup activity interval");
+      }
+      if (target.number === base.number && !same(target, base)) {
+        throw new BlockActivityRangeInvalidatedError("startup activity same-height source mismatch");
+      }
+      let checkpoint = this.checkpoint;
+      if (checkpoint && (!same(checkpoint.base, base) || target.number < checkpoint.targetNumber)) {
+        this.checkpoint = checkpoint = undefined;
+      }
+      if (checkpoint) {
+        await canonical(checkpoint.base);
+        if (checkpoint.cursor.number !== checkpoint.base.number) await canonical(checkpoint.cursor);
+      } else {
+        checkpoint = { base, cursor: base, targetNumber: target.number, touched: new Set() };
+        this.checkpoint = checkpoint;
+      }
+      checkpoint.targetNumber = target.number;
+      const retained = checkpoint;
+      await collectStartupActivity({ target, range: { ...range, previousSource: retained.cursor },
+        readHeader: number => this.reader.readHeader(number, range),
+        readRange: async (number, header, chunk) => {
+          const keys = await this.reader.readRange(number, header, chunk);
+          check();
+          // Normalize and validate the whole returned chunk before the commit.
+          const next = new Set<string>();
+          for (const key of keys) {
+            if (typeof key !== "string" || key.length === 0) throw new Error("invalid startup activity state key");
+            next.add(key.toLowerCase());
+          }
+          check();
+          for (const key of next) retained.touched.add(key);
+          retained.cursor = { number, hash: header.hash };
+          return next;
+        },
+      });
+      await canonical(target);
+      check();
+      return new Set(retained.touched);
+    } catch (error) {
+      if (error instanceof BlockActivityRangeInvalidatedError) this.checkpoint = undefined;
+      throw error;
+    } finally {
+      this.collecting = false;
+    }
+  }
+}
+
 /** Index lag is a transport boundary, not evidence that the suffix is clean.
  * Collect both sources before returning to the single production price pass. */
 export async function collectIndexedStartupActivity<Header extends { readonly number: number; readonly hash: string }>(input: {

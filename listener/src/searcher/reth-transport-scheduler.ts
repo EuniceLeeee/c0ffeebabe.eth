@@ -62,6 +62,11 @@ export function isRethTransportTimeout(error: unknown): boolean {
       .includes((error as Error & { code?: string }).code ?? "");
 }
 
+/** Explicitly classified transient failure of an idempotent read. Callers own
+ * method/error classification; this does not make arbitrary RPC errors or
+ * contract reverts retryable, and it is not evidence of provider throttling. */
+export class RethTransientReadError extends Error {}
+
 interface SchedulerWaiter {
   readonly lane: RethTransportLane;
   readonly signal: AbortSignal;
@@ -162,7 +167,7 @@ export class RethTransportScheduler {
       },
       retryDelayMs: (items: readonly RethTransportRetryState[] = []) => items[0]?.transportRetryBatch?.delayMs ?? 0,
       retry: (error: unknown, items: readonly RethTransportRetryState[], attempt: RethTransportAttempt) => {
-        if ((!isRethTransportTimeout(error) && !isRpcThrottleError(error)) ||
+        if ((!isRethTransportTimeout(error) && !isRpcThrottleError(error) && !(error instanceof RethTransientReadError)) ||
             isRpcQuotaExhaustedError(error) || items.length === 0) return false;
         const batch = attempt.batch ?? items[0]?.transportRetryBatch ?? {
           version: 0, level: 0, notBeforeMs: 0, delayMs: 0,

@@ -38,7 +38,7 @@ import {
   resolveBlockScanSolverSearchConfig,
 } from "./blockscan-solver-search-config.js";
 import { readBlockTouchedStateKeys, type BlockTouchedProvider } from "./blockscan-touched-state.js";
-import { collectStartupActivity, collectIndexedStartupActivity, startupCatchupSource, type ActivityRangeControl } from "./blockscan-startup-catchup.js";
+import { StartupActivityCollector, collectIndexedStartupActivity, startupCatchupSource, type ActivityRangeControl } from "./blockscan-startup-catchup.js";
 import { getBigQueryActivityCutoff, readBigQueryTouchedRange, type BigQueryActivityConfig } from "./blockscan-bigquery-activity.js";
 import { collectReorgActivity } from "./blockscan-reorg-activity.js";
 import { BlockScanActivityPrefetch } from "./blockscan-activity-prefetch.js";
@@ -2735,7 +2735,10 @@ async function main(): Promise<void> {
       } catch { /* Diagnostics never change activity completeness or failure. */ }
     }
   };
-  const activityTransport = createBlockScanActivityTransport(config.rpcUrl);
+  const activityTransport = createBlockScanActivityTransport(config.rpcUrl,
+    blockScanRethTransportScheduler === undefined ? undefined : {
+      scheduler: blockScanRethTransportScheduler, signal: blockScanRuntimeAbort.signal,
+    });
   const blockScanRawActivityProvider: BlockTouchedProvider = {
     getLogs(filter) {
       blockScanRuntimeAbort.signal.throwIfAborted();
@@ -2813,10 +2816,26 @@ async function main(): Promise<void> {
   }
   // Both startup readers feed this same production activity/pricing contract.
   // SQL covers only the indexed prefix; the existing RPC reader covers its tail.
-  const readContinuationHeader = (number: number, range: ActivityRangeControl) =>
-    readBlockScanObservedHeader(config.rpcUrl, blockScanChainId, number, {
-      signal: range.signal, deadlineAtMs: range.deadlineAtMs,
-    }).catch(activityReadFailed);
+  const readContinuationHeader = async (number: number, range: ActivityRangeControl) => {
+    if (!Number.isSafeInteger(number) || number < 0 ||
+        range.deadlineAtMs !== undefined && !Number.isFinite(range.deadlineAtMs)) {
+      throw new Error("invalid continuation header request");
+    }
+    const check = () => {
+      if (range.signal?.aborted) throw new StateCallAbortedError("source header signal aborted", "signal");
+      if (range.deadlineAtMs !== undefined && Date.now() >= range.deadlineAtMs) {
+        throw new StateCallAbortedError("source header deadline aborted", "deadline");
+      }
+    };
+    check();
+    // Headers use the same light queue and physical retry/permit authority as
+    // historical logs. Preserve full transactions for consensus activity proof.
+    const raw = await timedActivityRead("eth_getBlockByNumber", number, () =>
+      activityTransport.sendWithControl("eth_getBlockByNumber", [ethers.toQuantity(number), true], range)
+    ).catch(activityReadFailed);
+    check();
+    return parseBlockScanObservedHeader(raw, number, blockScanChainId);
+  };
   const requireStartupCoverage = <T extends { readonly passiveTouchedAddresses?: readonly string[] }>(header: T): T => {
     if (header.passiveTouchedAddresses === undefined) throw new Error("startup catchup lacks complete consensus activity coverage");
     return header;
@@ -2845,6 +2864,13 @@ async function main(): Promise<void> {
     readTouchedWithCoverage(number, header, range, false);
   const readStartupTouched: BlockScanRuntimeLoopDependencies["readBlockSwapTouched"] = (number, header, range) =>
     readTouchedWithCoverage(number, header, range, true);
+  // One frozen runtime/resolver owns the retained verified prefix across passes.
+  // Price publication still waits for the complete canonical activity union.
+  const startupActivityCollector = new StartupActivityCollector<NonNullable<Parameters<
+    BlockScanRuntimeLoopDependencies["readBlockSwapTouched"]
+  >[1]>>({
+    readHeader: readStartupHeader, readRange: readStartupTouched,
+  });
   const blockScanRuntimeLoop = new BlockScanRuntimeLoop({
     enabled: enableBlockScan,
     onPassSettled: () => continuationWriter?.capture(),
@@ -2864,9 +2890,8 @@ async function main(): Promise<void> {
     ...(restoredContinuation ? { liveContinuation: {
       async readInitialTouched(number, header, range) {
         const target = header;
-        const readRpcUnion = (previousSource: ActivityRangeControl["previousSource"]) => collectStartupActivity({
+        const readRpcUnion = (previousSource: ActivityRangeControl["previousSource"]) => startupActivityCollector.collect({
           target, range: { ...range, previousSource },
-          readHeader: n => readStartupHeader(n, range), readRange: readStartupTouched,
         });
         if (continuationCatchupSource === "rpc") return readRpcUnion(range.previousSource);
         if (blockScanChainId !== 1n) throw new Error("BigQuery activity dataset is Ethereum-only; select RPC catchup for this chain");
