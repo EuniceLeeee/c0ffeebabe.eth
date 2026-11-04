@@ -1,4 +1,5 @@
 import { PerformanceObserver, performance } from "node:perf_hooks";
+import { isMainThread } from "node:worker_threads";
 
 interface GcEntry {
   readonly startTime: number;
@@ -191,4 +192,141 @@ export class StateLatencyDiagnostics {
 export function createStateLatencyDiagnostics(enabled: boolean, host: StateLatencyHost = nativeHost): StateLatencyDiagnostics | undefined {
   if (!enabled) return undefined;
   try { return new StateLatencyDiagnostics(host); } catch { return undefined; }
+}
+
+/** Boundary-only synchronous evidence. CPU counters are cumulative microseconds;
+ * uptime is seconds, and performance.now/timeOrigin are milliseconds. No hooks,
+ * timers, observers, heap reads or samples are created by a disabled caller. */
+export interface PricingPhaseHost {
+  now(): number;
+  timeOrigin(): number;
+  uptime(): number;
+  threadCpu?(): CpuSample | null;
+  cpu(): CpuSample;
+  emit(channel: "coverage-phase-diagnostics" | "pricing-local-phase", summary: unknown): void;
+}
+export type PricingPhaseStatus = "returned" | "failed";
+const nativePricingHost: PricingPhaseHost = {
+  now: () => performance.now(), timeOrigin: () => performance.timeOrigin,
+  uptime: () => process.uptime(),
+  threadCpu: () => {
+    // Older Node typings/runtimes need feature detection. Never use process CPU
+    // as a substitute, nor mislabel a worker's current-thread CPU as main-thread.
+    const threadCpuUsage = (process as NodeJS.Process & { threadCpuUsage?: () => CpuSample }).threadCpuUsage;
+    return isMainThread && typeof threadCpuUsage === "function" ? threadCpuUsage.call(process) : null;
+  },
+  cpu: () => process.cpuUsage(),
+  emit: (channel, summary) => console.log(`[searcher/${channel}] ${JSON.stringify(summary)}`),
+};
+interface PricingBoundary {
+  readonly beforeSamplingMonotonicMs: number | null;
+  readonly afterSamplingMonotonicMs: number | null;
+  readonly wallOriginMs: number | null;
+  readonly processUptimeMs: number | null;
+  readonly mainThreadCpuMicros: CpuSample | null;
+  readonly processCpuMicros: CpuSample | null;
+}
+function diagnosticNumber(read: () => number): number | null {
+  try { const value = read(); return Number.isFinite(value) ? value : null; } catch { return null; }
+}
+function diagnosticCpu(read: () => CpuSample | null | undefined): CpuSample | null {
+  try {
+    const value = read();
+    if (!value || !Number.isFinite(value.user) || !Number.isFinite(value.system) || value.user < 0 || value.system < 0) return null;
+    return { user: value.user, system: value.system };
+  } catch { return null; }
+}
+function diagnosticElapsed(start: number | null, end: number | null): number | null {
+  return start !== null && end !== null && end >= start ? end - start : null;
+}
+function diagnosticCpuDelta(scope: "main-thread" | "process-wide-all-threads", before: CpuSample | null, after: CpuSample | null) {
+  const user = diagnosticElapsed(before?.user ?? null, after?.user ?? null);
+  const system = diagnosticElapsed(before?.system ?? null, after?.system ?? null);
+  const available = user !== null && system !== null;
+  return { scope, availability: available ? "available" : "unavailable",
+    userMs: available ? user / 1_000 : null, systemMs: available ? system / 1_000 : null };
+}
+
+/** Four coarse intervals at most; a transition shares one boundary sample.
+ * Sampling is bracketed separately from the work intervals. CPU reads within a
+ * boundary are sequential, not atomic, and include some diagnostic CPU cost. */
+class PricingPhaseDiagnostics {
+  private readonly boundaries: PricingBoundary[] = [];
+  private readonly phases: string[];
+  private finished = false;
+
+  constructor(phase: string, private readonly host: PricingPhaseHost) {
+    this.phases = [phase];
+    this.boundaries.push(this.sample());
+  }
+
+  private sample(): PricingBoundary {
+    const beforeSamplingMonotonicMs = diagnosticNumber(() => this.host.now());
+    const wallOriginMs = diagnosticNumber(() => this.host.timeOrigin());
+    const processUptimeMs = diagnosticNumber(() => this.host.uptime() * 1_000);
+    const mainThreadCpuMicros = diagnosticCpu(() => this.host.threadCpu?.());
+    const processCpuMicros = diagnosticCpu(() => this.host.cpu());
+    const afterSamplingMonotonicMs = diagnosticNumber(() => this.host.now());
+    return { beforeSamplingMonotonicMs, afterSamplingMonotonicMs, wallOriginMs, processUptimeMs,
+      mainThreadCpuMicros, processCpuMicros };
+  }
+
+  enter(phase: string): void {
+    try {
+      if (this.finished || this.phases.length >= 4) return;
+      this.boundaries.push(this.sample());
+      this.phases.push(phase);
+    } catch { /* Evidence cannot change the work or its original error. */ }
+  }
+
+  finish(source: { readonly sourceBlock: number; readonly sourceBlockHash: string; readonly generation: number },
+    status: PricingPhaseStatus, channel: "coverage-phase-diagnostics" | "pricing-local-phase",
+  ): void {
+    if (this.finished) return;
+    this.finished = true;
+    try {
+      this.boundaries.push(this.sample()); // Freeze all timing before summary construction or I/O.
+      const first = this.boundaries[0]!, last = this.boundaries[this.boundaries.length - 1]!;
+      const interval = (before: PricingBoundary, after: PricingBoundary, envelope = false) => {
+        const startedMonotonicMs = envelope ? before.beforeSamplingMonotonicMs : before.afterSamplingMonotonicMs;
+        const finishedMonotonicMs = envelope ? after.afterSamplingMonotonicMs : after.beforeSamplingMonotonicMs;
+        return {
+          startedAtMs: before.wallOriginMs !== null && startedMonotonicMs !== null ? before.wallOriginMs + startedMonotonicMs : null,
+          finishedAtMs: after.wallOriginMs !== null && finishedMonotonicMs !== null ? after.wallOriginMs + finishedMonotonicMs : null,
+          startedMonotonicMs, finishedMonotonicMs, wallMs: diagnosticElapsed(startedMonotonicMs, finishedMonotonicMs),
+          mainThreadCpu: diagnosticCpuDelta("main-thread", before.mainThreadCpuMicros, after.mainThreadCpuMicros),
+          processCpu: diagnosticCpuDelta("process-wide-all-threads", before.processCpuMicros, after.processCpuMicros),
+        };
+      };
+      const total = interval(first, last, true);
+      const intervals = this.phases.map((phase, i) => ({ phase,
+        status: i === this.phases.length - 1 ? status : "returned",
+        startBoundary: i, endBoundary: i + 1, ...interval(this.boundaries[i]!, this.boundaries[i + 1]!) }));
+      const sum = (values: readonly (number | null)[]) => values.reduce<number | null>(
+        (total, value) => total === null || value === null ? null : total + value, 0);
+      const intervalSumWallMs = sum(intervals.map(item => item.wallMs));
+      const boundarySamplingWallMs = sum(this.boundaries.map(item =>
+        diagnosticElapsed(item.beforeSamplingMonotonicMs, item.afterSamplingMonotonicMs)));
+      this.host.emit(channel, {
+        sourceBlock: source.sourceBlock, sourceBlockHash: source.sourceBlockHash, generation: source.generation,
+        phase: channel === "pricing-local-phase" ? this.phases[0] : "coverage-assembly", status,
+        ...total, timingModel: "sync-wall-includes-gc",
+        boundaries: this.boundaries, intervals,
+        accounting: { sampleCount: this.boundaries.length, intervalSumWallMs, boundarySamplingWallMs,
+          residualWallMs: total.wallMs !== null && intervalSumWallMs !== null ? total.wallMs - intervalSumWallMs : null,
+          residualMeaning: "same-call-envelope-minus-nonoverlapping-intervals-includes-boundary-sampling",
+          instrumentation: "bookkeeping-remains-in-intervals; collector-setup-summary-and-sink-outside-this-envelope; residual-is-not-total-diagnostic-overhead",
+          nesting: "outer-pricing-local-phase-may-include-coverage-summary-and-sink; do-not-add-nested-spans" },
+        cpuSampling: "sequential-boundary-counters-in-microseconds; deltas-in-ms-include-some-sampling-cost",
+        gcAttribution: "not-measured-here; wall-minus-main-thread-cpu-is-not-proof-of-gc-or-scheduling",
+      });
+    } catch { /* Includes clock, CPU, source metadata, summary and sink failures. */ }
+  }
+}
+
+export function beginPricingPhaseDiagnostics(enabled: boolean, phase: string,
+  host: PricingPhaseHost = nativePricingHost,
+): PricingPhaseDiagnostics | undefined {
+  if (!enabled) return undefined;
+  try { return new PricingPhaseDiagnostics(phase, host); } catch { return undefined; }
 }

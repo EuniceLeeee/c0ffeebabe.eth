@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { beginPricingPhaseDiagnostics, type PricingPhaseStatus } from "./state-latency-diagnostics.js";
 import { isVerifiedReorgActivity, revalidateReorgActivityTarget, type VerifiedReorgActivity } from "./blockscan-reorg-activity.js";
 import {
   FlashFundingSnapshot,
@@ -863,105 +864,117 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
   previous: BlockScanStateSnapshot | null,
   keyCache: EffectiveCoverageKeyCache,
 ): StrictPricingBuildResult {
-  const expectedKeys = effectiveCoverageKeys(keyCache, "expected", [...index.expectedEdgeKeys].sort());
-  const expectedEdgeKeys = expectedKeys.keys;
-  const expected = new Set(expectedEdgeKeys);
-  const graphEdges = new Map(graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
-  const scannerKeys = graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey);
-  if (expected.size !== expectedEdgeKeys.length ||
-      expectedKeys.hash !== index.expectedEdgeKeyHash ||
-      index.readyGraphContractFingerprint !== strictReadyGraphContractFingerprint(graph.edges) ||
-      scannerKeys.length !== graph.scannerEdgeCount ||
-      effectiveCoverageKeys(keyCache, "scanner", scannerKeys).hash !== graph.scannerEdgeKeyHash ||
-      scannerKeys.some(key => !expected.has(key)) || [...effectiveMids.rows.keys()].some(key => !expected.has(key))) {
-    throw new Error("effective pricing index differs from ready Graph");
-  }
-  const resolvedEdgeKeys: string[] = [], unavailableEdgeKeys: string[] = [], unresolvedEdgeKeys: string[] = [];
-  const refreshedEdgeKeys: string[] = [], carriedEdgeKeys: string[] = [];
-  const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
-  const pricingProvenanceByEdgeKey = new Map<string, StrictPricingProvenance>();
-  const resolvedCoverage: StateKeyCoverage = Object.freeze({ status: "resolved" });
-  const failures = new Map<string, StateKeyCoverage>();
-  const failureCoverage = (status: "rejected" | "unresolved", reason: string): StateKeyCoverage => {
-    const old = failures.get(reason);
-    if (old !== undefined) return old;
-    const coverage: StateKeyCoverage = Object.freeze({ status, reason });
-    failures.set(reason, coverage);
-    return coverage;
-  };
-  const familyIds = new Set<string>(), incompleteFamilyIds = new Set<string>();
-  for (const key of expectedEdgeKeys) {
-    const edge = graphEdges.get(key), familyId = index.familyIdByEdgeKey.get(key);
-    if (!edge || !familyId || !index.stateKeyByEdgeKey.has(key)) {
-      throw new Error(`effective pricing index omits ${key}`);
+  const diagnostics = beginPricingPhaseDiagnostics(process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1",
+    "index-validation/preparation");
+  let diagnosticStatus: PricingPhaseStatus = "failed";
+  try {
+    const expectedKeys = effectiveCoverageKeys(keyCache, "expected", [...index.expectedEdgeKeys].sort());
+    const expectedEdgeKeys = expectedKeys.keys;
+    const expected = new Set(expectedEdgeKeys);
+    const graphEdges = new Map(graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
+    const scannerKeys = graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey);
+    if (expected.size !== expectedEdgeKeys.length ||
+        expectedKeys.hash !== index.expectedEdgeKeyHash ||
+        index.readyGraphContractFingerprint !== strictReadyGraphContractFingerprint(graph.edges) ||
+        scannerKeys.length !== graph.scannerEdgeCount ||
+        effectiveCoverageKeys(keyCache, "scanner", scannerKeys).hash !== graph.scannerEdgeKeyHash ||
+        scannerKeys.some(key => !expected.has(key)) || [...effectiveMids.rows.keys()].some(key => !expected.has(key))) {
+      throw new Error("effective pricing index differs from ready Graph");
     }
-    familyIds.add(familyId);
-    const row = effectiveMids.rows.get(key);
-    if (row && (row.edgeId !== key || row.instanceKey !== edgeInstanceKey(edge) ||
-        row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() || row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase())) {
-      throw new Error(`effective pricing row differs from ready Graph: ${key}`);
-    }
-    if (row?.status === "quoted") {
-      if (row.amountIn === null || row.amountIn <= 0n || row.amountOut === null || row.amountOut <= 0n ||
-          row.effectiveMid === null || !Number.isFinite(row.effectiveMid) || row.effectiveMid <= 0) {
-        throw new Error(`invalid effective pricing row: ${key}`);
+    diagnostics?.enter("row-classification");
+    const resolvedEdgeKeys: string[] = [], unavailableEdgeKeys: string[] = [], unresolvedEdgeKeys: string[] = [];
+    const refreshedEdgeKeys: string[] = [], carriedEdgeKeys: string[] = [];
+    const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
+    const pricingProvenanceByEdgeKey = new Map<string, StrictPricingProvenance>();
+    const resolvedCoverage: StateKeyCoverage = Object.freeze({ status: "resolved" });
+    const failures = new Map<string, StateKeyCoverage>();
+    const failureCoverage = (status: "rejected" | "unresolved", reason: string): StateKeyCoverage => {
+      const old = failures.get(reason);
+      if (old !== undefined) return old;
+      const coverage: StateKeyCoverage = Object.freeze({ status, reason });
+      failures.set(reason, coverage);
+      return coverage;
+    };
+    const familyIds = new Set<string>(), incompleteFamilyIds = new Set<string>();
+    for (const key of expectedEdgeKeys) {
+      const edge = graphEdges.get(key), familyId = index.familyIdByEdgeKey.get(key);
+      if (!edge || !familyId || !index.stateKeyByEdgeKey.has(key)) {
+        throw new Error(`effective pricing index omits ${key}`);
       }
-      resolvedEdgeKeys.push(key);
-      const carried = effectiveMidRowCarried(effectiveMids, row);
-      (carried ? carriedEdgeKeys : refreshedEdgeKeys).push(key);
-      pricingProvenanceByEdgeKey.set(key, carried ? "carried" : "refreshed");
-      coverageByEdgeKey.set(key, resolvedCoverage);
-    } else if (row?.status === "no-output" || row?.status === "unsupported" || row?.status === "disabled-for-run") {
-      unavailableEdgeKeys.push(key);
-      pricingProvenanceByEdgeKey.set(key, "unavailable");
-      coverageByEdgeKey.set(key, failureCoverage("rejected", `effective-${row.status}`));
-    } else {
-      unresolvedEdgeKeys.push(key);
-      incompleteFamilyIds.add(familyId);
-      pricingProvenanceByEdgeKey.set(key, "unresolved");
-      coverageByEdgeKey.set(key, failureCoverage("unresolved", `effective-${row?.status ?? "missing-row"}`));
+      familyIds.add(familyId);
+      const row = effectiveMids.rows.get(key);
+      if (row && (row.edgeId !== key || row.instanceKey !== edgeInstanceKey(edge) ||
+          row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() || row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase())) {
+        throw new Error(`effective pricing row differs from ready Graph: ${key}`);
+      }
+      if (row?.status === "quoted") {
+        if (row.amountIn === null || row.amountIn <= 0n || row.amountOut === null || row.amountOut <= 0n ||
+            row.effectiveMid === null || !Number.isFinite(row.effectiveMid) || row.effectiveMid <= 0) {
+          throw new Error(`invalid effective pricing row: ${key}`);
+        }
+        resolvedEdgeKeys.push(key);
+        const carried = effectiveMidRowCarried(effectiveMids, row);
+        (carried ? carriedEdgeKeys : refreshedEdgeKeys).push(key);
+        pricingProvenanceByEdgeKey.set(key, carried ? "carried" : "refreshed");
+        coverageByEdgeKey.set(key, resolvedCoverage);
+      } else if (row?.status === "no-output" || row?.status === "unsupported" || row?.status === "disabled-for-run") {
+        unavailableEdgeKeys.push(key);
+        pricingProvenanceByEdgeKey.set(key, "unavailable");
+        coverageByEdgeKey.set(key, failureCoverage("rejected", `effective-${row.status}`));
+      } else {
+        unresolvedEdgeKeys.push(key);
+        incompleteFamilyIds.add(familyId);
+        pricingProvenanceByEdgeKey.set(key, "unresolved");
+        coverageByEdgeKey.set(key, failureCoverage("unresolved", `effective-${row?.status ?? "missing-row"}`));
+      }
     }
+    diagnostics?.enter("coverage-key-hashes");
+    const resolved = effectiveCoverageKeys(keyCache, "resolved", resolvedEdgeKeys);
+    const unavailable = effectiveCoverageKeys(keyCache, "unavailable", unavailableEdgeKeys);
+    const unresolved = effectiveCoverageKeys(keyCache, "unresolved", unresolvedEdgeKeys);
+    const refreshed = effectiveCoverageKeys(keyCache, "refreshed", refreshedEdgeKeys);
+    const carried = effectiveCoverageKeys(keyCache, "carried", carriedEdgeKeys);
+    diagnostics?.enter("snapshot-publication");
+    const coverage: BlockScanStateCoverage = Object.freeze({
+      ...raw.coverage,
+      expectedEdgeKeys,
+      resolvedEdgeKeys: resolved.keys,
+      unavailableEdgeKeys: unavailable.keys,
+      unresolvedEdgeKeys: unresolved.keys,
+      refreshedEdgeKeys: refreshed.keys,
+      carriedEdgeKeys: carried.keys,
+      expectedEdgeKeyHash: index.expectedEdgeKeyHash,
+      resolvedEdgeKeyHash: resolved.hash,
+      unavailableEdgeKeyHash: unavailable.hash,
+      unresolvedEdgeKeyHash: unresolved.hash,
+      refreshedEdgeKeyHash: refreshed.hash,
+      carriedEdgeKeyHash: carried.hash,
+    });
+    const snapshot: BlockScanStateSnapshot = Object.freeze({
+      ...raw, generation: graph.generation, sourceBlock: graph.sourceBlock,
+      sourceBlockHash: graph.sourceBlockHash, graph,
+      rawMidSource: Object.freeze({ number: raw.sourceBlock, hash: raw.sourceBlockHash, generation: raw.generation }),
+      mids: raw.mids, effectiveMids, coverage, coverageByEdgeKey,
+      perBlockRefreshStateKeys: index.perBlockRefreshStateKeys,
+      pricingStateKeyByEdgeKey: index.stateKeyByEdgeKey,
+      pricingFamilyIdByEdgeKey: index.familyIdByEdgeKey,
+      pricingProvenanceByEdgeKey,
+      resolvedFamilyIds: Object.freeze([...familyIds].filter(id => !incompleteFamilyIds.has(id)).sort()),
+      incompleteFamilyIds: Object.freeze([...incompleteFamilyIds].sort()),
+    });
+    const graphFingerprint = strictGraphPublicationFingerprint(graph);
+    const publication: StrictPricingPublication = previous === null
+      ? Object.freeze({ kind: "baseline", graphFingerprint, snapshot })
+      : Object.freeze({ kind: "delta", graphFingerprint,
+          previousGeneration: previous.generation, previousSourceBlock: previous.sourceBlock,
+          previousSourceBlockHash: previous.sourceBlockHash,
+          updates: Object.freeze([]), removals: Object.freeze([]), snapshot });
+    const result = Object.freeze({ snapshot, publication, rawBasis: raw });
+    diagnosticStatus = "returned";
+    return result;
+  } finally {
+    diagnostics?.finish(graph, diagnosticStatus, "coverage-phase-diagnostics");
   }
-  const resolved = effectiveCoverageKeys(keyCache, "resolved", resolvedEdgeKeys);
-  const unavailable = effectiveCoverageKeys(keyCache, "unavailable", unavailableEdgeKeys);
-  const unresolved = effectiveCoverageKeys(keyCache, "unresolved", unresolvedEdgeKeys);
-  const refreshed = effectiveCoverageKeys(keyCache, "refreshed", refreshedEdgeKeys);
-  const carried = effectiveCoverageKeys(keyCache, "carried", carriedEdgeKeys);
-  const coverage: BlockScanStateCoverage = Object.freeze({
-    ...raw.coverage,
-    expectedEdgeKeys,
-    resolvedEdgeKeys: resolved.keys,
-    unavailableEdgeKeys: unavailable.keys,
-    unresolvedEdgeKeys: unresolved.keys,
-    refreshedEdgeKeys: refreshed.keys,
-    carriedEdgeKeys: carried.keys,
-    expectedEdgeKeyHash: index.expectedEdgeKeyHash,
-    resolvedEdgeKeyHash: resolved.hash,
-    unavailableEdgeKeyHash: unavailable.hash,
-    unresolvedEdgeKeyHash: unresolved.hash,
-    refreshedEdgeKeyHash: refreshed.hash,
-    carriedEdgeKeyHash: carried.hash,
-  });
-  const snapshot: BlockScanStateSnapshot = Object.freeze({
-    ...raw, generation: graph.generation, sourceBlock: graph.sourceBlock,
-    sourceBlockHash: graph.sourceBlockHash, graph,
-    rawMidSource: Object.freeze({ number: raw.sourceBlock, hash: raw.sourceBlockHash, generation: raw.generation }),
-    mids: raw.mids, effectiveMids, coverage, coverageByEdgeKey,
-    perBlockRefreshStateKeys: index.perBlockRefreshStateKeys,
-    pricingStateKeyByEdgeKey: index.stateKeyByEdgeKey,
-    pricingFamilyIdByEdgeKey: index.familyIdByEdgeKey,
-    pricingProvenanceByEdgeKey,
-    resolvedFamilyIds: Object.freeze([...familyIds].filter(id => !incompleteFamilyIds.has(id)).sort()),
-    incompleteFamilyIds: Object.freeze([...incompleteFamilyIds].sort()),
-  });
-  const graphFingerprint = strictGraphPublicationFingerprint(graph);
-  const publication: StrictPricingPublication = previous === null
-    ? Object.freeze({ kind: "baseline", graphFingerprint, snapshot })
-    : Object.freeze({ kind: "delta", graphFingerprint,
-        previousGeneration: previous.generation, previousSourceBlock: previous.sourceBlock,
-        previousSourceBlockHash: previous.sourceBlockHash,
-        updates: Object.freeze([]), removals: Object.freeze([]), snapshot });
-  return Object.freeze({ snapshot, publication, rawBasis: raw });
 }
 
 function buildStrictPricingSnapshot(
@@ -1562,26 +1575,17 @@ function sourceFor(graph: VerifiedGraphView): CanonicalSource {
   });
 }
 
-/** Synchronous wall time, not exclusive CPU: GC and process contention overlap. */
+/** Synchronous wall/CPU evidence only; never exclusive GC or scheduling attribution. */
 function diagnosePricingSync<T>(graph: VerifiedGraphView, phase: string, work: () => T): T {
   if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS !== "1") return work();
-  const startedAt = performance.now();
-  let status = "failed";
+  const diagnostics = beginPricingPhaseDiagnostics(true, phase);
+  let status: PricingPhaseStatus = "failed";
   try {
     const result = work();
     status = "returned";
     return result;
   } finally {
-    const finishedAt = performance.now();
-    try {
-      console.log(`[searcher/pricing-local-phase] ${JSON.stringify({
-        sourceBlock: graph.sourceBlock, sourceBlockHash: graph.sourceBlockHash,
-        generation: graph.generation, phase, status,
-        startedAtMs: performance.timeOrigin + startedAt,
-        finishedAtMs: performance.timeOrigin + finishedAt,
-        wallMs: Math.max(0, finishedAt - startedAt), timingModel: "sync-wall-includes-gc",
-      })}`);
-    } catch { /* Diagnostics cannot affect publication or its failure boundary. */ }
+    diagnostics?.finish(graph, status, "pricing-local-phase");
   }
 }
 
