@@ -1,0 +1,46 @@
+/**
+ * Retained Ekubo row probe (2026-11-04). Read-only, synthetic provider.
+ *
+ * Proves that a cold retained `PoolUniverseEntry` — address = EKUBO_ROUTER,
+ * opaque = {poolId, routeBinding, ...} — is re-materialized by the declarative
+ * address-surface nomination and decoded to the same Ekubo pool-key candidate
+ * WITHOUT any Core `PoolInitialized` getLogs. Identity then re-verifies the
+ * pool by code reads + two full-fill quote rounds (the same capability the
+ * handwritten family uses for every candidate).
+ *
+ * Run from the workspace root:
+ *   mkdir -p listener/.migration-probe
+ *   cp docs/research/migration/pending-20261028/ekubo-retained-path-probe-20261104.ts.draft \
+ *      listener/.migration-probe/ekubo-retained-path-probe.ts
+ *   cd listener && node --import tsx .migration-probe/ekubo-retained-path-probe.ts
+ */
+import assert from "node:assert/strict";
+import { ethers } from "ethers";
+import definition from "../src/searcher/venues/swaps/ekubo-family/ekubo.json";
+import { compileDeclarativeSwap } from "../src/searcher/venues/declarative-swap.ts";
+import { defineSwapFamily } from "../src/searcher/venues/adapter-family-plugin.ts";
+import { EKUBO_CORE, EKUBO_ROUTER } from "../src/searcher/venues/swaps/ekubo/abi.ts";
+import { createEkuboPoolKeyBinding, ekuboPoolId } from "../src/searcher/venues/swaps/ekubo/pool-key.ts";
+
+const plugin: any = defineSwapFamily(compileDeclarativeSwap(definition as any, []) as any);
+const key = { token0: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+  token1: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+  config: "0x0000000000000000000000000000000000000000004189374bc6a7f08000137c" };
+const binding = createEkuboPoolKeyBinding(key), poolId = ekuboPoolId(key);
+const retained = { address: ethers.getAddress(EKUBO_ROUTER), adapter: "ekubo-core-pool-v1",
+  receiptEmitters: [ethers.getAddress(EKUBO_CORE)], venueId: "ekubo", token0: key.token0, token1: key.token1,
+  poolId, routeBinding: binding, score: 0, source: "landed-event-retry" };
+const opaque: Record<string, unknown> = { adapter: retained.adapter, adapterId: retained.adapter };
+for (const [name, value] of Object.entries(retained)) if (name !== "address" && name !== "adapter") opaque[name] = value;
+const source = { number: 26_130_639, hash: `0x${"22".repeat(32)}`, generation: 1 };
+const provider = { async getCode() { return "0x60006000f3"; }, async getStorage() { return ethers.ZeroHash; } };
+const observations = await plugin.discovery.nominate.nominate({
+  nominations: [{ address: retained.address, opaque }], source, provider });
+assert.equal(observations.length, 1);
+const candidate = plugin.discovery.decodeCandidate({ observation: observations[0], matchedPatternId: "ekubo-router-surface" });
+assert(candidate);
+assert.equal(candidate.poolId, poolId);
+assert.equal(candidate.token0.toLowerCase(), key.token0.toLowerCase());
+assert.equal(candidate.config, key.config);
+assert.equal(plugin.identity.variants[0].applies(candidate), true);
+console.log("retained Ekubo row re-materialized without getLogs:", candidate.poolId, "subject", candidate.subject);

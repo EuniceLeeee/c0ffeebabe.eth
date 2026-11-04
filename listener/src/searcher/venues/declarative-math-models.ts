@@ -18,6 +18,7 @@ import { stakedUsdatEventAssetsMathModel } from "./staked-usdat-math.js";
 import { bearQuoteMathModel, xwinLocalStateMathModel, xwinQuoteMathModel } from "./token-conversion-math.js";
 import { ellaMathModels } from "./swaps/ella-exchange-family/math.js";
 import { kyberswapElasticMathModels } from "./swaps/kyberswap-elastic-family/declarative-math.js";
+import { ekuboMathModels } from "./swaps/ekubo-family/declarative-math.js";
 import { oneswapMathModels } from "./swaps/oneswap-family/declarative-math.js";
 import { dodoV2MathModels } from "./swaps/dodo-v2-family/math.js";
 import { univ1MathModels } from "./swaps/univ1-family/math.js";
@@ -26,6 +27,7 @@ import { univ3MathModels } from "./swaps/univ3-family/math.js";
 import { algebraIntegralMathModels } from "./swaps/algebra-integral-family/declarative-math.js";
 import { precisionPoolMathModels } from "./swaps/precision-pool-family/math.js";
 import { univ4MathModels } from "./swaps/univ4-family/math.js";
+import { univ4FeeHookMathModels } from "./swaps/univ4-fee-hook-family/declarative-math.js";
 
 // Static, source-hashed math entries are registered here by protocol migration.
 // JSON never imports arbitrary files or executable handlers. An absent model
@@ -59,7 +61,9 @@ const models: readonly DeclarativeMathModel[] = [
   ...algebraIntegralMathModels,
   ...precisionPoolMathModels,
   ...univ4MathModels,
+  ...univ4FeeHookMathModels,
   ...oneswapMathModels,
   ...dodoV2MathModels,
+  ...ekuboMathModels,
 ];
 export const declarativeMathRegistry = createDeclarativeMathRegistry(models);
