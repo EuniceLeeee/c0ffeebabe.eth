@@ -1,0 +1,1694 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:inverse-auction"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_INVERSE_AUCTION_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:inverse-auction",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "inverse-auction-buy"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "convert"
+      }
+    ],
+    "supportedLineages": [
+      "inverse-auction:dbr-sale"
+    ],
+    "poolAdapterIds": [
+      "inverse-auction"
+    ],
+    "edgeAdapterIds": [
+      "inverse-auction-buy"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "inverse-auction",
+        "addressField": "target"
+      },
+      "calls": [
+        {
+          "id": "inverse-auction-buy-dbr-call",
+          "signature": "buyDBR(uint256,uint256,address)"
+        }
+      ],
+      "events": [
+        {
+          "id": "inverse-auction-buy-event",
+          "signature": "Buy(address,address,uint256,uint256)"
+        }
+      ],
+      "surface": {
+        "id": "inverse-auction-surface",
+        "fingerprint": "inverse-auction-dbr-sale-v1"
+      },
+      "labels": [
+        "inverse-auction",
+        "protocol:inverse-auction"
+      ]
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "auction": [
+          "function dola() view returns (address)",
+          "function dbr() view returns (address)",
+          "function dolaReserve() view returns (uint256)",
+          "function dbrReserve() view returns (uint256)",
+          "function getCurrentReserves() view returns (uint256,uint256)",
+          "function dbrRatePerYear() view returns (uint256)",
+          "function maxDbrRatePerYear() view returns (uint256)"
+        ]
+      },
+      "constants": {
+        "dola": "0x865377367054516e17014CcdED1e7d814EDC9ce4",
+        "dbr": "0xAD038Eb671c44b853887A7E32528FaB35dC5D710",
+        "codeHash": "0x1f1d270f2f650900307694d91332ba0b5dab7eadc9dae4c1babd7d769c1dd089"
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "base"
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
+              },
+              {
+                "id": "identity-dola",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "auction",
+                    "dola",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-dbr",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "auction",
+                    "dbr",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-dola-reserve",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "auction",
+                    "dolaReserve",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-dbr-reserve",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "auction",
+                    "dbrReserve",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-current-reserves",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "auction",
+                    "getCurrentReserves",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-rate",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "auction",
+                    "dbrRatePerYear",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-max-rate",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "auction",
+                    "maxDbrRatePerYear",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "identity-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "dola",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "auction",
+                        "dola",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-dola"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "dbr",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "auction",
+                        "dbr",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-dbr"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "dolaReserve",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "auction",
+                        "dolaReserve",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-dola-reserve"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "dbrReserve",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "auction",
+                        "dbrReserve",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-dbr-reserve"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "current",
+                "value": {
+                  "op": "decodeAll",
+                  "args": [
+                    "auction",
+                    "getCurrentReserves",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-current-reserves"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "currentDola",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$current",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "currentDbr",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$current",
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "rate",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "auction",
+                        "dbrRatePerYear",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-rate"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "maxRate",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "auction",
+                        "maxDbrRatePerYear",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-max-rate"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "codeHash": "$codeHash",
+                  "dola": "$dola",
+                  "dbr": "$dbr",
+                  "dolaReserve": "$dolaReserve",
+                  "dbrReserve": "$dbrReserve",
+                  "currentDola": "$currentDola",
+                  "currentDbr": "$currentDbr",
+                  "rate": "$rate",
+                  "maxRate": "$maxRate"
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "inverse_auction_code_or_token_mismatch",
+              "evidenceRequestIds": [
+                "identity-code",
+                "identity-dola",
+                "identity-dbr"
+              ]
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    "$evidence.codeHash",
+                    "$constants.codeHash"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$evidence.dola",
+                        "$constants.dola"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$evidence.dbr",
+                        "$constants.dbr"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "inverse_auction_reserves_inactive",
+              "evidenceRequestIds": [
+                "identity-dola-reserve",
+                "identity-dbr-reserve",
+                "identity-current-reserves"
+              ]
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.dolaReserve",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.dbrReserve",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.currentDola",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.currentDbr",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "inverse_auction_reserve_projection_inconsistent",
+              "evidenceRequestIds": [
+                "identity-rate",
+                "identity-max-rate"
+              ]
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$evidence.rate",
+                    "$evidence.maxRate"
+                  ]
+                },
+                {
+                  "op": "gt",
+                  "args": [
+                    "$evidence.currentDola",
+                    "$evidence.dolaReserve"
+                  ]
+                },
+                {
+                  "op": "lt",
+                  "args": [
+                    "$evidence.currentDbr",
+                    "$evidence.dbrReserve"
+                  ]
+                },
+                {
+                  "op": "gt",
+                  "args": [
+                    {
+                      "op": "mul",
+                      "args": [
+                        "$evidence.currentDola",
+                        "$evidence.currentDbr"
+                      ]
+                    },
+                    {
+                      "op": "mul",
+                      "args": [
+                        "$evidence.dolaReserve",
+                        "$evidence.dbrReserve"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "inverse-auction-dbr-sale-active-state-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "codeHash": "$evidence.codeHash",
+                          "dola": "$evidence.dola",
+                          "dbr": "$evidence.dbr",
+                          "dolaReserve": "$evidence.dolaReserve",
+                          "dbrReserve": "$evidence.dbrReserve",
+                          "currentDola": "$evidence.currentDola",
+                          "currentDbr": "$evidence.currentDbr",
+                          "rate": "$evidence.rate",
+                          "maxRate": "$evidence.maxRate"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "dola": "$evidence.dola",
+                "dbr": "$evidence.dbr",
+                "dolaReserve": "$evidence.dolaReserve",
+                "dbrReserve": "$evidence.dbrReserve"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "target": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "dola": {
+        "op": "address",
+        "args": [
+          "$identity.dola"
+        ]
+      },
+      "dbr": {
+        "op": "address",
+        "args": [
+          "$identity.dbr"
+        ]
+      }
+    },
+    "bindingProjection": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "dola": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.dola"
+            ]
+          }
+        ]
+      },
+      "dbr": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.dbr"
+            ]
+          }
+        ]
+      },
+      "quoteSemantics": "rebased-constant-product-floor-v1"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "buy",
+        "enabled": true,
+        "tokenIn": "$descriptor.dola",
+        "tokenOut": "$descriptor.dbr",
+        "adapterId": "inverse-auction-buy",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "convert"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.direction",
+            "buy"
+          ]
+        },
+        "error": "inverse-auction route requires the buy direction"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            "$descriptor.dola"
+          ]
+        },
+        "error": "inverse-auction route input must be DOLA"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            "$descriptor.dbr"
+          ]
+        },
+        "error": "inverse-auction route output must be DBR"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            "inverse-auction-buy"
+          ]
+        },
+        "error": "inverse-auction route adapter mismatch"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "target": "$descriptor.target",
+      "dola": "$descriptor.dola",
+      "dbr": "$descriptor.dbr",
+      "route": {
+        "op": "at",
+        "args": [
+          "$routes",
+          0
+        ]
+      },
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "pair": [
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.dola"
+              ]
+            }
+          ]
+        },
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.dbr"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "$constants.sample"
+      ]
+    },
+    "exactCompatibility": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "direction": "$route.direction",
+      "quoteSemantics": "rebased-constant-product-floor-v1",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": [
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "dbr-sale",
+    "lineageId": "inverse-auction:dbr-sale",
+    "abi": {
+      "auction": [
+        "function dola() view returns (address)",
+        "function dbr() view returns (address)",
+        "function dolaReserve() view returns (uint256)",
+        "function dbrReserve() view returns (uint256)",
+        "function getCurrentReserves() view returns (uint256,uint256)",
+        "function dbrRatePerYear() view returns (uint256)",
+        "function maxDbrRatePerYear() view returns (uint256)",
+        "function buyDBR(uint256,uint256,address)"
+      ]
+    },
+    "constants": {
+      "dola": "0x865377367054516e17014CcdED1e7d814EDC9ce4",
+      "dbr": "0xAD038Eb671c44b853887A7E32528FaB35dC5D710",
+      "codeHash": "0x1f1d270f2f650900307694d91332ba0b5dab7eadc9dae4c1babd7d769c1dd089",
+      "sample": "1000000000000000000",
+      "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "standalone-contract",
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.direction",
+            "buy"
+          ]
+        },
+        "error": "inverse-auction direction unsupported"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            "$descriptor.dola"
+          ]
+        },
+        "error": "inverse-auction DOLA binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            "$descriptor.dbr"
+          ]
+        },
+        "error": "inverse-auction DBR binding mismatch"
+      }
+    ],
+    "pricing": {
+      "mutationAddresses": [
+        "$descriptor.target"
+      ],
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": {
+        "op": "unique",
+        "args": [
+          [
+            "$descriptor.target",
+            "$descriptor.dola",
+            "$descriptor.dbr"
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "auction-current-reserves",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "retainReadEvidence": true,
+      "checks": [
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                ]
+              }
+            ]
+          },
+          "error": "inverse-auction exact input exceeds uint256"
+        },
+        {
+          "assert": {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$executor",
+                  "0x0000000000000000000000000000000000000000"
+                ]
+              }
+            ]
+          },
+          "error": "inverse-auction exact executor cannot be zero"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              "$route.direction",
+              "buy"
+            ]
+          },
+          "error": "inverse-auction exact direction unsupported"
+        }
+      ],
+      "evidence": {
+        "op": "merge",
+        "args": [
+          {
+            "kind": "inverse-auction-rebased-constant-product-quote",
+            "quoteModel": "constant-product",
+            "source": "$source",
+            "target": "$descriptor.target",
+            "dola": "$descriptor.dola",
+            "dbr": "$descriptor.dbr",
+            "tokenIn": "$route.tokenIn",
+            "tokenOut": "$route.tokenOut",
+            "amountIn": "$amountIn",
+            "amountOut": "$amountOut",
+            "bindingFingerprint": "$route.bindingRef.fingerprint"
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$amountOut",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "unavailableReason": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$quoteResult",
+                        "reason"
+                      ]
+                    },
+                    "inverse-auction-zero-curve-output"
+                  ]
+                }
+              },
+              {}
+            ]
+          }
+        ]
+      },
+      "zeroEvidence": {
+        "kind": "inverse-auction-rebased-constant-product-quote",
+        "quoteModel": "constant-product",
+        "source": "$source",
+        "target": "$descriptor.target",
+        "dola": "$descriptor.dola",
+        "dbr": "$descriptor.dbr",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "amountIn": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "amountOut": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "amountOut": {
+        "op": "get",
+        "args": [
+          "$quoteResult",
+          "amountOut"
+        ]
+      }
+    },
+    "readPrograms": {
+      "quote": {
+        "requests": [
+          {
+            "id": "$requestId",
+            "kind": "eth-call",
+            "to": "$descriptor.target",
+            "data": {
+              "op": "encode",
+              "args": [
+                "auction",
+                "getCurrentReserves",
+                []
+              ]
+            },
+            "completion": "return-data"
+          }
+        ],
+        "decode": [
+          {
+            "let": "reserves",
+            "value": {
+              "op": "decodeAll",
+              "args": [
+                "auction",
+                "getCurrentReserves",
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "$requestId"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "quote",
+            "value": {
+              "op": "model",
+              "args": [
+                "auctionCurve",
+                {
+                  "reserve0": {
+                    "op": "at",
+                    "args": [
+                      "$reserves",
+                      0
+                    ]
+                  },
+                  "reserve1": {
+                    "op": "at",
+                    "args": [
+                      "$reserves",
+                      1
+                    ]
+                  },
+                  "inputBalance": {
+                    "op": "at",
+                    "args": [
+                      "$reserves",
+                      0
+                    ]
+                  },
+                  "amountIn": "$amountIn",
+                  "feeBps": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "direction": "zero-for-one",
+                  "taxInNumerator": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "taxInDenominator": {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  },
+                  "taxOutNumerator": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "taxOutDenominator": {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "get",
+              "args": [
+                "$quote",
+                "amountOut"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.target",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "eq",
+            "args": [
+              "$route.direction",
+              "buy"
+            ]
+          },
+          "error": "inverse-auction execution direction unsupported"
+        }
+      ],
+      "requireCanonicalSource": true,
+      "steps": [
+        {
+          "id": "readReserves",
+          "static": true,
+          "call": {
+            "target": "$descriptor.target",
+            "signature": "function getCurrentReserves() view returns (uint256,uint256)",
+            "args": [],
+            "save": {
+              "dolaReserve": 0,
+              "dbrReserve": 1
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "dolaReserve"
+                },
+                "operator": "gte",
+                "right": 1
+              },
+              {
+                "left": {
+                  "runtime": "dbrReserve"
+                },
+                "operator": "gte",
+                "right": 1
+              }
+            ]
+          }
+        },
+        {
+          "id": "curve",
+          "math": {
+            "model": "auctionRuntimeCurve",
+            "inputs": {
+              "reserveIn": {
+                "runtime": "dolaReserve"
+              },
+              "reserveOut": {
+                "runtime": "dbrReserve"
+              },
+              "amountIn": {
+                "runtime": "amountIn"
+              },
+              "feeBps": {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              },
+              "taxInNumerator": {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              },
+              "taxInDenominator": {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              },
+              "taxOutNumerator": {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              },
+              "taxOutDenominator": {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            },
+            "outputs": {
+              "poolAmountOut": "auctionPoolOut",
+              "amountOut": "auctionDbrOut"
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "auctionDbrOut"
+                },
+                "operator": "gte",
+                "right": 1
+              }
+            ]
+          }
+        },
+        {
+          "id": "buy",
+          "call": {
+            "target": "$descriptor.target",
+            "signature": "function buyDBR(uint256,uint256,address)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              },
+              {
+                "runtime": "auctionDbrOut"
+              },
+              "$recipient"
+            ]
+          },
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$descriptor.target",
+            "mode": "exact-clear",
+            "amount": {
+              "runtime": "amountIn"
+            },
+            "requireBool": true
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "auctionDbrOut"
+          }
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "auctionCurve": {
+          "model": "univ2:exact-quote",
+          "version": 1
+        }
+      }
+    },
+    "executionMath": {
+      "version": 1,
+      "entries": {
+        "auctionRuntimeCurve": {
+          "model": "univ2:runtime-quote",
+          "version": 1
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "local-math",
+      "localStateUnsupportedReason": "Inverse Auction DBR accrual depends on the trade block timestamp; the sequential local transition is not migrated, and the execution program recomputes the post-rebase curve in-transaction",
+      "steps": [
+        {
+          "id": "reserves",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "quote-reserves",
+              "kind": "eth-call",
+              "to": "$descriptor.target",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "auction",
+                  "getCurrentReserves",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "observed",
+              "value": {
+                "op": "decodeAll",
+                "args": [
+                  "auction",
+                  "getCurrentReserves",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "quote-reserves"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "dolaReserve": {
+                  "op": "at",
+                  "args": [
+                    "$observed",
+                    0
+                  ]
+                },
+                "dbrReserve": {
+                  "op": "at",
+                  "args": [
+                    "$observed",
+                    1
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": {
+        "op": "model",
+        "args": [
+          "auctionCurve",
+          {
+            "reserve0": "$steps.reserves.dolaReserve",
+            "reserve1": "$steps.reserves.dbrReserve",
+            "inputBalance": "$steps.reserves.dolaReserve",
+            "amountIn": "$amountIn",
+            "feeBps": {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            "direction": "zero-for-one",
+            "taxInNumerator": {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            "taxInDenominator": {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            },
+            "taxOutNumerator": {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            "taxOutDenominator": {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "inverse-auction-buy",
+        "lineage": "inverse-auction",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function buyDBR(uint256,uint256,address)"
+        }
+      ]
+    }
+  ]
+}

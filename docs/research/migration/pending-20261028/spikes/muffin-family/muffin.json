@@ -1,0 +1,2459 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:muffin"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_MUFFIN_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:muffin",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "muffin-swap"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "muffin:muffin-hub"
+    ],
+    "poolAdapterIds": [
+      "muffin"
+    ],
+    "edgeAdapterIds": [
+      "muffin-swap"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "muffin-hub-pool",
+        "addressField": "hub",
+        "fields": {
+          "hub": "address",
+          "poolId": "bytes32",
+          "token0": "address",
+          "token1": "address"
+        },
+        "key": [
+          "hub",
+          "poolId"
+        ],
+        "instanceKey": [
+          "hub",
+          "poolId"
+        ]
+      },
+      "calls": [
+        {
+          "id": "muffin-swap-call",
+          "signature": "function swap(address,address,uint256,int256,address,uint256,uint256,bytes) returns(uint256,uint256)",
+          "fields": {
+            "hub": {
+              "from": "target"
+            },
+            "token0": {
+              "from": "expression",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "lt",
+                    "args": [
+                      {
+                        "op": "uint",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              1
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "at",
+                    "args": [
+                      "$args",
+                      0
+                    ]
+                  },
+                  {
+                    "op": "at",
+                    "args": [
+                      "$args",
+                      1
+                    ]
+                  }
+                ]
+              }
+            },
+            "token1": {
+              "from": "expression",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "lt",
+                    "args": [
+                      {
+                        "op": "uint",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              1
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "at",
+                    "args": [
+                      "$args",
+                      1
+                    ]
+                  },
+                  {
+                    "op": "at",
+                    "args": [
+                      "$args",
+                      0
+                    ]
+                  }
+                ]
+              }
+            },
+            "poolId": {
+              "from": "expression",
+              "value": {
+                "op": "codeHash",
+                "args": [
+                  {
+                    "op": "abiEncode",
+                    "args": [
+                      [
+                        "address",
+                        "address"
+                      ],
+                      [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "lt",
+                              "args": [
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        "$args",
+                                        0
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        "$args",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "lt",
+                              "args": [
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        "$args",
+                                        0
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        "$args",
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                1
+                              ]
+                            },
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "predicates": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$candidate.hub"
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$candidate.token0"
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$candidate.token1"
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$candidate.token0",
+                        "$candidate.token1"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "muffin-pool-created",
+          "signature": "event PoolCreated(address indexed token0,address indexed token1,bytes32 indexed poolId)",
+          "fields": {
+            "hub": {
+              "from": "emitter"
+            },
+            "token0": {
+              "from": "argument",
+              "index": 0
+            },
+            "token1": {
+              "from": "argument",
+              "index": 1
+            },
+            "poolId": {
+              "from": "argument",
+              "index": 2
+            }
+          },
+          "predicates": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$candidate.hub"
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$candidate.token0"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$candidate.token1"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$candidate.poolId"
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            {
+                              "op": "abiEncode",
+                              "args": [
+                                [
+                                  "address",
+                                  "address"
+                                ],
+                                [
+                                  "$candidate.token0",
+                                  "$candidate.token1"
+                                ]
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "muffin-swap-log",
+          "signature": "event Swap(bytes32 indexed poolId,address indexed sender,address indexed recipient,uint256 senderAccRefId,uint256 recipientAccRefId,int256 amount0,int256 amount1,uint256 amountInDistribution,uint256 amountOutDistribution,uint256[] tierData)",
+          "fields": {},
+          "nominationOnly": true
+        }
+      ],
+      "labels": [
+        "muffin",
+        "muffin-hub"
+      ],
+      "nomination": "tx-evidence",
+      "txSeedNominations": false
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "get",
+          "args": [
+            "$identity",
+            "subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "abi": {
+        "hub": [
+          "function getPoolParameters(bytes32) view returns(uint8,uint8)",
+          "function getTiersCount(bytes32) view returns(uint256)",
+          "function underlyings(bytes32) view returns(address,address)",
+          "function tokens(address) view returns(uint8,uint248)"
+        ]
+      },
+      "constants": {
+        "hub": "0x6690384822aff0b65fe0c21a809f187f5c3fcdd8",
+        "hubCodeHash": "0x0809ae2ae556ce22ae8a5b68463fc131ea76ef602cc584ab832262adf2104fb5",
+        "zero": "0x0000000000000000000000000000000000000000",
+        "max": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "probe"
+          }
+        ],
+        "stages": {
+          "probe": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "hub-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.hub"
+                  ]
+                }
+              },
+              {
+                "id": "underlyings",
+                "kind": "eth-call",
+                "to": "$candidate.hub",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "hub",
+                    "underlyings",
+                    [
+                      {
+                        "op": "lower",
+                        "args": [
+                          "$candidate.poolId"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "pool-parameters",
+                "kind": "eth-call",
+                "to": "$candidate.hub",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "hub",
+                    "getPoolParameters",
+                    [
+                      {
+                        "op": "lower",
+                        "args": [
+                          "$candidate.poolId"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "tiers-count",
+                "kind": "eth-call",
+                "to": "$candidate.hub",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "hub",
+                    "getTiersCount",
+                    [
+                      {
+                        "op": "lower",
+                        "args": [
+                          "$candidate.poolId"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "token0-data",
+                "kind": "eth-call",
+                "to": "$candidate.hub",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "hub",
+                    "tokens",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$candidate.token0"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "token1-data",
+                "kind": "eth-call",
+                "to": "$candidate.hub",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "hub",
+                    "tokens",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$candidate.token1"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "hub-code"
+                            ]
+                          },
+                          {
+                            "op": "returned",
+                            "args": [
+                              "underlyings"
+                            ]
+                          },
+                          {
+                            "op": "returned",
+                            "args": [
+                              "pool-parameters"
+                            ]
+                          },
+                          {
+                            "op": "returned",
+                            "args": [
+                              "tiers-count"
+                            ]
+                          },
+                          {
+                            "op": "returned",
+                            "args": [
+                              "token0-data"
+                            ]
+                          },
+                          {
+                            "op": "returned",
+                            "args": [
+                              "token1-data"
+                            ]
+                          }
+                        ]
+                      ]
+                    },
+                    {
+                      "op": "source",
+                      "args": [
+                        [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "hub-code"
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  ]
+                },
+                "error": "muffin identity reads came from different sources"
+              },
+              {
+                "return": {
+                  "phase": "probe",
+                  "hubCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "hub-code"
+                        ]
+                      }
+                    ]
+                  },
+                  "tickSpacing": {
+                    "op": "decode",
+                    "args": [
+                      "hub",
+                      "getPoolParameters",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "pool-parameters"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "protocolFee": {
+                    "op": "decode",
+                    "args": [
+                      "hub",
+                      "getPoolParameters",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "pool-parameters"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      1
+                    ]
+                  },
+                  "tiersCount": {
+                    "op": "decode",
+                    "args": [
+                      "hub",
+                      "getTiersCount",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "tiers-count"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "token0Locked": {
+                    "op": "decode",
+                    "args": [
+                      "hub",
+                      "tokens",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "token0-data"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "token1Locked": {
+                    "op": "decode",
+                    "args": [
+                      "hub",
+                      "tokens",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "token1-data"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "underlying0": {
+                    "op": "decode",
+                    "args": [
+                      "hub",
+                      "underlyings",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "underlyings"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "underlying1": {
+                    "op": "decode",
+                    "args": [
+                      "hub",
+                      "underlyings",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "underlyings"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      1
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$candidate",
+                    "candidateKind"
+                  ]
+                },
+                "muffin-hub-pool"
+              ]
+            },
+            "error": "muffin wrong candidate kind"
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "foreign_hub",
+              "evidenceRequestIds": []
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$candidate",
+                        "hub"
+                      ]
+                    },
+                    "$constants.hub"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "attempt": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "hubCodeHash"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$constants.hubCodeHash"
+                      ]
+                    }
+                  ]
+                },
+                "error": "muffin hub runtime code identity mismatch"
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "underlying0"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "token0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "underlying1"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "token1"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "muffin pool underlyings reverse binding"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "poolId"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            {
+                              "op": "abiEncode",
+                              "args": [
+                                [
+                                  "address",
+                                  "address"
+                                ],
+                                [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$evidence",
+                                      "underlying0"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$evidence",
+                                      "underlying1"
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "muffin pool id reverse binding"
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "gt",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "tiersCount"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "tickSpacing"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lt",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$evidence",
+                            "tickSpacing"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "muffin pool parameters unusable"
+              },
+              {
+                "return": {
+                  "status": "verified",
+                  "identity": {
+                    "familyId": "custom-swap:muffin",
+                    "lineageId": "muffin:muffin-hub",
+                    "subject": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "poolId"
+                          ]
+                        }
+                      ]
+                    },
+                    "provenance": [
+                      {
+                        "kind": "singleton-pool-active-proof",
+                        "subject": {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "hub"
+                              ]
+                            }
+                          ]
+                        },
+                        "evidenceHash": {
+                          "op": "hash",
+                          "args": [
+                            {
+                              "hub": {
+                                "op": "address",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$candidate",
+                                      "hub"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "poolId": {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$candidate",
+                                      "poolId"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "token0": {
+                                "op": "address",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$evidence",
+                                      "underlying0"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "token1": {
+                                "op": "address",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$evidence",
+                                      "underlying1"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "tickSpacing": {
+                                "op": "number",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$evidence",
+                                      "tickSpacing"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "protocolFee": {
+                                "op": "number",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$evidence",
+                                      "protocolFee"
+                                    ]
+                                  }
+                                ]
+                              },
+                              "tiersCount": {
+                                "op": "get",
+                                "args": [
+                                  "$evidence",
+                                  "tiersCount"
+                                ]
+                              },
+                              "hubCodeHash": {
+                                "op": "get",
+                                "args": [
+                                  "$evidence",
+                                  "hubCodeHash"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "facts": {
+                      "hub": {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$candidate",
+                              "hub"
+                            ]
+                          }
+                        ]
+                      },
+                      "poolId": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$candidate",
+                              "poolId"
+                            ]
+                          }
+                        ]
+                      },
+                      "token0": {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "underlying0"
+                            ]
+                          }
+                        ]
+                      },
+                      "token1": {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "underlying1"
+                            ]
+                          }
+                        ]
+                      },
+                      "tickSpacing": {
+                        "op": "number",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "tickSpacing"
+                            ]
+                          }
+                        ]
+                      },
+                      "protocolFee": {
+                        "op": "number",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$evidence",
+                              "protocolFee"
+                            ]
+                          }
+                        ]
+                      },
+                      "tiersCount": {
+                        "op": "get",
+                        "args": [
+                          "$evidence",
+                          "tiersCount"
+                        ]
+                      },
+                      "hubCodeHash": {
+                        "op": "get",
+                        "args": [
+                          "$evidence",
+                          "hubCodeHash"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "catch": [
+              {
+                "return": {
+                  "status": "chain-proven-rejected",
+                  "reasonCode": "muffin_pool_identity_mismatch",
+                  "evidenceRequestIds": [
+                    "hub-code",
+                    "underlyings",
+                    "pool-parameters",
+                    "tiers-count",
+                    "token0-data",
+                    "token1-data"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": "$identity.subject",
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              "$identity.subject"
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            }
+          ]
+        },
+        "$identity.facts"
+      ]
+    },
+    "bindingProjection": {
+      "hub": "$descriptor.hub",
+      "poolId": "$descriptor.poolId",
+      "token0": "$descriptor.token0",
+      "token1": "$descriptor.token1",
+      "tickSpacing": "$descriptor.tickSpacing",
+      "protocolFee": "$descriptor.protocolFee",
+      "tiersCount": "$descriptor.tiersCount",
+      "hubCodeHash": "$descriptor.hubCodeHash"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.hub",
+    "bindingKey": "$descriptor.poolId",
+    "directions": [
+      {
+        "id": "token0-in",
+        "enabled": true,
+        "tokenIn": "$descriptor.token0",
+        "tokenOut": "$descriptor.token1",
+        "adapterId": "muffin-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "poolId": "$descriptor.poolId"
+        }
+      },
+      {
+        "id": "token1-in",
+        "enabled": true,
+        "tokenIn": "$descriptor.token1",
+        "tokenOut": "$descriptor.token0",
+        "adapterId": "muffin-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "poolId": "$descriptor.poolId"
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "custom-swap:muffin",
+          "$descriptor.hub",
+          "$descriptor.poolId",
+          "$route.direction"
+        ],
+        "\u001f"
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": "$descriptor.hub"
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "descriptorChecks": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.familyId",
+            "custom-swap:muffin"
+          ]
+        },
+        "error": "muffin foreign family descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.lineageId",
+            "muffin:muffin-hub"
+          ]
+        },
+        "error": "muffin foreign lineage descriptor"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$descriptor.hub",
+            "0x6690384822aff0b65fe0c21a809f187f5c3fcdd8"
+          ]
+        },
+        "error": "muffin foreign hub"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$descriptor.token0",
+                "$descriptor.token1"
+              ]
+            }
+          ]
+        },
+        "error": "muffin pool requires distinct tokens"
+      },
+      {
+        "assert": {
+          "op": "gt",
+          "args": [
+            "$descriptor.tiersCount",
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "error": "muffin pool requires at least one tier"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "compatibility": {
+      "hub": "$descriptor.hub",
+      "poolId": "$descriptor.poolId",
+      "token0": "$descriptor.token0",
+      "token1": "$descriptor.token1",
+      "hubCodeHash": "$descriptor.hubCodeHash"
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "finalize": "$draft",
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1"
+      ]
+    },
+    "exactCompatibility": {
+      "binding": "$route.bindingRef.fingerprint",
+      "routeKey": "$route.routeKey",
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "swap": {
+    "version": 1,
+    "events": [
+      {
+        "id": "muffin-swap-log",
+        "signature": "event Swap(bytes32 indexed poolId,address indexed sender,address indexed recipient,uint256 senderAccRefId,uint256 recipientAccRefId,int256 amount0,int256 amount1,uint256 amountInDistribution,uint256 amountOutDistribution,uint256[] tierData)",
+        "pool": {
+          "op": "lower",
+          "args": [
+            "$args.poolId"
+          ]
+        },
+        "payload": {
+          "poolId": {
+            "op": "lower",
+            "args": [
+              "$args.poolId"
+            ]
+          },
+          "sender": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.sender"
+                ]
+              }
+            ]
+          },
+          "recipient": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.recipient"
+                ]
+              }
+            ]
+          },
+          "amount0": "$args.amount0",
+          "amount1": "$args.amount1"
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "ne",
+              "args": [
+                "$args.amount0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$args.amount1",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lt",
+              "args": [
+                {
+                  "op": "mul",
+                  "args": [
+                    "$args.amount0",
+                    "$args.amount1"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$args.poolId"
+                  ]
+                },
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$edge.target",
+                "$descriptor.hub"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$args.poolId"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$descriptor.poolId"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$args.amount0",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenIn",
+                    "$descriptor.token0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "op": "merge",
+          "args": [
+            {
+              "pool": "$edge.target",
+              "poolId": {
+                "op": "lower",
+                "args": [
+                  "$args.poolId"
+                ]
+              },
+              "matchedAdapterId": "$edge.adapterId"
+            },
+            {
+              "tokenIn": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amount0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  "$descriptor.token0",
+                  "$descriptor.token1"
+                ]
+              },
+              "tokenOut": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amount0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  "$descriptor.token1",
+                  "$descriptor.token0"
+                ]
+              },
+              "amountIn": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amount0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  "$args.amount0",
+                  {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      },
+                      "$args.amount0"
+                    ]
+                  }
+                ]
+              },
+              "amountOut": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amount0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      },
+                      "$args.amount1"
+                    ]
+                  },
+                  "$args.amount1"
+                ]
+              }
+            }
+          ]
+        },
+        "classification": "swap"
+      }
+    ],
+    "calls": [
+      {
+        "id": "muffin-swap-call",
+        "signature": "function swap(address,address,uint256,int256,address,uint256,uint256,bytes) returns(uint256,uint256)",
+        "classification": "swap",
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$args.tokenIn"
+                  ]
+                },
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$args.tokenOut"
+                  ]
+                },
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$args.tokenIn",
+                    "$args.tokenOut"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "tokenIn": {
+            "op": "lower",
+            "args": [
+              "$args.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "lower",
+            "args": [
+              "$args.tokenOut"
+            ]
+          },
+          "amountDesired": "$args.amountDesired",
+          "recipient": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.recipient"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "canonicalIntakeTargets": [],
+    "victimSupport": "none"
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "muffin-swap",
+        "lineage": "custom-swap:muffin",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function swap(address,address,uint256,int256,address,uint256,uint256,bytes) returns(uint256,uint256)"
+        }
+      ]
+    }
+  ],
+  "modules": {
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "tiers-count",
+              "kind": "eth-call",
+              "to": "$descriptor.hub",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "hub",
+                  "getTiersCount",
+                  [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$descriptor.poolId"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "tiersCount": {
+              "op": "decode",
+              "args": [
+                "hub",
+                "getTiersCount",
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "tiers-count"
+                      ]
+                    },
+                    "data"
+                  ]
+                },
+                0
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "quotes": {}
+      }
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$steps",
+                      "state"
+                    ]
+                  },
+                  "tiersCount"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "tiersCount"
+                ]
+              }
+            ]
+          },
+          "error": "muffin pricing state binding"
+        }
+      ],
+      "rows": []
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "effect-simulation",
+      "chainQuote": {
+        "step": "execution",
+        "requestId": "muffin-executor-receipt"
+      },
+      "steps": [
+        {
+          "id": "execution",
+          "requirements": {
+            "transports": [
+              "effect-delta-simulation"
+            ],
+            "caller": "executor",
+            "effects": [
+              "return-data",
+              "revert-data",
+              "token-delta",
+              "native-delta"
+            ]
+          },
+          "requests": [
+            {
+              "id": "muffin-executor-receipt",
+              "kind": "declarative-execution-simulation",
+              "amountIn": "$amountIn",
+              "observe": [
+                "token-delta",
+                "native-delta"
+              ],
+              "required": true
+            }
+          ],
+          "decode": [
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "muffin-executor-receipt"
+                        ]
+                      },
+                      "completion"
+                    ]
+                  },
+                  "returned"
+                ]
+              },
+              "error": "muffin quote simulation completion"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "muffin-executor-receipt"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  "0x"
+                ]
+              },
+              "error": "muffin executor returned unexpected data"
+            },
+            {
+              "return": {
+                "amountOut": {
+                  "op": "programReceipt",
+                  "args": [
+                    {
+                      "requestId": "muffin-executor-receipt",
+                      "source": "$source",
+                      "executor": "$executor",
+                      "tokenIn": "$route.tokenIn",
+                      "tokenOut": "$route.tokenOut",
+                      "amountIn": "$amountIn"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.execution"
+    }
+  },
+  "standard": {
+    "id": "muffin-hub-pool",
+    "lineageId": "muffin:muffin-hub",
+    "identityKind": "singleton-subinstance",
+    "abi": {
+      "hub": [
+        "function getPoolParameters(bytes32) view returns(uint8,uint8)",
+        "function getTiersCount(bytes32) view returns(uint256)",
+        "function underlyings(bytes32) view returns(address,address)",
+        "function tokens(address) view returns(uint8,uint248)",
+        "function swap(address,address,uint256,int256,address,uint256,uint256,bytes) returns(uint256,uint256)",
+        "event PoolCreated(address indexed token0,address indexed token1,bytes32 indexed poolId)",
+        "event Swap(bytes32 indexed poolId,address indexed sender,address indexed recipient,uint256 senderAccRefId,uint256 recipientAccRefId,int256 amount0,int256 amount1,uint256 amountInDistribution,uint256 amountOutDistribution,uint256[] tierData)"
+      ]
+    },
+    "constants": {
+      "hub": "0x6690384822aff0b65fe0c21a809f187f5c3fcdd8",
+      "hubCodeHash": "0x0809ae2ae556ce22ae8a5b68463fc131ea76ef602cc584ab832262adf2104fb5",
+      "zero": "0x0000000000000000000000000000000000000000",
+      "max": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    },
+    "expressions": {},
+    "match": {
+      "op": "eq",
+      "args": [
+        "$descriptor.lineageId",
+        "muffin:muffin-hub"
+      ]
+    },
+    "context": {},
+    "boundState": {
+      "hub": "$descriptor.hub",
+      "poolId": "$descriptor.poolId",
+      "token0": "$descriptor.token0",
+      "token1": "$descriptor.token1",
+      "tickSpacing": "$descriptor.tickSpacing",
+      "protocolFee": "$descriptor.protocolFee",
+      "tiersCount": "$descriptor.tiersCount",
+      "hubCodeHash": "$descriptor.hubCodeHash"
+    },
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.hub"
+      ],
+      "mutationAddresses": [
+        "$descriptor.hub"
+      ],
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          "$routes",
+          "route",
+          [
+            "$route.routeKey",
+            "muffin-pricing-math-not-migrated"
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "muffin-executor-receipt",
+      "requirements": {
+        "transports": [
+          "effect-delta-simulation"
+        ],
+        "caller": "executor",
+        "effects": [
+          "return-data",
+          "revert-data",
+          "token-delta",
+          "native-delta"
+        ]
+      },
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            "$descriptor.hub"
+          ],
+          [
+            "$descriptor.token0",
+            "$descriptor.token1"
+          ]
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "gt",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "muffin exact requires positive input"
+        },
+        {
+          "assert": {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$executor",
+                  "$descriptor.hub"
+                ]
+              }
+            ]
+          },
+          "error": "muffin executor must not be the hub"
+        },
+        {
+          "assert": {
+            "op": "not",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      "$descriptor.token0"
+                    ]
+                  },
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      "$descriptor.token1"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "muffin executor must not be a pool token"
+        }
+      ],
+      "amountOut": {
+        "op": "get",
+        "args": [
+          "$quoteResult",
+          "amountOut"
+        ]
+      },
+      "evidence": {
+        "kind": "muffin-executor-receipt",
+        "source": "$source",
+        "executor": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "hub": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.hub"
+              ]
+            }
+          ]
+        },
+        "poolId": {
+          "op": "lower",
+          "args": [
+            "$descriptor.poolId"
+          ]
+        },
+        "tokenIn": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$route.tokenIn"
+              ]
+            }
+          ]
+        },
+        "tokenOut": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$route.tokenOut"
+              ]
+            }
+          ]
+        },
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            "$descriptor.hub"
+          ],
+          [
+            "$descriptor.token0",
+            "$descriptor.token1"
+          ]
+        ]
+      },
+      "requireCanonicalSource": true,
+      "rejectRuntimeEvidence": true,
+      "preflight": [],
+      "steps": [
+        {
+          "id": "swap",
+          "frame": {
+            "call": {
+              "target": "$descriptor.hub",
+              "signature": "function swap(address,address,uint256,int256,address,uint256,uint256,bytes) returns(uint256,uint256)",
+              "args": [
+                "$route.tokenIn",
+                "$route.tokenOut",
+                "$constants.max",
+                {
+                  "runtime": "amountIn"
+                },
+                "$recipient",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ],
+              "dataArgument": 7
+            },
+            "callback": {
+              "signature": "function muffinSwapCallback(address,address,uint256,uint256,bytes)",
+              "dataArgument": 4,
+              "arguments": [
+                {
+                  "index": 0,
+                  "name": "callbackTokenIn",
+                  "encoding": "word",
+                  "equals": "$route.tokenIn"
+                },
+                {
+                  "index": 1,
+                  "name": "callbackTokenOut",
+                  "encoding": "word",
+                  "equals": "$route.tokenOut"
+                },
+                {
+                  "index": 2,
+                  "name": "debt",
+                  "encoding": "word",
+                  "maximum": {
+                    "runtime": "amountIn"
+                  },
+                  "minimum": 1
+                },
+                {
+                  "index": 3,
+                  "name": "received",
+                  "encoding": "word",
+                  "minimum": 1
+                }
+              ],
+              "captures": {},
+              "steps": [
+                {
+                  "id": "pay",
+                  "call": {
+                    "target": "$route.tokenIn",
+                    "signature": "function transfer(address,uint256) returns(bool)",
+                    "args": [
+                      "$route.target",
+                      {
+                        "runtime": "debt"
+                      }
+                    ],
+                    "save": {
+                      "paid": 0
+                    },
+                    "checks": [
+                      {
+                        "left": {
+                          "runtime": "paid"
+                        },
+                        "operator": "eq",
+                        "right": true
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "asset": "erc20",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "maximum": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "asset": "erc20",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    }
+  }
+}
