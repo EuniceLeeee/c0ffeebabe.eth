@@ -1494,6 +1494,196 @@ export function createBlockScanPriceRuntime(input: {
   return { strictSessionFor, currentRuntimeCoordinator, blockScanAmountReference };
 }
 
+/** Keep checkpoint ownership inside startup; producers retain only runtime projections. */
+export async function initializeReadyProducer({
+  universeRebuildCheckpointPath, rpcUrl, startupCandidates, executionIdentity,
+  onSimulationFatal, blindUseIncumbentReady, useReadyGeneration, currentHead,
+}: {
+  readonly universeRebuildCheckpointPath: string;
+  readonly rpcUrl: string;
+  readonly startupCandidates: NonNullable<Parameters<typeof createRebuildWiring>[0]>["startupCandidates"];
+  readonly executionIdentity: NonNullable<Parameters<typeof createRebuildWiring>[0]>["executionIdentity"];
+  readonly onSimulationFatal: NonNullable<Parameters<typeof createRebuildWiring>[0]>["onSimulationFatal"];
+  readonly blindUseIncumbentReady: boolean;
+  readonly useReadyGeneration: boolean;
+  readonly currentHead: number;
+}) {
+  const rebuildStore = new UniverseRebuildCheckpointStore({
+    path: universeRebuildCheckpointPath,
+  });
+  const rebuildWiring = createRebuildWiring({
+    rpcUrl,
+    startupCandidates,
+    executionIdentity,
+    onSimulationFatal,
+  });
+  let rebuildEnvelope = await rebuildStore.load();
+  let readyUniverse;
+  if (blindUseIncumbentReady || useReadyGeneration) {
+    if (
+      rebuildEnvelope === null ||
+      rebuildEnvelope.readyGeneration === null ||
+      rebuildEnvelope.inProgressRun !== null
+    ) {
+      throw new Error(
+        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
+          " requires one complete Ready checkpoint",
+      );
+    }
+    readyUniverse = rebuildEnvelope.readyGeneration;
+    if (useReadyGeneration && !blindUseIncumbentReady) {
+      readyUniverse = await refreshReadyInstances({
+        ...rebuildWiring,
+        store: rebuildStore,
+        log: (message) => console.log("[searcher/startup] " + message),
+      });
+      rebuildEnvelope = await rebuildStore.load();
+      if (rebuildEnvelope === null) {
+        throw new Error("strict startup readyGeneration failed root verification");
+      }
+    }
+    console.log(
+      "[searcher/startup] " +
+        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
+        " uses incumbent readyGeneration=" +
+        readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
+        " activeInstances=" + readyUniverse.activeInstanceKeys.length +
+        " retryableQueue=" +
+        Object.keys(rebuildEnvelope.retryableAttemptsByCandidateKey).length,
+    );
+  } else {
+    try {
+      readyUniverse = await rebuildUniverse({
+        ...rebuildWiring,
+        store: rebuildStore,
+        runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ??
+          "strict-startup-rebuild",
+        ...(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined
+          ? {}
+          : {
+              observationWindowBlocks: Number(
+                process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS,
+              ),
+            }),
+        log: (message) => console.log("[searcher/startup] " + message),
+      });
+    } catch (error) {
+      if (error instanceof UniverseRunIncomplete) {
+        throw new Error(
+          "strict startup rebuild incomplete: run=" + error.runId +
+            " remainingUnaccounted=" + error.remainingUnaccounted +
+            " (resume the durable run before producer start)",
+        );
+      }
+      throw error;
+    }
+    rebuildEnvelope = await rebuildStore.load();
+  }
+  if (
+    rebuildEnvelope === null ||
+    rebuildEnvelope.readyGeneration === null ||
+    rebuildEnvelope.readyGeneration.generation !== readyUniverse.generation
+  ) {
+    throw new Error("strict startup readyGeneration failed root verification");
+  }
+  const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
+  const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);
+  // Historical checkpoints can contain more than one memo per instance.
+  // Current terminal outcomes revoke their candidate memo atomically, while
+  // this defensive dedupe keeps runtime rehydration one-instance-per-key
+  // during the one-time checkpoint transition.
+  const seenReadyInstances = new Set<string>();
+  const activeReadyMemos = Object.values(rebuildEnvelope.verifiedMemos)
+    .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
+    .filter((memo) => {
+      if (seenReadyInstances.has(memo.familyInstanceKey)) return false;
+      seenReadyInstances.add(memo.familyInstanceKey);
+      return true;
+    });
+  assertReadyFamilyActivation(activeReadyMemos, rebuildWiring.isFamilyEnabled);
+  const routeReadyMemos = activeReadyMemos.filter((memo) =>
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .forStrictFamily(memo.familyId as never).plugin.manifest.domain !==
+        "funding"
+  );
+  const fundingReadyMemos = activeReadyMemos.filter((memo) =>
+    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+      .forStrictFamily(memo.familyId as never).plugin.manifest.domain ===
+        "funding"
+  );
+  const readyInstances = routeReadyMemos
+    .map((memo) => rebuildWiring.rehydrateVerifiedInstance({
+      memo,
+      cutoff: readyUniverse.cutoff,
+    }) as PreparedFamilyInstance);
+  const fundingReadyEntries = fundingReadyMemos.map((memo) =>
+    rebuildWiring.rehydrateVerifiedInstance({
+      memo,
+      cutoff: readyUniverse.cutoff,
+    }) as {
+      readonly domain: "funding";
+      readonly familyId: string;
+      readonly instanceKey: string;
+      readonly asset: string;
+    }
+  );
+  if (
+    readyInstances.length + fundingReadyEntries.length !==
+      activeInstanceKeys.size
+  ) {
+    throw new Error(
+      "strict startup readyGeneration lost an active memo/instance",
+    );
+  }
+  const flashTokens = Object.freeze([...new Set(fundingReadyEntries.map(
+    (entry) => ethers.getAddress(entry.asset).toLowerCase(),
+  ))].sort());
+  if (flashTokens.length === 0) {
+    throw new Error(
+      "strict startup rebuild produced no observed/retained funding token",
+    );
+  }
+  const strictRuntimeRoot = new StrictProductionRuntimeRoot({
+    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    readySource: readyUniverse.cutoff,
+    readyGraph: strictReadyRuntime.graph,
+    readyInstances,
+    readyFundingAssets: fundingReadyEntries.map((entry) => Object.freeze({
+      familyId: entry.familyId as never,
+      asset: entry.asset,
+    })),
+  });
+  const graph = strictReadyRuntime.graph as TokenEdge[];
+  const graphViewCoordinator = new StrictReadyGraphViewCoordinator({
+    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+    ready: readyUniverse,
+    edges: graph,
+  });
+  const baseline = resolveProducerBaseline({ ready: readyUniverse, currentHead });
+  return {
+    runtimeRoot: strictRuntimeRoot,
+    graph,
+    graphViewCoordinator,
+    flashTokens,
+    instanceCount: readyInstances.length,
+    lineage: Object.freeze({
+      generation: readyUniverse.generation,
+      graphHash: readyUniverse.graphHash,
+      catalogHash: readyUniverse.catalogHash,
+      cutoffNumber: readyUniverse.cutoff.number,
+      appliedThroughNumber: readyUniverse.appliedThrough.number,
+      appliedThroughHash: readyUniverse.appliedThrough.hash,
+      sourceCount: readyUniverse.sourceCoverage.length,
+    }),
+    baselineSummary: Object.freeze({
+      generation: baseline.ready.generation,
+      cutoffNumber: baseline.ready.cutoff.number,
+      activeInstanceCount: baseline.activeInstanceKeys.size,
+      observationScanFrom: baseline.observationScanFrom,
+    }),
+  };
+}
+
 async function main(): Promise<void> {
   // Blind acceptance must be enabled by the process supervisor. Letting .env
   // turn it on would make the nominal production process execute audit-only
@@ -2156,156 +2346,20 @@ async function main(): Promise<void> {
       "strict startup requires SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH",
     );
   }
-  const rebuildStore = new UniverseRebuildCheckpointStore({
-    path: universeRebuildCheckpointPath,
-  });
   const startupCandidates = Object.freeze([
     ...rawPinnedWarmPools,
     ...rawUniversePools,
     ...rawBlockscanUniverse,
     ...rawBlockScanOverrides,
   ].map((candidate) => Object.freeze({ ...candidate })));
-  const rebuildWiring = createRebuildWiring({
-    rpcUrl: config.rpcUrl,
-    startupCandidates,
-    executionIdentity,
-    onSimulationFatal,
-  });
-  let rebuildEnvelope = await rebuildStore.load();
-  let readyUniverse;
-  if (blindUseIncumbentReady || useReadyGeneration) {
-    if (
-      rebuildEnvelope === null ||
-      rebuildEnvelope.readyGeneration === null ||
-      rebuildEnvelope.inProgressRun !== null
-    ) {
-      throw new Error(
-        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
-          " requires one complete Ready checkpoint",
-      );
-    }
-    readyUniverse = rebuildEnvelope.readyGeneration;
-    if (useReadyGeneration && !blindUseIncumbentReady) {
-      readyUniverse = await refreshReadyInstances({
-        ...rebuildWiring,
-        store: rebuildStore,
-        log: (message) => console.log("[searcher/startup] " + message),
-      });
-      rebuildEnvelope = await rebuildStore.load();
-      if (rebuildEnvelope === null) {
-        throw new Error("strict startup readyGeneration failed root verification");
-      }
-    }
-    console.log(
-      "[searcher/startup] " +
-        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
-        " uses incumbent readyGeneration=" +
-        readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
-        " activeInstances=" + readyUniverse.activeInstanceKeys.length +
-        " retryableQueue=" +
-        Object.keys(rebuildEnvelope.retryableAttemptsByCandidateKey).length,
-    );
-  } else {
-    try {
-      readyUniverse = await rebuildUniverse({
-        ...rebuildWiring,
-        store: rebuildStore,
-        runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ??
-          "strict-startup-rebuild",
-        ...(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined
-          ? {}
-          : {
-              observationWindowBlocks: Number(
-                process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS,
-              ),
-            }),
-        log: (message) => console.log("[searcher/startup] " + message),
-      });
-    } catch (error) {
-      if (error instanceof UniverseRunIncomplete) {
-        throw new Error(
-          "strict startup rebuild incomplete: run=" + error.runId +
-            " remainingUnaccounted=" + error.remainingUnaccounted +
-            " (resume the durable run before producer start)",
-        );
-      }
-      throw error;
-    }
-    rebuildEnvelope = await rebuildStore.load();
-  }
-  if (
-    rebuildEnvelope === null ||
-    rebuildEnvelope.readyGeneration === null ||
-    rebuildEnvelope.readyGeneration.generation !== readyUniverse.generation
-  ) {
-    throw new Error("strict startup readyGeneration failed root verification");
-  }
-  const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
-  const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);
-  // Historical checkpoints can contain more than one memo per instance.
-  // Current terminal outcomes revoke their candidate memo atomically, while
-  // this defensive dedupe keeps runtime rehydration one-instance-per-key
-  // during the one-time checkpoint transition.
-  const seenReadyInstances = new Set<string>();
-  const activeReadyMemos = Object.values(rebuildEnvelope.verifiedMemos)
-    .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
-    .filter((memo) => {
-      if (seenReadyInstances.has(memo.familyInstanceKey)) return false;
-      seenReadyInstances.add(memo.familyInstanceKey);
-      return true;
-    });
-  assertReadyFamilyActivation(activeReadyMemos, rebuildWiring.isFamilyEnabled);
-  const routeReadyMemos = activeReadyMemos.filter((memo) =>
-    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-      .forStrictFamily(memo.familyId as never).plugin.manifest.domain !==
-        "funding"
-  );
-  const fundingReadyMemos = activeReadyMemos.filter((memo) =>
-    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-      .forStrictFamily(memo.familyId as never).plugin.manifest.domain ===
-        "funding"
-  );
-  const readyInstances = routeReadyMemos
-    .map((memo) => rebuildWiring.rehydrateVerifiedInstance({
-      memo,
-      cutoff: readyUniverse.cutoff,
-    }) as PreparedFamilyInstance);
-  const fundingReadyEntries = fundingReadyMemos.map((memo) =>
-    rebuildWiring.rehydrateVerifiedInstance({
-      memo,
-      cutoff: readyUniverse.cutoff,
-    }) as {
-      readonly domain: "funding";
-      readonly familyId: string;
-      readonly instanceKey: string;
-      readonly asset: string;
-    }
-  );
-  if (
-    readyInstances.length + fundingReadyEntries.length !==
-      activeInstanceKeys.size
-  ) {
-    throw new Error(
-      "strict startup readyGeneration lost an active memo/instance",
-    );
-  }
-  const flashTokens = Object.freeze([...new Set(fundingReadyEntries.map(
-    (entry) => ethers.getAddress(entry.asset).toLowerCase(),
-  ))].sort());
-  if (flashTokens.length === 0) {
-    throw new Error(
-      "strict startup rebuild produced no observed/retained funding token",
-    );
-  }
-  const strictRuntimeRoot = new StrictProductionRuntimeRoot({
-    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    readySource: readyUniverse.cutoff,
-    readyGraph: strictReadyRuntime.graph,
-    readyInstances,
-    readyFundingAssets: fundingReadyEntries.map((entry) => Object.freeze({
-      familyId: entry.familyId as never,
-      asset: entry.asset,
-    })),
+  const {
+    runtimeRoot: strictRuntimeRoot, graph: initialReadyGraph,
+    graphViewCoordinator: strictReadyGraphViews, flashTokens,
+    instanceCount: readyInstanceCount, lineage: readyUniverse, baselineSummary,
+  } = await initializeReadyProducer({
+    universeRebuildCheckpointPath, rpcUrl: config.rpcUrl, startupCandidates,
+    executionIdentity, onSimulationFatal, blindUseIncumbentReady,
+    useReadyGeneration, currentHead: discoveryToBlock,
   });
   // Transition-only pool views remain useful for detector metadata, but no
   // longer grant identity or Graph admission. readyGeneration is the sole
@@ -2397,7 +2451,7 @@ async function main(): Promise<void> {
   // by catalog-issued route handles and Family projectGraph during the same
   // CAS as cutoff/catalog/coverage. Backrun and blockscan consume this one
   // immutable generation; raw pool views cannot manufacture an edge.
-  let graph = strictReadyRuntime.graph as TokenEdge[];
+  let graph = initialReadyGraph;
   let blockScanGraph: TokenEdge[] | undefined = enableBlockScan
     ? graph
     : undefined;
@@ -2409,17 +2463,12 @@ async function main(): Promise<void> {
   );
   console.log(
     `[searcher/live] strict startup coverage restored: ` +
-      `cutoff=${readyUniverse.appliedThrough.number}:` +
-      `${readyUniverse.appliedThrough.hash} ` +
-      `sources=${readyUniverse.sourceCoverage.length} ` +
+      `cutoff=${readyUniverse.appliedThroughNumber}:` +
+      `${readyUniverse.appliedThroughHash} ` +
+      `sources=${readyUniverse.sourceCount} ` +
       `legacy_cache_authority=disabled`,
   );
   const tokenIndex = buildTokenIndex(graph);
-  const strictReadyGraphViews = new StrictReadyGraphViewCoordinator({
-    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    ready: readyUniverse,
-    edges: graph,
-  });
 
   // Detection admission comes from the strict ready Graph itself. Legacy
   // pool views cannot nominate a producer-time address absent from Graph.
@@ -2441,7 +2490,7 @@ async function main(): Promise<void> {
   // liquidity. No provider history rescan and no graph-token candidate sweep.
   const fundingTokenUniverseBinding = blindProductionAudit
     ? Object.freeze({
-        enumeratedAtBlock: readyUniverse.cutoff.number,
+        enumeratedAtBlock: readyUniverse.cutoffNumber,
         tokenCount: flashTokens.length,
         tokenSetSha256: blindProductionAuditHash(flashTokens),
       })
@@ -2509,10 +2558,10 @@ async function main(): Promise<void> {
   console.log(
     "[searcher/live] strict ready catalog loaded: generation=" +
       readyUniverse.generation +
-      " cutoff=" + readyUniverse.cutoff.number +
+      " cutoff=" + readyUniverse.cutoffNumber +
       " catalog_hash=" + readyUniverse.catalogHash +
-      " instances=" + readyInstances.length +
-      " edges=" + strictReadyRuntime.graph.length,
+      " instances=" + readyInstanceCount +
+      " edges=" + graph.length,
   );
 
   // Incremental refresh: scan recent blocks for new pools every N minutes
@@ -2522,17 +2571,13 @@ async function main(): Promise<void> {
   // it, and the historical event window is not re-scanned (the ready run
   // already covered it). No ready generation (or an incomplete run) fails
   // closed before the producer is created.
-  const baseline = resolveProducerBaseline({
-    ready: readyUniverse,
-    currentHead: discoveryToBlock,
-  });
   console.log(
     "[searcher/live] universe rebuild ready generation=" +
-      baseline.ready.generation +
-      " cutoff=" + baseline.ready.cutoff.number +
-      " instances=" + baseline.activeInstanceKeys.size +
+      baselineSummary.generation +
+      " cutoff=" + baselineSummary.cutoffNumber +
+      " instances=" + baselineSummary.activeInstanceCount +
       " producer baseline freeze (scan from " +
-      baseline.observationScanFrom + ")",
+      baselineSummary.observationScanFrom + ")",
   );
   const knownPoolAddrs = new Set(allPoolMap.keys());
   const mempoolIntakeRefresh = new MempoolIntakeRefreshSignal();
