@@ -665,9 +665,19 @@ export class StrictCurrentRuntimeCoordinator
         effectiveMids.source.generation !== source.generation) {
       throw new Error("effective pricing incomplete or mismatched source");
     }
-    if (rawBasis === null) this.bootstrapEffectiveDraft = {
-      graphKey: strictGraphPublicationFingerprint(graph), snapshot: effectiveMids,
-    };
+    // Only successful samples from an unfinished bootstrap may be resumed.
+    // A complete table carries failure statuses too, so it must become reusable
+    // only through atomic publication, after abort/Funding/canonical fences.
+    // Budget expiry may retain valid partial progress; cancellation may not.
+    if (rawBasis === null && !effectiveMids.complete && !control.signal?.aborted) {
+      for (const row of effectiveMids.rows.values()) {
+        if (row.status !== "quoted") continue;
+        this.bootstrapEffectiveDraft = {
+          graphKey: strictGraphPublicationFingerprint(graph), snapshot: effectiveMids,
+        };
+        break;
+      }
+    }
     assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
     if (!effectiveMids.complete) throw new Error("effective pricing incomplete or mismatched source");
     return { session, built: diagnosePricingSync(graph, "coverage-assembly", () =>

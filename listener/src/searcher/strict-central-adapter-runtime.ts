@@ -179,6 +179,11 @@ export function createStrictCentralAdapterRuntime(input: {
   const maxRequestsPerBatch = input.maxRequestsPerBatch ?? 512;
   const sharedSourceReads = createSharedSourceReadCache();
   const verifiedActors = Object.freeze({ ...(input.verifiedActors ?? {}) });
+  // Cache only the pure address conversion, never the caller authority. Exact
+  // rebinds at every fence and must still observe changes to the input values.
+  // One validated string per role bounds retention; invalid inputs are not kept.
+  const executorAddress = lastValidatedAddress();
+  const observedSenderAddress = lastValidatedAddress();
   const transactionOrigin = input.transactionOrigin === undefined
     ? undefined
     : normalizeTransactionOrigin(input.transactionOrigin);
@@ -510,15 +515,14 @@ export function createStrictCentralAdapterRuntime(input: {
         ...(transactionOrigin === undefined ? {} : { transactionOrigin }),
         ...(input.executor === undefined
           ? {}
-          : { executor: ethers.getAddress(input.executor).toLowerCase() }),
+          : { executor: executorAddress(input.executor) }),
         // Generic observed-sender binding: production supplies the sender
         // sealed by candidate observation evidence. Never derive it from the
         // executor/BotVM address.
         ...(input.observedSender !== undefined &&
             bindingInput.callerRole === "observed-sender"
           ? {
-              observedSender: ethers.getAddress(input.observedSender)
-                .toLowerCase(),
+              observedSender: observedSenderAddress(input.observedSender),
             }
           : {}),
         ...(Object.keys(verifiedActors).length === 0
@@ -564,6 +568,18 @@ export function createStrictCentralAdapterRuntime(input: {
     },
     scheduler,
   });
+}
+
+function lastValidatedAddress(): (value: string) => string {
+  let previous: string | undefined;
+  let normalized: string | undefined;
+  return value => {
+    if (typeof value === "string" && value === previous) return normalized!;
+    const next = ethers.getAddress(value).toLowerCase();
+    previous = value;
+    normalized = next;
+    return next;
+  };
 }
 
 /** Preserve the first rejection without releasing ownership of running work. */
