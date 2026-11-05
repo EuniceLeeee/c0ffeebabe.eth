@@ -108,6 +108,18 @@ test("dry-run router rejects unauthorized standing-position before recording", a
   assert(router.submissions.length === 0, `unauthorized dry-run: recorded ${router.submissions.length}`);
 });
 
+test("gross-profit retains gas/valuation guards and requires exactly 99% gross on an atomic standalone", () => {
+  const bundle: BundleSubmission = { ...minimalBundle(), mode: "standalone", profitMode: "positive-gross-profit",
+    expectedProfit: 1_000n, expectedProfitEth: 1_000n, gasUsed: 100n, maxBaseFeePerGas: 20n, bribeWei: 990n };
+  assert(productionEconomicsSafetyReject(bundle) === null, "negative net EV must pass this explicit mode");
+  assert(productionEconomicsSafetyReject({ ...bundle, profitMode: "positive-ev" })?.error === "non_positive_ev_budget", "default still rejects");
+  for (const patch of [{ expectedProfit: 0n }, { bribeWei: 0n }, { bribeWei: 1_000n },
+    { expectedProfitEth: 0n }, { gasUsed: 0n }, { maxBaseFeePerGas: 0n },
+    { mode: "victim-bundle" as const }, { safety: { leavesStandingPosition: true, authorized: true } }]) {
+    assert(productionEconomicsSafetyReject({ ...bundle, ...patch }) !== null, "unsafe gross-profit input must reject");
+  }
+});
+
 test("dry-run router records normal bundles with unsigned diagnostics", async () => {
   for (const [label, safety] of [
     ["authorized", { leavesStandingPosition: true, authorized: true }],

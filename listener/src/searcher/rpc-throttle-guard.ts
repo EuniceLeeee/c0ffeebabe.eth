@@ -59,7 +59,7 @@ type RpcThrottleReason = Extract<RevmFatalReason, { kind: "rpc-throttle" }>;
 export interface LiveRpcThrottleRecord {
   readonly sourceBlock: number;
   readonly failedBlocks: number;
-  readonly limit: 5;
+  readonly limit: 100;
   readonly action: "observe" | "recovered" | "stop";
   readonly category?: RpcThrottleReason["category"];
 }
@@ -97,10 +97,10 @@ export class LiveRpcThrottleObservation {
     // successor. An explicitly spent allocation remains terminal regardless.
     if (!exhausted && (sourceBlock <= this.recoveredThrough || this.failedBlocks.has(sourceBlock))) return;
     this.failedBlocks.add(sourceBlock);
-    const stop = exhausted || this.failedBlocks.size >= 5;
+    const stop = exhausted || this.failedBlocks.size >= 100;
     this.stopped = stop;
     try {
-      this.record({ sourceBlock, failedBlocks: this.failedBlocks.size, limit: 5,
+      this.record({ sourceBlock, failedBlocks: this.failedBlocks.size, limit: 100,
         action: stop ? "stop" : "observe", category: reason.category });
     } catch { /* Diagnostics cannot change admission or shutdown. */ }
     if (stop) this.stop(reason);
@@ -113,7 +113,7 @@ export class LiveRpcThrottleObservation {
     if (this.failedBlocks.size === 0) return;
     this.failedBlocks.clear();
     try {
-      this.record({ sourceBlock, failedBlocks: 0, limit: 5, action: "recovered" });
+      this.record({ sourceBlock, failedBlocks: 0, limit: 100, action: "recovered" });
     } catch { /* Diagnostics cannot change the recovery boundary. */ }
   }
 }

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { beginPricingPhaseDiagnostics, type PricingPhaseStatus } from "./state-latency-diagnostics.js";
+import { isVerifiedReorgActivity, revalidateReorgActivityTarget, type VerifiedReorgActivity } from "./blockscan-reorg-activity.js";
 import {
   FlashFundingSnapshot,
   type AdapterRuntimePrepareResult,
@@ -126,6 +128,8 @@ export interface StrictCanonicalActivityProof {
   /** Present only after the activity reader verified every canonical transition
    * from this published source through source; never a target-only touched set. */
   readonly previousSource?: { readonly number: number; readonly hash: string };
+  /** Separate, complete old+new branch proof; never a naked forward range. */
+  readonly reorg?: VerifiedReorgActivity;
   readonly touchedStateKeys: ReadonlySet<string>;
   readonly complete: true;
 }
@@ -249,10 +253,27 @@ export class StrictCurrentRuntimeCoordinator
     return this.publishedPricing;
   }
 
+  private reorgBase: BlockScanStateSnapshot | null = null;
+
+  /** Revoke execution/cache authority, but retain immutable pricing data until
+   * a verified two-branch update replaces it. This is not a cold-start reset. */
+  async retirePricingForReorg(source: { readonly number: number; readonly hash: string }): Promise<void> {
+    const previous = this.publishedPricing;
+    assert(previous?.effectiveMids?.complete && previous.sourceBlock === source.number &&
+      previous.sourceBlockHash.toLowerCase() === source.hash.toLowerCase(), "reorg retirement source changed");
+    if (this.reorgBase === previous) return;
+    this.reorgBase = previous;
+    this.pricingEpoch++;
+    this.fundingEpoch++;
+    this.bootstrapEffectiveDraft = null;
+    this.exactQuoteCache?.resetState();
+    this.resetSessions();
+  }
+
   /** A cursor, not another exported/deep-copied table. The raw basis must stay
    * unchanged throughout a journal; a reset cannot silently start a new one. */
   continuationPricing() {
-    return { raw: this.bootstrapRawPricing, pricing: this.publishedPricing };
+    return { raw: this.bootstrapRawPricing, pricing: this.reorgBase === null ? this.publishedPricing : null };
   }
 
   private continuationDisabled: string[] = [];
@@ -263,7 +284,7 @@ export class StrictCurrentRuntimeCoordinator
   }
 
   exportHistoricalBaseline(): HistoricalPricingBaseline {
-    assert(this.bootstrapRawPricing && this.publishedPricing?.effectiveMids?.complete,
+    assert(this.reorgBase === null && this.bootstrapRawPricing && this.publishedPricing?.effectiveMids?.complete,
       "complete published pricing required for historical baseline");
     return { version: 1, raw: this.bootstrapRawPricing, pricing: this.publishedPricing,
       lineage: exportEffectiveMidReplayState(this.publishedPricing.effectiveMids),
@@ -315,6 +336,7 @@ export class StrictCurrentRuntimeCoordinator
   }
 
   async resetDynamicStateForReplay(): Promise<void> {
+    this.reorgBase = null;
     this.pricingEpoch++;
     this.fundingEpoch++;
     this.publishedPricing = null;
@@ -329,6 +351,15 @@ export class StrictCurrentRuntimeCoordinator
   private rawBasisFor(graph: VerifiedGraphView, previous: BlockScanStateSnapshot | null,
     activity?: StrictCanonicalActivityProof): BlockScanStateSnapshot | null {
     const raw = this.bootstrapRawPricing;
+    if (this.reorgBase !== null) {
+      const proof = activity?.reorg;
+      assert(raw && previous === this.reorgBase && proof && matchesReorgActivity(previous, graph, activity!) &&
+        (raw.sourceBlock < proof.commonAncestor.number || (raw.sourceBlock === proof.commonAncestor.number &&
+          raw.sourceBlockHash.toLowerCase() === proof.commonAncestor.hash.toLowerCase())) &&
+        strictGraphPublicationFingerprint(raw.graph) === strictGraphPublicationFingerprint(graph),
+      "reorg recovery lacks complete branch proof or retained canonical raw basis");
+      return raw;
+    }
     if (!this.effectivePricing || raw === null || previous === null ||
         strictGraphPublicationFingerprint(raw.graph) !== strictGraphPublicationFingerprint(graph) ||
         graph.sourceBlock < previous.sourceBlock || graph.generation < previous.generation ||
@@ -342,6 +373,7 @@ export class StrictCurrentRuntimeCoordinator
   startFundingPreparation(
     request: StrictFundingPreparationInput,
   ): StrictFundingPreparation {
+    assert(this.reorgBase === null, "reorg recovery bars Funding until pricing is repaired");
     const input = Object.freeze({
       ...request,
       fundingTokens: Object.freeze([...request.fundingTokens]),
@@ -415,6 +447,10 @@ export class StrictCurrentRuntimeCoordinator
     const { built } = await this.preparePricing(sessionPromise, input.graph, previous, rawBasis,
       pricingEpoch, controlFor(settleDeadlineAtMs, input.signal), input.pricingCallBackend,
       input.canonicalActivity, simulationTransport);
+    if (this.reorgBase !== null) {
+      assert(input.canonicalActivity?.reorg, "reorg publication requires branch proof");
+      await revalidateReorgActivityTarget(input.canonicalActivity.reorg);
+    }
     assertWorkOpen(settleDeadlineAtMs, input.signal);
     const published = this.publishPricing(built, pricingEpoch);
     return completePricingResult(published.snapshot);
@@ -423,6 +459,7 @@ export class StrictCurrentRuntimeCoordinator
   async prepare(
     input: PrepareStrictRuntimeInput,
   ): Promise<AdapterRuntimePrepareResult> {
+    assert(this.reorgBase === null, "reorg recovery requires pricing-only preparation");
     const simulationTransport = input.simulationTransport;
     const startedAtMs = Date.now();
     const settleDeadlineAtMs = Math.min(
@@ -633,23 +670,26 @@ export class StrictCurrentRuntimeCoordinator
     };
     assertWorkOpen(control.deadlineAtMs ?? Infinity, control.signal);
     if (!effectiveMids.complete) throw new Error("effective pricing incomplete or mismatched source");
-    return { session, built: buildEffectivePricingSnapshot(built.snapshot, graph,
-      session.pricingIndex(), effectiveMids, rawBasis === null ? null : previous, this.effectiveCoverageKeyCache) };
+    return { session, built: diagnosePricingSync(graph, "coverage-assembly", () =>
+      buildEffectivePricingSnapshot(built.snapshot, graph,
+        session.pricingIndex(), effectiveMids, rawBasis === null ? null : previous, this.effectiveCoverageKeyCache)) };
   }
 
   private publishPricing(built: StrictPricingBuildResult, pricingEpoch: number): StrictPricingBuildResult {
     if (pricingEpoch !== this.pricingEpoch) throw new Error("pricing publication retired during prepare");
     // Only the successful atomic publication can retire an instance. Failed,
     // incomplete, cancelled or superseded drafts must not poison the next try.
-    this.recordFailedEffectiveInstances(built.snapshot);
-    const organized = this.organizePricing?.(built.snapshot) ?? built.snapshot;
+    diagnosePricingSync(built.snapshot.graph, "failure-index", () => this.recordFailedEffectiveInstances(built.snapshot));
+    const organized = diagnosePricingSync(built.snapshot.graph, "organize-view", () =>
+      this.organizePricing?.(built.snapshot) ?? built.snapshot);
     if (organized !== built.snapshot) built = Object.freeze({ ...built, snapshot: organized,
       publication: Object.freeze({ ...built.publication, snapshot: organized }) });
     this.bootstrapEffectiveDraft = null;
     if (built.rawBasis !== undefined) this.bootstrapRawPricing = built.rawBasis;
     this.publishedPricing = built.snapshot;
+    this.reorgBase = null;
     try {
-      this.onPricingPublication?.(built.publication);
+      diagnosePricingSync(built.snapshot.graph, "publication-observer", () => this.onPricingPublication?.(built.publication));
     } catch {
       // Historical evidence is fail-open and cannot suppress pricing.
     }
@@ -723,6 +763,7 @@ export class StrictCurrentRuntimeCoordinator
   async prepareCurrentNExactExecutionContext(
     input: PrepareCurrentNExactExecutionContextInput,
   ): Promise<CurrentNExactExecutionContextResult> {
+    assert(this.reorgBase === null, "reorg recovery bars Exact execution until pricing is repaired");
     const simulationTransport = input.simulationTransport;
     const startedAtMs = Date.now();
     const settleDeadlineAtMs = Math.min(
@@ -789,6 +830,7 @@ function activityAllowsEffectiveCarry(previous: BlockScanStateSnapshot | null,
 ): activity is StrictCanonicalActivityProof {
   if (previous === null || activity?.complete !== true ||
       !sameCanonicalSource(activity.source, sourceFor(graph))) return false;
+  if (activity.reorg !== undefined) return matchesReorgActivity(previous, graph, activity);
   const base = activity.previousSource;
   if (base !== undefined && (base.number !== previous.sourceBlock ||
       base.hash.toLowerCase() !== previous.sourceBlockHash.toLowerCase())) return false;
@@ -803,6 +845,18 @@ function activityAllowsEffectiveCarry(previous: BlockScanStateSnapshot | null,
     activity.parentHash?.toLowerCase() === previous.sourceBlockHash.toLowerCase();
 }
 
+function matchesReorgActivity(previous: BlockScanStateSnapshot, graph: VerifiedGraphView,
+  activity: StrictCanonicalActivityProof): boolean {
+  const proof = activity.reorg;
+  return proof !== undefined && isVerifiedReorgActivity(proof) && activity.complete === true &&
+    sameCanonicalSource(activity.source, sourceFor(graph)) && graph.generation > previous.generation &&
+    graph.sourceBlock > previous.sourceBlock &&
+    proof.previousSource.number === previous.sourceBlock && proof.previousSource.hash === previous.sourceBlockHash.toLowerCase() &&
+    proof.target.number === graph.sourceBlock && proof.target.hash === graph.sourceBlockHash.toLowerCase() &&
+    activity.previousSource?.number === previous.sourceBlock && activity.previousSource.hash.toLowerCase() === proof.previousSource.hash &&
+    [...proof.touchedStateKeys].every(key => activity.touchedStateKeys.has(key));
+}
+
 /** The current publication owns effective coverage; raw retains its startup
  * source/map and supplies sizing only. It is never promoted to current state. */
 function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
@@ -810,105 +864,117 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
   previous: BlockScanStateSnapshot | null,
   keyCache: EffectiveCoverageKeyCache,
 ): StrictPricingBuildResult {
-  const expectedKeys = effectiveCoverageKeys(keyCache, "expected", [...index.expectedEdgeKeys].sort());
-  const expectedEdgeKeys = expectedKeys.keys;
-  const expected = new Set(expectedEdgeKeys);
-  const graphEdges = new Map(graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
-  const scannerKeys = graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey);
-  if (expected.size !== expectedEdgeKeys.length ||
-      expectedKeys.hash !== index.expectedEdgeKeyHash ||
-      index.readyGraphContractFingerprint !== strictReadyGraphContractFingerprint(graph.edges) ||
-      scannerKeys.length !== graph.scannerEdgeCount ||
-      effectiveCoverageKeys(keyCache, "scanner", scannerKeys).hash !== graph.scannerEdgeKeyHash ||
-      scannerKeys.some(key => !expected.has(key)) || [...effectiveMids.rows.keys()].some(key => !expected.has(key))) {
-    throw new Error("effective pricing index differs from ready Graph");
-  }
-  const resolvedEdgeKeys: string[] = [], unavailableEdgeKeys: string[] = [], unresolvedEdgeKeys: string[] = [];
-  const refreshedEdgeKeys: string[] = [], carriedEdgeKeys: string[] = [];
-  const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
-  const pricingProvenanceByEdgeKey = new Map<string, StrictPricingProvenance>();
-  const resolvedCoverage: StateKeyCoverage = Object.freeze({ status: "resolved" });
-  const failures = new Map<string, StateKeyCoverage>();
-  const failureCoverage = (status: "rejected" | "unresolved", reason: string): StateKeyCoverage => {
-    const old = failures.get(reason);
-    if (old !== undefined) return old;
-    const coverage: StateKeyCoverage = Object.freeze({ status, reason });
-    failures.set(reason, coverage);
-    return coverage;
-  };
-  const familyIds = new Set<string>(), incompleteFamilyIds = new Set<string>();
-  for (const key of expectedEdgeKeys) {
-    const edge = graphEdges.get(key), familyId = index.familyIdByEdgeKey.get(key);
-    if (!edge || !familyId || !index.stateKeyByEdgeKey.has(key)) {
-      throw new Error(`effective pricing index omits ${key}`);
+  const diagnostics = beginPricingPhaseDiagnostics(process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1",
+    "index-validation/preparation");
+  let diagnosticStatus: PricingPhaseStatus = "failed";
+  try {
+    const expectedKeys = effectiveCoverageKeys(keyCache, "expected", [...index.expectedEdgeKeys].sort());
+    const expectedEdgeKeys = expectedKeys.keys;
+    const expected = new Set(expectedEdgeKeys);
+    const graphEdges = new Map(graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
+    const scannerKeys = graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey);
+    if (expected.size !== expectedEdgeKeys.length ||
+        expectedKeys.hash !== index.expectedEdgeKeyHash ||
+        index.readyGraphContractFingerprint !== strictReadyGraphContractFingerprint(graph.edges) ||
+        scannerKeys.length !== graph.scannerEdgeCount ||
+        effectiveCoverageKeys(keyCache, "scanner", scannerKeys).hash !== graph.scannerEdgeKeyHash ||
+        scannerKeys.some(key => !expected.has(key)) || [...effectiveMids.rows.keys()].some(key => !expected.has(key))) {
+      throw new Error("effective pricing index differs from ready Graph");
     }
-    familyIds.add(familyId);
-    const row = effectiveMids.rows.get(key);
-    if (row && (row.edgeId !== key || row.instanceKey !== edgeInstanceKey(edge) ||
-        row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() || row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase())) {
-      throw new Error(`effective pricing row differs from ready Graph: ${key}`);
-    }
-    if (row?.status === "quoted") {
-      if (row.amountIn === null || row.amountIn <= 0n || row.amountOut === null || row.amountOut <= 0n ||
-          row.effectiveMid === null || !Number.isFinite(row.effectiveMid) || row.effectiveMid <= 0) {
-        throw new Error(`invalid effective pricing row: ${key}`);
+    diagnostics?.enter("row-classification");
+    const resolvedEdgeKeys: string[] = [], unavailableEdgeKeys: string[] = [], unresolvedEdgeKeys: string[] = [];
+    const refreshedEdgeKeys: string[] = [], carriedEdgeKeys: string[] = [];
+    const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
+    const pricingProvenanceByEdgeKey = new Map<string, StrictPricingProvenance>();
+    const resolvedCoverage: StateKeyCoverage = Object.freeze({ status: "resolved" });
+    const failures = new Map<string, StateKeyCoverage>();
+    const failureCoverage = (status: "rejected" | "unresolved", reason: string): StateKeyCoverage => {
+      const old = failures.get(reason);
+      if (old !== undefined) return old;
+      const coverage: StateKeyCoverage = Object.freeze({ status, reason });
+      failures.set(reason, coverage);
+      return coverage;
+    };
+    const familyIds = new Set<string>(), incompleteFamilyIds = new Set<string>();
+    for (const key of expectedEdgeKeys) {
+      const edge = graphEdges.get(key), familyId = index.familyIdByEdgeKey.get(key);
+      if (!edge || !familyId || !index.stateKeyByEdgeKey.has(key)) {
+        throw new Error(`effective pricing index omits ${key}`);
       }
-      resolvedEdgeKeys.push(key);
-      const carried = effectiveMidRowCarried(effectiveMids, row);
-      (carried ? carriedEdgeKeys : refreshedEdgeKeys).push(key);
-      pricingProvenanceByEdgeKey.set(key, carried ? "carried" : "refreshed");
-      coverageByEdgeKey.set(key, resolvedCoverage);
-    } else if (row?.status === "no-output" || row?.status === "unsupported" || row?.status === "disabled-for-run") {
-      unavailableEdgeKeys.push(key);
-      pricingProvenanceByEdgeKey.set(key, "unavailable");
-      coverageByEdgeKey.set(key, failureCoverage("rejected", `effective-${row.status}`));
-    } else {
-      unresolvedEdgeKeys.push(key);
-      incompleteFamilyIds.add(familyId);
-      pricingProvenanceByEdgeKey.set(key, "unresolved");
-      coverageByEdgeKey.set(key, failureCoverage("unresolved", `effective-${row?.status ?? "missing-row"}`));
+      familyIds.add(familyId);
+      const row = effectiveMids.rows.get(key);
+      if (row && (row.edgeId !== key || row.instanceKey !== edgeInstanceKey(edge) ||
+          row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() || row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase())) {
+        throw new Error(`effective pricing row differs from ready Graph: ${key}`);
+      }
+      if (row?.status === "quoted") {
+        if (row.amountIn === null || row.amountIn <= 0n || row.amountOut === null || row.amountOut <= 0n ||
+            row.effectiveMid === null || !Number.isFinite(row.effectiveMid) || row.effectiveMid <= 0) {
+          throw new Error(`invalid effective pricing row: ${key}`);
+        }
+        resolvedEdgeKeys.push(key);
+        const carried = effectiveMidRowCarried(effectiveMids, row);
+        (carried ? carriedEdgeKeys : refreshedEdgeKeys).push(key);
+        pricingProvenanceByEdgeKey.set(key, carried ? "carried" : "refreshed");
+        coverageByEdgeKey.set(key, resolvedCoverage);
+      } else if (row?.status === "no-output" || row?.status === "unsupported" || row?.status === "disabled-for-run") {
+        unavailableEdgeKeys.push(key);
+        pricingProvenanceByEdgeKey.set(key, "unavailable");
+        coverageByEdgeKey.set(key, failureCoverage("rejected", `effective-${row.status}`));
+      } else {
+        unresolvedEdgeKeys.push(key);
+        incompleteFamilyIds.add(familyId);
+        pricingProvenanceByEdgeKey.set(key, "unresolved");
+        coverageByEdgeKey.set(key, failureCoverage("unresolved", `effective-${row?.status ?? "missing-row"}`));
+      }
     }
+    diagnostics?.enter("coverage-key-hashes");
+    const resolved = effectiveCoverageKeys(keyCache, "resolved", resolvedEdgeKeys);
+    const unavailable = effectiveCoverageKeys(keyCache, "unavailable", unavailableEdgeKeys);
+    const unresolved = effectiveCoverageKeys(keyCache, "unresolved", unresolvedEdgeKeys);
+    const refreshed = effectiveCoverageKeys(keyCache, "refreshed", refreshedEdgeKeys);
+    const carried = effectiveCoverageKeys(keyCache, "carried", carriedEdgeKeys);
+    diagnostics?.enter("snapshot-publication");
+    const coverage: BlockScanStateCoverage = Object.freeze({
+      ...raw.coverage,
+      expectedEdgeKeys,
+      resolvedEdgeKeys: resolved.keys,
+      unavailableEdgeKeys: unavailable.keys,
+      unresolvedEdgeKeys: unresolved.keys,
+      refreshedEdgeKeys: refreshed.keys,
+      carriedEdgeKeys: carried.keys,
+      expectedEdgeKeyHash: index.expectedEdgeKeyHash,
+      resolvedEdgeKeyHash: resolved.hash,
+      unavailableEdgeKeyHash: unavailable.hash,
+      unresolvedEdgeKeyHash: unresolved.hash,
+      refreshedEdgeKeyHash: refreshed.hash,
+      carriedEdgeKeyHash: carried.hash,
+    });
+    const snapshot: BlockScanStateSnapshot = Object.freeze({
+      ...raw, generation: graph.generation, sourceBlock: graph.sourceBlock,
+      sourceBlockHash: graph.sourceBlockHash, graph,
+      rawMidSource: Object.freeze({ number: raw.sourceBlock, hash: raw.sourceBlockHash, generation: raw.generation }),
+      mids: raw.mids, effectiveMids, coverage, coverageByEdgeKey,
+      perBlockRefreshStateKeys: index.perBlockRefreshStateKeys,
+      pricingStateKeyByEdgeKey: index.stateKeyByEdgeKey,
+      pricingFamilyIdByEdgeKey: index.familyIdByEdgeKey,
+      pricingProvenanceByEdgeKey,
+      resolvedFamilyIds: Object.freeze([...familyIds].filter(id => !incompleteFamilyIds.has(id)).sort()),
+      incompleteFamilyIds: Object.freeze([...incompleteFamilyIds].sort()),
+    });
+    const graphFingerprint = strictGraphPublicationFingerprint(graph);
+    const publication: StrictPricingPublication = previous === null
+      ? Object.freeze({ kind: "baseline", graphFingerprint, snapshot })
+      : Object.freeze({ kind: "delta", graphFingerprint,
+          previousGeneration: previous.generation, previousSourceBlock: previous.sourceBlock,
+          previousSourceBlockHash: previous.sourceBlockHash,
+          updates: Object.freeze([]), removals: Object.freeze([]), snapshot });
+    const result = Object.freeze({ snapshot, publication, rawBasis: raw });
+    diagnosticStatus = "returned";
+    return result;
+  } finally {
+    diagnostics?.finish(graph, diagnosticStatus, "coverage-phase-diagnostics");
   }
-  const resolved = effectiveCoverageKeys(keyCache, "resolved", resolvedEdgeKeys);
-  const unavailable = effectiveCoverageKeys(keyCache, "unavailable", unavailableEdgeKeys);
-  const unresolved = effectiveCoverageKeys(keyCache, "unresolved", unresolvedEdgeKeys);
-  const refreshed = effectiveCoverageKeys(keyCache, "refreshed", refreshedEdgeKeys);
-  const carried = effectiveCoverageKeys(keyCache, "carried", carriedEdgeKeys);
-  const coverage: BlockScanStateCoverage = Object.freeze({
-    ...raw.coverage,
-    expectedEdgeKeys,
-    resolvedEdgeKeys: resolved.keys,
-    unavailableEdgeKeys: unavailable.keys,
-    unresolvedEdgeKeys: unresolved.keys,
-    refreshedEdgeKeys: refreshed.keys,
-    carriedEdgeKeys: carried.keys,
-    expectedEdgeKeyHash: index.expectedEdgeKeyHash,
-    resolvedEdgeKeyHash: resolved.hash,
-    unavailableEdgeKeyHash: unavailable.hash,
-    unresolvedEdgeKeyHash: unresolved.hash,
-    refreshedEdgeKeyHash: refreshed.hash,
-    carriedEdgeKeyHash: carried.hash,
-  });
-  const snapshot: BlockScanStateSnapshot = Object.freeze({
-    ...raw, generation: graph.generation, sourceBlock: graph.sourceBlock,
-    sourceBlockHash: graph.sourceBlockHash, graph,
-    rawMidSource: Object.freeze({ number: raw.sourceBlock, hash: raw.sourceBlockHash, generation: raw.generation }),
-    mids: raw.mids, effectiveMids, coverage, coverageByEdgeKey,
-    perBlockRefreshStateKeys: index.perBlockRefreshStateKeys,
-    pricingStateKeyByEdgeKey: index.stateKeyByEdgeKey,
-    pricingFamilyIdByEdgeKey: index.familyIdByEdgeKey,
-    pricingProvenanceByEdgeKey,
-    resolvedFamilyIds: Object.freeze([...familyIds].filter(id => !incompleteFamilyIds.has(id)).sort()),
-    incompleteFamilyIds: Object.freeze([...incompleteFamilyIds].sort()),
-  });
-  const graphFingerprint = strictGraphPublicationFingerprint(graph);
-  const publication: StrictPricingPublication = previous === null
-    ? Object.freeze({ kind: "baseline", graphFingerprint, snapshot })
-    : Object.freeze({ kind: "delta", graphFingerprint,
-        previousGeneration: previous.generation, previousSourceBlock: previous.sourceBlock,
-        previousSourceBlockHash: previous.sourceBlockHash,
-        updates: Object.freeze([]), removals: Object.freeze([]), snapshot });
-  return Object.freeze({ snapshot, publication, rawBasis: raw });
 }
 
 function buildStrictPricingSnapshot(
@@ -1507,6 +1573,20 @@ function sourceFor(graph: VerifiedGraphView): CanonicalSource {
     hash: graph.sourceBlockHash,
     generation: graph.generation,
   });
+}
+
+/** Synchronous wall/CPU evidence only; never exclusive GC or scheduling attribution. */
+function diagnosePricingSync<T>(graph: VerifiedGraphView, phase: string, work: () => T): T {
+  if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS !== "1") return work();
+  const diagnostics = beginPricingPhaseDiagnostics(true, phase);
+  let status: PricingPhaseStatus = "failed";
+  try {
+    const result = work();
+    status = "returned";
+    return result;
+  } finally {
+    diagnostics?.finish(graph, status, "pricing-local-phase");
+  }
 }
 
 function controlFor(

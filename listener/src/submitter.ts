@@ -4,6 +4,7 @@ import { classifyTitanSubmissionReceipt, observedBuilderRequest, type BuilderEvi
 import { computeSubmissionFees, BRIBE_WALLET_RESERVE, type BribeGasBasis } from "./shared/submission-fees.js";
 import type { SubmitResult } from "./types.js";
 import { captureBoundedLiveSession, type BoundedLiveSession } from "./shared/bounded-live-session.js";
+import { resolveProfitMode, type ProfitMode } from "./shared/profit-mode.js";
 
 // ─── Builder Endpoints ─────────────────────────────────────────
 
@@ -229,6 +230,7 @@ export function mevShareInclusion(targetBlock: number): {
  * the mined victim hash cannot be referenced in mev_sendBundle.
  */
 export async function submitStandaloneBundle(params: {
+  profitMode?: ProfitMode;
   bribeGasBasis?: BribeGasBasis;
   expectedProfitEth?: bigint;
   evidence?: BuilderEvidenceSink;
@@ -263,6 +265,7 @@ export async function submitStandaloneBundle(params: {
     maxBaseFeePerGas,
     targetBlock,
     submissionMode: "standalone",
+    profitMode: params.profitMode,
   });
 
   const ts = new Date().toISOString();
@@ -295,6 +298,7 @@ export async function submitStandaloneBundle(params: {
 }
 
 export async function buildSignedBackrunTx(params: {
+  profitMode?: ProfitMode;
   bribeGasBasis?: BribeGasBasis;
   expectedProfitEth?: bigint;
   evidence?: BuilderEvidenceSink;
@@ -332,12 +336,14 @@ export async function buildSignedBackrunTx(params: {
   if (maxBaseFeePerGas <= 0n) {
     throw new Error("target block base fee unavailable");
   }
+  const profitMode = resolveProfitMode(params.profitMode);
   const liveSession = captureBoundedLiveSession({
     wallet: wallet.address,
     executor: botvmAddress,
     chainId: 1,
     targetBlock: params.targetBlock,
     mode: params.submissionMode,
+    profitMode,
   });
   const nonce = await wallet.getNonce("pending");
 
@@ -348,7 +354,7 @@ export async function buildSignedBackrunTx(params: {
   const walletBal = await provider.getBalance(wallet.address);
   const fees = computeSubmissionFees({ measuredGasUsed: BigInt(gasUsed), targetBaseFee,
     bribeWei, walletBalance: walletBal, basis: params.bribeGasBasis ?? "gas-limit",
-    expectedProfitEth: params.expectedProfitEth });
+    expectedProfitEth: params.expectedProfitEth, profitMode });
   const { gasLimit, bribeBudget, priorityFee } = fees;
 
   const backrunTx: ethers.TransactionLike = {
@@ -370,6 +376,7 @@ export async function buildSignedBackrunTx(params: {
   const submissionId = randomUUID();
   params.evidence?.({
     type: "submission_fee_parameters", submission_id: submissionId,
+    profit_mode: profitMode,
     captured_at_ms: Date.now(), target_block: params.targetBlock ?? null,
     sender: wallet.address, executor: botvmAddress,
     calldata_hash: ethers.keccak256(calldataHex), nonce, gas_limit: gasLimit.toString(),

@@ -10,29 +10,6 @@ import { createSourceCodeProviders } from "../source-code-cache.js";
 const quiet = () => {};
 const rate = () => new ReadyRpcRateError();
 
-test("resume preserves minimum pressure and spent responses, never upgrading or resetting", () => {
-  const state = { concurrency: 1, batchMaxCount: 1, responsesAtLevel: 1, stopped: false };
-  const control = new ReadyRpcThrottle(4, quiet, state);
-  assert.deepEqual(control.snapshot(), state);
-  control.observe(rate());
-  assert.equal(control.snapshot().responsesAtLevel, 2);
-  assert.throws(() => control.observe(rate()), /persisted at concurrency=1 batch=1/);
-  assert.equal(control.snapshot().stopped, true);
-  const capped = new ReadyRpcThrottle(1, quiet, { ...state, concurrency: 3, batchMaxCount: 8, responsesAtLevel: 2 });
-  assert.deepEqual(capped.snapshot(), { ...state, concurrency: 1, batchMaxCount: 8, responsesAtLevel: 2 });
-  capped.observe(rate());
-  assert.equal(capped.batchMaxCount, 4);
-});
-
-test("stopped, malformed and impossible resume snapshots fail before any candidate runs", () => {
-  const state = { concurrency: 1, batchMaxCount: 1, responsesAtLevel: 1, stopped: false };
-  for (const patch of [{ stopped: true }, { stopped: 'false' }, { concurrency: 0 }, { concurrency: 5 },
-    { batchMaxCount: 3 }, { responsesAtLevel: -1 }, { responsesAtLevel: 3 }, { responsesAtLevel: 0.5 },
-    { concurrency: 2, batchMaxCount: 4 }]) {
-    assert.throws(() => new ReadyRpcThrottle(4, quiet, { ...state, ...patch } as any), /stopped or invalid/);
-  }
-});
-
 test("three physical responses per level; no upgrade, no premature stop at 1/1", () => {
   const control = new ReadyRpcThrottle(4, quiet);
   const levels = [[3, 8], [2, 8], [1, 8], [1, 4], [1, 2], [1, 1]];

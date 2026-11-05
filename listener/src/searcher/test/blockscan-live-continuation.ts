@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { LivePricingContinuationStore, liveContinuationEnabled, validateLiveContinuationAnchors, liveContinuationIdentity,
-  liveContinuationFiles, compatibleLiveContinuationIdentity } from "../blockscan-live-continuation.js";
+  liveContinuationFiles, compatibleLiveContinuationIdentity, compatibleLiveContinuationIdentities } from "../blockscan-live-continuation.js";
 import { BlockScanAmountReference } from "../blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveRowAmountReference, exportEffectiveMidReplayState,
   restoreEffectiveMidReplayState } from "../blockscan-effective-mid.js";
@@ -164,6 +164,13 @@ test("reviewed migration binds both complete file inventories, exact changes and
     const change = async (name: string) => writeFile(join(consumer, name),
       (await readFile(join(consumer, name), "utf8")) + "\n// migration fixture\n");
     await change("searcher/blockscan-live-continuation.ts");
+    const transport = "searcher/pinned-reth-quote-backend.ts";
+    await change(transport);
+    for (const name of ["blockscan-startup-catchup", "blockscan-bigquery-activity"])
+      await change(`searcher/${name}.ts`);
+    await change("shared/state/ethereum-block-activity.ts");
+    for (const name of ["bounded-live-session", "submission-fees", "profit-mode"])
+      await change(`shared/${name}.ts`);
     await writeFile(join(directory, "review.txt"), "fixture review evidence");
     const before = liveContinuationFiles(producer);
     const manifest = join(directory, "compatibility.json");
@@ -175,8 +182,19 @@ test("reviewed migration binds both complete file inventories, exact changes and
           .map(([file, afterSha256]) => ({ file, beforeSha256: prior.get(file) ?? null, afterSha256 })),
         review: { verdict: "compatible", evidencePath: "review.txt", evidenceSha256: sha("fixture review evidence") } };
     };
+    assert.notEqual(liveContinuationIdentity(context, consumer), liveContinuationIdentity(context, producer),
+      "transport changes still invalidate ordinary continuation identity");
+    await writeFile(manifest, JSON.stringify({ ...proof(), review: { ...proof().review, verdict: "pending" } }));
+    assert.throws(() => compatibleLiveContinuationIdentity(context, manifest, consumer), /invalid continuation compatibility manifest/);
     await writeFile(manifest, JSON.stringify(proof()));
     assert.equal(compatibleLiveContinuationIdentity(context, manifest, consumer), liveContinuationIdentity(context, producer));
+    await writeFile(manifest, JSON.stringify({ ...proof(), changes: proof().changes.filter(change => change.file !== transport) }));
+    assert.throws(() => compatibleLiveContinuationIdentity(context, manifest, consumer), /changes differ/);
+    await writeFile(manifest, JSON.stringify(proof()));
+    const producerTransport = await readFile(join(producer, transport));
+    await writeFile(join(producer, transport), producerTransport.toString("utf8") + "\n// unreviewed producer change\n");
+    assert.throws(() => compatibleLiveContinuationIdentity(context, manifest, consumer), /code changed/);
+    await writeFile(join(producer, transport), producerTransport);
     const thresholdContext = { ...context, fixedWethInput: "100", spreadBps: 10 };
     const thresholdReview = JSON.stringify({ producerSpreadBps: 0, consumerSpreadBps: 10, fixedWethInput: "100" });
     await writeFile(join(directory, "review.txt"), thresholdReview);
@@ -184,6 +202,41 @@ test("reviewed migration binds both complete file inventories, exact changes and
       review: { ...proof().review, evidenceSha256: sha(thresholdReview) } }));
     assert.equal(compatibleLiveContinuationIdentity(thresholdContext, manifest, consumer),
       liveContinuationIdentity({ ...thresholdContext, spreadBps: 0 }, producer));
+    const earlier = join(directory, "earlier.json");
+    await cp(manifest, earlier);
+    const current = join(directory, "current.json");
+    await writeFile(current, JSON.stringify({ ...proof(), review: { ...proof().review, evidenceSha256: sha(thresholdReview) } }));
+    const setPath = join(directory, "set.json");
+    const refs = await Promise.all([earlier, current].map(async path => ({ path, sha256: sha(await readFile(path)) })));
+    await writeFile(setPath, JSON.stringify({ schema: "reviewed-live-continuation-set-v1", manifests: refs }));
+    assert.deepEqual(compatibleLiveContinuationIdentities(thresholdContext, setPath, consumer), [
+      liveContinuationIdentity({ ...thresholdContext, spreadBps: 0 }, producer),
+      liveContinuationIdentity(thresholdContext, producer),
+    ]);
+    assert.deepEqual(compatibleLiveContinuationIdentities(thresholdContext, earlier, consumer), [
+      liveContinuationIdentity({ ...thresholdContext, spreadBps: 0 }, producer),
+    ], "single-producer manifests remain supported");
+    const reviewedCurrent = await readFile(current);
+    const incomplete = JSON.parse(reviewedCurrent.toString("utf8"));
+    incomplete.changes = incomplete.changes.filter((change: { file: string }) => change.file !== transport);
+    await writeFile(current, JSON.stringify(incomplete));
+    await writeFile(setPath, JSON.stringify({ schema: "reviewed-live-continuation-set-v1", manifests: [
+      refs[0], { path: current, sha256: sha(await readFile(current)) },
+    ] }));
+    assert.throws(() => compatibleLiveContinuationIdentities(thresholdContext, setPath, consumer), /changes differ/,
+      "each producer proof is checked directly even when its outer reference hash is valid");
+    await writeFile(current, reviewedCurrent);
+    await writeFile(setPath, JSON.stringify({ schema: "reviewed-live-continuation-set-v1", manifests: refs }));
+    await writeFile(current, (await readFile(current, "utf8")) + "\n");
+    assert.throws(() => compatibleLiveContinuationIdentities(thresholdContext, setPath, consumer), /proof changed/);
+    await writeFile(setPath, JSON.stringify({ schema: "reviewed-live-continuation-set-v1", manifests: [
+      { path: current, sha256: sha(await readFile(current)) }, { path: earlier, sha256: sha(await readFile(earlier)) },
+    ] }));
+    const nested = join(directory, "nested.json");
+    await writeFile(nested, JSON.stringify({ schema: "reviewed-live-continuation-set-v1", manifests: [
+      { path: setPath, sha256: sha(await readFile(setPath)) },
+    ] }));
+    assert.throws(() => compatibleLiveContinuationIdentities(thresholdContext, nested, consumer), /invalid continuation compatibility manifest/);
     for (const fixedWethInput of [null, undefined, "0", "101"]) {
       assert.throws(() => compatibleLiveContinuationIdentity({ ...thresholdContext, fixedWethInput }, manifest, consumer), /threshold change/);
     }
@@ -193,11 +246,15 @@ test("reviewed migration binds both complete file inventories, exact changes and
     await writeFile(join(directory, "review.txt"), "tampered");
     assert.throws(() => compatibleLiveContinuationIdentity(context, manifest, consumer), /evidence changed/);
     await writeFile(join(directory, "review.txt"), "fixture review evidence");
-    await change("searcher/blockscan-live-continuation.ts");
+    await change(transport);
     assert.throws(() => compatibleLiveContinuationIdentity(context, manifest, consumer), /code changed/);
-    await change("compiler.ts");
-    await writeFile(manifest, JSON.stringify(proof()));
-    assert.throws(() => compatibleLiveContinuationIdentity(context, manifest, consumer), /execution semantics/);
+    for (const file of ["compiler.ts", "encoder.ts", "searcher/venues/swaps/univ4-family/pricing.ts", "searcher/execution-asset-boundary.ts"]) {
+      const original = await readFile(join(consumer, file));
+      await change(file);
+      await writeFile(manifest, JSON.stringify(proof()));
+      assert.throws(() => compatibleLiveContinuationIdentity(context, manifest, consumer), /execution semantics/, file);
+      await writeFile(join(consumer, file), original);
+    }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

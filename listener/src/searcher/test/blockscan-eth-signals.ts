@@ -32,14 +32,8 @@ function fixture(count: number, samePool = false, seed = 1, token = usdc) {
   }
   return { edges, mids };
 }
-// Give each independent fixture a forward source range. The production cache
-// deliberately retains the newest source when an older historical reader runs.
-// A fixture must not accidentally test that older-reader path because another
-// test advanced the shared cache first; within-fixture reorgs remain explicit.
-let fixtureSource = 0;
 function publication({ edges, mids }: ReturnType<typeof fixture>): BlockScanStateSnapshot {
-  fixtureSource += 1_000;
-  const source = { number: fixtureSource, hash: `0x${fixtureSource.toString(16).padStart(64, "0")}`, generation: fixtureSource };
+  const source = { number: 1, hash: `0x${"ab".repeat(32)}`, generation: 1 };
   const rows = new Map<string, EffectiveMidRow>([...mids].map(([key, mid]) => {
     const edge = mid.edges[0]!;
     return [key, { edgeId: key, status: "quoted", effectiveMid: mid.mid,
@@ -76,8 +70,8 @@ function oracle(view: BlockScanEthView, limit: number, legacy = false) {
 }
 const identities = (signals: readonly DirectedPriceSignal[]) => signals.map(s => `${s.token}|${s.buy}|${s.sell}`).sort();
 
-test("default 50, selectable positive integer, rejects malformed limits", () => {
-  assert.equal(resolveEthSignalPairsPerToken(), 50);
+test("default 20, selectable positive integer, rejects malformed limits", () => {
+  assert.equal(resolveEthSignalPairsPerToken(), 20);
   for (const raw of ["1", "20", "100"]) assert.equal(resolveEthSignalPairsPerToken(raw), Number(raw));
   for (const raw of ["", "0", "-1", "1.2", "Infinity", "01", "9007199254740992"])
     assert.throws(() => resolveEthSignalPairsPerToken(raw), /positive safe integer/);
@@ -158,20 +152,13 @@ test("publication cache distinguishes cap, retains mids and supports switching b
   const one = effectiveEthPricing(pricing, 1);
   assert.equal(effectiveEthPricing(pricing, 1), one);
   const twenty = effectiveEthPricing(pricing, 20);
-  // Changing policy rebuilds the validated index Map, while unchanged quote
-  // objects and their exact amounts remain reusable across those indexes.
-  assert.deepEqual(twenty.mids, one.mids);
-  assert([...twenty.mids].every(([key, quote]) => quote === one.mids.get(key)));
-  assert(twenty.view.signals.length > one.view.signals.length);
-  const defaults = effectiveEthPricing(pricing);
-  assert.equal(defaults.view.signalPairsPerToken, 50);
-  assert.equal(effectiveEthPricing(pricing), defaults);
+  assert.equal(twenty.mids, one.mids); assert(twenty.view.signals.length > one.view.signals.length);
+  assert.equal(effectiveEthPricing(pricing), twenty);
   assert.deepEqual(identities(effectiveEthPricing(pricing, 1).view.signals), identities(one.view.signals));
   assert.throws(() => effectiveEthPricing(pricing, 0), /positive safe integer/);
   const on = effectiveEthPricing(pricing, 20, true);
   const off = effectiveEthPricing(pricing, 20, false);
-  assert.notEqual(on, off); assert.deepEqual(on.mids, off.mids);
-  assert([...on.mids].every(([key, quote]) => quote === off.mids.get(key)));
+  assert.notEqual(on, off); assert.equal(on.mids, off.mids);
   assert.equal(off.view.allowRepeatedPools, false);
   assert.deepEqual(identities(off.view.signals), identities(buildBlockScanEthView(edges, mids, 20, false).signals));
   assert.equal(effectiveEthPricing(pricing, 20, false), off);
@@ -261,7 +248,7 @@ test("ETH marks and signal statistics remain available with no USDC edge", () =>
   assert.deepEqual(view.referenceEthPerRaw.get(weth), { num: 1n, den: 1n });
   assert(view.referenceEthPerRaw.has(token));
   assert.equal(stats.referenceEthTokens, 2);
-  assert.equal(view.signals.length, 100);
+  assert.equal(view.signals.length, 40);
   assert(view.quotes.every(quote => quote.value !== null));
 });
 
@@ -332,8 +319,7 @@ test("cross-publication view equals a fresh build through updates, removal, reor
     if (round % 11 === 0) rows.delete(key);
     else if (round % 7 === 0) rows.set(key, { ...original, status: "quote-failed", amountOut: null, effectiveMid: null });
     else rows.set(key, { ...original, amountOut: original.amountOut! + BigInt(random % 100) });
-    const source = { number: base.sourceBlock + 1 + round % 9, generation: base.generation + round + 2,
-      hash: `0x${String(round).padStart(64, "0")}` };
+    const source = { number: 1 + round % 9, generation: round + 2, hash: `0x${String(round).padStart(64, "0")}` };
     const current = { ...base, graph: { ...base.graph, edges: inputs.edges.map(edge => ({ ...edge })) },
       sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
       effectiveMids: { ...base.effectiveMids!, source, rows } };
@@ -373,7 +359,7 @@ test("unchanged offers are reused but changed upstream marks invalidate dependen
 test("copied production topology reuses unchanged offers without retaining removed prices or old authority", () => {
   const inputs = fixture(40), base = publication(inputs);
   const first = effectiveEthPricing(base, 7, false), saved = structuredClone(first.view);
-  const source = { number: base.sourceBlock + 1, hash: `0x${"cd".repeat(32)}`, generation: base.generation + 1 };
+  const source = { number: 2, hash: `0x${"cd".repeat(32)}`, generation: 2 };
   const edges = inputs.edges.map(edge => ({ ...edge }));
   const next = { ...base, graph: { ...base.graph, edges }, sourceBlock: source.number,
     sourceBlockHash: source.hash, generation: source.generation,

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -1709,192 +1708,6 @@ async function main(): Promise<void> {
       await rm(updateDir, { recursive: true, force: true });
     }
 
-    for (const changeDefinition of [false, true]) {
-      const resumeDir = await mkdtemp(join(tmpdir(), "ready-refresh-resume-"));
-      try {
-        const f = makeFixture(resumeDir);
-        f.terminalKeys.add("c");
-        const ready = await rebuildUniverse(f.input);
-        const parent = (await f.store.load())!;
-        const path = join(resumeDir, "checkpoint.json");
-        const originalBytes = await readFile(path, "utf8");
-        let definition = "refresh-v2";
-        let scans = 0;
-        const seal = f.input.sealDurableVerifiedMemo;
-        const input = {
-          ...f.input,
-          attestationConcurrency: 1,
-          freezeCanonicalHead: async (): Promise<never> => { scans++; throw new Error("no scan"); },
-          scanSwapWindow: async (): Promise<never> => { scans++; throw new Error("no scan"); },
-          isReadyMemoDefinitionCurrent: (memo: DurableVerifiedMemo) => memo.familyDefinitionHash === definition,
-          sealDurableVerifiedMemo: (value: Parameters<typeof seal>[0]) =>
-            sealFixtureMemo({ ...seal(value), familyDefinitionHash: definition }),
-        };
-        f.failKeys.add("b");
-        await assert.rejects(refreshReadyInstances(input), /retryable.*incumbent unchanged/);
-        assert.equal(f.attestCalls.get("a"), 2);
-        assert.equal(f.attestCalls.get("b"), 4);
-        assert.equal(await readFile(path, "utf8"), originalBytes, "partial refresh never changes published Ready");
-        const restarted = new UniverseRebuildCheckpointStore({ path });
-        assert.deepEqual(await restarted.load(), parent, "restart keeps the old complete Graph");
-        const oldA = parent.verifiedMemos["cand:a"]!, oldB = parent.verifiedMemos["cand:b"]!;
-        const saved = await restarted.loadReadyRefreshResult(parent, oldA);
-        assert(saved?.status === "verified");
-        assert.equal(saved.memo.familyDefinitionHash, definition, "successful sibling survived the failed batch");
-        const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
-          import { UniverseRebuildCheckpointStore } from ${JSON.stringify(new URL("../universe-rebuild-checkpoint.ts", import.meta.url).href)};
-          const store = new UniverseRebuildCheckpointStore({ path: process.argv[1] });
-          const parent = await store.load();
-          const result = await store.loadReadyRefreshResult(parent, parent.verifiedMemos["cand:a"]);
-          console.log(result.memo.familyDefinitionHash);
-        `, path], { encoding: "utf8", timeout: 30_000 });
-        assert.equal(child.status, 0, child.stderr);
-        assert.equal(child.stdout.trim(), definition, "a new OS process restores the durable proof, not in-memory state");
-        assert.equal(await restarted.loadReadyRefreshResult(parent, oldB), null, "retryable is not completed");
-        const cacheDir = path + ".ready-refresh/" + parent.checkpointFingerprint;
-        const files = await readdir(cacheDir);
-        assert.equal(files.length, 1, "one completed proof, not an all-Ready rewrite");
-        const cachedPath = join(cacheDir, files[0]!);
-        const validBytes = await readFile(cachedPath, "utf8");
-        await writeFile(cachedPath + ".tmp.interrupted", '{"version":');
-        assert.deepEqual(await restarted.loadReadyRefreshResult(parent, oldA), saved, "an interrupted temp write is not committed");
-        const corrupt = JSON.parse(validBytes);
-        corrupt.result.memo.compiledDescriptor = { tampered: true };
-        await writeFile(cachedPath, JSON.stringify(corrupt));
-        await assert.rejects(restarted.loadReadyRefreshResult(parent, oldA), /fingerprint mismatch/);
-        await writeFile(cachedPath, validBytes);
-        await assert.rejects(restarted.saveReadyRefreshResult(parent, { status: "verified", memo: sealFixtureMemo({
-          ...saved.memo, familyInstanceKey: "inst:replacement",
-        }) }), /changed identity/);
-        await assert.rejects(restarted.saveReadyRefreshResult(parent, { status: "verified", memo: sealFixtureMemo({
-          ...saved.memo, validity: { ...saved.memo.validity, proofSource: { number: SOURCE.number + 1, hash: SOURCE.hash } },
-        }) }), /different proof source/);
-        await assert.rejects(refreshReadyInstances({ ...input, store: restarted,
-          assertCanonicalHead: async () => { throw new Error("cutoff reorged before resume"); },
-        }), /cutoff reorged before resume/);
-        assert.equal(f.attestCalls.get("a"), 2);
-        if (changeDefinition) definition = "refresh-v3";
-        f.failKeys.delete("b");
-        const logs: string[] = [];
-        const next = await refreshReadyInstances({ ...input, store: restarted, log: message => logs.push(message) });
-        assert.equal(f.attestCalls.get("a"), changeDefinition ? 3 : 2,
-          "same definition resumes without RPC; a changed definition revalidates the saved proof");
-        assert.equal(f.attestCalls.get("b"), 5, "only the unfinished entry must retry on a compatible resume");
-        assert.equal(f.attestCalls.get("c"), 1, "excluded candidates are not reconsidered");
-        assert.equal(next.generation, ready.generation + 1);
-        assert.deepEqual(next.cutoff, ready.cutoff);
-        assert.deepEqual(next.activeInstanceKeys, ready.activeInstanceKeys);
-        assert.equal(scans, 0);
-        assert(logs.some(message => message.includes(changeDefinition
-          ? "reattested=2 resumed=0 reused=0" : "reattested=1 resumed=1 reused=0")));
-        const committed = (await restarted.load())!;
-        assert.equal(await restarted.loadReadyRefreshResult(committed, committed.verifiedMemos["cand:a"]!), null,
-          "a new Ready cannot reuse another parent namespace");
-        await assert.rejects(restarted.saveReadyRefreshResult(parent, saved), /parent changed/);
-        console.log(`ready refresh durable resume PASS (definitionChanged=${changeDefinition}, scans=0)`);
-      } finally {
-        await rm(resumeDir, { recursive: true, force: true });
-      }
-    }
-
-    for (const [partitions, changeDefinition] of [[false, false], [true, false], [true, true]] as const) {
-      const rejectDir = await mkdtemp(join(tmpdir(), "ready-refresh-rejection-"));
-      try {
-        const f = makeFixture(rejectDir);
-        const baseInput = { ...f.input, ...(partitions ? {
-          candidateFamilyId: () => "univ2", familyDiscoveryDefinitionHash: () => "d".repeat(64),
-        } : {}) };
-        const ready = await rebuildUniverse(baseInput);
-        const parent = (await f.store.load())!;
-        const path = join(rejectDir, "checkpoint.json");
-        const bytesBefore = await readFile(path, "utf8");
-        f.terminalKeys.add("a");
-        f.failKeys.add("c");
-        let definition = "v2";
-        const attempted: string[] = [];
-        const input = {
-          ...baseInput, attestationConcurrency: 1,
-          scanSwapWindow: async (): Promise<never> => { throw new Error("must not scan"); },
-          isReadyMemoDefinitionCurrent: (memo: DurableVerifiedMemo) => memo.familyDefinitionHash === definition,
-          isReadyRefreshRejectionCurrent: (outcome: { familyDefinitionHash: string }) => outcome.familyDefinitionHash === definition,
-          attestFamilyInstanceOnce: async (value: Parameters<typeof f.input.attestFamilyInstanceOnce>[0]) => {
-            const id = (value.candidate as { id: string }).id;
-            attempted.push(id);
-            const result = await f.input.attestFamilyInstanceOnce(value);
-            return result.status === "terminal-rejected" ? { ...result,
-              binding: { ...result.binding, familyDefinitionHash: definition, candidateFingerprint: "cf:" + id } } : result;
-          },
-          sealDurableVerifiedMemo: (value: Parameters<typeof f.input.sealDurableVerifiedMemo>[0]) =>
-            sealFixtureMemo({ ...f.input.sealDurableVerifiedMemo(value), familyDefinitionHash: definition }),
-        };
-        await assert.rejects(refreshReadyInstances(input), /cand:c: attempt=3\/3 retryable/);
-        assert.deepEqual(attempted, ["a", "b", "c", "c", "c"], "normal rejection does not abort later candidates");
-        assert.equal(await readFile(path, "utf8"), bytesBefore, "transport stop leaves complete incumbent intact");
-        const store = new UniverseRebuildCheckpointStore({ path });
-        const saved = await store.loadReadyRefreshResult(parent, parent.verifiedMemos["cand:a"]!);
-        assert(saved?.status === "terminal-rejected");
-        await assert.rejects(store.saveReadyRefreshResult(parent, { ...saved, candidateFingerprint: "different" }), /negative evidence/);
-        await assert.rejects(store.casRefreshReadyInstances({ expectedRevision: parent.revision,
-          memos: [parent.verifiedMemos["cand:b"]!, parent.verifiedMemos["cand:c"]!],
-          rejections: [{ ...saved, cutoff: { number: SOURCE.number, hash: "0x" + "ff".repeat(32) } }],
-          graphSnapshot: { edges: [] },
-        }), /negative evidence/);
-        f.failKeys.delete("c");
-        if (changeDefinition) {
-          definition = "v3";
-          f.terminalKeys.delete("a");
-        }
-        attempted.length = 0;
-        const logs: string[] = [];
-        const next = await refreshReadyInstances({ ...input, store, log: value => logs.push(value) });
-        if (changeDefinition) {
-          assert.deepEqual(attempted, ["a", "b", "c"], "changed definitions invalidate saved rejection AND success");
-          assert.deepEqual(next.activeInstanceKeys, ["inst:a", "inst:b", "inst:c"]);
-          assert.equal(next.candidateAccounting.terminalRejected, 0);
-          assert.equal(next.refreshRejections, undefined, "old rejection cannot remove a newly verified candidate");
-          assert.equal(activeReadyMemos((await store.load())!).length, 3);
-          console.log("ready refresh changed rejection definition PASS (revalidated=true, readmitted=true)");
-          continue;
-        }
-        assert.deepEqual(attempted, ["c"], "completed success and normal rejection both resume without re-attesting");
-        assert.deepEqual(next.activeInstanceKeys, ["inst:b", "inst:c"]);
-        assert.deepEqual((next.graphSnapshot as { edges: { instanceKey: string }[] }).edges.map(edge => edge.instanceKey), ["inst:b", "inst:c"]);
-        assert.deepEqual(next.candidateAccounting, { total: 3, verified: 2, terminalRejected: 1, retryable: 0, remainingUnaccounted: 0 });
-        assert.deepEqual(next.refreshRejections?.["cand:a"], saved, "reason/evidence remain in the published checkpoint");
-        assert.equal(next.familyPartitions?.univ2?.outcomesByCandidateKey["cand:a"]?.status, partitions ? "terminal-rejected" : undefined);
-        assert(logs.some(line => line.includes("reattested=1 resumed=2 reused=0 rejected=1")));
-        assert.deepEqual(activeReadyMemos((await store.load())!).map(memo => memo.familyCandidateKey), ["cand:b", "cand:c"]);
-        assert.deepEqual(next.cutoff, ready.cutoff);
-        assert.deepEqual(next.sourceCoverage, ready.sourceCoverage);
-        if (partitions) {
-          const parentAfterRejection = (await store.load())!;
-          const deltaDir = join(rejectDir, "new-definition");
-          await mkdir(deltaDir);
-          await copyFile(path, join(deltaDir, "checkpoint.json"));
-          const delta = makeFixture(deltaDir);
-          await rebuildUniverse({ ...delta.input,
-            candidateFamilyId: () => "univ2", familyDiscoveryDefinitionHash: () => "d".repeat(64),
-            isFamilyEnabled: id => id === "univ2",
-            observationRange: next.universeRange,
-            familyUpdateScope: { parentCheckpointFingerprint: parentAfterRejection.checkpointFingerprint, familyIds: ["univ2"] },
-            findReusableMemo: async () => null,
-          });
-          const restored = await updateReadyFamilies({ ...baseInput, store,
-            isFamilyEnabled: () => true, isReadyMemoDefinitionCurrent: () => true,
-            assertReadyGraphSnapshot: ({ publications, graphSnapshot, cutoff }) =>
-              assert.deepEqual(graphSnapshot, baseInput.buildGraphSnapshot(publications, cutoff)),
-            supplements: [{ familyIds: ["univ2"], checkpoint: (await delta.store.load())! }],
-          });
-          assert.deepEqual(restored.activeInstanceKeys, ["inst:a", "inst:b", "inst:c"]);
-          assert.equal(restored.refreshRejections, undefined, "a later Family replacement removes superseded rejection evidence");
-          assert.equal(activeReadyMemos((await store.load())!).length, 3);
-        }
-        console.log(`ready refresh normal rejection PASS (partitions=${partitions}, continues=true, resumes=true, graph-excluded=true)`);
-      } finally {
-        await rm(rejectDir, { recursive: true, force: true });
-      }
-    }
-
     const refreshDir = await mkdtemp(join(tmpdir(), "ready-instance-refresh-"));
     try {
       const refresh = makeFixture(refreshDir);
@@ -1989,7 +1802,7 @@ async function main(): Promise<void> {
 
       // A failed attestation, source reorg or identity change cannot publish
       // a partial/smaller Ready or overwrite its sealed memos.
-      for (const outcome of ["retryable"] as const) {
+      for (const outcome of ["retryable", "terminal"] as const) {
         const keys = outcome === "retryable" ? refresh.failKeys : refresh.terminalKeys;
         keys.add("a");
         const attemptsBefore = refresh.attestCalls.get("a")!;
@@ -2020,7 +1833,7 @@ async function main(): Promise<void> {
           expectedAttempts, "every failed attempt is logged, including exhaustion");
         assert.deepEqual(await refresh.store.load(), after);
         assert.equal(await readFile(join(refreshDir, "checkpoint.json"), "utf8"), checkpointBefore,
-          "successful siblings persist separately; the published Ready never changes partially");
+          "even successfully refreshed siblings are not partially persisted");
         keys.delete("a");
       }
       await assert.rejects(refreshReadyInstances({

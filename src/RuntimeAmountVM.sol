@@ -2,11 +2,12 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "./interfaces/IERC20.sol";
+import {RuntimeAmountKernel} from "./RuntimeAmountKernel.sol";
+import {RuntimeCallSequence} from "./RuntimeCallSequence.sol";
 
 /// Protocol-neutral, bounded runtime amount programs. Protocol selectors and
 /// formulae are emitted by Family encoders, never interpreted by this kernel.
 abstract contract RuntimeAmountVM {
-    uint256 private constant CALLBACK_TARGET = uint256(keccak256("BotVM.runtime.callback.target"));
     uint256 private constant CALLBACK_HASH = uint256(keccak256("BotVM.runtime.callback.hash"));
     uint256 private constant VM_STATE = 0x1337;
     // Dry-run-only state overlay. Never read on a successful execution. A fresh
@@ -15,15 +16,41 @@ abstract contract RuntimeAmountVM {
     struct HopContext { uint256 index; bytes flow; address lastTarget; }
     error RuntimeHopFailed(uint256 hop, address target, bytes32 flowHash, bytes reason, bytes32 proof);
 
-    function _runtimeEnsureAllowance(address token, address spender, uint256 minimum, uint256 grant) internal virtual;
-
-    function _checkRuntimeCallback(uint256 start, uint256 size) internal {
-        uint256 target = _getTransient(CALLBACK_TARGET);
-        if (target == 0) return; // legacy execution has its separate contract
-        require(target == uint160(msg.sender), "runtime callback sender");
-        require(start <= msg.data.length && size <= msg.data.length - start, "runtime callback bounds");
-        require(keccak256(msg.data[start:start + size]) == bytes32(_getTransient(CALLBACK_HASH)), "runtime callback script");
-        _setTransient(CALLBACK_TARGET, 1); // one callback; nested calls install their own scope
+    function _checkRuntimeCallback(uint256 start, uint256 size, uint256 state) internal returns (bytes memory script) {
+        uint256 callbackHash = CALLBACK_HASH;
+        assembly ("memory-safe") {
+            function reject(message) {
+                let n := 32
+                for { } and(iszero(iszero(n)), iszero(byte(sub(n, 1), message))) { } { n := sub(n, 1) }
+                let p := mload(0x40)
+                mstore(p, shl(224, 0x08c379a0)) mstore(add(p, 4), 32)
+                mstore(add(p, 36), n) mstore(add(p, 68), message) revert(p, 100)
+            }
+            let mask := 0xffffffffffffffffffffffffffffffffffffffff
+            let target := and(state, mask)
+            if target {
+                if iszero(eq(target, caller())) { reject("runtime callback sender") }
+                if or(gt(start, calldatasize()), gt(size, sub(calldatasize(), start))) {
+                    reject("runtime callback bounds")
+                }
+            }
+            script := mload(0x40)
+            let next := and(add(add(script, size), 63), not(31))
+            // Match Solidity's checked dynamic-memory allocation, including
+            // legacy callbacks whose length is not bounded by msg.data.
+            if or(gt(size, 0xffffffffffffffff), or(lt(next, script), gt(next, 0xffffffffffffffff))) {
+                mstore(0, shl(224, 0x4e487b71)) mstore(4, 0x41) revert(0, 36)
+            }
+            mstore(0x40, next) mstore(script, size)
+            mstore(sub(next, 32), 0)
+            calldatacopy(add(script, 32), start, size)
+            if target {
+                if iszero(eq(keccak256(add(script, 32), size), tload(callbackHash))) {
+                    reject("runtime callback script")
+                }
+                tstore(VM_STATE, or(and(state, not(mask)), 1))
+            }
+        }
     }
 
     function _runRuntimeAmountFlow(bytes memory data) internal {
@@ -93,8 +120,9 @@ abstract contract RuntimeAmountVM {
             require(spent <= amount, "runtime input rounding");
             if ((maximumInputMask & (1 << i)) == 0) {
                 require(amount - spent <= tolerance, "runtime input rounding");
-            } else {
-                // A budget operation may retain input. Protect it alongside
+            }
+            if (spent < amount) {
+                // Protect all retained input, including one-unit rounding. Protect it alongside
                 // inventory so a later visit cannot mistake it for fresh output.
                 address tokenIn = _address(data, ip);
                 for (uint256 j; j < tokenCount; ++j) {
@@ -129,147 +157,21 @@ abstract contract RuntimeAmountVM {
     }
 
     function _runRuntimeProgram(bytes memory data, uint256 amount) internal {
-        _runRuntimeProgram(data, amount, HopContext(0, new bytes(0), address(0)));
+        RuntimeAmountKernel.run(data, amount, 0, new bytes(0));
+    }
+
+    function _runRuntimeProgramSlice(bytes memory data, uint256 start, uint256 size, uint256 amount) internal {
+        if (start == 1) {
+            RuntimeCallSequence.runSlice(data, start, size, 0, bytes32(0));
+            return;
+        }
+        RuntimeAmountKernel.runSlice(data, start, size, amount, 0, new bytes(0));
     }
 
     function _runRuntimeProgram(bytes memory data, uint256 amount, HopContext memory context)
         private
     {
-        _runRuntimeProgram(data, amount, context, false, 0);
-    }
-
-    function _runRuntimeProgram(bytes memory data, uint256 amount, HopContext memory context, bool readOnly, uint256 depth)
-        private returns (uint256 output)
-    {
-        require(depth <= 8, "runtime nesting limit");
-        require(data.length > 1 && data.length <= 65536 && uint8(data[0]) == 1, "runtime program version");
-        uint256[16] memory r;
-        r[0] = amount;
-        uint256 ip = 1;
-        uint256 count;
-        bytes memory returned;
-        while (ip < data.length) {
-            require(++count <= 128, "runtime instruction limit");
-            uint8 op = uint8(data[ip++]);
-            if (op == 0) {
-                require(ip + 33 <= data.length, "runtime constant bounds");
-                r[uint8(data[ip])] = _word(data, ip + 1); ip += 33;
-            } else if (op == 1) {
-                if (readOnly) require(ip + 29 <= data.length &&
-                    (uint8(data[ip + 20]) == 1 || uint8(data[ip + 20]) == 2), "runtime readonly call");
-                (ip, returned, context.lastTarget) = _runtimeCall(data, ip, r, context);
-            } else if (op == 2) {
-                require(ip + 4 <= data.length, "runtime math bounds");
-                uint8 kind = uint8(data[ip]);
-                uint256 dst = uint8(data[ip + 1]);
-                uint256 a = r[uint8(data[ip + 2])];
-                uint256 b = r[uint8(data[ip + 3])];
-                if (kind == 0) r[dst] = a + b;
-                else if (kind == 1) r[dst] = a - b;
-                else if (kind == 2) r[dst] = a * b;
-                else if (kind == 3) r[dst] = a / b;
-                else if (kind == 4) { require(b < 256, "runtime shift"); r[dst] = a >> b; }
-                else if (kind == 5) r[dst] = a & b;
-                else if (kind == 6) { require(a < (1 << 255), "runtime signed range"); unchecked { r[dst] = 0 - a; } }
-                else if (kind == 7) r[dst] = a == b ? 1 : 0;
-                else if (kind == 8) r[dst] = a < b ? a : b;
-                else revert("runtime math opcode");
-                ip += 4;
-            } else if (op == 3) {
-                require(ip + 2 <= data.length, "runtime equality bounds");
-                require(r[uint8(data[ip])] == r[uint8(data[ip + 1])], "runtime amount mismatch"); ip += 2;
-            } else if (op == 4) {
-                require(!readOnly, "runtime readonly allowance");
-                require(ip + 73 <= data.length, "runtime allowance bounds");
-                uint256 oldTarget = _getTransient(CALLBACK_TARGET);
-                _setTransient(CALLBACK_TARGET, 1);
-                _runtimeEnsureAllowance(_address(data, ip), _address(data, ip + 20), r[uint8(data[ip + 40])], _word(data, ip + 41));
-                _setTransient(CALLBACK_TARGET, oldTarget);
-                ip += 73;
-            } else if (op == 5) {
-                require(ip < data.length, "runtime native balance bounds");
-                r[uint8(data[ip++])] = address(this).balance;
-            } else if (op == 6) {
-                require(ip + 4 <= data.length, "runtime result bounds");
-                r[uint8(data[ip])] = _word(returned, _u24(data, ip + 1)); ip += 4;
-            } else if (op == 7) {
-                require(ip + 4 <= data.length, "runtime calldata instruction bounds");
-                uint256 offset = _u24(data, ip + 1);
-                require(offset <= msg.data.length && msg.data.length - offset >= 32, "runtime calldata bounds");
-                uint256 value;
-                assembly { value := calldataload(offset) }
-                r[uint8(data[ip])] = value; ip += 4;
-            } else if (op == 8) {
-                require(ip + 6 <= data.length, "runtime subprogram header");
-                uint256 inputReg = uint8(data[ip]);
-                uint256 outputReg = uint8(data[ip + 1]);
-                uint256 mode = uint8(data[ip + 2]);
-                require(mode <= 1, "runtime subprogram mode");
-                uint256 size = _u24(data, ip + 3);
-                r[outputReg] = _runRuntimeProgram(_slice(data, ip + 6, size), r[inputReg],
-                    context, readOnly || mode == 1, depth + 1);
-                ip += 6 + size;
-            } else revert("runtime opcode");
-        }
-        output = r[0];
-    }
-
-    function _runtimeCall(bytes memory data, uint256 ip, uint256[16] memory r, HopContext memory context)
-        private returns (uint256, bytes memory result, address target)
-    {
-        require(ip + 29 <= data.length, "runtime call header");
-        target = _address(data, ip);
-        uint256 mode = uint8(data[ip + 20]);
-        uint256 valueReg = uint8(data[ip + 21]);
-        uint256 incoming = _u24(data, ip + 22);
-        uint256 outgoing = _u24(data, ip + 25);
-        uint256 patches = uint8(data[ip + 28]);
-        ip += 29;
-        if (mode == 2) {
-            require(outgoing == 0, "runtime reverted call config");
-            // Mode 2 cannot install a callback; reuse its scratch offset for
-            // the separately encoded expected revert length.
-            outgoing = _u24(data, ip); ip += 3;
-        }
-        uint256 patchStart = ip;
-        ip += patches * 4;
-        uint256 size = _u24(data, ip);
-        bytes memory payload = _slice(data, ip + 3, size);
-        ip += 3 + size;
-        for (uint256 i; i < patches; ++i) {
-            uint256 offset = _u24(data, patchStart + i * 4);
-            require(offset >= 4 && offset + 32 <= size, "runtime patch bounds");
-            uint256 value = r[uint8(data[patchStart + i * 4 + 3])];
-            assembly { mstore(add(add(payload, 32), offset), value) }
-        }
-        require(target.code.length > 0 && mode <= 2, "runtime call target");
-        require(mode == 0 || (valueReg == 255 && incoming == 0), "runtime static config");
-        require(mode != 2 || outgoing <= 65536, "runtime reverted call config");
-        uint256 oldTarget = _getTransient(CALLBACK_TARGET);
-        uint256 oldHash = _getTransient(CALLBACK_HASH);
-        uint256 oldState = _getTransient(VM_STATE);
-        _setTransient(CALLBACK_TARGET, incoming == 0 ? 1 : uint160(target));
-        if (incoming != 0) {
-            require(incoming >= 32 && outgoing >= 32, "runtime callback offset");
-            bytes memory callbackScript = _slice(payload, outgoing, _word(payload, outgoing - 32));
-            _setTransient(CALLBACK_HASH, uint256(keccak256(callbackScript)));
-            _setTransient(VM_STATE, incoming << 224);
-        }
-        bool ok;
-        if (mode == 1) (ok, result) = target.staticcall(payload);
-        else (ok, result) = target.call{value: valueReg == 255 ? 0 : r[valueReg]}(payload);
-        // Mode 2 can be used by a readonly subprogram only because every
-        // accepted external call has reverted all of its descendant effects.
-        // A successful return, even with matching bytes, reverts this VM call.
-        if (mode == 2) require(!ok && result.length == outgoing, "runtime expected revert");
-        else if (!ok) _runtimeHopFailure(context, target, result, "runtime external call");
-        if (incoming != 0 && _getTransient(CALLBACK_TARGET) != 1) {
-            _runtimeHopGuard(context, target, "runtime callback missing");
-        }
-        _setTransient(CALLBACK_TARGET, oldTarget);
-        _setTransient(CALLBACK_HASH, oldHash);
-        _setTransient(VM_STATE, oldState);
-        return (ip, result, target);
+        (context.lastTarget,) = RuntimeAmountKernel.run(data, amount, context.index, context.flow);
     }
 
     function _runtimeHopGuard(HopContext memory context, address target, string memory reason) private view {
@@ -281,7 +183,7 @@ abstract contract RuntimeAmountVM {
     {
         uint256 slot = DIAGNOSTIC_KEY;
         bytes32 key;
-        assembly { key := sload(slot) }
+        assembly ("memory-safe") { key := sload(slot) }
         if (key == bytes32(0) || context.flow.length == 0) revert(legacy);
         bytes32 flowHash = keccak256(context.flow);
         bytes32 proof = keccak256(abi.encode(key, context.index, target, flowHash, keccak256(reason)));
@@ -292,33 +194,27 @@ abstract contract RuntimeAmountVM {
     // This only transports bytes: the simulator verifies the per-call proof.
     function _bubbleRuntimeHopFailure(bytes memory result, string memory legacy) internal pure {
         if (result.length >= 4 && bytes4(result) == RuntimeHopFailed.selector) {
-            assembly { revert(add(result, 32), mload(result)) }
+            assembly ("memory-safe") { revert(add(result, 32), mload(result)) }
         }
         revert(legacy);
     }
-    function _getTransient(uint256 slot) private view returns (uint256 value) { assembly { value := tload(slot) } }
-    function _setTransient(uint256 slot, uint256 value) private { assembly { tstore(slot, value) } }
     function _word(bytes memory data, uint256 offset) private pure returns (uint256 value) {
         require(offset <= data.length && data.length - offset >= 32, "runtime word bounds");
-        assembly { value := mload(add(add(data, 32), offset)) }
+        assembly ("memory-safe") { value := mload(add(add(data, 32), offset)) }
     }
     function _u24(bytes memory data, uint256 offset) private pure returns (uint256 value) {
         require(offset <= data.length && data.length - offset >= 3, "runtime size bounds");
-        assembly { value := shr(232, mload(add(add(data, 32), offset))) }
+        assembly ("memory-safe") { value := shr(232, mload(add(add(data, 32), offset))) }
     }
     function _address(bytes memory data, uint256 offset) private pure returns (address value) {
         require(offset <= data.length && data.length - offset >= 20, "runtime address bounds");
-        assembly { value := shr(96, mload(add(add(data, 32), offset))) }
+        assembly ("memory-safe") { value := shr(96, mload(add(add(data, 32), offset))) }
     }
     function _slice(bytes memory data, uint256 offset, uint256 size) private pure returns (bytes memory result) {
         require(offset <= data.length && size <= data.length - offset, "runtime slice bounds");
         result = new bytes(size);
-        assembly {
-            let src := add(add(data, 32), offset)
-            let dst := add(result, 32)
-            for { let i := 0 } lt(i, size) { i := add(i, 32) } {
-                mstore(add(dst, i), mload(add(src, i)))
-            }
+        assembly ("memory-safe") {
+            mcopy(add(result, 32), add(add(data, 32), offset), size)
         }
     }
 }

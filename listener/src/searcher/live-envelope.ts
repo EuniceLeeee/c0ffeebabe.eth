@@ -1,9 +1,14 @@
 import { ethers } from "ethers";
+import { isAbsolute } from "node:path";
+import { resolveProfitMode, validatePositiveGrossProfitMode, type ProfitMode } from "../shared/profit-mode.js";
 
 const AUTHORIZED_MAX_WALLET_WEI = ethers.parseEther("0.2");
 export const DEFAULT_BRIBE_BPS = 5_000;
 
 export interface LiveEnvelopeInput {
+  profitMode?: ProfitMode;
+  sessionPath?: string;
+  sessionId?: string;
   dryRun: boolean;
   evGate: boolean;
   bribeBps: number;
@@ -27,6 +32,11 @@ export async function validateLiveEnvelope(
   probe: LiveEnvelopeProbe,
 ): Promise<void> {
   if (input.dryRun) return;
+  validatePositiveGrossProfitMode(input);
+  const positiveGrossProfit = resolveProfitMode(input.profitMode) === "positive-gross-profit";
+  if (positiveGrossProfit && (!input.sessionPath || !isAbsolute(input.sessionPath) || !input.sessionId)) {
+    throw new Error("gross-profit requires a bounded-live session; signing checks its active permit");
+  }
   if (!input.evGate) throw new Error("bounded-live requires SEARCHER_EV_GATE=1");
   if (!Number.isInteger(input.bribeBps) || input.bribeBps < 0 || input.bribeBps > 10_000) {
     throw new Error("bounded-live SEARCHER_BRIBE_BPS must be an integer between 0 and 10000");

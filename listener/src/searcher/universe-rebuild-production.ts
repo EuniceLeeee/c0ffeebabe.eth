@@ -3821,11 +3821,6 @@ export function createRebuildWiring(input?: {
     isReadyMemoDefinitionCurrent: (memo) =>
       inScope(memo.familyId) && (memo.familyDefinitionHash === familyDefinitionHash(memo.familyId) ||
       memo.familyDefinitionHash === familyMemoDefinitionHash(memo.familyId)) && memoPricingProjectionCompatible(memo),
-    isReadyRefreshRejectionCurrent: (outcome, rawCandidate) => {
-      const candidate = rawCandidate as Readonly<Record<string, unknown>>;
-      return candidateInScope(candidate) && outcome.familyDefinitionHash === familyDefinitionHash(familyIdForCandidate(candidate)) &&
-        outcome.candidateFingerprint === candidateFingerprint(candidate);
-    },
     findReusableMemo: async (memoInput) => {
       assertOpen();
       const candidate = memoInput.candidate as

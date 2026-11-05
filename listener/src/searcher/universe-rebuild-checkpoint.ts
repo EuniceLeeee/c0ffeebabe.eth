@@ -125,11 +125,6 @@ export interface DurableSourceChunkReceipt {
   readonly resultHash: string;
 }
 
-export type ReadyRefreshRejection = Extract<RunOutcome, { readonly status: "terminal-rejected" }>;
-export type ReadyRefreshResult =
-  | { readonly status: "verified"; readonly memo: DurableVerifiedMemo }
-  | ReadyRefreshRejection;
-
 /**
  * Durable proof that one exact source plan completed at the fixed cutoff.
  * The current catalog activity receipt atomically covers its declared log
@@ -197,8 +192,6 @@ export interface ReadyFamilyPartition {
 }
 
 export interface ReadyUniverseGeneration {
-  /** Chain-proven rejections of previously admitted candidates, not operator exclusions. */
-  readonly refreshRejections?: Readonly<Record<string, ReadyRefreshRejection>>;
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly generation: number;
   readonly cutoff: CanonicalSource;
@@ -348,43 +341,6 @@ export function assertDurableVerifiedMemoFingerprint(
   }
 }
 
-/** A refresh may renew a proof/descriptor, never change its historical subject. */
-function assertReadyRefreshMemo(
-  old: DurableVerifiedMemo | undefined,
-  memo: DurableVerifiedMemo,
-  cutoff: CanonicalSource,
-): void {
-  assertDurableVerifiedMemoFingerprint(memo);
-  if (old === undefined || memo.familyCandidateKey !== old.familyCandidateKey ||
-    memo.familyInstanceKey !== old.familyInstanceKey || memo.familyId !== old.familyId ||
-    memo.instanceKey !== old.instanceKey || memo.candidateKey !== old.candidateKey ||
-    memo.candidateFingerprint !== old.candidateFingerprint ||
-    canonicalJson(memo.candidateSnapshot) !== canonicalJson(old.candidateSnapshot) ||
-    (memo.memoFingerprint !== old.memoFingerprint && (
-      memo.validity.proofSource.number !== cutoff.number ||
-      memo.validity.proofSource.hash.toLowerCase() !== cutoff.hash.toLowerCase()
-    ))) {
-    throw new Error("ready refresh changed identity/candidate or used a different proof source");
-  }
-}
-
-function assertReadyRefreshRejection(
-  old: DurableVerifiedMemo | undefined,
-  rejection: ReadyRefreshRejection,
-  cutoff: CanonicalSource,
-): void {
-  if (old === undefined || rejection.status !== "terminal-rejected" ||
-    rejection.familyCandidateKey !== old.familyCandidateKey ||
-    rejection.candidateFingerprint !== old.candidateFingerprint ||
-    rejection.cutoff?.number !== cutoff.number ||
-    rejection.cutoff.hash.toLowerCase() !== cutoff.hash.toLowerCase() ||
-    [rejection.reasonCode, rejection.familyDefinitionHash, rejection.authorityFingerprint]
-      .some(value => typeof value !== "string" || value.length === 0) ||
-    [rejection.requestFingerprint, rejection.trustedResultsFingerprint].some(value => typeof value !== "string")) {
-    throw new Error("ready refresh rejection lacks bound negative evidence");
-  }
-}
-
 export function buildReadyCatalogSnapshot(memos: readonly DurableVerifiedMemo[]): unknown {
   return Object.freeze({
     format: "strict-rebuild-catalog-v1",
@@ -467,17 +423,6 @@ export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly 
   }
   if (ready.familyPartitions !== undefined) {
     assertReadyFamilyPartitions(envelope, memos);
-  }
-  const rejected = Object.entries(ready.refreshRejections ?? {});
-  if (rejected.length > ready.candidateAccounting.terminalRejected) {
-    throw new Error("ready refresh rejection accounting mismatch");
-  }
-  const activeCandidates = new Set(memos.map(memo => memo.familyCandidateKey));
-  for (const [key, outcome] of rejected) {
-    if (key !== outcome.familyCandidateKey || activeCandidates.has(key)) {
-      throw new Error("ready refresh rejection is still active");
-    }
-    assertReadyRefreshRejection(envelope.verifiedMemos[key], outcome, ready.cutoff);
   }
   return Object.freeze(memos);
 }
@@ -1354,92 +1299,6 @@ export class UniverseRebuildCheckpointStore {
     });
   }
 
-  #refreshMemoPath(checkpoint: StartupCheckpointEnvelope, candidateKey: string): string {
-    if (!/^[0-9a-f]{64}$/.test(checkpoint.checkpointFingerprint)) {
-      throw new Error("ready refresh parent fingerprint is invalid");
-    }
-    const key = createHash("sha256").update(candidateKey).digest("hex");
-    return this.#path + ".ready-refresh/" + checkpoint.checkpointFingerprint + "/" + key + ".json";
-  }
-
-  /** Progress is separate from the sealed Ready; readers never see a partial Graph. */
-  async loadReadyRefreshResult(
-    checkpoint: StartupCheckpointEnvelope,
-    old: DurableVerifiedMemo,
-  ): Promise<ReadyRefreshResult | null> {
-    let raw: string;
-    try {
-      raw = await readFile(this.#refreshMemoPath(checkpoint, old.familyCandidateKey), "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
-    }
-    const record = JSON.parse(raw);
-    if (record.version !== 1 || record.parentCheckpointFingerprint !== checkpoint.checkpointFingerprint ||
-      record.priorMemoFingerprint !== old.memoFingerprint || checkpoint.readyGeneration === null) {
-      throw new Error("ready refresh saved memo binding mismatch");
-    }
-    if (record.result.status === "verified") {
-      assertReadyRefreshMemo(old, record.result.memo, checkpoint.readyGeneration.cutoff);
-    } else {
-      assertReadyRefreshRejection(old, record.result, checkpoint.readyGeneration.cutoff);
-    }
-    if (record.resultFingerprint !== canonicalJsonFingerprint(record.result, "ready-refresh-result-v1:")) {
-      throw new Error("ready refresh saved result fingerprint mismatch");
-    }
-    return immutableReadyValue(record.result as ReadyRefreshResult);
-  }
-
-  /** One successful proof -> fsync + atomic rename before reporting completion.
-   * Retryable outcomes never enter this cache. A different parent has a
-   * different namespace; the runner must still check the current Family definition.
-   */
-  async saveReadyRefreshResult(
-    checkpoint: StartupCheckpointEnvelope,
-    result: ReadyRefreshResult,
-  ): Promise<void> {
-    result = immutableReadyValue(result);
-    return this.#withLock(async () => {
-      await this.#acquireLock();
-      try {
-        const current = await this.#loadUnlocked();
-        if (current?.checkpointFingerprint !== checkpoint.checkpointFingerprint ||
-          current.revision !== checkpoint.revision || current.inProgressRun !== null ||
-          current.readyGeneration === null) {
-          throw new Error("ready refresh progress parent changed (CAS conflict)");
-        }
-        const key = result.status === "verified" ? result.memo.familyCandidateKey : result.familyCandidateKey;
-        const old = current.verifiedMemos[key];
-        if (result.status === "verified") assertReadyRefreshMemo(old, result.memo, current.readyGeneration.cutoff);
-        else assertReadyRefreshRejection(old, result, current.readyGeneration.cutoff);
-        if (!current.readyGeneration.activeInstanceKeys.includes(old!.familyInstanceKey)) {
-          throw new Error("ready refresh progress cannot add an inactive instance");
-        }
-        const path = this.#refreshMemoPath(checkpoint, key);
-        await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-        const tmp = path + ".tmp." + process.pid;
-        const file = await open(tmp, "w", 0o600);
-        try {
-          await file.writeFile(JSON.stringify({ version: 1,
-            parentCheckpointFingerprint: checkpoint.checkpointFingerprint,
-            priorMemoFingerprint: old!.memoFingerprint, result,
-            resultFingerprint: canonicalJsonFingerprint(result, "ready-refresh-result-v1:") }) + "\n");
-          await file.sync();
-        } finally {
-          await file.close();
-        }
-        await rename(tmp, path);
-        // Persist the rename and any newly created parent directories as well.
-        for (const dirPath of [dirname(path), dirname(dirname(path)), dirname(this.#path)]) {
-          const dir = await open(dirPath, "r");
-          try { await dir.sync(); } finally { await dir.close(); }
-        }
-      } finally {
-        await unlink(this.#lockPath).catch(() => undefined);
-      }
-    });
-  }
-
   /** Seed a new run directory with an existing completed Ready checkpoint.
    * This is the same rolling-rebuild state, not a new cache or admission path.
    * The runner still creates fresh source receipts and checks every reused memo.
@@ -2047,14 +1906,13 @@ export class UniverseRebuildCheckpointStore {
 
   /**
    * Refresh only the materialization of an incumbent Ready's exact instance
-   * candidate set. A bound terminal rejection can remove an active instance;
-   * an unaccounted missing instance or retryable failure cannot. No discovery,
-   * cutoff/coverage movement or partially published Graph is permitted.
+   * set. This does not claim discovery under a new source plan. The cutoff,
+   * universe, coverage, candidate accounting and retryable queue stay intact.
+   * Any rejection/missing instance must leave the old Ready untouched.
    */
   async casRefreshReadyInstances(input: {
     readonly expectedRevision: number;
     readonly memos: readonly DurableVerifiedMemo[];
-    readonly rejections?: readonly ReadyRefreshRejection[];
     readonly graphSnapshot: unknown;
   }): Promise<StartupCheckpointEnvelope> {
     return this.#cas(input.expectedRevision, (base) => {
@@ -2062,17 +1920,24 @@ export class UniverseRebuildCheckpointStore {
       const oldMemos = activeReadyMemos(base);
       const ready = base.readyGeneration!;
       const priorByKey = new Map(oldMemos.map((memo) => [memo.familyCandidateKey, memo]));
-      const rejections = input.rejections ?? [];
-      const resultKeys = [...input.memos.map(memo => memo.familyCandidateKey), ...rejections.map(outcome => outcome.familyCandidateKey)];
-      if (resultKeys.length !== oldMemos.length || new Set(resultKeys).size !== oldMemos.length ||
-        resultKeys.some(key => !priorByKey.has(key))) {
-        throw new Error("ready refresh cannot add or remove unaccounted active instances");
+      if (input.memos.length !== oldMemos.length ||
+        new Set(input.memos.map((memo) => memo.familyCandidateKey)).size !== oldMemos.length) {
+        throw new Error("ready refresh cannot add or remove active instances");
       }
-      const rejectedByKey = new Map(rejections.map(outcome => [outcome.familyCandidateKey, outcome]));
-      for (const rejection of rejections) assertReadyRefreshRejection(priorByKey.get(rejection.familyCandidateKey), rejection, ready.cutoff);
       const verifiedMemos = { ...base.verifiedMemos };
       for (const memo of input.memos) {
-        assertReadyRefreshMemo(priorByKey.get(memo.familyCandidateKey), memo, ready.cutoff);
+        assertDurableVerifiedMemoFingerprint(memo);
+        const old = priorByKey.get(memo.familyCandidateKey);
+        if (old === undefined || memo.familyInstanceKey !== old.familyInstanceKey ||
+          memo.familyId !== old.familyId || memo.instanceKey !== old.instanceKey ||
+          memo.candidateFingerprint !== old.candidateFingerprint ||
+          canonicalJson(memo.candidateSnapshot) !== canonicalJson(old.candidateSnapshot) ||
+          (memo.memoFingerprint !== old.memoFingerprint && (
+            memo.validity.proofSource.number !== ready.cutoff.number ||
+            memo.validity.proofSource.hash.toLowerCase() !== ready.cutoff.hash.toLowerCase()
+          ))) {
+          throw new Error("ready refresh changed identity/candidate or used a different proof source");
+        }
         verifiedMemos[memo.familyCandidateKey] = Object.freeze(memo);
       }
       const catalogSnapshot = buildReadyCatalogSnapshot(input.memos);
@@ -2080,24 +1945,17 @@ export class UniverseRebuildCheckpointStore {
         Object.fromEntries(Object.entries(ready.familyPartitions).map(([id, partition]) => [id, Object.freeze({
           ...partition,
           outcomesByCandidateKey: Object.freeze(Object.fromEntries(Object.entries(partition.outcomesByCandidateKey)
-            .map(([key, outcome]) => [key, rejectedByKey.get(key) ?? (outcome.status === "verified" && verifiedMemos[key] !== undefined
-              ? Object.freeze({ ...outcome, memoFingerprint: verifiedMemos[key]!.memoFingerprint }) : outcome)]))),
+            .map(([key, outcome]) => [key, outcome.status === "verified" && verifiedMemos[key] !== undefined
+              ? Object.freeze({ ...outcome, memoFingerprint: verifiedMemos[key]!.memoFingerprint }) : outcome]))),
         })])),
       );
-      const next = Object.freeze({
+      return Object.freeze({
         ...base,
         revision: base.revision + 1,
         verifiedMemos: Object.freeze(verifiedMemos),
         readyGeneration: Object.freeze({
           ...ready,
           generation: ready.generation + 1,
-          activeInstanceKeys: Object.freeze(input.memos.map(memo => memo.familyInstanceKey).sort()),
-          candidateAccounting: Object.freeze({ ...ready.candidateAccounting,
-            verified: input.memos.length,
-            terminalRejected: ready.candidateAccounting.terminalRejected + rejections.length }),
-          ...(rejections.length === 0 ? {} : { refreshRejections: Object.freeze({
-            ...ready.refreshRejections, ...Object.fromEntries(rejectedByKey),
-          }) }),
           graphSnapshot: input.graphSnapshot,
           graphHash: readyRootHash("graph-v2:", input.graphSnapshot),
           catalogSnapshot,
@@ -2106,8 +1964,6 @@ export class UniverseRebuildCheckpointStore {
           ...(familyPartitions === undefined ? {} : { familyPartitions }),
         }),
       });
-      activeReadyMemos(next);
-      return next;
     });
   }
 
@@ -2224,9 +2080,7 @@ export class UniverseRebuildCheckpointStore {
         supplements: input.supplements }, input.graphSnapshot, graphValidation);
       const plan = prepareReadyFamilyUpdate(base, input);
       const ready = base.readyGeneration!;
-      const { activationRestriction: _restriction, familyUpdateScope: _scope, refreshRejections: _rejections, ...prior } = ready;
-      const remainingRejections = Object.fromEntries(Object.entries(_rejections ?? {})
-        .filter(([key]) => !plan.replacedFamilyIds.includes(base.verifiedMemos[key]!.familyId)));
+      const { activationRestriction: _restriction, familyUpdateScope: _scope, ...prior } = ready;
       const disabledFamilyIds = Object.keys(plan.familyPartitions).filter(id => !plan.familyPartitions[id]!.enabled).sort();
       const catalogSnapshot = buildReadyCatalogSnapshot(plan.activeMemos);
       const excludedVerified = Object.freeze(plan.excludedMemos.map(memo => Object.freeze({
@@ -2240,7 +2094,6 @@ export class UniverseRebuildCheckpointStore {
         retryableAttemptsByCandidateKey: plan.retryableAttemptsByCandidateKey,
         readyGeneration: Object.freeze({
           ...prior,
-          ...(Object.keys(remainingRejections).length === 0 ? {} : { refreshRejections: Object.freeze(remainingRejections) }),
           generation: ready.generation + 1,
           universeHash: readyRootHash("ready-family-universe-v1:", Object.fromEntries(
             Object.entries(plan.familyPartitions).map(([id, partition]) => [id, partition.candidateSetHash]))),

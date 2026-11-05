@@ -621,6 +621,7 @@ async function declarativeProtocolRecords(input: {
       const generated = await generateCapabilityClosure({
         familyId: strictFamilyId, capability, rootDirectory: input.context.rootDirectory,
         entryFile: compilerRoot.sourceFile, additionalEntryFiles: dependencies,
+        inactiveRuntimeModules: entry.inactiveRuntimeModules,
         provenanceCommit: input.provenanceCommit,
       });
       records.push(exactRecord(generated.identity, capability, compilerRoot, dependencies, input.context.rootDirectory));

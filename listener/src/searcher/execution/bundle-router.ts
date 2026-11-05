@@ -3,8 +3,10 @@ import { submitBundle, submitMevShareBundle, submitStandaloneBundle } from "../.
 import type { SubmitResult } from "../../types.js";
 import type { BuilderEvidenceSink } from "../../shared/builder-observations.js";
 import type { BribeGasBasis } from "../../shared/submission-fees.js";
+import { positiveGrossProfitBid, resolveProfitMode, type ProfitMode } from "../../shared/profit-mode.js";
 
 export interface BundleSubmission {
+  profitMode?: ProfitMode;
   victimTxHash: string;
   victimRawTx?: string;
   mode?: "victim-bundle" | "hash-only" | "standalone";
@@ -13,7 +15,7 @@ export interface BundleSubmission {
   expectedProfit: bigint;
   /** Expected profit valued in ETH wei (for sizing the proposer bribe). */
   expectedProfitEth?: bigint;
-  /** Fraction of post-gas expected surplus to pay as priority-fee bribe, in bps. */
+  /** Fraction of the mode's profit basis to pay as priority-fee bribe, in bps. */
   bribeBps?: number;
   /** EV-approved bid; an expected payment when bribeGasBasis is measured-gas. */
   bribeWei?: bigint;
@@ -40,6 +42,11 @@ export function standingPositionSafetyReject(bundle: BundleSubmission): SubmitRe
 export function productionEconomicsSafetyReject(
   bundle: BundleSubmission,
 ): SubmitResult | null {
+  const profitMode = resolveProfitMode(bundle.profitMode);
+  if (profitMode === "positive-gross-profit" &&
+      (bundle.mode !== "standalone" || bundle.safety?.leavesStandingPosition)) {
+    return { builder: "economics-reject", accepted: false, error: "gross_profit_requires_atomic_standalone" };
+  }
   const gasUsed = typeof bundle.gasUsed === "bigint"
     ? bundle.gasUsed
     : Number.isSafeInteger(bundle.gasUsed) && Number(bundle.gasUsed) > 0
@@ -57,7 +64,11 @@ export function productionEconomicsSafetyReject(
   if (bundle.expectedProfitEth === undefined || bundle.expectedProfitEth <= 0n) {
     return { builder: "economics-reject", accepted: false, error: "missing_expected_profit_eth" };
   }
-  if (
+  if (profitMode === "positive-gross-profit") {
+    if (bundle.expectedProfit <= 0n || bundle.bribeWei !== positiveGrossProfitBid(bundle.expectedProfitEth)) {
+      return { builder: "economics-reject", accepted: false, error: "gross_profit_requires_99pct_positive_bid" };
+    }
+  } else if (
     bundle.expectedProfitEth <=
       bundle.maxBaseFeePerGas * gasUsed + bundle.bribeWei
   ) {
@@ -110,6 +121,7 @@ export function dryRunSubmissionId(
     bribeWei: bundle.bribeWei?.toString() ?? null,
     maxBaseFeePerGas: bundle.maxBaseFeePerGas?.toString() ?? null,
     safety: bundle.safety ?? null,
+    ...(bundle.profitMode === "positive-gross-profit" ? { profitMode: bundle.profitMode } : {}),
   });
   return ethers.id(unsigned);
 }
@@ -143,6 +155,7 @@ export class ProductionBundleRouter implements BundleRouter {
       // backrun tx for the next block. Do not reference the mined tx hash in
       // mev_sendBundle.
       results = await submitStandaloneBundle({
+        profitMode: bundle.profitMode,
         calldataHex: bundle.backrunCalldata,
         gasUsed,
         wallet: this.wallet,

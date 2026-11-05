@@ -7,6 +7,8 @@ import { RethTransportScheduler } from "../reth-transport-scheduler.js";
 import check from "node:assert/strict";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 import type { RethTransportLoad, RethTransportRetryState } from "../reth-transport-scheduler.js";
+import { createServer } from "node:http";
+import { PinnedRethQuoteBackend } from "../pinned-reth-quote-backend.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -27,6 +29,123 @@ function deferred<T>(): {
 }
 
 async function run(): Promise<void> {
+  {
+    const previousFlag = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+    const clockDescriptor = Object.getOwnPropertyDescriptor(performance, "now");
+    let now = 0, reads = 0;
+    Object.defineProperty(performance, "now", { configurable: true, value: () => { reads++; return now; } });
+    try {
+      for (const flag of [undefined, "0", "1"]) {
+        if (flag === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+        else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = flag;
+        const scheduler = new RethTransportScheduler({ capacity: 1, producerReserved: 1 });
+        now = 10; reads = 0;
+        const result = scheduler.run("producer-bulk", new AbortController().signal, async lease => lease);
+        // Grant is synchronous; the continuation cannot resume until this turn
+        // yields. Changing the flag now must not mix admission measurements.
+        now = 17; process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = flag === "1" ? "0" : "1";
+        const lease = await result;
+        check.equal(lease.queueWaitMs, 7);
+        if (flag === "1") {
+          check.equal(lease.permitWaitMs, 0);
+          check.equal(lease.resumeDelayMs, 7);
+          check.equal(reads, 3);
+        } else {
+          check.equal(Object.hasOwn(lease, "permitWaitMs"), false);
+          check.equal(Object.hasOwn(lease, "resumeDelayMs"), false);
+          check.equal(reads, 2, "disabled diagnostics must not sample grant time");
+        }
+        check.equal(scheduler.snapshot().activeTotal, 0);
+      }
+      process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = "1";
+      const scheduler = new RethTransportScheduler({ capacity: 1, producerReserved: 1 });
+      const held = deferred<void>(), started = deferred<void>();
+      now = 100;
+      const owner = scheduler.run("producer-bulk", new AbortController().signal, () => {
+        started.resolve(); return held.promise;
+      });
+      await started.promise;
+      now = 110;
+      const queued = scheduler.run("producer-bulk", new AbortController().signal, async lease => lease);
+      check.equal(scheduler.snapshot().queuedByLane["producer-bulk"], 1);
+      now = 140; held.resolve();
+      // Existing owner's release grants the permit in the first microtask.
+      // This later microtask runs before the admitted caller resumes.
+      queueMicrotask(() => { now = 190; });
+      const lease = await queued; await owner;
+      check.equal(lease.permitWaitMs, 30);
+      check.equal(lease.resumeDelayMs, 50);
+      check.equal(lease.queueWaitMs, 80);
+      check.equal(lease.permitWaitMs! + lease.resumeDelayMs!, lease.queueWaitMs);
+      check.equal(scheduler.snapshot().activeTotal, 0);
+      const cancelled = new AbortController();
+      const neverRun = scheduler.run("producer-bulk", cancelled.signal, async () => check.fail("cancelled grant ran"));
+      cancelled.abort(); await check.rejects(neverRun);
+      check.equal(scheduler.snapshot().activeTotal, 0);
+      console.log("[reth-transport-scheduler] diagnostic permit/resume split, disabled overhead and cancellation: PASS");
+    } finally {
+      if (clockDescriptor) Object.defineProperty(performance, "now", clockDescriptor);
+      else Reflect.deleteProperty(performance, "now");
+      if (previousFlag === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+      else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = previousFlag;
+    }
+  }
+  {
+    const previousFlag = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+    const originalLog = console.log;
+    const server = createServer(async (request, response) => {
+      let text = ""; for await (const part of request) text += part;
+      const payload = JSON.parse(text);
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(payload.map((call: { id: number }) => ({ jsonrpc: "2.0", id: call.id, result: "0x01" }))));
+    });
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    try {
+      for (const mode of ["disabled", "enabled", "legacy-wrapper"] as const) {
+        process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = mode === "disabled" ? "0" : "1";
+        const rows: { tag: string; value: Record<string, number> }[] = [];
+        console.log = (...args: unknown[]) => {
+          const text = String(args[0]);
+          const match = /^\[searcher\/(quote-batch-dispatch|quote-batch-timing)\] (.*)$/.exec(text);
+          if (match) rows.push({ tag: match[1]!, value: JSON.parse(match[2]!) });
+        };
+        const scheduler = new RethTransportScheduler({ capacity: 2, producerReserved: 1 });
+        const transportScheduler: Pick<RethTransportScheduler, "run"> = mode === "legacy-wrapper" ? {
+          run(lane, signal, work) {
+            return scheduler.run(lane, signal, lease => {
+              const { permitWaitMs: _permit, resumeDelayMs: _resume, ...legacy } = lease;
+              return work(legacy);
+            });
+          },
+        } : scheduler;
+        const backend = new PinnedRethQuoteBackend(`http://127.0.0.1:${(server.address() as { port: number }).port}`,
+          `0x${"ab".repeat(32)}`, { transportScheduler, maxBatchSize: 1, maxConcurrentBatches: 1,
+            allowSingleCallFallback: false, deadlineAtMs: Date.now() + 2_000 });
+        try {
+          check.equal(await backend.call({ to: `0x${"11".repeat(20)}`, data: "0x12345678" }), "0x01");
+          check.equal(rows.length, mode === "disabled" ? 0 : 2);
+          for (const { value } of rows) {
+            check.equal(typeof value.permitQueueWaitMs, "number", "legacy total stays present");
+            if (mode === "enabled") {
+              check(value.schedulerPermitWaitMs! >= 0 && value.schedulerResumeDelayMs! >= 0);
+              check(Math.abs(value.schedulerPermitWaitMs! + value.schedulerResumeDelayMs! - value.permitQueueWaitMs!) < 1e-6);
+            } else {
+              check.equal(Object.hasOwn(value, "schedulerPermitWaitMs"), false);
+              check.equal(Object.hasOwn(value, "schedulerResumeDelayMs"), false);
+            }
+          }
+          check.equal(scheduler.snapshot().activeTotal, 0);
+        } finally { await backend.closeAndDrain(); }
+      }
+    } finally {
+      console.log = originalLog;
+      if (previousFlag === undefined) delete process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS;
+      else process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS = previousFlag;
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+    console.log("[reth-transport-scheduler] quote diagnostics preserve totals, optional leases and disabled output: PASS");
+  }
   for (const initial of [{ batchSize: 128, concurrency: 4 }, { batchSize: 75, concurrency: 7 }]) {
     const scheduler = new RethTransportScheduler({ capacity: 8, producerReserved: 4, retryDelayMs: 1 });
     const load = await scheduler.run("producer-bulk", new AbortController().signal, async lease => lease.load!);

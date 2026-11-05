@@ -347,3 +347,156 @@ test("v2 cannot bypass the strict constructor, shared export validation or gener
     assert(result.issues.some(issue => issue.message.includes("resolvable framework export")));
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });
+
+
+test("JSON supersedes the same handwritten Family once and changes Ready capability authority", async () => {
+  const f = await fixture();
+  try {
+    const handwritten = renderDeclarativeProductionEntry({ rootDirectory: f.directory,
+      definitionFile: f.jsonPath, document: f.doc }).source.split("\n").slice(1).join("\n");
+    await rm(f.jsonPath);
+    await writeFile(f.entryPath, handwritten);
+    const old = await f.build(); assert(old.complete, JSON.stringify(old.issues));
+    const adapterBefore = await readFile(resolve(f.familyDirectory, "execution.ts"), "utf8");
+    await f.save();
+    await assert.rejects(f.sync("check"), /stale/);
+    assert.equal(await readFile(f.entryPath, "utf8"), handwritten);
+    await f.sync("write");
+    const next = await f.build(); assert(next.complete, JSON.stringify(next.issues));
+    assert.equal(next.exact.length, old.exact.length, "no duplicate TS/JSON capability registration");
+    for (const capability of ["capture", "discovery", "identity", "instance", "routes", "pricing"]) {
+      assert.notEqual(next.exact.find(row => row.identity.capability === capability)!.identity.contentHash,
+        old.exact.find(row => row.identity.capability === capability)!.identity.contentHash,
+        `${capability}: old discovery/memo authority cannot survive TS-to-JSON cutover`);
+    }
+    assert.equal(await readFile(resolve(f.familyDirectory, "execution.ts"), "utf8"), adapterBefore);
+    await f.sync("write");
+    assert.deepEqual((await f.build()).exact, next.exact, "unchanged generated Family remains reusable");
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("JSON uses the existing Family entry even when its filename differs", async () => {
+  const f = await fixture();
+  try {
+    const alias = resolve(f.productionDirectory, "old-name.production.ts");
+    const handwritten = renderDeclarativeProductionEntry({ rootDirectory: f.directory,
+      definitionFile: f.jsonPath, entryFile: alias, document: f.doc }).source.split("\n").slice(1).join("\n");
+    await writeFile(alias, handwritten);
+    const entries = await f.sync("write");
+    assert.deepEqual([...entries.keys()], [alias]);
+    await assert.rejects(stat(f.entryPath), { code: "ENOENT" });
+    await f.sync("check"); await f.sync("write");
+    assert((await f.build()).complete);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("invalid JSON and mismatched handwritten identity never silently fall back or overwrite", async () => {
+  const f = await fixture();
+  try {
+    const handwritten = renderDeclarativeProductionEntry({ rootDirectory: f.directory,
+      definitionFile: f.jsonPath, document: f.doc }).source.split("\n").slice(1).join("\n");
+    await writeFile(f.entryPath, handwritten);
+    f.doc.production.activation.enabled = "invalid"; await f.save();
+    await assert.rejects(f.sync("write"), /activation/);
+    assert.equal(await readFile(f.entryPath, "utf8"), handwritten);
+    f.doc.production.activation.enabled = true; f.doc.scope.family = "protocol:different"; await f.save();
+    await assert.rejects(f.sync("write"), /handwritten/);
+    assert.equal(await readFile(f.entryPath, "utf8"), handwritten);
+    f.doc.scope.family = "protocol:fixture"; f.doc.production.domain = "swap"; await f.save();
+    await assert.rejects(f.sync("write"), /domain disagrees/);
+    assert.equal(await readFile(f.entryPath, "utf8"), handwritten);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+
+test("handwritten shorthand manifest is replaced at the existing entry path", async () => {
+  for (const filename of ["fixture.production.ts", "old-name.production.ts"]) {
+    const f = await fixture();
+    try {
+      const path = resolve(f.productionDirectory, filename);
+      const handwritten = renderDeclarativeProductionEntry({ rootDirectory: f.directory,
+        definitionFile: f.jsonPath, entryFile: path, document: f.doc }).source.split("\n").slice(1).join("\n")
+        .replaceAll("binding_manifest", "manifest").replace("manifest: manifest,", "manifest,");
+      await writeFile(path, handwritten);
+      assert.deepEqual([...(await f.sync("write")).keys()], [path]);
+      await f.sync("check");
+      assert((await f.build()).complete);
+      if (path !== f.entryPath) await assert.rejects(stat(f.entryPath), { code: "ENOENT" });
+    } finally { await rm(f.directory, { recursive: true, force: true }); }
+  }
+});
+
+
+test("ambiguous handwritten entries cannot grant replacement authority", async () => {
+  for (const kind of ["dynamic-manifest", "fake-brand", "fake-constructor", "non-exported", "duplicate-ts", "generated-plus-ts"]) {
+    const f = await fixture();
+    try {
+      const alias = resolve(f.productionDirectory, "old-name.production.ts");
+      let handwritten = renderDeclarativeProductionEntry({ rootDirectory: f.directory,
+        definitionFile: f.jsonPath, document: f.doc }).source.split("\n").slice(1).join("\n");
+      if (kind === "dynamic-manifest") handwritten = handwritten.replace("manifest: binding_manifest", "manifest: unknownManifest()");
+      if (kind === "fake-brand") await f.put("src/searcher/venues/protocols/fixture-family/manifest.ts",
+        `const familyId = (_: string) => "protocol:other"; export const manifest = {familyId: familyId("protocol:fixture"), domain: "protocol"};`);
+      if (kind === "fake-constructor") handwritten = handwritten.replace(
+        'import { defineProtocolFamily } from "../adapter-family-plugin.js";', 'const defineProtocolFamily = (value: unknown) => value;');
+      if (kind === "non-exported") handwritten = handwritten.replace("export const plugin", "const plugin");
+      if (kind === "duplicate-ts") await writeFile(f.entryPath, handwritten);
+      if (kind === "generated-plus-ts") await f.sync("write");
+      await writeFile(alias, handwritten);
+      for (const mode of ["check", "write"] as const) await assert.rejects(f.sync(mode), /unresolved handwritten|duplicate/);
+      assert.equal(await readFile(alias, "utf8"), handwritten);
+      if (!["duplicate-ts", "generated-plus-ts"].includes(kind)) await assert.rejects(stat(f.entryPath), { code: "ENOENT" });
+    } finally { await rm(f.directory, { recursive: true, force: true }); }
+  }
+});
+
+
+test("production capability hashes ignore unused optional bodies but retain their shared safety imports", async () => {
+  const f = await protocolFixture();
+  try {
+    const leaf = "src/searcher/venues/declarative-oracle-victim.ts";
+    await f.put(leaf, "export function unusedModule() { return 1; }");
+    await f.put("src/searcher/venues/declarative-protocol.ts", `import {unusedModule} from './declarative-oracle-victim.js';
+      export function compileDeclarativeProtocol(root: unknown, children: unknown[]) { return {root, children, unusedModule}; }`);
+    await f.sync("write");
+    const before = await f.build(); assert(before.complete, JSON.stringify(before.issues));
+    await f.put(leaf, "export function unusedModule() { return 2; }");
+    assert.deepEqual((await f.build()).exact, before.exact);
+    await f.put(leaf, "export function unusedModule() { return 2; }\n(globalThis as any).sideEffect = 1;");
+    assert.notDeepEqual((await f.build()).exact, before.exact);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+
+test("shadowed Object.freeze cannot authorize replacing a handwritten Family", async () => {
+  for (const shadow of [
+    `class Object { static freeze(_: unknown) { return {familyId: "protocol:other", domain: "protocol"}; } }`,
+    `function Object() {} Object.freeze = (_: unknown) => ({familyId: "protocol:other", domain: "protocol"});`,
+    `namespace Object { export const freeze = (_: unknown) => ({familyId: "protocol:other", domain: "protocol"}); }`,
+  ]) {
+    const f = await fixture();
+    try {
+      const handwritten = renderDeclarativeProductionEntry({ rootDirectory: f.directory,
+        definitionFile: f.jsonPath, document: f.doc }).source.split("\n").slice(1).join("\n");
+      await writeFile(f.entryPath, handwritten);
+      await f.put("src/searcher/venues/protocols/fixture-family/manifest.ts", shadow +
+        `\nexport const manifest = Object.freeze({familyId: "protocol:fixture", domain: "protocol"});`);
+      await assert.rejects(f.sync("write"), /unresolved handwritten/);
+      assert.equal(await readFile(f.entryPath, "utf8"), handwritten);
+    } finally { await rm(f.directory, { recursive: true, force: true }); }
+  }
+});
+
+test("the dependency-selection policy itself remains part of every JSON capability fingerprint", async () => {
+  const f = await protocolFixture();
+  try {
+    await f.put("src/searcher/build-declarative-production.ts", `import {policy} from './venues/declarative-module-dependencies.js'; export const compilerRevision = policy;`);
+    await f.put("src/searcher/venues/declarative-module-dependencies.ts", "export const policy = 1;");
+    await f.sync("write"); const before = await f.build(); assert(before.complete, JSON.stringify(before.issues));
+    const identity = before.exact.find(row => row.identity.capability === "identity")!;
+    assert(identity.identity.semanticDependencies.includes("src/searcher/venues/declarative-module-dependencies.ts"));
+    await f.put("src/searcher/venues/declarative-module-dependencies.ts", "export const policy = 2;");
+    const after = await f.build();
+    assert.notEqual(after.exact.find(row => row.identity.capability === "identity")!.identity.contentHash, identity.identity.contentHash);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});

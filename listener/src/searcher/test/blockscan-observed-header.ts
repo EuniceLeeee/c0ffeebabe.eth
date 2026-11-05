@@ -96,6 +96,12 @@ try {
   assert.equal(getEventListeners(caller.signal, "abort").length, 0);
   caller.abort(new Error(secret)); // Successful completed work is detached.
   assert.deepEqual(await read(), header); // Optional controls preserve the read contract.
+  assert.deepEqual(await readBlockScanObservedHeader(rpcUrl, 1n, hash("a")), header);
+  assert.deepEqual(requests.at(-1), { jsonrpc: "2.0", id: 1, method: "eth_getBlockByHash", params: [hash("a"), true] });
+  await assert.rejects(readBlockScanObservedHeader(rpcUrl, 1n, hash("c")), /hash mismatch/);
+  reply = response => response.end(JSON.stringify({ ...success, result: null }));
+  await assert.rejects(readBlockScanObservedHeader(rpcUrl, 1n, hash("a")), /missing source header/);
+  reply = response => response.end(JSON.stringify(success));
 
   const rpcFailure = (code: number, message = secret, data?: string) => ({
     jsonrpc: "2.0", id: 1, error: { code, message, ...(data === undefined ? {} : { data }) },

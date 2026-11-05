@@ -11,7 +11,7 @@ import { ethers } from "ethers";
 import { BlockScanRuntimeLoop, SourceSimulationWork, startBlockScanBackgroundFork, type BlockScanRuntimeLoopDependencies,
   type SourceSimulationFactory } from "../blockscan-runtime-loop.js";
 import { createLiveRuntimeStop, createLiveSourceSimulationFactory, maybeSubmitBlockScanAtomic,
-  resolveBlockScanAtomicPolicy, createBlockScanLiveAmountSelectorFactory, logBlockScanAmountEvent } from "../main.js";
+  resolveBlockScanAtomicPolicy, createBlockScanLiveAmountSelectorFactory } from "../main.js";
 import { BlockScanSimRejectCache } from "../blockscan-sim-reject-cache.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
 import { detectProductionBlockScanOpportunities } from "../detector/blockscan-scanner-production.js";
@@ -19,7 +19,7 @@ import type { SimulationResult } from "../simulator/botvm-simulator.js";
 import { RevmFatalError, RevmStrictError, type RevmFatalReason, type StrictSimulateRequest } from "../revm-sim-client.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
 import { BlockActivityRangeInvalidatedError, MAX_ACTIVITY_TRANSITIONS } from "../blockscan-touched-state.js";
-import { isRpcQuotaExhaustedError, isRpcThrottleError, LiveRpcThrottleObservation, type LiveRpcThrottleRecord } from "../rpc-throttle-guard.js";
+import { isRpcQuotaExhaustedError, LiveRpcThrottleObservation, type LiveRpcThrottleRecord } from "../rpc-throttle-guard.js";
 import { BlockScanActivityPrefetch } from "../blockscan-activity-prefetch.js";
 import { PinnedRethQuoteBackend } from "../pinned-reth-quote-backend.js";
 import { blockScanEdgeKey, createVerifiedGraphView, exactSetHash, type VerifiedGraphView } from "../venues/blockscan-state-capability.js";
@@ -144,9 +144,9 @@ test("actual shared activity provider latches spent quota before joined reads se
       async send(_method: string, _params: unknown[]) { calls++; if (method === "trace") throw throttle; await slow.promise; return []; },
     };
     const guarded = runInNewContext(js, {
-      provider, activityTransport: provider, blockScanRuntimeAbort: runtimeAbort, console: { error() {} },
-      process: { env: {} }, blindProductionAudit: false,
-      isRpcQuotaExhaustedError, isRpcThrottleError,
+      provider, blockScanRuntimeAbort: runtimeAbort, console: { error() {} },
+      process: { env: {} },
+      isRpcQuotaExhaustedError,
       onSimulationFatal: stop.fatal,
     }, { timeout: 1000 }) as typeof provider;
     const a = guarded.getLogs({ fromBlock: 1, toBlock: 1 }), b = guarded.send("debug_traceBlockByNumber", ["0x1"]);
@@ -182,14 +182,13 @@ test("actual full-header spent quota latches before speculative trace drain, the
     let fatalities = 0, done = false, traces = 0;
     const throttle = Object.assign(new Error("fixture header HTTP 429 monthly quota exhausted"), { statusCode: 429 });
     const stop = createLiveRuntimeStop({ runtimeAbort, emitFatal() { fatalities++; }, exit: code => { exits.push(code); } });
-    const provider = { getLogs: async () => [], send: async (method: string) => {
-      if (method === "eth_getBlockByNumber") throw throttle;
-      traces++; await slow.promise; return [];
-    } };
     const wired = runInNewContext(js, {
       readyUniverse: { generation: 4, graphHash: hash(4) }, config: { rpcUrl: "http://fixture.invalid" },
       blockScanChainId: 1n, blockScanRuntimeAbort: runtimeAbort, ethers, BlockScanActivityPrefetch,
-      provider, activityTransport: provider, blindProductionAudit: false, isRpcThrottleError,
+      provider: { getLogs: async () => [], send: async (method: string) => {
+        if (method === "eth_getBlockByNumber") throw throttle;
+        traces++; await slow.promise; return [];
+      } },
       readBlockScanObservedHeader: async () => { throw throttle; },
       parseBlockScanObservedHeader: () => { throw new Error("unexpected successful header"); },
       process: { env: {} }, console: { error() {}, log() {} }, isRpcQuotaExhaustedError,
@@ -418,7 +417,7 @@ test("cross-live resume uses the ordinary price/activity producer, defers startu
   } finally { await f.loop.shutdown(); }
 });
 
-test("cross-live large gaps use bounded activity ranges and failed catch-up never enables trading", async () => {
+test("cross-live large gaps union bounded activity reads before exactly one pricing publication", async () => {
   for (const fail of [false, true]) {
     const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("no catchup execution"); } },
       async closeAndDrain() {} }));
@@ -426,12 +425,17 @@ test("cross-live large gaps use bounded activity ranges and failed catch-up neve
     f.coordinator.latestPricingSnapshot = () => latest;
     (f.deps as any).startupWarmBudgetMs = 10_000;
     let revalidated = 0;
+    let publications = 0;
     (f.deps as any).liveContinuation = { async revalidateStartup() { revalidated++; } };
     const ranges: number[][] = [];
     f.deps.readBlockSwapTouched = async (n, _header, range) => {
-      assert(range); ranges.push([range.previousSource.number, n]); return new Set();
+      assert(range); ranges.push([range.previousSource.number, n]); return new Set([target]);
     };
     f.coordinator.prepareCoarsePricing = async (input: any) => {
+      publications++;
+      assert.equal(input.canonicalActivity.previousSource.number, 100);
+      assert.equal(input.canonicalActivity.source.number, 613);
+      assert.deepEqual([...input.touchedPools], [target]);
       if (!fail) latest = { sourceBlock: input.graph.sourceBlock, sourceBlockHash: input.graph.sourceBlockHash,
         generation: input.graph.generation, effectiveMids: { complete: true } };
       return { status: fail ? "incomplete" : "complete", snapshot: latest };
@@ -443,12 +447,67 @@ test("cross-live large gaps use bounded activity ranges and failed catch-up neve
         sourceHeadSeenAtMonotonicMs: performance.now() });
       if (fail) await assert.rejects(run, /no pricing progress/); else await run;
       assert(ranges.every(([a, b]) => b - a <= MAX_ACTIVITY_TRANSITIONS));
-      assert.equal(ranges.length, fail ? 1 : 3);
+      assert.equal(ranges.length, 3, "all activity is read before any price update, even when that update fails");
+      assert.equal(publications, 1);
       assert.equal(revalidated, fail ? 0 : 1);
       assert.equal((f.loop as any).liveContinuationPending, fail);
       assert.equal(f.inputs.length, 0);
     } finally { await f.loop.shutdown(); }
   }
+});
+
+test("cross-live indexed initial target is frozen; later heads use the ordinary RPC tail", async () => {
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("no catchup execution"); } },
+    async closeAndDrain() {} }));
+  let latest: any = { sourceBlock: 100, sourceBlockHash: hash(100), generation: 7, effectiveMids: { complete: true } };
+  f.coordinator.latestPricingSnapshot = () => latest;
+  (f.deps as any).startupWarmBudgetMs = 10_000;
+  const publications: number[] = [], reads: string[] = [];
+  (f.deps as any).liveContinuation = {
+    async readInitialTouched(n: number, _header: unknown, range: any) {
+      reads.push(`sql:${range.previousSource.number}-${n}`);
+      f.loop.schedule(615);
+      return new Set([target]);
+    }, async revalidateStartup() {},
+  };
+  f.deps.readBlockSwapTouched = async (n, _header, range) => {
+    reads.push(`rpc:${range!.previousSource.number}-${n}`); return new Set([target]);
+  };
+  f.coordinator.prepareCoarsePricing = async (input: any) => {
+    publications.push(input.graph.sourceBlock);
+    assert.equal(input.canonicalActivity.previousSource.number, latest.sourceBlock);
+    latest = { sourceBlock: input.graph.sourceBlock, sourceBlockHash: input.graph.sourceBlockHash,
+      generation: input.graph.generation, effectiveMids: { complete: true } };
+    return { status: "complete", snapshot: latest };
+  };
+  try {
+    f.loop.restoreLiveContinuation(); f.loop.schedule(613); await f.loop.waitForIdle();
+    assert.deepEqual(publications, [613, 615]);
+    assert.deepEqual(reads, ["sql:100-613", "rpc:613-615"]);
+    assert.equal(f.inputs.length, 0);
+  } finally { await f.loop.shutdown(); }
+});
+
+test("cross-live incomplete indexed activity never reaches pricing or startup simulation", async () => {
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("no catchup execution"); } },
+    async closeAndDrain() {} }));
+  f.coordinator.latestPricingSnapshot = () => ({ sourceBlock: 100, sourceBlockHash: hash(100), generation: 7,
+    effectiveMids: { complete: true } }) as any;
+  (f.deps as any).startupWarmBudgetMs = 10_000;
+  let publications = 0, simulations = 0;
+  (f.deps as any).liveContinuation = {
+    async readInitialTouched() { throw new Error("missing indexed block"); },
+    async revalidateStartup() { simulations++; },
+  };
+  f.coordinator.prepareCoarsePricing = async () => { publications++; throw new Error("must not publish"); };
+  try {
+    f.loop.restoreLiveContinuation();
+    await assert.rejects((f.loop as any).runScheduledHead(613, { sourceHeadSeenAtMs: Date.now(),
+      sourceHeadSeenAtMonotonicMs: performance.now() }), /missing indexed block|no pricing progress/);
+    assert.equal(publications, 0); assert.equal(simulations, 0);
+    assert.equal((f.loop as any).liveContinuationPending, true);
+    assert.equal(f.inputs.length, 0);
+  } finally { await f.loop.shutdown(); }
 });
 
 test("historical effective continuation is read-only, verified-data-only and cannot bypass live preparation", async () => {
@@ -462,7 +521,7 @@ test("historical effective continuation is read-only, verified-data-only and can
   finally { await f.loop.shutdown(); }
 });
 
-for (const where of ["header", "activity"] as const) test(`live observes five different ${where} throttled heads without publishing missing state`, async context => {
+for (const where of ["header", "activity"] as const) test(`live observes one hundred different ${where} throttled heads without publishing missing state`, async context => {
   context.mock.method(console, "log", () => {});
   let simulations = 0;
   const f = loopFixture(() => ({ transport: { async simulate() { simulations++; throw new Error("failed activity must not simulate"); } },
@@ -478,22 +537,22 @@ for (const where of ["header", "activity"] as const) test(`live observes five di
   });
   stop.installDrain(() => f.loop.shutdown());
   try {
-    for (let block = 101; block <= 105; block++) {
+    for (let block = 101; block <= 200; block++) {
       await assert.rejects(f.loop.runHead(block, {
         sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now(),
-      }), error => error === throttle || block === 105 && error instanceof RevmFatalError);
-      assert.equal(f.runtimeAbort.signal.aborted, block === 105);
+      }), error => error === throttle || block === 200 && error instanceof RevmFatalError);
+      assert.equal(f.runtimeAbort.signal.aborted, block === 200);
       assert.equal(records.length, block - 100, "header/activity/catch siblings count one source");
       assert.equal(f.inputs.filter(input => input.kind === "runtime").length, 0, "incomplete activity never enters pricing");
       assert.equal(simulations, 0);
     }
     await turn(); assert.deepEqual(exits, [1]);
-    await f.loop.runHead(106, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
-    assert.equal(reads, 5, "terminal runtime cannot admit the sixth head");
+    await f.loop.runHead(201, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+    assert.equal(reads, 100, "terminal runtime cannot admit the hundred-and-first head");
   } finally { await f.loop.shutdown(); }
 });
 
-test("live temporary source fatal fences/drains its client and resumes new sources until the fifth head", async context => {
+test("live temporary source fatal fences/drains its client and resumes new sources until the hundredth head", async context => {
   context.mock.method(console, "log", () => {});
   const c = clients(), f = loopFixture(c.factory);
   const exits: number[] = [], records: LiveRpcThrottleRecord[] = [];
@@ -515,13 +574,13 @@ test("live temporary source fatal fences/drains its client and resumes new sourc
   };
   stop.installDrain(() => f.loop.shutdown());
   try {
-    for (let index = 0; index < 5; index++) {
+    for (let index = 0; index < 100; index++) {
       if (index !== 1) f.loop.schedule(101 + index); // Head 102 was queued during the first drain.
       await until(() => c.made[index]?.closes === 1);
       assert.equal(c.made.length, index + 1);
       assert(controls[index]!.aborted, "the current pass, not just its client, is retired");
-      assert.equal(c.runtimeAbort.signal.aborted, index === 4);
-      assert.deepEqual(exits, [], "even a terminal fifth-head stop must join physical drain");
+      assert.equal(c.runtimeAbort.signal.aborted, index === 99);
+      assert.deepEqual(exits, [], "even a terminal hundredth-head stop must join physical drain");
       if (index === 0) {
         f.loop.schedule(102); await turn(); assert.equal(c.made.length, 1, "successor waits for source drain");
       }
@@ -530,9 +589,9 @@ test("live temporary source fatal fences/drains its client and resumes new sourc
       else await f.loop.waitForIdle();
     }
     await turn(); assert.deepEqual(exits, [1]);
-    assert.deepEqual(records.map(event => event.failedBlocks), [1, 2, 3, 4, 5]);
+    assert.deepEqual(records.map(event => event.failedBlocks), Array.from({ length: 100 }, (_, index) => index + 1));
     assert.deepEqual(c.reports, [], "temporary source failures do not use the legacy immediate fatal");
-    f.loop.schedule(106); await turn(); assert.equal(c.made.length, 5);
+    f.loop.schedule(201); await turn(); assert.equal(c.made.length, 100);
     assert(c.made.every(client => client.requests.length === 1 && client.closes === 1));
   } finally {
     for (const client of c.made) client.release();
@@ -632,7 +691,7 @@ test("runHead creates SOURCE-controlled context before prefunding and drains it 
   } finally { await f.loop.shutdown(); }
 });
 
-test("startup uses64-item batches with4 lanes; steady source-N pricing uses1000 with8 lanes", async context => {
+test("startup retains64-item batches; steady source-N pricing uses1000 with the same8-batch limit", async context => {
   const records: Array<Record<string, number>> = [];
   const marker = "[searcher/blockscan-source-n-call-stats-final] ";
   context.mock.method(console, "log", (line: string) => {
@@ -648,7 +707,7 @@ test("startup uses64-item batches with4 lanes; steady source-N pricing uses1000 
       assert.equal(records.length, 1, "the real phase-owned backend emits one drained receipt");
       const stats = records[0]!;
       assert.equal(stats.maxBatchSize, startup ? 64 : 1000);
-      assert.equal(stats.maxConcurrentBatches, startup ? 4 : 8);
+      assert.equal(stats.maxConcurrentBatches, 8);
       assert.equal(stats.totalCalls, 0, "phase selection is offline and does not manufacture calls");
       assert.equal(stats.singleCallFallbacks, 0);
     } finally { await f.loop.shutdown(); }
@@ -685,7 +744,7 @@ test("source-N binds the full published-to-target activity range, with bounded f
   }
 });
 
-test("orphaned range anchor resets only after independent canonical check and owned work drain", async () => {
+test("orphaned range anchor retires authority without cold reset after canonical check and owned work drain", async () => {
   for (const kind of ["orphaned", "canonical", "ordinary-error", "recheck-failed"] as const) {
     let closed = false, reset = false, checked = false;
     const funding = deferred();
@@ -694,8 +753,10 @@ test("orphaned range anchor resets only after independent canonical check and ow
     const base = { sourceBlock: 100, sourceBlockHash: hash(100) };
     f.coordinator.latestPricingSnapshot = () => base;
     f.coordinator.startFundingPreparation = () => ({ settle: () => funding.promise });
-    f.coordinator.resetDynamicStateForReplay = async () => {
+    f.coordinator.resetDynamicStateForReplay = async () => { throw new Error("must not cold reset for reorg"); };
+    f.coordinator.retirePricingForReorg = async (source: any) => {
       assert(closed, "old simulation work must be drained before retiring publication");
+      assert.deepEqual(source, { number: 100, hash: hash(100) });
       reset = true;
     };
     f.deps.frozenTopology.observeHeader = async number => {
@@ -723,10 +784,84 @@ test("orphaned range anchor resets only after independent canonical check and ow
       await result;
       assert.equal(checked, kind !== "ordinary-error");
       assert.equal(reset, kind === "orphaned");
+      assert.equal((f.loop as any).startupWarmPending, false, "a retired anchor never arms cold warmup");
+      assert.equal((f.loop as any).reorgRecoveryPending, kind === "orphaned");
       assert.equal(f.inputs.some(input => input.kind === "runtime"), false,
         "failed activity never reaches pricing publication");
     } finally { funding.resolve(); await f.loop.shutdown(); }
   }
+});
+
+test("reorg recovery repairs P+1 then uses bounded prices-only catchup even with more than 256 blocks of lag", async () => {
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("unexpected execution"); } },
+    async closeAndDrain() {} }));
+  let latest: any = { sourceBlock: 100, sourceBlockHash: hash(900), generation: 1, effectiveMids: { complete: true } };
+  f.coordinator.latestPricingSnapshot = () => latest;
+  (f.deps as any).startupWarmBudgetMs = 300_000;
+  (f.loop as any).reorgRecoveryPending = true;
+  (f.loop as any).reorgCatchupPending = true;
+  const steps: number[] = [], ranges: number[][] = [];
+  const now = Date.now(), mono = performance.now(), txHash = hash(999);
+  const canonicalPayload = "0x", payloadHash = ethers.keccak256(canonicalPayload);
+  const trigger = { txHash, head: { number: 614, hash: hash(614) },
+    observedAtMs: now, observedAtMonotonicMs: mono, evidenceReadyAtMs: now, evidenceReadyAtMonotonicMs: mono,
+    evidence: [{ familyId: "fixture" as any, txHash, headBlockNumber: 614, headHash: hash(614),
+      canonicalPayload, payloadHash, evidenceHash: ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
+        ["string", "bytes32", "uint256", "bytes32", "bytes32"], ["fixture", txHash, 614, hash(614), payloadHash])) }] };
+  const queued = { key: "queued-evidence", context: trigger };
+  (f.loop as any).scheduledExecutionRefreshes.set("614:1", { kind: "evidence", item: queued });
+  (f.loop as any).scheduledExecutionRefreshes.set("614:2", { kind: "ordinary-retry" });
+  (f.loop as any).pendingEvidenceKeys.add(queued.key);
+  (f.loop as any).evidenceDispatchScheduledHeads.add(614);
+  (f.loop as any).pendingEvidenceByHead.set(614, [{ ...queued, key: "waiting-evidence" }]);
+  (f.deps as any).readReorgActivity = async (n: number, header: any, range: any) => {
+    assert.equal(n, 101, "repair target stays close to the orphan, not current head");
+    assert(range.deadlineAtMs - Date.now() <= 60_000, "recovery cannot inherit cold-start lifetime");
+    assert.equal(f.loop.schedulePendingEvidence(trigger), false, "pending evidence cannot interrupt recovery");
+    assert.equal((f.loop as any).activePass.controller.signal.aborted, false);
+    return { target: header, previousSource: range.previousSource, commonAncestor: { number: 99 },
+      oldDepth: 1, touchedStateKeys: new Set([target, "old-only-pool"]) };
+  };
+  f.deps.readBlockSwapTouched = async (n, _header, range) => {
+    ranges.push([range!.previousSource.number, n]); return new Set([target]);
+  };
+  f.coordinator.prepareCoarsePricing = async (input: any) => {
+    steps.push(input.graph.sourceBlock);
+    if (steps.length === 1) assert(input.canonicalActivity.touchedStateKeys.has("old-only-pool"));
+    latest = { sourceBlock: input.graph.sourceBlock, sourceBlockHash: input.graph.sourceBlockHash,
+      generation: input.graph.generation, effectiveMids: { complete: true } };
+    return { status: "complete", snapshot: latest };
+  };
+  try {
+    await (f.loop as any).runScheduledHead(614, { revision: 1, sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+    assert.deepEqual(steps, [101, 357, 613, 614]);
+    assert.deepEqual(ranges, [[101, 357], [357, 613], [613, 614]]);
+    assert.equal(f.inputs.length, 0, "no Funding or full runtime during repair/catchup");
+    assert.equal((f.loop as any).startupWarmPending, false);
+    assert.equal((f.loop as any).reorgRecoveryPending, false);
+    assert.equal((f.loop as any).reorgCatchupPending, false);
+    for (const field of ["scheduledExecutionRefreshes", "pendingEvidenceByHead", "pendingEvidenceKeys", "evidenceDispatchScheduledHeads"]) {
+      assert.equal((f.loop as any)[field].size, 0, `${field} must not retain retired evidence`);
+    }
+    await assert.rejects(f.loop.runHead(615, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() }), /fixture prepared boundary/);
+    assert(f.inputs.some(input => input.kind === "funding"));
+  } finally { await f.loop.shutdown(); }
+});
+
+test("missing old branch leaves retained prices unavailable without rearming startup or starting execution", async () => {
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("unexpected execution"); } }, async closeAndDrain() {} }));
+  const latest = { sourceBlock: 100, sourceBlockHash: hash(900), generation: 1, effectiveMids: { complete: true } };
+  f.coordinator.latestPricingSnapshot = () => latest;
+  (f.loop as any).reorgRecoveryPending = true; (f.loop as any).reorgCatchupPending = true;
+  (f.deps as any).readReorgActivity = async () => { throw new Error("old trace unavailable"); };
+  f.coordinator.prepareCoarsePricing = async () => { throw new Error("must not publish"); };
+  try {
+    await (f.loop as any).runScheduledHead(614, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+    assert.strictEqual(f.coordinator.latestPricingSnapshot(), latest);
+    assert.equal((f.loop as any).startupWarmPending, false);
+    assert.equal((f.loop as any).reorgRecoveryPending, true);
+    assert.equal(f.inputs.length, 0);
+  } finally { await f.loop.shutdown(); }
 });
 
 test("N-1 producer also uses one current-block activity set for both prices", async () => {
@@ -764,7 +899,7 @@ test("startup retry retires the old generation before creating a new source cont
   const work = new SourceSimulationWork(f.deps.sourceSimulationFactory); const pass = new AbortController();
   const graph = f.deps.buildGraphView({ id: "fixture", generation: f.loop.nextGeneration(), sourceBlock: 101,
     sourceBlockHash: hash(101), edges: [], landedCoverage: [], topologyKey: "fixture" });
-  let attempts = 0, checkpoints = 0;
+  let attempts = 0;
   f.coordinator.prepare = async (input: any) => {
     attempts++; assert.equal(input.simulationTransport, contexts.length && work.transportFor({ number: 101,
       hash: hash(101), generation: input.graph.generation }, control()));
@@ -776,11 +911,7 @@ test("startup retry retires the old generation before creating a new source cont
   try {
     await assert.rejects((f.loop as any).prepareStartupWarm(f.coordinator, { graph, fundingTokens: [],
       deadlineAtMs: Date.now() + 30, preparationSettleDeadlineAtMs: Date.now() + 20 },
-      [], { async drain() {}, abort() {}, stats: () => ({}), async checkpoint() {
-        checkpoints++;
-        assert.deepEqual(closes, [graph.generation], "checkpoint follows retirement of the failed generation");
-      } }, pass, work), /second attempt observed/);
-    assert.equal(checkpoints, 1, "one completed checkpoint before the retry");
+      [], { async drain() {}, abort() {}, stats: () => ({}) }, pass, work), /second attempt observed/);
     assert.equal(contexts.length, 2); assert.equal(contexts[0]!.source.generation + 1, contexts[1]!.source.generation);
     assert.equal(contexts[0]!.control.signal, pass.signal); assert.equal(contexts[1]!.control.signal, pass.signal);
   } finally { await work.closeAndDrain(); await f.loop.shutdown(); }
@@ -960,6 +1091,72 @@ function completeRuntimeFixture(graph: VerifiedGraphView): any {
       sourceBlock: graph.sourceBlock, sourceBlockHash: graph.sourceBlockHash } };
 }
 
+for (const selection of ["preferred", "uncertain", "fallback", "cancel"] as const)
+test(`runHead wires deferred gross selection through the production pipeline: ${selection}`, async context => {
+  context.mock.method(console, "log", () => {});
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("unexpected state sim"); } },
+    async closeAndDrain() {} }));
+  const edges = twoWayPoolEdges([target, `0x${"dd".repeat(20)}`]);
+  const sends: string[] = [], discarded: string[] = [];
+  let atomicCalls = 0, completion: any;
+  f.coordinator.prepare = async (input: any) => completeRuntimeFixture(input.graph);
+  context.mock.method(AnvilSolver.prototype, "solve", async (_plan: any, _state: any, _probe: any, options: any) => {
+    const plans = [1n, 2n].map(amount => ({ root: { adapterId: "skip", target: actor, children: [],
+      tokenIn: priceFundingToken, tokenOut: priceFundingToken, amount, params: {} },
+      profitToken: priceFundingToken, netProfit: 1n, flashAmount: amount, templateName: "fixture" }));
+    options.onDeferredCandidates(plans);
+    return plans[0];
+  });
+  Object.assign(f.deps, {
+    exactRefineEnabled: false, blockScanGraph: () => edges,
+    exactQuoteStateFactory: () => ({ async call() { throw new Error("unexpected quote"); } }),
+    strictSession: async () => ({ edges, runtimeEvidenceFromPendingExecution: () => [],
+      familyIdForEdge: () => "fixture", async issueExact() { throw new Error("unexpected Exact"); } }),
+    amountReference: { prepare(input: any) { return new Map(input.opportunities.map((opp: any) => [opp, 123n])); } },
+    frozenTopology: { topologyKey: "fixture", async observeHeader(number: number) {
+      return { number, hash: hash(number), parentHash: hash(number - 1), timestamp: 1,
+        baseFeePerGas: 1n, gasUsed: 0n, gasLimit: 30_000_000n, transactionHashes: [] };
+    } },
+    directFinalSimulation: { concurrency: 1, async simulate() { throw new Error("atomic boundary is mocked"); } },
+    blockScanPlanner: () => ({ setFlashLiquidity() {}, setGraph() {}, async planBlockScanFromSeedEdges(opp: any) {
+      return [{ opportunity: { ...opp, startToken: opp.flashToken, profitToken: opp.flashToken },
+        tokenPath: { edges: [...opp.seedEdges] }, templateName: "fixture", root: {},
+        maxFlashAmount: opp.searchSeed.maxInput, flashAdapterIds: ["fixture-flash"],
+        flashAdapterId: "fixture-flash", cycleTokens: [opp.flashToken], borrowableTokens: [] }];
+    } }),
+    blockScanConfig: { ...f.deps.blockScanConfig, minSpreadBps: 0, exactAdmissionSpreadBps: 0,
+      maxCandidates: 1, pricedTokens: new Map([[priceFundingToken, { maxBorrow: 10n ** 20n }]]) },
+    async submitAtomic() {
+      atomicCalls++;
+      const result = (decision: string, submitted = false) => ({ decision, submitted,
+        terminalForQuoteSet: true, finalSimStatus: "succeeded" as const, audit: null,
+        timing: { finalSimMs: 1, evMs: 1, finalSimStartedAtMs: Date.now(),
+          finalSimFinishedAtMs: Date.now(), evStartedAtMs: Date.now(), evFinishedAtMs: Date.now() } });
+      if (atomicCalls === 1) return { ...result("deferred"), terminalForQuoteSet: false,
+        profitMode: "positive-gross-profit", deferredSubmission: { netEvWei: -1n,
+          async submit() { sends.push("gross"); return { ...result("fallback", true), profitMode: "positive-gross-profit" }; },
+          discard(reason: string) { discarded.push(reason); return result(reason); },
+        } };
+      assert.deepEqual(sends, [], "gross must not precede a later finalist");
+      if (selection === "cancel") { f.runtimeAbort.abort(new Error("fixture cancelled")); throw f.runtimeAbort.signal.reason; }
+      if (selection === "fallback") return result("below_ev_gate");
+      sends.push("ev");
+      return { ...result(selection, selection === "preferred"), submissionAttempted: true, profitMode: "positive-ev" };
+    },
+  });
+  try {
+    const pass = f.loop.runHead(101, { sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() },
+      { through: "ev", onSnapshot() {}, onEnumeration() {}, onComplete(result) { completion = result; } });
+    if (selection === "cancel") await assert.rejects(pass, /fixture cancelled/); else await pass;
+    assert.equal(atomicCalls, 2, "a deferred gross result must not terminate its quote set");
+    assert.deepEqual(sends, selection === "cancel" ? [] : [selection === "fallback" ? "gross" : "ev"]);
+    assert.deepEqual(discarded, selection === "fallback" ? [] : [selection === "cancel" ? "pass_cancelled" : "preferred_submitted"]);
+    assert.equal(completion.atomicResults.length, selection === "cancel" ? 1 : 2, "deferred outcome recorded exactly once");
+    assert(completion.atomicResults.every((result: any) => !result.deferredSubmission));
+    assert.equal(completion.timing.finalSimMs, selection === "cancel" ? 1 : 2, "flush must not count a second simulation");
+  } finally { await f.loop.shutdown(); }
+});
+
 function pendingEvidenceFixture(number: number) {
   const txHash = hash(999), canonicalPayload = "0x", payloadHash = ethers.keccak256(canonicalPayload);
   const now = Date.now(), mono = performance.now();
@@ -969,6 +1166,33 @@ function pendingEvidenceFixture(number: number) {
       evidenceHash: ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
         ["string", "bytes32", "uint256", "bytes32", "bytes32"], ["fixture", txHash, number, hash(number), payloadHash])) }] };
 }
+
+test("settling a deferred amount cannot overwrite an already submitted opportunity's audit", () => {
+  const text = readFileSync(new URL("../blockscan-runtime-loop.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("runtime.ts", text, ts.ScriptTarget.Latest, true);
+  let expression: ts.Expression | undefined;
+  function visit(node: ts.Node): void {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === "recordAtomicResult") expression = node.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast); assert(expression);
+  const atomicResults: any[] = [], submittedAuditOpportunities = new Set<string>();
+  const auditOpportunities = new Map(["ev", "gross", "uncertain", "rejected"].map(id => [id, {} as any]));
+  const record = runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
+    { atomicResults, submittedAuditOpportunities, auditOpportunities,
+      blindOpportunityEvidenceKey: (opp: string) => opp });
+  for (const [id, submitted, submissionAttempted] of [["ev", true, true], ["gross", true, true], ["uncertain", false, true]] as const) {
+    const selected = { submitted, submissionAttempted, audit: { simulation: id, ev: { decision: "allow", reason: id } } };
+    record({ item: { opp: id } }, selected);
+    record({ item: { opp: id } }, { submitted: false, audit: { simulation: "discarded", ev: { decision: "reject" } } });
+    assert.deepEqual(auditOpportunities.get(id)?.ev, selected.audit.ev);
+  }
+  const rejected = { submitted: false, audit: { simulation: "failed", ev: { decision: "reject" } } };
+  record({ item: { opp: "rejected" } }, rejected);
+  assert.deepEqual(auditOpportunities.get("rejected")?.ev, rejected.audit.ev);
+  assert.equal(atomicResults.length, 7, "all terminal outcomes remain available for per-amount analysis");
+});
 
 test("historical prices-only warmup clears bootstrap and the next pass consumes the published predecessor", async context => {
   context.mock.method(console, "log", () => {});
@@ -1837,7 +2061,7 @@ function liveSimAmountFactory(cache = new BlockScanSimRejectCache()): NonNullabl
   visit(ast); assert(expression);
   return runInNewContext(ts.transpileModule(`(${expression.getText(ast)})`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
-  }).outputText, { createBlockScanSimAmountSelector, createBlockScanLiveAmountSelectorFactory, logBlockScanAmountEvent,
+  }).outputText, { createBlockScanSimAmountSelector, createBlockScanLiveAmountSelectorFactory,
     blockScanSimRejects: cache,
     blockScanPoolRevertAttributor: undefined,
     blockScanStageSettings: { singleFunding: false },

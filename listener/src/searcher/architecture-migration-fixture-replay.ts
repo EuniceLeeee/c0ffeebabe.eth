@@ -1,6 +1,5 @@
 import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 import assert from "node:assert/strict";
-import { identityAssetRequestId } from "./identity-asset-metadata.js";
 import {
   executeAdapterFamilyLifecycleBatch,
   type AdapterFamilyPublication,
@@ -9340,8 +9339,8 @@ function fluidDexSuccessResult(
               "getDexAddress",
               [FLUID_DEX_FIXTURE_POOL],
             )
-          : request.id === identityAssetRequestId("token0", "decimals") ||
-              request.id === identityAssetRequestId("token1", "decimals")
+          : request.id === "token0-decimals" ||
+              request.id === "token1-decimals"
             ? FLUID_DEX_ERC20_INTERFACE.encodeFunctionResult(
                 "decimals",
                 [18],

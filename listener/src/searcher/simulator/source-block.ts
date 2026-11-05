@@ -118,14 +118,12 @@ export class SourceBlockSimulator {
   }
 
   captureInput(plan: ResolvedPlan, context: Pick<Context, "source" | "header">, scriptHex?: string): SourceBlockExecutionInput {
-    const tokens = [...(plan.simulationTokens ?? [])];
+    const tokens: string[] = [];
     const visit = (node: ResolvedPlan["root"]) => { tokens.push(node.tokenIn, node.tokenOut); node.children.forEach(visit); };
     visit(plan.root);
-    const compiled = bytesToHex(compilePlan(plan.root, this.options.executor));
-    assert(scriptHex === undefined || scriptHex.toLowerCase() === compiled, "source-block script does not match plan");
     return buildSourceBlockExecutionInput({ ...context, ...this.options, profitToken: plan.profitToken,
       funding: this.options.fundingForPlan(plan), tokens,
-      scriptHex: compiled });
+      scriptHex: scriptHex ?? bytesToHex(compilePlan(plan.root, this.options.executor)) });
   }
   async simulate(plan: ResolvedPlan, context: Context): Promise<SourceBlockSimulationResult> {
     return this.simulateExecutionInput(this.captureInput(plan, context), context);
@@ -233,9 +231,6 @@ export function sourceBlockResult(input: SourceBlockExecutionInput, response: Da
     const cause = Object.assign(new Error("source-block final transaction reverted"), { code: "TRANSACTION_REVERTED", kind: "revert" });
     const result: SourceBlockSimulationResult = { ...base, success: false, grossProfit: 0n, netProfit: 0n, gasUsed: 0n,
       revertReason: cause.message, failure: { cause, kind: "revert", code: cause.code } };
-    Object.defineProperty(result, "sourceBlockRevertEvidence", { value: frozen({
-      executionInput: input, trace: rawTrace,
-    }) });
     Object.defineProperty(result, "traceRevert", { value: async () => ({
       executionInput: input, trace: rawTrace,
     }) });

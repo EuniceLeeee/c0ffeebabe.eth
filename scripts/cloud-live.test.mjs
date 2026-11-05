@@ -72,9 +72,23 @@ test('resume switch is forwarded with the exact human-confirmed 1250 block limit
   assert(result.commands[0].argv.join(' ').includes('--broadcast --blocks 1250 --resume-prices 1'));
   assert(!result.commands[0].argv.join(' ').includes(dummyKey));
 });
+test('RPC catchup choice is forwarded without changing trading confirmation or limits', async () => {
+  const result = await runMock({ args: ['--broadcast', '--blocks', '500', '--resume-prices', '1', '--catchup-source', 'rpc'], answer: 'START 500' });
+  assert.equal(result.error, undefined);
+  assert(result.commands[0].argv.join(' ').includes('--broadcast --blocks 500 --resume-prices 1 --catchup-source rpc'));
+});
 test('noninteractive start cannot read credentials or connect', async () => {
   const result = await runMock({ args: ['--broadcast'], tty: false, envReadable: false });
   assert(result.error); assert.equal(result.commands.length, 0); assert.equal(result.reads.length, 1);
+});
+test('positive-gross-profit needs explicit confirmation and is forwarded without changing the block cap', async () => {
+  const args = ['--broadcast', '--blocks', '500', '--profit-mode', 'positive-gross-profit'];
+  const cancelled = await runMock({ args, answer: 'START 500', envReadable: false });
+  assert(cancelled.error); assert.equal(cancelled.commands.length, 0); assert.equal(cancelled.reads.length, 1);
+  const started = await runMock({ args, answer: 'START 500 POSITIVE-GROSS-PROFIT' });
+  assert.equal(started.error, undefined);
+  assert(started.commands[0].argv.join(' ').includes('--broadcast --blocks 500 --profit-mode positive-gross-profit'));
+  assert(!started.commands[0].argv.join(' ').includes(dummyKey));
 });
 test('check and status never read or send credentials', async () => {
   for (const mode of ['--check', '--status']) {

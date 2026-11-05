@@ -464,6 +464,13 @@ export async function buildEffectiveMids(input: {
   readonly onProgress?: (progress: EffectiveMidProgress) => void;
 }): Promise<EffectiveMidSnapshot> {
   const started = Date.now();
+  // Wall intervals only: a quote wave includes I/O, JS processing and any GC.
+  // Keep this outside the snapshot/replay contract and never trace per row.
+  const diagnostic = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" ? {
+    startedAt: performance.now(), setupMs: 0, progressCallbackMs: 0, assemblyMs: 0,
+    waves: [] as { depth: number; directions: number; fresh: number;
+      planningMs: number; sessionPrepareMs: number; quoteWorkMs: number; propagationMs: number }[],
+  } : undefined;
   const { pricing, control } = input;
   if (!Number.isSafeInteger(input.concurrency) || input.concurrency < 1 ||
       !Number.isFinite(input.enumerationSpreadBps) || input.enumerationSpreadBps < 0) {
@@ -516,6 +523,7 @@ export async function buildEffectiveMids(input: {
   };
   const report = () => {
     if (!input.onProgress) return;
+    const reportStartedAt = diagnostic ? performance.now() : 0;
     const now = Date.now(), cancelled = byStatus.cancelled ?? 0;
     lastProgressAt = now;
     try { input.onProgress(Object.freeze({
@@ -528,6 +536,7 @@ export async function buildEffectiveMids(input: {
       inFlight: quoteCallsStarted - quoteCallsSettled, byStatus: Object.freeze({ ...byStatus }),
       elapsedMs: Math.max(0, now - started), observedAtMs: now,
     })); } catch { /* Telemetry has no effect on pricing. */ }
+    finally { if (diagnostic) diagnostic.progressCallbackMs += Math.max(0, performance.now() - reportStartedAt); }
   };
   const closed = () => control.signal?.aborted === true ||
     (control.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs);
@@ -668,11 +677,13 @@ export async function buildEffectiveMids(input: {
     if (indices) indices.push(index); else workByToken.set(token, [index]);
   }
 
+  if (diagnostic) diagnostic.setupMs = Math.max(0, performance.now() - diagnostic.startedAt);
   report();
   const progressTimer = input.onProgress ? setInterval(report, 5000) : undefined;
   progressTimer?.unref();
   try {
   for (let depth = 0; depth <= MAX_EFFECTIVE_INPUT_PATH_HOPS; depth++) {
+    const planningStartedAt = diagnostic ? performance.now() : 0;
     const layer: number[] = depth === 0 ? [...(workByToken.get(weth) ?? [])] : [];
     for (const [token, reference] of pending[depth]!) {
       if (!references.has(token)) {
@@ -694,18 +705,28 @@ export async function buildEffectiveMids(input: {
       else if (closed()) unavailable(index, "cancelled");
       else fresh.push(index);
     }
+    const wave = diagnostic ? { depth, directions: layer.length, fresh: fresh.length,
+      planningMs: Math.max(0, performance.now() - planningStartedAt),
+      sessionPrepareMs: 0, quoteWorkMs: 0, propagationMs: 0 } : undefined;
+    if (wave) diagnostic!.waves.push(wave);
     // Structural reachability is not a quote demand: failed upstream samples
     // and clean carried rows need no new authority. Batch only this frontier;
     // successful outputs below will determine the next one, without capping it.
     if (input.prepareQuote && fresh.length > 0 && !closed()) {
       phase = "preparing";
       report();
-      await input.prepareQuote(new Set(fresh.map(index => work[index]!.edgeId)));
+      const prepareStartedAt = wave ? performance.now() : 0;
+      const prepareReportMs = diagnostic?.progressCallbackMs ?? 0;
+      try { await input.prepareQuote(new Set(fresh.map(index => work[index]!.edgeId))); }
+      finally { if (wave) wave.sessionPrepareMs = Math.max(0, performance.now() - prepareStartedAt -
+        (diagnostic!.progressCallbackMs - prepareReportMs)); }
     }
     if (phase !== "quoting") {
       phase = "quoting";
       report();
     }
+    const quoteStartedAt = wave ? performance.now() : 0;
+    const quoteReportMs = diagnostic?.progressCallbackMs ?? 0;
     let next = 0;
     const worker = async () => {
       for (;;) {
@@ -727,13 +748,18 @@ export async function buildEffectiveMids(input: {
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(input.concurrency, fresh.length) }, worker));
+    try { await Promise.all(Array.from({ length: Math.min(input.concurrency, fresh.length) }, worker)); }
+    finally { if (wave) wave.quoteWorkMs = Math.max(0, performance.now() - quoteStartedAt -
+      (diagnostic!.progressCallbackMs - quoteReportMs)); }
+    const propagationStartedAt = wave ? performance.now() : 0;
     for (const index of layer) {
       const row = rows[index]!;
       const reference = input.cascadeAmountChanges ? work[index]!.reference : rowAmountReferences.get(row);
       if (reference) offerOutput(row, reference);
     }
+    if (wave) wave.propagationMs = Math.max(0, performance.now() - propagationStartedAt);
   }
+  const assemblyStartedAt = diagnostic ? performance.now() : 0;
   for (let index = 0; index < work.length; index++) {
     if (rows[index] === undefined) unavailable(index, closed() ? "cancelled" : "missing-valuation");
   }
@@ -757,11 +783,27 @@ export async function buildEffectiveMids(input: {
     updates: Object.freeze(updates), removals: Object.freeze(removals),
   }));
   phase = snapshot.complete ? "completed" : "interrupted";
+  if (diagnostic) diagnostic.assemblyMs = Math.max(0, performance.now() - assemblyStartedAt);
   return snapshot;
   } finally {
     clearInterval(progressTimer);
     if (phase !== "completed") phase = "interrupted";
     report();
+    if (diagnostic) {
+      try {
+        const wallMs = Math.max(0, performance.now() - diagnostic.startedAt);
+        const measuredMs = diagnostic.setupMs + diagnostic.progressCallbackMs + diagnostic.assemblyMs +
+          diagnostic.waves.reduce((sum, wave) => sum + wave.planningMs + wave.sessionPrepareMs +
+            wave.quoteWorkMs + wave.propagationMs, 0);
+        console.log(`[searcher/effective-phase-timing] ${JSON.stringify({
+          sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
+          status: phase, timingModel: "nonoverlapping-wall-includes-io-cpu-gc",
+          wallMs, setupMs: diagnostic.setupMs, progressCallbackMs: diagnostic.progressCallbackMs,
+          assemblyMs: diagnostic.assemblyMs, unattributedMs: Math.max(0, wallMs - measuredMs),
+          waves: diagnostic.waves,
+        })}`);
+      } catch { /* Diagnostic output must not alter an effective-price result. */ }
+    }
   }
 }
 

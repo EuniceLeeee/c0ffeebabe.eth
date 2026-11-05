@@ -343,8 +343,7 @@ function buildEthView(
 // are incremental. Topology/configuration changes and backwards sources rebuild.
 // Direct mode deliberately retains indirect marks on ordinary price changes;
 // exclusions/removals always propagate. Published arrays/maps are never mutated.
-let recent: { pricing: Pick<EffectiveEnumerationPricing, "sourceBlock" | "sourceBlockHash" | "generation">;
-  work: EthViewWork; signalPairsPerToken: number;
+let recent: { pricing: EffectiveEnumerationPricing; work: EthViewWork; signalPairsPerToken: number;
   allowRepeatedPools: boolean; touchedMode: EthReferenceTouchedMode } | undefined;
 const published = new WeakMap<EffectiveEnumerationPricing, {
   mids: ReadonlyMap<string, ResolvedBlockScanQuote>; view: BlockScanEthView;
@@ -438,8 +437,7 @@ export function effectiveEthPricing(pricing: EffectiveEnumerationPricing, signal
       touchedMode, changes, effective, nativeIds, native ? native.updates.length + native.removals.length : effective?.rows.size);
     // Historical/overlapping readers may build their own view, but must never
     // replace the current working history (especially in non-propagating mode).
-    if (advance) recent = { pricing: { sourceBlock: pricing.sourceBlock, sourceBlockHash: pricing.sourceBlockHash,
-      generation: pricing.generation }, work: built.work,
+    if (advance) recent = { pricing: { ...pricing, effectiveMids: built.effective }, work: built.work,
       signalPairsPerToken, allowRepeatedPools, touchedMode };
     result = { mids, view: built.view };
     published.set(pricing, result);

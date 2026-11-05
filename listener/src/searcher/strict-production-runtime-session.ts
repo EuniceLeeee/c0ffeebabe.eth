@@ -250,6 +250,7 @@ export class StrictProductionRuntimeRoot {
   readonly #instanceIndexesByKey: ReadonlyMap<string, readonly number[]>;
   readonly #pricingIndex: StrictReadyPricingIndex;
   readonly #mutationIndexesByDependency: ReadonlyMap<string, readonly CompiledMutationIndex[]>;
+  readonly #passiveStateKeysByDependency: ReadonlyMap<string, ReadonlySet<string>>;
   readonly #readyFundingAssetsByFamily: ReadonlyMap<
     FamilyId,
     readonly string[]
@@ -276,6 +277,7 @@ export class StrictProductionRuntimeRoot {
     const instanceIndexesByStateKey = new Map<string, number[]>();
     const instanceIndexesByKey = new Map<string, number[]>();
     const perBlockRefreshStateKeys = new Set<string>();
+    const passiveStateKeysByDependency = new Map<string, Set<string>>();
     type Pricing = PreparedFamilyInstance["pricingInstances"][number];
     type Semantics = ReturnType<typeof asPricedFamily>["plugin"]["pricing"];
     const mutationGroups = new Map<Semantics, MutationPricingEntry<
@@ -303,6 +305,12 @@ export class StrictProductionRuntimeRoot {
           routes: pricing.routes, stateKey: pricing.stateKey, dependencies: pricing.dependencies }));
         mutationGroups.set(semantics, entries);
         const stateKey = String(pricing.stateKey).toLowerCase();
+        for (const dependency of pricing.dependencies) {
+          const key = dependency.toLowerCase();
+          const stateKeys = passiveStateKeysByDependency.get(key) ?? new Set<string>();
+          stateKeys.add(stateKey);
+          passiveStateKeysByDependency.set(key, stateKeys);
+        }
         const refreshPolicy = semantics.refreshPolicyForInstance === undefined
           ? semantics.refreshPolicy ?? "on-touch"
           : semantics.refreshPolicyForInstance({ descriptor: pricing.pricingDescriptor, routes: pricing.routes });
@@ -388,6 +396,7 @@ export class StrictProductionRuntimeRoot {
     this.#mutationIndexesByDependency = new Map([...mutationIndexesByDependency].map(
       ([address, indexes]) => [address, Object.freeze(indexes)],
     ));
+    this.#passiveStateKeysByDependency = passiveStateKeysByDependency;
     this.#instanceIndexesByKey = new Map([...instanceIndexesByKey].map(
       ([key, indexes]) => [key, Object.freeze(indexes)],
     ));
@@ -401,7 +410,8 @@ export class StrictProductionRuntimeRoot {
   }
 
   /** Stable per Ready root: the reader's derived cache cannot cross this binding. */
-  readonly resolveBlockTouchedStateKeys: BlockTouchedStateKeyResolver = (observation, block) => {
+  readonly resolveBlockTouchedStateKeys: BlockTouchedStateKeyResolver = Object.freeze(Object.assign(
+    ((observation, block) => {
     const address = observation.kind === "log" ? observation.address : observation.target;
     const indexes = this.#mutationIndexesByDependency.get(address.toLowerCase());
     if (indexes === undefined) return [];
@@ -414,7 +424,14 @@ export class StrictProductionRuntimeRoot {
       for (const key of keys) touched.add(key.toLowerCase());
     }
     return [...touched];
-  };
+    }) as BlockTouchedStateKeyResolver, {
+      passiveStateKeys: (addresses: readonly string[], block: { readonly number: number; readonly hash: string }): readonly string[] => {
+        assertCanonicalSource({ ...block, generation: this.#readySource.generation });
+        const keys = new Set<string>();
+        for (const address of addresses) for (const key of this.#passiveStateKeysByDependency.get(address.toLowerCase()) ?? []) keys.add(key);
+        return [...keys];
+      },
+    }));
 
   async createSession(input: {
     readonly source: CanonicalSource;

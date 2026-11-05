@@ -1,3 +1,5 @@
+import { inactiveDeclarativeModules } from "./venues/declarative-module-dependencies.js";
+import ts from "typescript";
 import { ROOT_ONLY_FAMILY_MODULES } from "./venues/declarative-family-modules.js";
 import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
@@ -27,6 +29,7 @@ export interface DeclarativeProductionEntry {
   readonly childFiles: readonly string[];
   readonly ownedActionAdapterIds: readonly string[];
   readonly declaresOracleVictim?: boolean;
+  readonly inactiveRuntimeModules?: readonly string[];
   readonly typesFile?: string;
 }
 function object(value: unknown, label: string): Record<string, any> {
@@ -188,7 +191,7 @@ function renderDataFamilyEntry(input: {
       ...(typesFile ? [resolve(root, "src/searcher/venues/declarative-types.ts")] : [])]) });
 }
 export function renderDeclarativeProductionEntry(input: {
-  rootDirectory: string; definitionFile: string; productionDirectory?: string; document: unknown;
+  rootDirectory: string; definitionFile: string; productionDirectory?: string; entryFile?: string; document: unknown;
 }): DeclarativeProductionEntry {
   const root = resolve(input.rootDirectory), sourceRoot = resolve(root, "src");
   const definitionFile = resolve(input.definitionFile);
@@ -207,7 +210,10 @@ export function renderDeclarativeProductionEntry(input: {
   keys(activation, ["enabled", "envKey"], "production activation");
   if (typeof activation.enabled !== "boolean" || typeof activation.envKey !== "string" ||
       !/^SEARCHER_FAMILY_[A-Z0-9_]+_ENABLED$/.test(activation.envKey)) throw new Error("invalid production activation");
-  const entryFile = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root), `${stem}.production.ts`);
+  const productionDirectory = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root));
+  const entryFile = resolve(input.entryFile ?? resolve(productionDirectory, `${stem}.production.ts`));
+  if (dirname(entryFile) !== productionDirectory || !/^[a-z0-9][a-z0-9-]*\.production\.ts$/.test(basename(entryFile)))
+    throw new Error("declarative entry must remain in the production directory");
   localPath(sourceRoot, entryFile);
   if (doc.version === 2) return renderDataFamilyEntry({ root, sourceRoot, definitionFile, entryFile, doc, activation });
   const slots = FAMILY_CAPABILITY_APPLICABILITY[domain];
@@ -257,6 +263,100 @@ export function renderDeclarativeProductionEntry(input: {
     dependencyFiles: Object.freeze([definitionFile, resolve(root, "src/searcher/build-declarative-production.ts")]) });
 }
 
+/** Read only the static identity of a handwritten strict entry. Never import or
+ * execute its module. Unresolved/dynamic identities cannot authorize replacement. */
+async function handwrittenIdentity(file: string, regular: (path: string) => Promise<void>): Promise<{
+  familyId: string; domain: FamilyDomain;
+} | undefined> {
+  const sources = new Map<string, ts.SourceFile>();
+  const canonical = (name: string) => resolve(dirname(file), `../${name}.ts`);
+  function importedName(node: ts.Expression, module: string): string | undefined {
+    if (!ts.isIdentifier(node)) return undefined;
+    for (const statement of node.getSourceFile().statements) {
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+      if (!statement.moduleSpecifier.text.startsWith(".") ||
+          resolve(dirname(node.getSourceFile().fileName), statement.moduleSpecifier.text.replace(/\.js$/, ".ts")) !== canonical(module)) continue;
+      const names = statement.importClause?.namedBindings;
+      if (!names || !ts.isNamedImports(names) || statement.importClause?.isTypeOnly) continue;
+      const imported = names.elements.find(item => !item.isTypeOnly && item.name.text === node.text);
+      if (imported) return imported.propertyName?.text ?? imported.name.text;
+    }
+    return undefined;
+  }
+  function globalFreeze(node: ts.Expression): boolean {
+    if (!ts.isPropertyAccessExpression(node) || node.name.text !== "freeze" ||
+        !ts.isIdentifier(node.expression) || node.expression.text !== "Object") return false;
+    return !node.getSourceFile().statements.some(statement =>
+      (ts.isVariableStatement(statement) && statement.declarationList.declarations.some(d => d.name.getText() === "Object")) ||
+      ((ts.isClassDeclaration(statement) || ts.isFunctionDeclaration(statement) || ts.isModuleDeclaration(statement) ||
+        ts.isEnumDeclaration(statement)) && statement.name?.getText() === "Object") ||
+      (ts.isImportDeclaration(statement) && statement.importClause?.getText().includes("Object")));
+  }
+  async function source(path: string): Promise<ts.SourceFile> {
+    if (!sources.has(path)) {
+      await regular(path);
+      sources.set(path, ts.createSourceFile(path, await readFile(path, "utf8"), ts.ScriptTarget.Latest, true));
+    }
+    return sources.get(path)!;
+  }
+  async function value(node: ts.Expression, seen = new Set<string>()): Promise<ts.Expression | undefined> {
+    while (ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isParenthesizedExpression(node)) node = node.expression;
+    if (ts.isCallExpression(node) && node.arguments.length === 1 &&
+        (globalFreeze(node.expression) || importedName(node.expression, "adapter-family-identifiers") === "familyId"))
+      return value(node.arguments[0]!, seen);
+    if (!ts.isIdentifier(node)) return node;
+    const owner = node.getSourceFile(), key = `${owner.fileName}:${node.text}`;
+    if (seen.has(key)) return undefined;
+    seen.add(key);
+    for (const statement of owner.statements) {
+      if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) {
+        if (ts.isIdentifier(declaration.name) && declaration.name.text === node.text && declaration.initializer)
+          return value(declaration.initializer, seen);
+      }
+      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) ||
+          !statement.moduleSpecifier.text.startsWith(".")) continue;
+      const names = statement.importClause?.namedBindings;
+      if (!names || !ts.isNamedImports(names)) continue;
+      const imported = names.elements.find(item => item.name.text === node.text);
+      if (!imported) continue;
+      const target = await source(resolve(dirname(owner.fileName), statement.moduleSpecifier.text.replace(/\.js$/, ".ts")));
+      const exportName = imported.propertyName?.text ?? imported.name.text;
+      for (const item of target.statements) if (ts.isVariableStatement(item) &&
+          item.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
+        for (const declaration of item.declarationList.declarations) if (ts.isIdentifier(declaration.name) &&
+            declaration.name.text === exportName && declaration.initializer) return value(declaration.initializer, seen);
+      }
+    }
+    return undefined;
+  }
+  async function property(node: ts.Expression, name: string): Promise<ts.Expression | undefined> {
+    const resolved = await value(node);
+    if (!resolved || !ts.isObjectLiteralExpression(resolved) || resolved.properties.some(ts.isSpreadAssignment)) return undefined;
+    const item = resolved.properties.find(item => item.name &&
+      (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === name);
+    return item && ts.isPropertyAssignment(item) ? value(item.initializer)
+      : item && ts.isShorthandPropertyAssignment(item) ? value(item.name) : undefined;
+  }
+  for (const statement of (await source(file)).statements) if (ts.isVariableStatement(statement)) {
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== "plugin" || !declaration.initializer) continue;
+      if (!statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ||
+          !(statement.declarationList.flags & ts.NodeFlags.Const)) throw new Error(`unresolved handwritten strict entry: ${file}`);
+      const call = declaration.initializer;
+      if (!ts.isCallExpression(call) || call.arguments.length !== 1) throw new Error(`unresolved handwritten strict entry: ${file}`);
+      const constructor = importedName(call.expression, "adapter-family-plugin");
+      const domain = (Object.keys(CONSTRUCTORS) as FamilyDomain[]).find(key => CONSTRUCTORS[key] === constructor);
+      const manifest = await property(call.arguments[0]!, "manifest");
+      if (!domain || !manifest) throw new Error(`unresolved handwritten strict entry: ${file}`);
+      const id = await property(manifest, "familyId"), declaredDomain = await property(manifest, "domain");
+      if (id && ts.isStringLiteralLike(id) && declaredDomain && ts.isStringLiteralLike(declaredDomain) && declaredDomain.text === domain)
+        return { familyId: id.text, domain };
+      throw new Error(`unresolved handwritten strict entry: ${file}`);
+    }
+  }
+  return undefined;
+}
+
 /** Build-time only. Runtime keeps the existing generated static imports and
  * domain constructors; JSON cannot import code dynamically or issue authority. */
 export async function syncDeclarativeProductionEntries(input: {
@@ -291,6 +391,27 @@ export async function syncDeclarativeProductionEntries(input: {
       current = dirname(current);
     }
   }
+  const handwritten = new Map<string, { familyId: string; domain: FamilyDomain }>();
+  const generatedByDefinition = new Map<string, string>();
+  const productionFiles = await readdir(productionDirectory).catch(error => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [] as string[]; throw error;
+  });
+  for (const name of productionFiles.filter(name => name.endsWith(".production.ts")).sort()) {
+    const path = resolve(productionDirectory, name);
+    await regular(path);
+    const text = await readFile(path, "utf8");
+    if (text.startsWith(MARKER)) {
+      const definition = /^\/\/ Definition: (.+)$/m.exec(text)?.[1];
+      if (definition) {
+        const key = resolve(root, definition);
+        if (generatedByDefinition.has(key)) throw new Error("duplicate generated Family definition");
+        generatedByDefinition.set(key, path);
+      }
+    } else {
+      const identity = await handwrittenIdentity(path, regular);
+      if (identity) handwritten.set(path, identity);
+    }
+  }
   async function visit(directory: string): Promise<void> {
     let children;
     try { children = await readdir(directory, { withFileTypes: true }); }
@@ -305,8 +426,15 @@ export async function syncDeclarativeProductionEntries(input: {
       catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
       const document = JSON.parse(text);
       if (!Object.hasOwn(object(document, "Family definition"), "production")) continue;
-      const entry = renderDeclarativeProductionEntry({ rootDirectory: root, productionDirectory, definitionFile, document });
+      const matches = [...handwritten].filter(([, identity]) => identity.familyId === document.scope?.family);
+      if (matches.length > 1) throw new Error("duplicate handwritten Family ID");
+      if (matches[0] && matches[0][1].domain !== document.production.domain) throw new Error("JSON/handwritten Family domain disagrees");
+      const generated = generatedByDefinition.get(definitionFile);
+      if (generated && matches.length) throw new Error("duplicate JSON/handwritten Family registration");
+      const entryFile = generated ?? matches[0]?.[0];
+      const entry = renderDeclarativeProductionEntry({ rootDirectory: root, productionDirectory, entryFile, definitionFile, document });
       if (entries.has(entry.entryFile) || familyIds.has(entry.familyId)) throw new Error("duplicate declarative production entry or Family ID");
+      const documents = [document];
       if (entry.format !== "bindings-v1") {
         const ids = new Set<string>([document.standard.id]), lineages = new Set<string>([document.standard.lineageId]);
         const childTypes: unknown[] = [];
@@ -314,6 +442,7 @@ export async function syncDeclarativeProductionEntries(input: {
           await regular(childFile);
           const child = object(JSON.parse(await readFile(childFile, "utf8")), "variant JSON");
           dataOnly(child);
+          documents.push(child);
           if (Object.hasOwn(child, "variantFiles") || Object.hasOwn(child, "production"))
             throw new Error("nested or cyclic variant JSON references are unsupported");
           if (child.version !== 1 || typeof child.id !== "string" || typeof child.lineageId !== "string" ||
@@ -337,7 +466,9 @@ export async function syncDeclarativeProductionEntries(input: {
         for (const b of [...references, ...document.actionAdapters as Binding[]])
           await regular(resolve(path, b.module.replace(/\.js$/, ".ts")));
       }
-      entries.set(entry.entryFile, entry); familyIds.add(entry.familyId);
+      entries.set(entry.entryFile, entry.format === "bindings-v1" ? entry : Object.freeze({ ...entry,
+        inactiveRuntimeModules: inactiveDeclarativeModules(documents),
+      })); familyIds.add(entry.familyId);
     }
   }
   await visit(resolve(root, "src/searcher/venues"));
@@ -357,7 +488,11 @@ export async function syncDeclarativeProductionEntries(input: {
     let current: string | undefined;
     try { await regular(entry.entryFile); current = await readFile(entry.entryFile, "utf8"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    if (current !== undefined && !current.startsWith(MARKER)) throw new Error(`refusing to overwrite a handwritten production entry: ${entry.entryFile}`);
+    if (current !== undefined && !current.startsWith(MARKER)) {
+      const identity = handwritten.get(entry.entryFile);
+      if (identity?.familyId !== entry.familyId || identity.domain !== entry.domain)
+        throw new Error(`refusing to overwrite an unverified handwritten production entry: ${entry.entryFile}`);
+    }
     if (current !== entry.source) {
       if (input.mode === "check") throw new Error(`declarative production entry is missing or stale: ${entry.entryFile}`);
       pending.push(entry);

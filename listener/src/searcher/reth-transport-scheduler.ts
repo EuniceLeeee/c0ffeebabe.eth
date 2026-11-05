@@ -16,7 +16,11 @@ export type RethTransportLane =
   | "discovery";
 
 export interface RethTransportLease {
+  /** Legacy total: admission wait plus JS continuation-resume delay. */
   readonly queueWaitMs: number;
+  /** Diagnostic-only split; older/forwarding schedulers may omit these. */
+  readonly permitWaitMs?: number;
+  readonly resumeDelayMs?: number;
   readonly activeTotal: number;
   readonly activeByLane: Readonly<Record<RethTransportLane, number>>;
   /** Shared authority survives run-only forwarding wrappers and new scopes. */
@@ -40,6 +44,7 @@ export interface RethTransportRetryBatch {
 
 export interface RethTransportRetryState {
   transportRetriesAtOne?: number;
+  transportBackoffAtOne?: number;
   transportRetryBatch?: RethTransportRetryBatch;
 }
 
@@ -61,10 +66,16 @@ export function isRethTransportTimeout(error: unknown): boolean {
       .includes((error as Error & { code?: string }).code ?? "");
 }
 
+/** Explicitly classified transient failure of an idempotent read. Callers own
+ * method/error classification; this does not make arbitrary RPC errors or
+ * contract reverts retryable, and it is not evidence of provider throttling. */
+export class RethTransientReadError extends Error {}
+
 interface SchedulerWaiter {
   readonly lane: RethTransportLane;
   readonly signal: AbortSignal;
   readonly queuedAtMs: number;
+  readonly timing?: { grantedAtMs?: number };
   readonly resolve: (release: () => void) => void;
   readonly reject: (reason?: unknown) => void;
   readonly onAbort: () => void;
@@ -109,7 +120,9 @@ export class RethTransportScheduler {
       readonly retryDelayMs?: number;
       /**
        * Throttle/timeout retries still allowed once this batch's ladder has
-       * degraded to concurrency 1. A metered provider can refuse one batch for
+       * degraded to concurrency 1 and a single-item batch. Splitting a larger
+       * failed envelope must reach one item before spending this floor budget.
+       * A metered provider can refuse one batch for
        * minutes while the caller still holds a valid budget; giving up after a
        * handful of attempts turns a recoverable throughput dip into a dead
        * pass. Only the throttled batch pays this, never the whole scope.
@@ -121,7 +134,7 @@ export class RethTransportScheduler {
   ) {
     if (
       !Number.isSafeInteger(options.capacity) ||
-      options.capacity < 2
+      options.capacity < 1
     ) {
       throw new Error(
         `invalid reth transport capacity ${options.capacity}`,
@@ -130,7 +143,8 @@ export class RethTransportScheduler {
     if (
       !Number.isSafeInteger(options.producerReserved) ||
       options.producerReserved < 1 ||
-      options.producerReserved >= options.capacity
+      (options.producerReserved >= options.capacity &&
+        !(options.capacity === 1 && options.producerReserved === 1))
     ) {
       throw new Error(
         `invalid producer reserve ${options.producerReserved}`,
@@ -154,11 +168,11 @@ export class RethTransportScheduler {
         const batch = items[0]?.transportRetryBatch;
         const reduce = (n: number) => Math.max(1, Math.floor(n / 2 ** (batch?.level ?? 0)));
         return Object.freeze({version: batch?.version ?? 0, batchSize: reduce(batchSize),
-          concurrency: reduce(concurrency), ...(batch ? {batch} : {})});
+          concurrency: this.capacity === 1 ? 1 : reduce(concurrency), ...(batch ? {batch} : {})});
       },
       retryDelayMs: (items: readonly RethTransportRetryState[] = []) => items[0]?.transportRetryBatch?.delayMs ?? 0,
       retry: (error: unknown, items: readonly RethTransportRetryState[], attempt: RethTransportAttempt) => {
-        if ((!isRethTransportTimeout(error) && !isRpcThrottleError(error)) ||
+        if ((!isRethTransportTimeout(error) && !isRpcThrottleError(error) && !(error instanceof RethTransientReadError)) ||
             isRpcQuotaExhaustedError(error) || items.length === 0) return false;
         const batch = attempt.batch ?? items[0]?.transportRetryBatch ?? {
           version: 0, level: 0, notBeforeMs: 0, delayMs: 0,
@@ -167,14 +181,24 @@ export class RethTransportScheduler {
         // In-flight split siblings from one tier lower their own group once.
         if (attempt.version === batch.version) {
           batch.version++;
-          batch.level++;
+          // With one request already in flight, lower the failed payload,
+          // not unrelated fresh envelopes: 64 -> 16 -> 4 -> 1 on HTTP/RPC 429.
+          // Socket timeouts retain their existing halving ladder.
+          batch.level += attempt.concurrency === 1 && !isRethTransportTimeout(error) && isRpcThrottleError(error) ? 2 : 1;
         }
-        const exhausted = attempt.concurrency === 1 &&
+        const atFloor = attempt.concurrency === 1 &&
+          (attempt.batchSize === 1 || items.length === 1);
+        const exhausted = atFloor &&
           items.some(item => (item.transportRetriesAtOne ?? 0) >= maxRetriesAtOne);
-        if (!exhausted && attempt.concurrency === 1) for (const item of items) {
+        if (!exhausted && atFloor) for (const item of items) {
           item.transportRetriesAtOne = (item.transportRetriesAtOne ?? 0) + 1;
         }
-        const atOne = Math.max(...items.map(item => item.transportRetriesAtOne ?? 0));
+        // Preserve the original exponential waiting after concurrency reaches
+        // one; splitting and the single-item retry budget are separate clocks.
+        if (!exhausted && attempt.concurrency === 1) for (const item of items) {
+          item.transportBackoffAtOne = (item.transportBackoffAtOne ?? 0) + 1;
+        }
+        const atOne = Math.max(...items.map(item => item.transportBackoffAtOne ?? 0));
         const delayMs = Math.min(
           (options.retryDelayMs ?? 1_000) * 2 ** Math.max(0, atOne - 1),
           maxRetryDelayMs,
@@ -204,9 +228,18 @@ export class RethTransportScheduler {
     work: (lease: RethTransportLease) => Promise<T>,
   ): Promise<T> {
     const queuedAtMs = performance.now();
-    const release = await this.acquire(lane, signal, queuedAtMs);
+    // Capture the flag once per waiter, not again after a potentially long
+    // queue. Disabled diagnostics allocate no timing object or grant timestamp.
+    const timing = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1"
+      ? {} as { grantedAtMs?: number } : undefined;
+    const release = await this.acquire(lane, signal, queuedAtMs, timing);
+    const resumedAtMs = performance.now();
     const lease = Object.freeze({
-      queueWaitMs: Math.max(0, performance.now() - queuedAtMs),
+      queueWaitMs: Math.max(0, resumedAtMs - queuedAtMs),
+      ...(timing?.grantedAtMs === undefined ? {} : {
+        permitWaitMs: Math.max(0, timing.grantedAtMs - queuedAtMs),
+        resumeDelayMs: Math.max(0, resumedAtMs - timing.grantedAtMs),
+      }),
       activeTotal: this.activeTotal,
       activeByLane: Object.freeze({ ...this.activeByLane }),
       load: this.load,
@@ -250,6 +283,7 @@ export class RethTransportScheduler {
     lane: RethTransportLane,
     signal: AbortSignal,
     queuedAtMs: number,
+    timing?: { grantedAtMs?: number },
   ): Promise<() => void> {
     if (signal.aborted) {
       return Promise.reject(
@@ -273,6 +307,7 @@ export class RethTransportScheduler {
         lane,
         signal,
         queuedAtMs,
+        timing,
         resolve,
         reject,
         onAbort,
@@ -287,6 +322,10 @@ export class RethTransportScheduler {
 
   private canAdmit(lane: RethTransportLane): boolean {
     if (this.activeTotal >= this.capacity) return false;
+    // A one-permit diagnostic/live configuration still serves every lane.
+    // drain() keeps producer priority, without reserving the sole idle slot
+    // forever and deadlocking Exact or discovery.
+    if (this.capacity === 1) return true;
     if (
       lane === "producer-critical" ||
       lane === "producer-bulk"
@@ -327,6 +366,7 @@ export class RethTransportScheduler {
         waiter.signal.removeEventListener("abort", waiter.onAbort);
         this.activeTotal++;
         this.activeByLane[lane]++;
+        if (waiter.timing !== undefined) waiter.timing.grantedAtMs = performance.now();
         waiter.resolve(this.releaseOnce(lane));
         admitted = true;
         break;

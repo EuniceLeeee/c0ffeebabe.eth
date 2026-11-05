@@ -16,8 +16,6 @@ import {
   type InProgressUniverseRun,
   type LegacyDurableVerifiedMemo,
   type ReadyUniverseGeneration,
-  type ReadyRefreshRejection,
-  type ReadyRefreshResult,
   type ReadyFamilyPartition,
   type ReadyFamilyUpdateInput,
   type ReadyFamilyUpdateScope,
@@ -165,8 +163,6 @@ export interface UniverseRebuildDependencies {
   /** Pure definition check for rematerializing the already-validated Ready
    * at its unchanged cutoff. Not cross-block authority or discovery reuse. */
   readonly isReadyMemoDefinitionCurrent?: (memo: DurableVerifiedMemo) => boolean;
-  /** Same-cutoff negative outcomes may resume only under the same Family definition. */
-  readonly isReadyRefreshRejectionCurrent?: (outcome: ReadyRefreshRejection, candidate: unknown) => boolean;
   /** Pure production full-Graph/route/funding validation before subset publication. */
   readonly assertReadyGraphSnapshot?: (input: {
     readonly publications: readonly { readonly familyId: string; readonly instances: readonly unknown[] }[];
@@ -1028,7 +1024,7 @@ const READY_REFRESH_MAX_ATTEMPTS = 3;
 /** Same attestation/Graph pipeline, restricted to the existing Ready set.
  * Never scans, invents source receipts, retries excluded candidates or moves
  * the historical cutoff. Only explicitly retryable attestations get bounded
- * retries; only bound terminal rejections may remove an admitted instance.
+ * retries; non-verified results cannot shrink the reused set.
  */
 export async function refreshReadyInstances(input: UniverseRebuildDependencies & {
   readonly store: UniverseRebuildCheckpointStore;
@@ -1048,14 +1044,10 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
   }
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value: unknown) => value);
   await input.assertCanonicalHead(cutoff);
-  const memos = new Array<DurableVerifiedMemo | undefined>(oldMemos.length);
-  const rejections = new Array<ReadyRefreshRejection | undefined>(oldMemos.length);
+  const memos = new Array<DurableVerifiedMemo>(oldMemos.length);
   let next = 0;
   let completed = 0;
   let refreshed = 0;
-  let resumed = 0;
-  let reused = 0;
-  let rejected = 0;
   let stop = false;
   const refreshOne = async (index: number): Promise<void> => {
       input.readyThrottle?.assertOpen();
@@ -1067,68 +1059,38 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
       // Ready already validated this exact set at this exact cutoff. Do not
       // re-attest unrelated dependency-proof Funding when only code-defined
       // descriptors changed; its stored proof is neither moved nor renewed.
-      let reusable = input.isReadyMemoDefinitionCurrent === undefined
+      const reusable = input.isReadyMemoDefinitionCurrent === undefined
         ? await input.findReusableMemo({ candidate, checkpoint, cutoff })
         : input.isReadyMemoDefinitionCurrent(old) ? old : null;
-      if (reusable !== null) reused++;
-      if (reusable === null) {
-        const saved = await input.store.loadReadyRefreshResult(checkpoint, old);
-        if (saved?.status === "verified") {
-          reusable = input.isReadyMemoDefinitionCurrent === undefined
-            ? await input.findReusableMemo({ candidate,
-              checkpoint: { ...checkpoint, verifiedMemos: { ...checkpoint.verifiedMemos,
-                [saved.memo.familyCandidateKey]: saved.memo } }, cutoff })
-            : input.isReadyMemoDefinitionCurrent(saved.memo) ? saved.memo : null;
-          if (reusable !== null) resumed++;
-        } else if (saved?.status === "terminal-rejected" && input.isReadyRefreshRejectionCurrent?.(saved, candidate)) {
-          rejections[index] = saved;
-          rejected++;
-          resumed++;
-        }
-      }
       input.readyThrottle?.assertOpen();
       if (reusable !== null) {
         memos[index] = reusable;
-      } else if (rejections[index] === undefined) {
+      } else {
         if (stop) return;
         let attempt = 1;
         let result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
-        while (result.status === "retryable") {
-          input.readyThrottle?.assertOpen();
+        input.readyThrottle?.assertOpen();
+        while (result.status !== "verified") {
           const failure = `ready refresh ${old.familyCandidateKey}: attempt=${attempt}/${READY_REFRESH_MAX_ATTEMPTS} ${result.status} ${result.reasonCode}`;
           input.log?.(failure);
-          if (attempt === READY_REFRESH_MAX_ATTEMPTS) {
+          if (result.status !== "retryable" || attempt === READY_REFRESH_MAX_ATTEMPTS) {
             throw new Error(`${failure}; incumbent unchanged`);
           }
           await new Promise<void>((resolve) => setTimeout(resolve, attempt * 250));
           if (stop) return;
           attempt++;
           result = await input.attestFamilyInstanceOnce({ candidate, cutoff });
+          input.readyThrottle?.assertOpen();
         }
-        let progress: ReadyRefreshResult;
-        if (result.status === "terminal-rejected") {
-          const outcome: ReadyRefreshRejection = Object.freeze({ status: "terminal-rejected",
-            familyCandidateKey: old.familyCandidateKey, reasonCode: result.reasonCode, ...result.binding });
-          rejections[index] = outcome;
-          progress = outcome;
-        } else {
-          memos[index] = input.sealDurableVerifiedMemo({ candidate, result: result.result,
-            proofSource: cutoff, familyCandidateKey: old.familyCandidateKey });
-          progress = { status: "verified", memo: memos[index]! };
-        }
-        await input.store.saveReadyRefreshResult(checkpoint, progress);
-        if (progress.status === "verified") refreshed++;
-        else {
-          rejected++;
-          input.log?.(`ready refresh ${old.familyCandidateKey}: terminal-rejected ${progress.reasonCode}; saved, continuing`);
-        }
-        // A sibling may exhaust the budget while this proof finishes. Persist
-        // the completed proof before honouring the shared stop; never lose it.
-        input.readyThrottle?.assertOpen();
+        memos[index] = input.sealDurableVerifiedMemo({
+          candidate, result: result.result, proofSource: cutoff,
+          familyCandidateKey: old.familyCandidateKey,
+        });
+        refreshed++;
       }
       completed++;
       if (completed === 1 || completed % 100 === 0 || completed === oldMemos.length) {
-        input.log?.(`ready instance refresh ${completed}/${oldMemos.length} reattested=${refreshed} resumed=${resumed} reused=${reused} rejected=${rejected}`);
+        input.log?.(`ready instance refresh ${completed}/${oldMemos.length} reattested=${refreshed}`);
       }
   };
   if (input.readyThrottle) {
@@ -1148,22 +1110,18 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
     const failed = workers.find(worker => worker.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
   }
-  if (rejected === 0 && memos.every((memo, index) => memo?.memoFingerprint === oldMemos[index]!.memoFingerprint)) {
+  if (memos.every((memo, index) => memo.memoFingerprint === oldMemos[index]!.memoFingerprint)) {
     await input.assertCanonicalHead(cutoff);
     if ((await input.store.load())?.revision !== checkpoint.revision) {
       throw new Error("ready refresh checkpoint changed during validation");
     }
     return ready;
   }
-  const retained = memos.filter((memo): memo is DurableVerifiedMemo => memo !== undefined);
-  const excluded = rejections.filter((outcome): outcome is ReadyRefreshRejection => outcome !== undefined);
-  const instances = retained.map((memo) => input.rehydrateVerifiedInstance({ memo, cutoff }));
-  const publications = input.aggregateOnceByFamily(instances);
-  const graphSnapshot = input.buildGraphSnapshot(publications, cutoff);
-  input.assertReadyGraphSnapshot?.({ publications, graphSnapshot, cutoff });
+  const instances = memos.map((memo) => input.rehydrateVerifiedInstance({ memo, cutoff }));
+  const graphSnapshot = input.buildGraphSnapshot(input.aggregateOnceByFamily(instances), cutoff);
   await input.assertCanonicalHead(cutoff);
   const updated = await input.store.casRefreshReadyInstances({
-    expectedRevision: checkpoint.revision, memos: retained, rejections: excluded, graphSnapshot,
+    expectedRevision: checkpoint.revision, memos, graphSnapshot,
   });
   return updated.readyGeneration!;
 }

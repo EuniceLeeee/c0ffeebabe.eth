@@ -28,7 +28,11 @@ import {
   PinnedRethQuoteBackend,
   type PinnedRethQuoteBackendOptions,
 } from "../pinned-reth-quote-backend.js";
-import { RethTransportScheduler } from "../reth-transport-scheduler.js";
+import {
+  RethTransportScheduler,
+  type RethTransportLoad,
+  type RethTransportRetryBatch,
+} from "../reth-transport-scheduler.js";
 import { isRpcThrottleError } from "../rpc-throttle-guard.js";
 
 function assert(cond: boolean, msg: string): asserts cond {
@@ -822,6 +826,111 @@ async function pendingCallTests(): Promise<void> {
   if (failures.length) throw new AggregateError(failures, "pending-call coalescing regressions");
 }
 
+async function retryWakeLivenessTests(): Promise<void> {
+  type Item = { settled: boolean; transportRetryBatch?: RethTransportRetryBatch };
+  type Internals = {
+    pending: Item[];
+    flushScheduled: boolean;
+    transportLoad: RethTransportLoad;
+    retryWake?: { promise: Promise<void> };
+    pump(): void;
+    flushBatch(items: Item[], limit: number): Promise<void>;
+    resolveItem(item: Item, result: string): void;
+  };
+  for (const mode of ["crossed", "crossed-existing-wake", "future", "due",
+    "group-saturated", "global-saturated", "abort"] as const) {
+    // Use the real call queue, pump, settlement, and drain. Only the wire is
+    // replaced; no RPC or copied implementation of the pump is involved.
+    const client = new PinnedRethQuoteBackend("http://127.0.0.1:1", HASH, {
+      maxBatchSize: 32, maxConcurrentBatches: mode === "global-saturated" ? 1 : 2,
+      transportScheduler: { run: async () => { throw new Error("unexpected wire I/O"); } },
+    });
+    const internal = client as unknown as Internals;
+    const originalNow = Date.now;
+    let held = mode === "group-saturated" || mode === "global-saturated";
+    const releases: Array<() => void> = [];
+    let sent = 0, pumps = 0;
+    const pump = internal.pump.bind(internal);
+    internal.pump = () => { pumps++; pump(); };
+    internal.flushBatch = async (items) => {
+      sent += items.length;
+      if (held) await new Promise<void>(resolve => { releases.push(resolve); });
+      for (const item of items) internal.resolveItem(item, RESULT);
+    };
+    const release = (): void => { held = false; releases.splice(0).forEach(done => done()); };
+    try {
+      // Prevent enqueue from scheduling an unrelated wake before the test's
+      // first explicit pump; fewer than maxBatchSize also avoids eager flush.
+      internal.flushScheduled = true;
+      const results = ["0xaa", "0xbb"].map(data => observe(client.call({ to: OK_A, data })));
+      const dueAt = originalNow() + (mode === "future" || mode === "abort" ? 20 : 0);
+      const group: RethTransportRetryBatch = { version: 1, level: 1, notBeforeMs: dueAt, delayMs: 20 };
+      internal.pending.forEach(item => {
+        item.transportRetryBatch = mode === "global-saturated" ? { ...group } : group;
+      });
+      internal.transportLoad = {
+        timeoutMs: 1000,
+        limits: (batchSize, concurrency, items) => ({
+          version: 1, batchSize: items ? 1 : batchSize, concurrency: items ? 1 : concurrency,
+        }),
+        retryDelayMs: () => 20,
+        retry: () => false,
+      };
+      internal.flushScheduled = false;
+      if (mode === "crossed-existing-wake") {
+        Date.now = () => dueAt - 10;
+        internal.pump();
+        check.ok(internal.retryWake, "future cooldown must initially own a wake");
+      }
+      let clockReads = 0;
+      Date.now = mode.startsWith("crossed")
+        ? () => clockReads++ === 0 ? dueAt - 1 : dueAt
+        : () => mode === "future" || mode === "abort" ? dueAt - 20 : dueAt;
+      internal.pump();
+      Date.now = originalNow;
+      if (mode.startsWith("crossed") || mode === "future" || mode === "abort") {
+        check.equal(sent, 0, `${mode}: no batch was eligible during this pump`);
+        check.ok(internal.retryWake, `${mode}: pending retries lost their only wakeup`);
+      } else {
+        check.equal(sent, 1, `${mode}: due retry should dispatch immediately`);
+        check.equal(internal.retryWake, undefined, `${mode}: active completion owns the next wake`);
+      }
+      if (held) {
+        const before = pumps;
+        await nextTurn(); await nextTurn(); await nextTurn();
+        check.equal(pumps, before, `${mode}: saturated capacity must not poll`);
+        check.equal(sent, 1, `${mode}: saturation must preserve concurrency`);
+        release();
+      }
+      if (mode === "abort") {
+        const wake = internal.retryWake!.promise;
+        await client.closeAndDrain();
+        await wake;
+        (await Promise.all(results)).forEach(result => aborted(result));
+        check.equal(sent, 0, "abort must not dispatch cooling retries");
+      } else {
+        // Do not call drain yet: it pumps directly and could hide a missing wake.
+        let completed = false;
+        const settled = Promise.all(results).then(values => { completed = true; return values; });
+        await until(() => completed, `${mode}: retry queue resumes without new input`);
+        check.deepEqual(await settled, Array(2).fill({ status: "fulfilled", value: RESULT }));
+        await client.drain();
+        check.equal(sent, 2, `${mode}: each pending item settles exactly once`);
+      }
+      check.equal(client.stats().pendingItems, 0);
+      check.equal(client.stats().liveItems, 0);
+      check.equal(client.stats().inFlightBatches, 0);
+      check.equal(client.stats().activeTransports, 0);
+      check.equal(internal.retryWake, undefined);
+      console.log(`[pinned-reth-quote-backend] retry wake ${mode}: PASS`);
+    } finally {
+      Date.now = originalNow;
+      release();
+      await client.closeAndDrain();
+    }
+  }
+}
+
 async function adaptiveRetryTests(): Promise<void> {
   const limited = { code: 429, message: "Your app has exceeded its compute units per second capacity" };
   const results = (items: Array<Record<string, unknown>>) => items.map(item =>
@@ -1258,7 +1367,7 @@ async function latencyDiagnosticTests(): Promise<void> {
           const row = records[0]!;
           check.deepEqual(Object.keys(row).sort(), ["sourceBlockHash", "lane", "scopeLabel", "method",
             "items", "startedAtMs", "wallMs", "status", "statusCode", "batchId",
-            "permitQueueWaitMs", "createdAtMs", "http"].sort());
+            "permitQueueWaitMs", "schedulerPermitWaitMs", "schedulerResumeDelayMs", "createdAtMs", "http"].sort());
           check.equal(row.sourceBlockHash, HASH);
           check.equal(row.lane, "producer-bulk");
           check.equal(row.scopeLabel, "diagnostic test");
@@ -1268,6 +1377,9 @@ async function latencyDiagnosticTests(): Promise<void> {
           check.equal(row.statusCode, 200);
           check.ok(typeof row.startedAtMs === "number" && row.startedAtMs >= startedAtMs);
           check.ok(typeof row.wallMs === "number" && row.wallMs >= 0);
+          check.ok(typeof row.schedulerPermitWaitMs === "number" && row.schedulerPermitWaitMs >= 0);
+          check.ok(typeof row.schedulerResumeDelayMs === "number" && row.schedulerResumeDelayMs >= 0);
+          check.ok(Math.abs(row.schedulerPermitWaitMs + row.schedulerResumeDelayMs - (row.permitQueueWaitMs as number)) < 1e-6);
           const serialized = JSON.stringify(records);
           for (const excluded of [rpcUrl, request.data, "0xabcdef", OK_A, OK_B, RESULT]) {
             check.ok(!serialized.includes(excluded), "timing must not expose RPC URL, call payload or returned body");
@@ -1276,6 +1388,8 @@ async function latencyDiagnosticTests(): Promise<void> {
           check.equal(dispatch.batchId, row.batchId);
           check.equal(dispatch.sourceBlockHash, HASH);
           check.equal(dispatch.permitQueueWaitMs, row.permitQueueWaitMs);
+          check.equal(dispatch.schedulerPermitWaitMs, row.schedulerPermitWaitMs);
+          check.equal(dispatch.schedulerResumeDelayMs, row.schedulerResumeDelayMs);
           const calls = dispatch.calls as Array<Record<string, unknown>>;
           check.equal(calls.length, 2, "memo hit must not manufacture another physical item");
           check.deepEqual(calls.map(call => call.target), [OK_A, OK_B]);
@@ -1847,6 +1961,7 @@ async function run(): Promise<void> {
       console.log("[pinned-reth-quote-backend] early deadline timer: PASS");
     }
     await pendingCallTests();
+    await retryWakeLivenessTests();
     await adaptiveRetryTests();
     await sharedTimeoutTests();
     await latencyDiagnosticTests();

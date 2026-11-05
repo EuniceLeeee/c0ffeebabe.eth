@@ -141,21 +141,24 @@ const fatal = { kind: "rpc-throttle", category: "http429", httpStatus: 429 } as 
 const observed: LiveRpcThrottleRecord[] = [], stops: RevmFatalReason[] = [];
 const observation = new LiveRpcThrottleObservation(reason => stops.push(reason), event => observed.push(event));
 observation.observeError(100, new Error("ordinary failure"));
-for (let block = 100; block <= 103; block++) {
+for (let block = 100; block <= 198; block++) {
   observation.observeError(block, { status: 429 });
   for (let sibling = 0; sibling < 20; sibling++) observation.observeFatal(block, fatal);
   observation.observeRecovery(block); // One successful sibling is not a healthy successor.
 }
-assert.deepEqual(observed.map(event => event.failedBlocks), [1, 2, 3, 4]);
+assert.deepEqual(observed.map(event => event.failedBlocks), Array.from({ length: 99 }, (_, index) => index + 1));
 assert.deepEqual(stops, []);
-observation.observeRecovery(104);
-observation.observeFatal(103, fatal); // A retired source's late failure cannot start a new streak.
-assert.deepEqual(observed.at(-1), { sourceBlock: 104, failedBlocks: 0, limit: 5, action: "recovered" });
-for (let block = 105; block <= 109; block++) observation.observeFatal(block, fatal);
+assert(observed.every(event => event.limit === 100 && event.action === "observe"));
+observation.observeRecovery(199);
+observation.observeFatal(198, fatal); // A retired source's late failure cannot start a new streak.
+assert.deepEqual(observed.at(-1), { sourceBlock: 199, failedBlocks: 0, limit: 100, action: "recovered" });
+for (let block = 200; block <= 298; block++) observation.observeFatal(block, fatal);
+assert.equal(stops.length, 0, "99 distinct failed sources after recovery must not stop");
+observation.observeFatal(299, fatal);
 assert.equal(stops.length, 1);
 assert.equal(observed.at(-1)!.action, "stop");
-assert.equal(observed.at(-1)!.failedBlocks, 5);
-observation.observeRecovery(110); observation.observeFatal(111, fatal);
+assert.equal(observed.at(-1)!.failedBlocks, 100);
+observation.observeRecovery(300); observation.observeFatal(301, fatal);
 assert.equal(stops.length, 1, "terminal stop cannot reopen");
 
 for (const failure of [
@@ -167,11 +170,22 @@ for (const failure of [
   observation.observeRecovery(200);
   observation.observeError(199, failure);
   assert.deepEqual(stops, [{ kind: "rpc-throttle", category: "rpc-quota" }], "spent quota stops even from a late source");
+  observation.observeError(201, failure); observation.observeRecovery(202); observation.observeFatal(203, fatal);
+  assert.equal(stops.length, 1, "explicit quota stop remains terminal and fires only once");
 }
 const ambiguousStops: RevmFatalReason[] = [];
 const ambiguousQuota = new LiveRpcThrottleObservation(reason => ambiguousStops.push(reason), () => {});
-for (let block = 201; block <= 204; block++) ambiguousQuota.observeFatal(block, { kind: "rpc-throttle", category: "rpc-quota" });
+for (let block = 201; block <= 299; block++) ambiguousQuota.observeFatal(block, { kind: "rpc-throttle", category: "rpc-quota" });
 assert.deepEqual(ambiguousStops, [], "engine rpc-quota alone also means short throughput throttling");
-ambiguousQuota.observeFatal(205, { kind: "rpc-throttle", category: "rpc-quota" });
+ambiguousQuota.observeFatal(300, { kind: "rpc-throttle", category: "rpc-quota" });
 assert.equal(ambiguousStops.length, 1);
+const reporterStops: RevmFatalReason[] = [];
+const brokenReporter = new LiveRpcThrottleObservation(reason => reporterStops.push(reason), () => { throw new Error("reporter failed"); });
+for (let block = 1000; block <= 1098; block++) brokenReporter.observeError(block, { status: 429 });
+assert.equal(reporterStops.length, 0, "diagnostic failure must not force an early stop");
+brokenReporter.observeRecovery(1099);
+for (let block = 1100; block <= 1198; block++) brokenReporter.observeError(block, { status: 429 });
+assert.equal(reporterStops.length, 0, "diagnostic failure must not prevent healthy recovery");
+brokenReporter.observeError(1199, { status: 429 });
+assert.equal(reporterStops.length, 1, "diagnostic failure must not suppress the hundred-source stop");
 console.log("Live RPC throttle observation: PASS");

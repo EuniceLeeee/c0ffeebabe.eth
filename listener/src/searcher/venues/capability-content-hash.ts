@@ -1,3 +1,4 @@
+import { dormantDeclarativeModuleSource } from "./declarative-module-dependencies.js";
 import { createHash } from "node:crypto";
 import { builtinModules } from "node:module";
 import {
@@ -70,6 +71,7 @@ export interface CapabilityClosureInput {
   readonly entryFile: string;
   /** Build-derived roots only, for example manifest and owned actions. */
   readonly additionalEntryFiles?: readonly string[];
+  readonly inactiveRuntimeModules?: readonly string[];
   readonly provenanceCommit: string | null;
 }
 
@@ -87,6 +89,7 @@ export async function generateCapabilityClosure(
     rootDirectory: input.rootDirectory,
     entryFile: input.entryFile,
     additionalEntryFiles: input.additionalEntryFiles,
+    inactiveRuntimeModules: input.inactiveRuntimeModules,
   });
   const dependencies = new Map(
     runtime.dependencyArtifacts.map((artifact) => [
@@ -169,6 +172,7 @@ export async function generateRuntimeSourceClosure(input: {
   readonly rootDirectory: string;
   readonly entryFile: string;
   readonly additionalEntryFiles?: readonly string[];
+  readonly inactiveRuntimeModules?: readonly string[];
 }): Promise<RuntimeSourceClosure> {
   const rootDirectory = resolve(input.rootDirectory);
   const entryFile = resolve(input.entryFile);
@@ -194,7 +198,9 @@ export async function generateRuntimeSourceClosure(input: {
     try {
       const source = await readFile(canonicalFile, "utf8");
       const logicalId = sourceLogicalId(rootDirectory, canonicalFile);
-      const normalized = normalizeRuntimeSource(canonicalFile, source);
+      const normalized = dormantDeclarativeModuleSource({ rootDirectory, file: canonicalFile, source,
+        inactive: input.inactiveRuntimeModules ?? [],
+      }) ?? normalizeRuntimeSource(canonicalFile, source);
       sourceArtifacts.set(logicalId, Object.freeze({
         logicalId,
         contentHash: sha256(normalized),

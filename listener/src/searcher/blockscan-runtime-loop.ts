@@ -37,7 +37,10 @@ import {
 } from "./detector/blockscan-nminus1-fallback.js";
 import { BlockScanFamilyStageBudget } from "./detector/blockscan-family-budget.js";
 import { BlockScanPassTimeline } from "./blockscan-pass-timeline.js";
+import { createStateLatencyDiagnostics, type StateLatencySample } from "./state-latency-diagnostics.js";
 import { runOrderedBlockScanPipeline } from "./blockscan-ordered-pipeline.js";
+import { SubmissionPreference, type DeferredSubmission } from "./execution/submission-preference.js";
+import type { ProfitMode } from "../shared/profit-mode.js";
 import { blockScanGrossProfitWeth } from "./blockscan-profit-priority.js";
 import { createScannedProfitTokenValuation } from "./scanned-profit-token-valuation.js";
 import type { ProfitTokenValuation } from "./profit-token-valuation.js";
@@ -109,6 +112,8 @@ import {
   type CanonicalHeader,
 } from "./canonical-header-journal.js";
 import type { BlockScanObservedHeader } from "./blockscan-observed-header.js";
+import { collectStartupActivity, type ActivityRangeControl } from "./blockscan-startup-catchup.js";
+import type { VerifiedReorgActivity } from "./blockscan-reorg-activity.js";
 import { requireFinalSimulationHeader, type BlockScanDirectFinalSimulation } from "./blockscan-final-simulation-method.js";
 
 type BlockScanSourceHeader = CanonicalHeader & Partial<Pick<BlockScanObservedHeader,
@@ -388,6 +393,11 @@ function sanitizeBlockScanFailureMessage(message: string): string {
 export interface BlockScanAtomicResult {
   decision: string;
   submitted: boolean;
+  /** Entered the submission boundary; outcome may be indeterminate. */
+  submissionAttempted?: boolean;
+  profitMode?: ProfitMode;
+  /** An in-memory, source-bound final-sim result; no persisted submit authority. */
+  deferredSubmission?: DeferredSubmission<BlockScanAtomicResult>;
   /** False only when another quote-ranked amount should still be tried. */
   terminalForQuoteSet: boolean;
   finalSimStatus: "not-run" | "succeeded" | "failed";
@@ -690,8 +700,12 @@ export interface BlockScanRuntimeLoopDependencies {
   /** Cross-live data restore only. Prices catch up through this same runHead;
    * startup execution observations are renewed once, after reaching the head. */
   readonly liveContinuation?: {
+    /** Initial fixed B→T union only; ordinary tail activity stays on RPC. */
+    readInitialTouched?(number: number, header: BlockScanSourceHeader, range: ActivityRangeControl): Promise<ReadonlySet<string>>;
     revalidateStartup(pricing: BlockScanStateSnapshot, control: AdapterWorkControl): Promise<void>;
   };
+  readonly readReorgActivity?: (number: number, header: BlockScanSourceHeader,
+    range: ActivityRangeControl) => Promise<VerifiedReorgActivity>;
   /** Opt-in stage diagnostics, still dispatched by the ordinary head scheduler. */
   readonly diagnosticForHead?: (blockNumber: number) => NonNullable<Parameters<BlockScanRuntimeLoop["runHead"]>[2]> | undefined;
   readonly blockScanConfig: BlockScanCoreConfig | undefined;
@@ -900,6 +914,7 @@ export interface CurrentSourceRuntimeCoordinator {
     readonly pricingCallBackend?: Pick<StateBackend, "call">;
   }): Promise<BlockScanStatePrepareResult>;
   resetDynamicStateForReplay(): Promise<void>;
+  retirePricingForReorg?(source: { readonly number: number; readonly hash: string }): Promise<void>;
   startFundingPreparation?(
     input: StrictFundingPreparationInput,
   ): StrictFundingPreparation;
@@ -917,6 +932,7 @@ export interface CurrentSourceRuntimeCoordinator {
  * owns scheduling, worker orchestration and the unchanged stage sequence.
  */
 export class BlockScanRuntimeLoop {
+  private readonly stateLatencyDiagnostics: ReturnType<typeof createStateLatencyDiagnostics>;
   private generation = 0;
   private pendingGeneration = 0;
   private producerCriticalActive = false;
@@ -1013,6 +1029,9 @@ export class BlockScanRuntimeLoop {
         });
       },
     );
+    this.stateLatencyDiagnostics = createStateLatencyDiagnostics(
+      deps.enabled && process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1",
+    );
   }
 
   private observeTopologyHeader(blockNumber: number): Promise<BlockScanSourceHeader> {
@@ -1020,6 +1039,31 @@ export class BlockScanRuntimeLoop {
   }
 
   private async runScheduledHead(number: number, observation: LatestHeadObservation): Promise<void> {
+    if (this.reorgCatchupPending) {
+      this.dropReorgExecutionRefreshes();
+      while (!this.deps.runtimeAbort.signal.aborted && !this.deps.isShuttingDown()) {
+        const prior = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
+        if (!prior?.effectiveMids?.complete) throw new Error("reorg recovery lost retained pricing data");
+        const head = Math.max(number, this.latestScheduledHead ?? number);
+        if (prior.sourceBlock >= head) {
+          if (!this.reorgRecoveryPending) {
+            this.reorgCatchupPending = false;
+            this.liveContinuationCompletedThrough = prior.sourceBlock;
+          }
+          return;
+        }
+        // Repair the first forward height, even after a long outage; only then
+        // use ordinary bounded activity catch-up. Growing lag cannot make the
+        // fork-neighborhood proof exceed its retention bound forever.
+        const target = this.reorgRecoveryPending ? prior.sourceBlock + 1
+          : Math.min(head, prior.sourceBlock + MAX_ACTIVITY_TRANSITIONS);
+        await this.runHead(target, {
+          sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+        const next = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
+        if (!next?.effectiveMids?.complete || next.sourceBlock <= prior.sourceBlock) return;
+      }
+      return;
+    }
     if (this.liveContinuationPending) {
       while (!this.deps.runtimeAbort.signal.aborted && !this.deps.isShuttingDown()) {
         const prior = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
@@ -1027,13 +1071,15 @@ export class BlockScanRuntimeLoop {
         const head = Math.max(number, this.latestScheduledHead ?? number);
         if (prior.sourceBlock > head) throw new Error("live continuation source is ahead of head");
         if (prior.sourceBlock < head) {
-          const target = Math.min(head, prior.sourceBlock + MAX_ACTIVITY_TRANSITIONS);
+          const target = this.liveContinuationInitialCatchupComplete
+            ? Math.min(head, prior.sourceBlock + MAX_ACTIVITY_TRANSITIONS) : head;
           await this.runHead(target, { ...observation,
             sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
           const next = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
           if (!next?.effectiveMids?.complete || next.sourceBlock <= prior.sourceBlock) {
             throw new Error("live continuation made no pricing progress; trading remains disabled");
           }
+          this.liveContinuationInitialCatchupComplete = true;
           console.log(`[searcher/live-continuation] ${JSON.stringify({
             phase: "catching-up-prices", from: prior.sourceBlock, to: next.sourceBlock, head,
             startupSimulation: false, trading: false,
@@ -1041,6 +1087,7 @@ export class BlockScanRuntimeLoop {
           continue;
         }
         if (!this.liveContinuationStartupChecked) {
+          this.liveContinuationInitialCatchupComplete = true;
           await this.deps.liveContinuation!.revalidateStartup(prior, {
             signal: this.deps.runtimeAbort.signal,
             deadlineAtMs: Date.now() + this.deps.startupWarmBudgetMs,
@@ -1238,6 +1285,10 @@ export class BlockScanRuntimeLoop {
   ): boolean {
     if (this.deps.runtimeAbort.signal.aborted || this.deps.isShuttingDown()) return false;
     validateBlockScanPendingEvidenceTrigger(trigger);
+    if (this.reorgCatchupPending) {
+      this.recordPendingEvidenceNotStarted(trigger, "pending_evidence_reorg_recovery");
+      return false;
+    }
     const evidence = Object.freeze(trigger.evidence.filter((item) =>
       this.deps.isCurrentHeadEvidenceFamily(item.familyId)
     ));
@@ -1299,6 +1350,7 @@ export class BlockScanRuntimeLoop {
   }
 
   private dispatchNextPendingEvidence(blockNumber: number): void {
+    if (this.reorgCatchupPending) return;
     if (this.evidenceDispatchScheduledHeads.has(blockNumber)) return;
     const queue = this.pendingEvidenceByHead.get(blockNumber);
     const item = queue?.shift();
@@ -1890,11 +1942,15 @@ export class BlockScanRuntimeLoop {
     } catch (error) {
       stopError = error;
     }
-    await drained;
-    if (this.coarsePricingActive) {
-      await this.coarsePricingActive;
+    try {
+      await drained;
+      if (this.coarsePricingActive) {
+        await this.coarsePricingActive;
+      }
+      if (stopError !== undefined) throw stopError;
+    } finally {
+      this.stateLatencyDiagnostics?.close();
     }
-    if (stopError !== undefined) throw stopError;
   }
 
   private async observeControlledHeader(
@@ -2053,6 +2109,9 @@ export class BlockScanRuntimeLoop {
   }
 
   private liveContinuationPending = false;
+  private reorgRecoveryPending = false;
+  private reorgCatchupPending = false;
+  private liveContinuationInitialCatchupComplete = false;
   private liveContinuationStartupChecked = false;
   private liveContinuationCompletedThrough: number | null = null;
 
@@ -2273,6 +2332,8 @@ export class BlockScanRuntimeLoop {
     }
     const startupWarmAttempt =
       this.startupWarmPending && !this.deps.blind.enabled;
+    const reorgRecoveryAttempt = this.reorgRecoveryPending;
+    const reorgCatchupAttempt = this.reorgCatchupPending;
     if (sizingBudgetMs !== undefined && startupWarmAttempt) {
       throw new Error("sizingBudgetMs is not applicable to startup setup");
     }
@@ -2303,14 +2364,20 @@ export class BlockScanRuntimeLoop {
     const timing = passTimeline.timing;
     const stageBoundaries = passTimeline.boundaries;
     const beginStage = passTimeline.begin.bind(passTimeline);
-    const finishStage = passTimeline.finish.bind(passTimeline);
+    let stateLatencySample: StateLatencySample | undefined;
+    const finishStage: typeof passTimeline.finish = (name, status) => {
+      passTimeline.finish(name, status);
+      if (name === "state") stateLatencySample?.finish(status ?? "ran", observedSourceBlockHash);
+    };
     const mergeAtomicStage = passTimeline.mergeAtomic.bind(passTimeline);
     const hotPassDeadlineAtMs = passStartedAtMs + (
       blockScanGraph.length >= this.deps.largeGraphEdgeThreshold
         ? this.deps.largeGraphPassBudgetMs
         : this.deps.passBudgetMs
     );
-    let passDeadlineAtMs = startupWarmAttempt || this.liveContinuationPending
+    let passDeadlineAtMs = reorgCatchupAttempt
+      ? Math.max(hotPassDeadlineAtMs, passWorkerStartedAtMs + Math.min(60_000, Math.max(1, this.deps.startupWarmBudgetMs)))
+      : startupWarmAttempt || this.liveContinuationPending
       ? Math.max(
           hotPassDeadlineAtMs,
           passWorkerStartedAtMs + Math.max(1, this.deps.startupWarmBudgetMs),
@@ -2628,6 +2695,7 @@ export class BlockScanRuntimeLoop {
       stage: string,
     ): Promise<BlockScanSourceHeader> =>
       this.observeControlledHeader(canonicalBlock, passDeadlineAtMs, passSignal, stage, blockNumber);
+    stateLatencySample = this.stateLatencyDiagnostics?.begin(blockNumber, passStartedAtMs);
     beginStage("state", {
       atMs: passStartedAtMs,
       atPerf: passStarted,
@@ -2648,12 +2716,14 @@ export class BlockScanRuntimeLoop {
     // N-1's separate sequential producer keeps its existing one-block scope.
     const activityBasis = useNMinusOneFallback || startupWarmAttempt
       ? null : currentRuntimeCoordinator.latestPricingSnapshot();
+    const initialContinuationCatchup = this.liveContinuationPending && !this.liveContinuationInitialCatchupComplete;
     const activityPreviousSource = activityBasis !== null &&
         blockNumber > activityBasis.sourceBlock &&
-        blockNumber - activityBasis.sourceBlock <= MAX_ACTIVITY_TRANSITIONS
+        (reorgRecoveryAttempt || initialContinuationCatchup || blockNumber - activityBasis.sourceBlock <= MAX_ACTIVITY_TRANSITIONS)
       ? Object.freeze({ number: activityBasis.sourceBlock, hash: activityBasis.sourceBlockHash })
       : undefined;
     let activityCanonicalBaseHash: string | null = null;
+    let reorgActivity: VerifiedReorgActivity | undefined;
     let activityFinishedAtMs: number | null = null;
     let fundingStartedAtMs: number | null = null;
     let fundingFinishedAtMs: number | null = null;
@@ -2669,6 +2739,23 @@ export class BlockScanRuntimeLoop {
         const header = await sourceHeaderRead;
         if (header.status === "rejected") throw header.reason;
         try {
+          if (reorgRecoveryAttempt) {
+            if (!activityPreviousSource || !this.deps.readReorgActivity) throw new Error("reorg recovery requires complete two-branch activity reader");
+            reorgActivity = await this.deps.readReorgActivity(blockNumber, header.value, {
+              previousSource: activityPreviousSource, signal: passSignal, deadlineAtMs: passDeadlineAtMs,
+            });
+            return reorgActivity.touchedStateKeys;
+          }
+          if (initialContinuationCatchup && activityPreviousSource !== undefined) {
+            const range = { previousSource: activityPreviousSource, signal: passSignal, deadlineAtMs: passDeadlineAtMs };
+            if (this.deps.liveContinuation?.readInitialTouched) {
+              return await this.deps.liveContinuation.readInitialTouched(blockNumber, header.value, range);
+            }
+            return await collectStartupActivity({ target: header.value, range,
+              readHeader: number => observeCanonicalHeader(number, "startup activity chunk header"),
+              readRange: (number, anchor, chunk) => this.deps.readBlockSwapTouched(number, anchor, chunk),
+            });
+          }
           return await this.deps.readBlockSwapTouched(blockNumber, header.value,
             activityPreviousSource === undefined ? undefined : {
               previousSource: activityPreviousSource, signal: passSignal,
@@ -2926,7 +3013,7 @@ export class BlockScanRuntimeLoop {
           }),
           backend,
         };
-        if (!startupWarmAttempt && !this.liveContinuationPending) {
+        if (!startupWarmAttempt && !this.liveContinuationPending && !reorgCatchupAttempt) {
           // Funding has a separate pending queue on the existing priority lane.
           // The parent backend owns its abort/drain; both share global permits.
           fundingCallBackend = currentRuntimeCoordinator.startFundingPreparation === undefined
@@ -3031,7 +3118,7 @@ export class BlockScanRuntimeLoop {
         recordEnumeration(coarse.opportunities, coarse.coarseEnumeration, coarse.selection.selectedCount);
       } else if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
-        if (!startupWarmAttempt && !this.liveContinuationPending) {
+        if (!startupWarmAttempt && !this.liveContinuationPending && !reorgCatchupAttempt) {
           for (const worker of blockScanFinalSimulationWorkers) {
             backgroundFinalSimForks.set(worker, startBlockScanBackgroundFork({
               signal: passSignal,
@@ -3053,6 +3140,7 @@ export class BlockScanRuntimeLoop {
         const canonicalActivity: StrictCanonicalActivityProof = Object.freeze({
           parentHash: sourceHeader.parentHash,
           ...(activityPreviousSource === undefined ? {} : { previousSource: activityPreviousSource }),
+          ...(reorgActivity === undefined ? {} : { reorg: reorgActivity }),
           source: Object.freeze({
             number: graphView.sourceBlock,
             hash: graphView.sourceBlockHash,
@@ -3094,7 +3182,7 @@ export class BlockScanRuntimeLoop {
         // Never hold the process open only to report progress.
         prepareHeartbeat.unref?.();
         try {
-          if (this.liveContinuationPending) {
+          if (this.liveContinuationPending || reorgCatchupAttempt) {
             const pricing = await currentRuntimeCoordinator.prepareCoarsePricing({
               graph: graphView, simulationTransport, deadlineAtMs: runtimeDeadlineAtMs,
               familySettleDeadlineAtMs: preparationSettleDeadlineAtMs,
@@ -3102,8 +3190,16 @@ export class BlockScanRuntimeLoop {
             });
             finishStage("state", pricing.status === "incomplete" ? "failed" : "ran");
             timing.stateMs = stageBoundaries.state.stage_ms;
-            outcome = "startup_warm";
-            skippedReason = "live_continuation_prices_only";
+            if (reorgRecoveryAttempt && pricing.status !== "incomplete") {
+              this.reorgRecoveryPending = false;
+              console.log(`[searcher/blockscan-reorg-recovered] ${JSON.stringify({
+                previousSourceBlock: activityPreviousSource!.number, sourceBlock: blockNumber,
+                ancestor: reorgActivity!.commonAncestor.number, oldDepth: reorgActivity!.oldDepth,
+                touchedStateKeys: reorgActivity!.touchedStateKeys.size, fullWarmup: false, trading: false,
+              })}`);
+            }
+            outcome = reorgCatchupAttempt ? "stale_state" : "startup_warm";
+            skippedReason = reorgCatchupAttempt ? "reorg_recovery_prices_only" : "live_continuation_prices_only";
             return; // No Funding, enumeration, Solver, final-sim, EV or submit.
           }
           const request: PrepareStrictRuntimeInput = {
@@ -4465,6 +4561,29 @@ export class BlockScanRuntimeLoop {
       });
       const finalSimFamilyBudget = new BlockScanFamilyStageBudget();
       const terminalQuoteSets = new Set<number>();
+      const submissionPreference = new SubmissionPreference<BlockScanAtomicResult>({ signal: passSignal, deadlineAtMs: passDeadlineAtMs });
+      const deferredOwners = new Map<DeferredSubmission<BlockScanAtomicResult>, QuotedBlockScanPlan>();
+      const submittedAuditOpportunities = new Set<string>();
+      const recordAtomicResult = (quoted: QuotedBlockScanPlan, atomic: BlockScanAtomicResult): void => {
+        atomicResults.push(atomic);
+        if (!auditOpportunities) return;
+        const key = blindOpportunityEvidenceKey(quoted.item.opp);
+        const attempted = atomic.submitted || atomic.submissionAttempted === true;
+        // Discarding an earlier amount must not erase the same opportunity's
+        // actual submission evidence (including an indeterminate outcome).
+        if (submittedAuditOpportunities.has(key) && !attempted) return;
+        if (attempted) submittedAuditOpportunities.add(key);
+        const auditEvidence = auditOpportunities.get(key);
+        if (auditEvidence && atomic.audit) auditOpportunities.set(key, {
+          ...auditEvidence, simulation: atomic.audit.simulation, ev: atomic.audit.ev,
+        });
+      };
+      const recordDeferredResult = (entry: DeferredSubmission<BlockScanAtomicResult>, atomic: BlockScanAtomicResult): void => {
+        const quoted = deferredOwners.get(entry);
+        if (!quoted) throw new Error("deferred submission lost its source-pass owner");
+        deferredOwners.delete(entry);
+        recordAtomicResult(quoted, atomic);
+      };
       const consumePlan = async (
         _index: number,
         quotes: readonly QuotedBlockScanPlan[],
@@ -4508,7 +4627,9 @@ export class BlockScanRuntimeLoop {
             plans: quoted.item.planCount,
             passDeadlineAtMs,
             sourceBlockHash,
-            signal,
+            // The ordered pipeline detaches its own controller after draining.
+            // Deferred sends must still observe the source pass's cancellation.
+            signal: AbortSignal.any([signal, passSignal]),
             onFinalSimStart: (startedAtMs) => {
               if (
                 firstFinalSimStartedAtMs === null ||
@@ -4518,24 +4639,17 @@ export class BlockScanRuntimeLoop {
               }
             },
           });
-          atomicResults.push(atomic);
+          if (atomic.deferredSubmission) {
+            deferredOwners.set(atomic.deferredSubmission, quoted);
+            submissionPreference.defer(atomic.deferredSubmission);
+          } else {
+            recordAtomicResult(quoted, atomic);
+            if ((atomic.submitted || atomic.submissionAttempted) && atomic.profitMode === "positive-ev") submissionPreference.notePreferredSubmission();
+          }
           if (atomic.timing.evFinishedAtMs !== null) {
             firstEvFinishedAtMs = firstEvFinishedAtMs === null
               ? atomic.timing.evFinishedAtMs
               : Math.min(firstEvFinishedAtMs, atomic.timing.evFinishedAtMs);
-          }
-          const auditEvidence = auditOpportunities?.get(
-            blindOpportunityEvidenceKey(quoted.item.opp),
-          );
-          if (auditEvidence && atomic.audit) {
-            auditOpportunities!.set(
-              blindOpportunityEvidenceKey(quoted.item.opp),
-              {
-                ...auditEvidence,
-                simulation: atomic.audit.simulation,
-                ev: atomic.audit.ev,
-              },
-            );
           }
           if (atomic.finalSimStatus === "succeeded") {
             finalSimFamilyBudget.recordSuccess(quoted.item.opp.seedEdges);
@@ -4579,10 +4693,15 @@ export class BlockScanRuntimeLoop {
             sealAuditBoundary("planner_solver_done", "planner_solver");
           },
         });
+        solvePipelineSignal = passSignal;
+        await submissionPreference.flush(recordDeferredResult);
       } finally {
-        finalSimulationRuntime.close(
-          new Error(`block-scan final simulation generation ${generation} ended`),
-        );
+        try { submissionPreference.cancel(recordDeferredResult); }
+        finally {
+          finalSimulationRuntime.close(
+            new Error(`block-scan final simulation generation ${generation} ended`),
+          );
+        }
       }
       if (Date.now() >= passDeadlineAtMs && atomicResults.length === 0) {
         outcome = "budget_exceeded";
@@ -4612,6 +4731,15 @@ export class BlockScanRuntimeLoop {
         // before discarding the orphaned publication and requesting warmup.
         outcome = "stale_state";
         skippedReason = "activity_published_source_reorg";
+        return;
+      }
+      if (reorgCatchupAttempt && !isRpcThrottleError(error)) {
+        outcome = Date.now() >= passDeadlineAtMs ? "budget_exceeded" : "stale_state";
+        skippedReason = "reorg_recovery_incomplete";
+        console.log(`[searcher/blockscan-reorg-recovery-pending] ${JSON.stringify({
+          sourceBlock: blockNumber, fullWarmup: false, trading: false,
+          reason: blockScanErrorMessage(error),
+        })}`);
         return;
       }
       outcome = Date.now() >= passDeadlineAtMs
@@ -4672,16 +4800,20 @@ export class BlockScanRuntimeLoop {
                 await Promise.all([activity, fundingSettlement]);
                 if (activityCanonicalBaseHash !== null &&
                     currentRuntimeCoordinator.latestPricingSnapshot() === activityBasis) {
-                  // Only after all old-generation work has settled can the next
-                  // head rebuild a new raw/effective epoch using the same Ready.
-                  await currentRuntimeCoordinator.resetDynamicStateForReplay();
-                  this.startupWarmPending = this.deps.startupWarmEnabled;
+                  // Retire authority only after old work drains. Keep price DATA
+                  // for a two-branch invalidation proof, never silently warm all.
+                  this.reorgRecoveryPending = true;
+                  this.reorgCatchupPending = true;
+                  this.dropReorgExecutionRefreshes();
+                  if (!currentRuntimeCoordinator.retirePricingForReorg) throw new Error("coordinator lacks guarded reorg recovery");
+                  await currentRuntimeCoordinator.retirePricingForReorg(activityPreviousSource!);
                   console.log(`[searcher/blockscan-activity-anchor-retired] ${JSON.stringify({
                     previousSourceBlock: activityPreviousSource!.number,
                     previousSourceHash: activityPreviousSource!.hash,
                     canonicalSourceHash: activityCanonicalBaseHash,
                     sourceBlock: blockNumber,
                     startupWarmPending: this.startupWarmPending,
+                    recovery: "two-branch-incremental", trading: false,
                   })}`);
                 }
               }
@@ -4722,6 +4854,7 @@ export class BlockScanRuntimeLoop {
         this.deps.onPassSettled?.();
         recordPass();
       } finally {
+        stateLatencySample?.finish("failed", observedSourceBlockHash);
         if (
           passMode !== "evidence-only" &&
           enumerationFinished &&
@@ -4780,7 +4913,16 @@ export class BlockScanRuntimeLoop {
     }
   };
 
-  private pruneEvidenceContexts(minimumHead: number): void {
+  private dropReorgExecutionRefreshes(): void {
+    this.pruneEvidenceContexts(Infinity, "pending_evidence_reorg_recovery");
+    // Ordinary retry revisions also refer to the retired execution authority.
+    // A queued scheduler notification may still wake recovery, without revision.
+    this.scheduledExecutionRefreshes.clear();
+    this.pendingEvidenceKeys.clear();
+    this.evidenceDispatchScheduledHeads.clear();
+  }
+
+  private pruneEvidenceContexts(minimumHead: number, reason = "pending_evidence_head_superseded"): void {
     for (const [head, queue] of this.pendingEvidenceByHead) {
       if (head >= minimumHead) continue;
       this.pendingEvidenceByHead.delete(head);
@@ -4788,7 +4930,7 @@ export class BlockScanRuntimeLoop {
         this.pendingEvidenceKeys.delete(item.key);
         this.recordPendingEvidenceNotStarted(
           item.context,
-          "pending_evidence_head_superseded",
+          reason,
         );
       }
     }
@@ -4806,7 +4948,7 @@ export class BlockScanRuntimeLoop {
       );
       this.recordPendingEvidenceNotStarted(
         refresh.item.context,
-        "pending_evidence_head_superseded",
+        reason,
       );
     }
   }

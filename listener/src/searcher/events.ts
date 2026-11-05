@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { ethers } from "ethers";
 import type { BuilderEvidence } from "../shared/builder-observations.js";
+import type { ProfitMode } from "../shared/profit-mode.js";
 
 /**
  * Desensitized, append-only JSONL event emitter for the live searcher.
@@ -149,6 +150,7 @@ export type SearcherEvent =
     }
 	  | {
 	      type: "simulation_result";
+	      profit_mode?: ProfitMode;
 	      opportunity_id: string;
 	      target_block: number;
       victim_hash?: string;
@@ -178,6 +180,7 @@ export type SearcherEvent =
 	    }
 	  | {
 	      type: "pipeline_dropped";
+	      profit_mode?: ProfitMode;
 	      opportunity_id: string;
 	      target_block: number;
 	      victim_hash?: string;
@@ -217,6 +220,7 @@ export type SearcherEvent =
 	    }
 	  | {
 	      type: "bundle_submitted";
+	      profit_mode?: ProfitMode;
 	      opportunity_id: string;
       target_block: number;
       submission_target_block?: number;

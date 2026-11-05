@@ -27,7 +27,7 @@ export function createBlockScanSimAmountSelector(input: {
   runtimeAmounts?: boolean;
   /** Source-pinned per-token maximum-borrow entry selected once by the caller. */
   fundingActionId?: string;
-  /** Paired correctness control; default uses capabilities. */
+  /** Paired execution benchmark control, not an independent search policy. */
   callbackSettlement?: boolean;
 }) {
   return createSimAmountSelector({
@@ -53,13 +53,13 @@ export function createBlockScanSimAmountSelector(input: {
             return leg === null ? null : { ...leg, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut };
           });
           const runtimeLegs = legs !== null && legs.every(leg => leg !== null) ? legs : null;
-          const proposedSettlement = input.callbackSettlement === false || !runtimeLegs ||
+          const settlement = input.callbackSettlement === false || !runtimeLegs ||
+              !runtimeLegs.at(-1)?.settlement?.deferredInput ||
               plan.tokenPath.edges.some(edge => session.blocksPrefixInversion(edge)) ? null : buildRuntimeSettlementRoot({
             legs: runtimeLegs, amount, minimumProfit: plan.opportunity.targetNetProfit ?? 1n, executor: input.executor,
             build: (index, request) => session.buildRuntimeAmountLeg({ edge: plan.tokenPath.edges[index]!, executor: input.executor,
               runtimeEvidence: opts.runtimeEvidence ?? [], settlement: request }),
           });
-          const settlement = proposedSettlement && !plan.tokenPath.edges.some(edge => session.blocksPrefixInversion(edge)) ? proposedSettlement : null;
           input.record?.({ type: "sim_amount_construction", mode: runtimeLegs ? "runtime-actual" : "quoted",
             ...identity,
             hops: plan.tokenPath.edges.length, unsupportedLegs: legs?.filter(leg => leg === null).length ?? null });
@@ -73,7 +73,7 @@ export function createBlockScanSimAmountSelector(input: {
           const actions = input.fundingActionId === undefined
             ? session.fundingActionIds(plan.opportunity.flashToken, amount)
             : [input.fundingActionId];
-          if (!actions.length && !settlement) throw new Error("sim amount selector missing verified funding action");
+          if (!actions.length) throw new Error("sim amount selector missing verified funding action");
           let best: AmountSimulation<ResolvedPlan> = { success: false, reason: "no positive executable funding action" };
           for (const action of [...(settlement ? [null] : []), ...actions]) {
             control.signal.throwIfAborted();
@@ -82,14 +82,12 @@ export function createBlockScanSimAmountSelector(input: {
               asset: plan.opportunity.flashToken, amount, minProfit: plan.opportunity.targetNetProfit ?? 1n,
               children: [{ adapterId: "runtime-amount-flow", target: input.executor,
                 tokenIn: plan.opportunity.flashToken, tokenOut: plan.opportunity.flashToken, amount,
-                params: { legs: JSON.stringify(runtimeLegs), quoteToleranceRawUnits: tolerance,
-                  minimumReturn: amount + (plan.opportunity.targetNetProfit ?? 1n) }, children: [] }],
+                params: { legs: JSON.stringify(runtimeLegs), quoteToleranceRawUnits: tolerance, minimumReturn: amount + (plan.opportunity.targetNetProfit ?? 1n) }, children: [] }],
             }) : await buildResolvedPlanFromPath(plan.tokenPath, plan.opportunity.flashToken, amount,
               propagated!.amounts, input.executor, controlledState, plan.opportunity.targetNetProfit ?? 1n,
               action, propagated!.rawOutputs, session, propagated!.exactHandles, tolerance);
             if (opts.timing) opts.timing.planBuildMs += performance.now() - buildStart;
             const candidate: ResolvedPlan = { root, flashAmount: amount, profitToken: plan.opportunity.profitToken,
-              ...(runtimeLegs ? { simulationTokens: runtimeLegs.flatMap(leg => [leg.tokenIn, leg.tokenOut]) } : {}),
               netProfit: 0n, templateName: plan.templateName };
             const simStart = performance.now();
             let sim: SimulationResult;

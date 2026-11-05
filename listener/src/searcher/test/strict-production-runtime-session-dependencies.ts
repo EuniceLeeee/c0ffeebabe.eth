@@ -50,6 +50,14 @@ const tokenTouched = await readBlockTouchedStateKeys({
     input: "0x12345678", gas: "0x100", gasUsed: "0x80" } }],
 }, current.number, ethers.ZeroAddress, anchor, undefined, resolver);
 assert(pools.every(pool => !tokenTouched.has(pool)), "shared token call does not dirty every dependent pool");
+assert(Object.isFrozen(resolver), "passive interpretation cannot mutate behind the activity cache identity");
+assert.deepEqual(new Set(resolver.passiveStateKeys!([UNIV2_FIXTURE_TOKEN0], current)), new Set(pools),
+  "non-call state changes refresh all declared dependency owners without inventing a Family call");
+assert.deepEqual(resolver.passiveStateKeys!([address(9999)], current), [], "passive refresh is dependency-scoped");
+const passiveTouched = await readBlockTouchedStateKeys({ getLogs: async () => [], send: async () => [] },
+  current.number, ethers.ZeroAddress, { ...anchor, transactionHashes: [], passiveTouchedAddresses: [UNIV2_FIXTURE_TOKEN0] },
+  undefined, resolver);
+assert(pools.every(pool => passiveTouched.has(pool)), "the actual activity reader wires passive owners into price refresh");
 const rawReads: string[] = [];
 let failPricing = false;
 const runtime = createStrictCentralAdapterRuntime({
