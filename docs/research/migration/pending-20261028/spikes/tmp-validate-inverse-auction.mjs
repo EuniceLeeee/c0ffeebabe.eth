@@ -1,8 +1,20 @@
+// Run from the listener workspace:
+//   cd listener && node --import tsx ../docs/research/migration/pending-20261028/spikes/tmp-validate-inverse-auction.mjs
+// Read-only RPC only (MAINNET_RPC_URL). No local VM, no broadcast, no generator.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { JsonRpcProvider, Interface, keccak256, toBeHex } from "ethers";
-import { createDeclarativeProtocolRuntime } from "./src/searcher/venues/declarative-protocol.ts";
-import { inspectRuntime } from "./src/searcher/test/runtime-program-testkit.ts";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const LISTENER = join(HERE, "../../../../../listener");
+const { JsonRpcProvider, Interface, keccak256, toBeHex } = createRequire(join(LISTENER, "package.json"))("ethers");
+const { createDeclarativeProtocolRuntime } = await import(
+  pathToFileURL(join(LISTENER, "src/searcher/venues/declarative-protocol.ts")).href);
+const { inspectRuntime } = await import(
+  pathToFileURL(join(LISTENER, "src/searcher/test/runtime-program-testkit.ts")).href);
+const DEFINITION = join(LISTENER, "src/searcher/venues/protocols/inverse-auction-family/inverse-auction.json");
 
 const AUCTION = "0x933cBE81313d9dD523dF6dC9B899A7AF8Ba073e3";
 const DOLA = "0x865377367054516e17014CcdED1e7d814EDC9ce4";
@@ -10,6 +22,8 @@ const DBR = "0xAD038Eb671c44b853887A7E32528FaB35dC5D710";
 const EXECUTOR = "0xE08D97e151473A848C3d9CA3f323Cb720472D015";
 const PRE_BLOCK = 26346566;
 const TRADE_BLOCK = 26346567;
+const TRADE_TX = "0x120a580cf245335b4f968737725b91bae0535bac22a95b4a46cb2e6de722c1a1";
+const BUY_TOPIC = "0x89f5adc174562e07c9c9b1cae7109bbecb21cf9d1b2847e550042b8653c54a0e";
 const HIST_AMOUNT_IN = 53999369337904472842n;
 const HIST_AMOUNT_OUT = 1155708947764273217536n;
 
@@ -19,7 +33,9 @@ const auctionAbi = new Interface([
   "function dolaReserve() view returns (uint256)", "function dbrReserve() view returns (uint256)",
   "function getCurrentReserves() view returns (uint256,uint256)",
   "function dbrRatePerYear() view returns (uint256)", "function maxDbrRatePerYear() view returns (uint256)",
+  "function lastUpdate() view returns (uint256)",
   "function buyDBR(uint256,uint256,address)",
+  "event Buy(address indexed caller, address indexed to, uint256 dolaIn, uint256 dbrOut)",
 ]);
 const preBlock = await provider.getBlock(PRE_BLOCK);
 const preSource = Object.freeze({ number: PRE_BLOCK, generation: 0, hash: preBlock.hash });
@@ -28,20 +44,43 @@ assert.equal(preBlock.timestamp, 1793856839); assert.equal(tradeBlock.timestamp,
 
 const code = await provider.getCode(AUCTION, PRE_BLOCK);
 const codeHash = keccak256(code);
+const callAt = async (tag, data) => provider.send("eth_call", [{ to: AUCTION, data }, tag]);
 const preTag = "0x" + PRE_BLOCK.toString(16);
-const callAtPre = data => provider.send("eth_call", [{ to: AUCTION, data }, preTag]);
+const postTag = "0x" + TRADE_BLOCK.toString(16);
+const callAtPre = data => callAt(preTag, data);
 const preDolaReserve = (await auctionAbi.decodeFunctionResult("dolaReserve", await callAtPre(auctionAbi.encodeFunctionData("dolaReserve"))))[0];
 const preDbrReserve = (await auctionAbi.decodeFunctionResult("dbrReserve", await callAtPre(auctionAbi.encodeFunctionData("dbrReserve"))))[0];
 const [curDola, curDbr] = await auctionAbi.decodeFunctionResult("getCurrentReserves", await callAtPre(auctionAbi.encodeFunctionData("getCurrentReserves")));
 const rate = (await auctionAbi.decodeFunctionResult("dbrRatePerYear", await callAtPre(auctionAbi.encodeFunctionData("dbrRatePerYear"))))[0];
 const maxRate = (await auctionAbi.decodeFunctionResult("maxDbrRatePerYear", await callAtPre(auctionAbi.encodeFunctionData("maxDbrRatePerYear"))))[0];
-console.log("pre-state", { codeHash, preDolaReserve: String(preDolaReserve), preDbrReserve: String(preDbrReserve), curDola: String(curDola), curDbr: String(curDbr), rate: String(rate), maxRate: String(maxRate) });
+const preLastUpdate = (await auctionAbi.decodeFunctionResult("lastUpdate", await callAtPre(auctionAbi.encodeFunctionData("lastUpdate"))))[0];
+console.log("pre-state", { codeHash, preDolaReserve: String(preDolaReserve), preDbrReserve: String(preDbrReserve),
+  curDola: String(curDola), curDbr: String(curDbr), rate: String(rate), maxRate: String(maxRate), preLastUpdate: String(preLastUpdate) });
 assert.equal(codeHash, "0x1f1d270f2f650900307694d91332ba0b5dab7eadc9dae4c1babd7d769c1dd089");
+assert.equal(preLastUpdate, 1793856215n);
+
+// ── historical transaction evidence: the recorded sample is a real landed Buy ──
+const buyLogs = await provider.getLogs({ address: AUCTION, fromBlock: TRADE_BLOCK, toBlock: TRADE_BLOCK, topics: [BUY_TOPIC] });
+assert.equal(buyLogs.length, 1, "one Buy log in the trade block");
+const buyLog = buyLogs[0];
+assert.equal(buyLog.transactionHash, TRADE_TX);
+const buy = auctionAbi.parseLog({ topics: buyLog.topics, data: buyLog.data });
+assert.equal(buy.args.caller, EXECUTOR); assert.equal(buy.args.to, EXECUTOR);
+assert.equal(buy.args.dolaIn, HIST_AMOUNT_IN); assert.equal(buy.args.dbrOut, HIST_AMOUNT_OUT);
+const tradeTx = await provider.getTransaction(TRADE_TX);
+const tradeReceipt = await provider.getTransactionReceipt(TRADE_TX);
+assert.equal(tradeTx.to, EXECUTOR); assert.equal(tradeReceipt.status, 1);
+console.log("historical buy", { tx: TRADE_TX, from: tradeTx.from, to: tradeTx.to, block: tradeReceipt.blockNumber,
+  caller: buy.args.caller, recipient: buy.args.to, amountIn: String(buy.args.dolaIn), amountOut: String(buy.args.dbrOut) });
 
 // ── source-order rebase at the trade block timestamp (Solidity semantics) ──
+// buyDBR takes exactDbrOut from the caller; only the post-trade invariant is enforced.
 const YEAR = 365n * 86400n;
 const K = preDolaReserve * preDbrReserve;
-const elapsed = BigInt(tradeBlock.timestamp - preBlock.timestamp) + 624n; // lastUpdate 1793856215 -> preBlock already 624s
+const preElapsed = BigInt(preBlock.timestamp) - preLastUpdate;
+assert.equal(preElapsed, 624n); // lastUpdate 1793856215 -> preBlock 1793856839
+const elapsed = BigInt(tradeBlock.timestamp) - preLastUpdate;
+assert.equal(elapsed, 636n); // trade block 1793856851
 const dbrIn = elapsed * rate / YEAR;
 const tradeDbrReserve = preDbrReserve + dbrIn;
 const tradeDolaReserve = K / tradeDbrReserve;
@@ -49,10 +88,19 @@ const tradeMax = HIST_AMOUNT_IN * tradeDbrReserve / (tradeDolaReserve + HIST_AMO
 const tradePost = (tradeDolaReserve + HIST_AMOUNT_IN) * (tradeDbrReserve - HIST_AMOUNT_OUT) - tradeDolaReserve * tradeDbrReserve;
 const preQuoteMax = HIST_AMOUNT_IN * curDbr / (curDola + HIST_AMOUNT_IN);
 console.log("source-order", { elapsed: String(elapsed), dbrIn: String(dbrIn), tradeDolaReserve: String(tradeDolaReserve), tradeDbrReserve: String(tradeDbrReserve), preQuoteMax: String(preQuoteMax), tradeMax: String(tradeMax), historicalDeltaVsTradeMax: String(HIST_AMOUNT_OUT - tradeMax), invariantSlack: String(tradePost) });
-assert.ok(tradePost >= 0n);
+assert.ok(tradePost >= 0n, "historical exactDbrOut satisfies the post-rebase invariant");
+const tradeMaxPost = (tradeDolaReserve + HIST_AMOUNT_IN) * (tradeDbrReserve - tradeMax) - tradeDolaReserve * tradeDbrReserve;
+assert.ok(tradeMaxPost >= 0n, "the model's max output would also satisfy the contract invariant");
+// The contract stores the rebased reserves in the updateReserves modifier, then the caller's
+// exactDbrOut is subtracted. The landed post-state must equal that transition.
+const postDolaReserve = (await auctionAbi.decodeFunctionResult("dolaReserve", await callAt(postTag, auctionAbi.encodeFunctionData("dolaReserve"))))[0];
+const postDbrReserve = (await auctionAbi.decodeFunctionResult("dbrReserve", await callAt(postTag, auctionAbi.encodeFunctionData("dbrReserve"))))[0];
+assert.equal(postDolaReserve, tradeDolaReserve + HIST_AMOUNT_IN);
+assert.equal(postDbrReserve, tradeDbrReserve - HIST_AMOUNT_OUT);
+console.log("landed post-state", { dolaReserve: String(postDolaReserve), dbrReserve: String(postDbrReserve) });
 
 // ── compile ──
-const raw = JSON.parse(readFileSync("./src/searcher/venues/protocols/inverse-auction-family/inverse-auction.json", "utf8"));
+const raw = JSON.parse(readFileSync(DEFINITION, "utf8"));
 const runtime = createDeclarativeProtocolRuntime(raw);
 const family = runtime.definition;
 assert.equal(family.manifest.familyId, "protocol:inverse-auction");
@@ -79,12 +127,10 @@ function answer(request, { blockTag = PRE_BLOCK } = {}) {
   }
   const name = SELECTORS.get(request.data.slice(0, 10));
   assert.ok(name, `unexpected calldata ${request.data}`);
-  const result = request.kind === "get-code" ? code
-    : name === "dola()" ? DOLA : name === "dbr()" ? DBR
-    : null;
+  const result = name === "dola()" ? DOLA : name === "dbr()" ? DBR : null;
   return { id: request.id, ok: true, source: preSource, completion: "returned",
     provenance: { kind: "synthetic-binding-of-saved-public-inputs", fingerprint: "validation-not-admission" },
-    data: request.kind === "get-code" ? code : result ?? "0x" };
+    data: result ?? "0x" };
 }
 const recorded = new Map();
 async function rpcAnswer(request) {
@@ -168,6 +214,14 @@ assert.equal(zero.amountOut, 0n);
 console.log("exact@pre delta vs historical", String(quoted.amountOut - HIST_AMOUNT_OUT));
 assert.throws(() => method.program.decode({ programInput: { ...exactInput, source: { ...preSource, hash: "0x" + "00".repeat(32) } }, initialResults: exactResults, dependentEvidence: [] }));
 
+// same exact method at the trade-block rebased reserves (timestamp-only synthetic read)
+const tradeReservesData = "0x" + toBeHex(tradeDolaReserve, 32).slice(2) + toBeHex(tradeDbrReserve, 32).slice(2);
+const quotedAtTrade = method.program.decode({ programInput: exactInput,
+  initialResults: [{ ...answer(exactRequests[0]), data: tradeReservesData }], dependentEvidence: [] });
+console.log("exact@trade-rebased", JSON.stringify({ amountOut: String(quotedAtTrade.amountOut), evidenceAmountOut: String(quotedAtTrade.evidence.amountOut) }));
+assert.equal(quotedAtTrade.amountOut, tradeMax);
+assert.equal(HIST_AMOUNT_OUT, tradeMax - 9n); // caller-supplied exactDbrOut, 9 wei below the curve maximum
+
 // ── execution fragment: on-chain runtime program ──
 const fragment = family.execution.buildFragment({ descriptor, route, amountIn: HIST_AMOUNT_IN, quotedAmountOut: quoted.amountOut,
   minAmountOut: quoted.amountOut, exactEvidence: quoted.evidence, executor: EXECUTOR, runtimeEvidence: [] });
@@ -228,12 +282,20 @@ const runtimeAtTrade = runProgram(leg.program, tradeCurDola, tradeCurDbr, "runti
 assert.equal(runtimeAtTrade.decoded[1], tradeMax);
 
 // ── pricing mutation index ──
+// The compiled index contract returns state-key strings (adapter-family-plugin.ts:
+// CompiledMutationIndex.affectedStateKeys -> readonly string[]), not entry records.
 const dependencies = family.pricing.dependencies(current);
-const index = family.pricing.mutation.compile({ entries: [{ ...current, stateKey: family.pricing.stateKey(route), dependencies }] });
-for (const [kind, target, expected] of [["call", AUCTION, [family.pricing.stateKey(route)]], ["call", DOLA, []], ["call", "0x0000000000000000000000000000000000000002", []]]) {
-  const observation = { kind, source: preSource, target, data: "0x" };
-  assert.deepEqual(index.affectedStateKeys({ observation }).map(x => x.stateKey), expected, `${kind} ${target}`);
+const stateKey = family.pricing.stateKey(route);
+const index = family.pricing.mutation.compile({ entries: [{ ...current, stateKey, dependencies }] });
+assert.deepEqual(index.dependencies, [AUCTION.toLowerCase()]);
+for (const [kind, target, expected] of [["call", AUCTION, [stateKey]], ["call", DOLA, []],
+  ["call", "0x0000000000000000000000000000000000000002", []], ["log", AUCTION, []]]) {
+  const observation = kind === "call"
+    ? { kind, source: preSource, target, data: "0x" }
+    : { kind, source: preSource, address: target, topics: [], data: "0x" };
+  assert.deepEqual(index.affectedStateKeys({ observation }), expected, `${kind} ${target}`);
+  assert.deepEqual([...new Set(family.pricing.mutation.affectedStateKeys({ ...current, observation }))], expected, `${kind} ${target} legacy`);
 }
-console.log("mutation index ok; dependencies", dependencies);
+console.log("mutation index ok", JSON.stringify({ dependencies: index.dependencies, stateKey, mutationKinds: raw.pricing.mutationKinds }));
 
 console.log("VALIDATION OK", JSON.stringify({ preQuoteMax: String(preQuoteMax), tradeMax: String(tradeMax), historical: String(HIST_AMOUNT_OUT), historicalVsTradeMax: String(HIST_AMOUNT_OUT - tradeMax), historicalVsPreQuote: String(HIST_AMOUNT_OUT - preQuoteMax) }));

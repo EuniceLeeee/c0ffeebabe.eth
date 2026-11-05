@@ -1,6 +1,14 @@
+// Run from the listener workspace:
+//   cd listener && node --import tsx ../docs/research/migration/pending-20261028/spikes/tmp-compile-inverse-auction.mjs
 import { readFileSync } from "node:fs";
-import { createDeclarativeProtocolRuntime } from "./src/searcher/venues/declarative-protocol.ts";
-const raw = JSON.parse(readFileSync("./src/searcher/venues/protocols/inverse-auction-family/inverse-auction.json", "utf8"));
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const LISTENER = join(HERE, "../../../../../listener");
+const { createDeclarativeProtocolRuntime } = await import(
+  pathToFileURL(join(LISTENER, "src/searcher/venues/declarative-protocol.ts")).href);
+const raw = JSON.parse(readFileSync(join(LISTENER, "src/searcher/venues/protocols/inverse-auction-family/inverse-auction.json"), "utf8"));
 const runtime = createDeclarativeProtocolRuntime(raw);
 const family = runtime.definition;
 console.log("compiled", family.manifest.familyId, family.manifest.domain);
