@@ -431,52 +431,82 @@ impl RpcClient {
         rate_limited
     }
 
-    // Retry only all-failed Ready state reads at one canonical hash. Mixed
-    // results keep the original fail-closed path so no observed state is lost.
-    // Source prechecks, execution calls and live's retry policy are unchanged.
-    fn retryable_ready_internal_response(&self, request: &Value, response: &Value) -> bool {
-        if !self.pinned || self.ready_batch_limit.is_none() { return false; }
-        let internal = |item: &Value| item.get("result").is_none()
-            && item["error"]["code"].as_i64() == Some(-32000)
-            && item["error"]["message"].as_str().is_some_and(|s| s.trim().eq_ignore_ascii_case("Internal error"))
-            && item["error"].get("data").is_none();
-        // No allocation or repeated state decoding on normal successful reads.
-        if !response.as_array().map(|items| !items.is_empty() && items.iter().all(internal))
-            .unwrap_or_else(|| internal(response)) { return false; }
-        let requests: Vec<&Value> = request.as_array().map(|v| v.iter().collect())
-            .unwrap_or_else(|| vec![request]);
-        let responses: Vec<&Value> = response.as_array().map(|v| v.iter().collect())
-            .unwrap_or_else(|| vec![response]);
-        if request.is_array() != response.is_array() || requests.len() != responses.len() { return false; }
-        let mut pin = None;
-        for item in &requests {
-            let count = match item["method"].as_str() {
-                Some("eth_getStorageAt") => 3,
-                Some("eth_getCode" | "eth_getBalance" | "eth_getTransactionCount") => 2,
-                _ => return false,
-            };
-            let Some(params) = item["params"].as_array().filter(|p| p.len() == count) else { return false; };
-            let tag = &params[count - 1];
-            if tag.as_object().is_none_or(|v| v.len() != 2) || tag["requireCanonical"] != json!(true)
-                || !tag["blockHash"].as_str().is_some_and(|h| h.len() == 66 && h.starts_with("0x")
-                    && h[2..].bytes().all(|c| c.is_ascii_hexdigit())) { return false; }
-            if pin.is_some_and(|value| value != tag) { return false; }
-            pin = Some(tag);
-        }
+    // Partition a bound Ready response. Retained successes are immutable for the
+    // lifetime of this logical batch; retries keep the original IDs and params.
+    fn ready_internal_retry_parts(&self, request: &Value, response: &Value,
+        source: Option<(u64, &SourcePin)>) -> Option<(Value, Vec<Value>)> {
+        if !self.pinned || self.ready_batch_limit.is_none() { return None; }
+        let replies = response.as_array().map(Vec::as_slice).unwrap_or(std::slice::from_ref(response));
+        let internal = |v: &Value| v.get("result").is_none()
+            && v["error"]["code"].as_i64() == Some(-32000)
+            && v["error"]["message"].as_str().is_some_and(|s| s.trim().eq_ignore_ascii_case("Internal error"))
+            && v["error"].get("data").is_none();
+        // No allocation/extra state decoding for normal successful responses.
+        if !replies.iter().any(internal) || request.is_array() != response.is_array() { return None; }
+        let requests = request.as_array().map(Vec::as_slice).unwrap_or(std::slice::from_ref(request));
+        if requests.len() != replies.len() { return None; }
         let mut seen = HashSet::new();
-        responses.iter().all(|item| {
-            let Some(id) = item.get("id").and_then(Value::as_u64) else { return false; };
-            item["jsonrpc"] == "2.0" && seen.insert(id)
-                && requests.iter().any(|r| r.get("id").and_then(Value::as_u64) == Some(id))
-        })
+        let mut state_tag = None;
+        let mut missing = Vec::new();
+        let mut retained = Vec::new();
+        for req in requests {
+            let id = req["id"].as_u64()?;
+            if !seen.insert(id) || req["jsonrpc"] != "2.0" { return None; }
+            let reply = replies.iter().find(|r| r["id"].as_u64() == Some(id))?;
+            if reply["jsonrpc"] != "2.0" { return None; }
+            let method = req["method"].as_str()?;
+            let params = &req["params"];
+            if let Some((number, pin)) = source {
+                let valid = match method {
+                    "eth_chainId" => *params == json!([]),
+                    "eth_getBlockByHash" => *params == json!([pin.block_hash, false]),
+                    "eth_getBlockByNumber" => *params == json!([hex_quantity_u64(number), false]),
+                    _ => false,
+                };
+                if !valid { return None; }
+            } else {
+                let count = match method {
+                    "eth_getStorageAt" => 3,
+                    "eth_getCode" | "eth_getBalance" | "eth_getTransactionCount" => 2,
+                    _ => return None,
+                };
+                let tag = &params.as_array().filter(|p| p.len() == count)?[count - 1];
+                if tag.as_object()?.len() != 2 || tag["requireCanonical"] != true
+                    || strict_hex(&tag["blockHash"], Some(32)).is_err()
+                    || state_tag.is_some_and(|t| t != tag) { return None; }
+                state_tag = Some(tag);
+            }
+            if internal(reply) {
+                missing.push(req.clone());
+            } else {
+                if reply.get("error").is_some() { return None; }
+                let value = reply.get("result")?;
+                if let Some((number, pin)) = source {
+                    if method == "eth_chainId" {
+                        if parse_u64(strict_quantity(value, 16).ok()?).ok()? != pin.chain_id { return None; }
+                    } else {
+                        verified_header(value, number, pin).ok()?;
+                    }
+                } else { validate_state_value(method, value).ok()?; }
+                retained.push(reply.clone());
+            }
+        }
+        Some((if request.is_array() { Value::Array(missing) } else { missing.pop()? }, retained))
     }
 
     fn send_json(&self, body: &Value) -> Result<Value> {
+        self.send_ready_json(body, None)
+    }
+
+    fn send_ready_json(&self, original: &Value, source: Option<(u64, &SourcePin)>) -> Result<Value> {
+        let mut pending = None;
+        let mut retained = Vec::new();
         // Retry the identical read before checked_source can latch a transient
         // transport failure. The caller's operation timeout remains unchanged.
         let mut rate_wait = Duration::ZERO;
         let mut rate_reason = None;
         for (attempt, delay) in RPC_ATTEMPT_DELAYS.iter().enumerate() {
+            let body = pending.as_ref().unwrap_or(original);
             self.check_fatal()?;
             let delay = (*delay).max(rate_wait);
             rate_wait = Duration::ZERO;
@@ -538,11 +568,17 @@ impl RpcClient {
                 .is_some_and(|byte| matches!(*byte, b'{' | b'[' | b'"'));
             let mut has_rpc_response = false;
             if let Ok(value) = &decoded {
-                if can_retry && status.as_u16() == 200 && internal_retry_allowed
-                    && self.retryable_ready_internal_response(body, value) {
-                    diagnostic::rpc_failure("rpc-ready-internal-retry", body, attempt + 1,
-                        Some(status.as_u16()), Some(-32000), "internal-server-error", true);
-                    continue;
+                if status.as_u16() == 200 && internal_retry_allowed {
+                    if let Some((next, successes)) = self.ready_internal_retry_parts(body, value, source) {
+                        let stage = if can_retry { "rpc-ready-internal-retry" } else { "rpc-ready-internal-exhausted" };
+                        diagnostic::rpc_failure(stage, &next, attempt + 1, Some(status.as_u16()),
+                            Some(-32000), "internal-server-error", can_retry);
+                        if can_retry {
+                            retained.extend(successes);
+                            pending = Some(next);
+                            continue;
+                        }
+                    }
                 }
                 // A JSON-RPC-shaped reply must not be hidden by an HTTP retry,
                 // including wrong IDs/versions, incomplete batches and reverts.
@@ -626,6 +662,12 @@ impl RpcClient {
             if !status.is_success() {
                 bail!("rpc http status {}", status.as_u16());
             }
+            if !retained.is_empty() {
+                let Value::Array(tail) = value else { bail!("Ready retried batch has non-array response"); };
+                retained.extend(tail);
+                // batch_chunk validates the complete original ID set before use.
+                return Ok(Value::Array(retained));
+            }
             return Ok(value);
         }
         unreachable!("last RPC attempt returns without retrying")
@@ -688,15 +730,19 @@ impl RpcClient {
     /// same order as `calls`; a per-call error becomes an `Err` entry while a
     /// transport failure fails the whole batch.
     fn batch_call(&self, calls: &[(&str, Value)]) -> Result<Vec<Result<Value>>> {
+        self.batch_with_source(calls, None)
+    }
+
+    fn batch_with_source(&self, calls: &[(&str, Value)], source: Option<(u64, &SourcePin)>) -> Result<Vec<Result<Value>>> {
         self.check_fatal()?;
         let mut results = Vec::with_capacity(calls.len());
         for chunk in calls.chunks(self.ready_batch_limit.unwrap_or(usize::MAX)) {
-            results.extend(self.batch_chunk(chunk)?);
+            results.extend(self.batch_chunk(chunk, source)?);
         }
         Ok(results)
     }
 
-    fn batch_chunk(&self, calls: &[(&str, Value)]) -> Result<Vec<Result<Value>>> {
+    fn batch_chunk(&self, calls: &[(&str, Value)], source: Option<(u64, &SourcePin)>) -> Result<Vec<Result<Value>>> {
         let result = (|| {
         self.check_fatal()?;
         if calls.is_empty() {
@@ -709,7 +755,7 @@ impl RpcClient {
                 json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params })
             })
             .collect();
-        let response = self.send_json(&Value::Array(body))?;
+        let response = self.send_ready_json(&Value::Array(body), source)?;
         let items = response
             .as_array()
             .ok_or_else(|| anyhow!("rpc batch: non-array response"))?;
@@ -938,11 +984,11 @@ fn verify_source(rpc: &RpcClient, number: u64, pin: &SourcePin) -> Result<Verifi
         // Context::mainnet below is chain 1. Do not mislabel another chain.
         if pin.chain_id != 1 { bail!("pinned chain mismatch"); }
         let hash = strict_hex(&json!(pin.block_hash), Some(32))?.to_owned();
-        let results = rpc.batch_call(&[
+        let results = rpc.batch_with_source(&[
             ("eth_chainId", json!([])),
             ("eth_getBlockByHash", json!([hash, false])),
             ("eth_getBlockByNumber", json!([hex_quantity_u64(number), false])),
-        ])?.into_iter().collect::<Result<Vec<_>>>()?;
+        ], Some((number, pin)))?.into_iter().collect::<Result<Vec<_>>>()?;
         if parse_u64(strict_quantity(&results[0], 16)?)? != pin.chain_id { bail!("pinned chain mismatch"); }
         let source = verified_header(&results[1], number, pin)?;
         if verified_header(&results[2], number, pin)? != source { bail!("pinned canonical header changed"); }
@@ -5514,6 +5560,53 @@ mod tests {
     }
 
     #[test]
+    fn ready_partial_state_retries_only_missing_items_and_preserves_each_success() {
+        let ok = |id, val: &str| json!({"jsonrpc":"2.0","id":id,"result":val});
+        let err = |id| json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":"Internal error"}});
+        let (mut rpc, peer) = rpc_fixture_steps(vec![
+            (200,json!([err(2),ok(0,"0x1"),err(1)])),
+            (200,json!([ok(2,"0x3"),err(1)])),
+            (200,json!([ok(1,"0x2")])),
+        ]);
+        rpc.pinned=true;rpc.ready_batch_limit=Some(8);
+        let p=json!([Address::ZERO,{"blockHash":format!("0x{}","11".repeat(32)),"requireCanonical":true}]);
+        let out=rpc.batch_call(&[("eth_getBalance",p.clone()),("eth_getTransactionCount",p.clone()),("eth_getBalance",p)]).unwrap();
+        assert_eq!(out.into_iter().collect::<Result<Vec<_>>>().unwrap(),vec![json!("0x1"),json!("0x2"),json!("0x3")]);
+        let sent=peer.join().unwrap();assert_eq!(sent.len(),3);
+        assert_eq!(sent[1],json!([sent[0][1],sent[0][2]]));assert_eq!(sent[2],json!([sent[0][1]]));
+    }
+
+    #[test]
+    fn ready_source_precheck_repairs_chain_id_but_still_checks_the_pin() {
+        let error=json!({"jsonrpc":"2.0","id":0,"error":{"code":-32000,"message":"Internal error"}});
+        let pin=SourcePin{chain_id:1,block_hash:pinned_header()["hash"].as_str().unwrap().into(),state_root:None};
+        for answer in ["0x1","0x2"] {
+            let mut initial=source_batch_reply();initial[0]=error.clone();
+            let (mut rpc,peer)=rpc_fixture_steps(vec![(200,initial),(200,json!([{"jsonrpc":"2.0","id":0,"result":answer}]))]);
+            rpc.pinned=true;rpc.ready_batch_limit=Some(8);
+            assert_eq!(verify_source(&rpc,300,&pin).is_ok(),answer=="0x1");
+            assert_eq!(rpc.fatal.get().is_some(),answer!="0x1");
+            let requests=peer.join().unwrap();assert_eq!(requests.len(),2);assert_eq!(requests[1],json!([requests[0][0]]));
+        }
+        let mut bad=source_batch_reply();bad[0]=error;bad[2]["result"]["hash"]=json!(format!("0x{}","ff".repeat(32)));
+        let (mut rpc,peer)=rpc_fixture_steps(vec![(200,bad)]);rpc.pinned=true;rpc.ready_batch_limit=Some(8);
+        assert!(verify_source(&rpc,300,&pin).is_err());assert_eq!(peer.join().unwrap().len(),1);
+    }
+
+    #[test]
+    fn ready_partial_retry_rejects_missing_or_substituted_response_id() {
+        for reply in [json!([]),json!([{"jsonrpc":"2.0","id":1,"result":"0x2"}])] {
+            let first=json!([{"jsonrpc":"2.0","id":0,"error":{"code":-32000,"message":"Internal error"}},
+                {"jsonrpc":"2.0","id":1,"result":"0x1"}]);
+            let (mut rpc,peer)=rpc_fixture_steps(vec![(200,first),(200,reply)]);
+            rpc.pinned=true;rpc.ready_batch_limit=Some(8);
+            let p=json!([Address::ZERO,{"blockHash":format!("0x{}","11".repeat(32)),"requireCanonical":true}]);
+            assert!(rpc.batch_call(&[("eth_getBalance",p.clone()),("eth_getBalance",p)]).is_err());
+            assert_eq!(rpc.fatal.get(),Some(FatalReason::SourceFault));assert_eq!(peer.join().unwrap().len(),2);
+        }
+    }
+
+    #[test]
     fn ready_internal_state_error_exhaustion_still_fences_source() {
         let error = json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Internal error"}});
         let (mut rpc,peer) = rpc_fixture_steps(vec![(200,error);RPC_ATTEMPT_DELAYS.len()]);
@@ -5526,8 +5619,7 @@ mod tests {
 
     #[test]
     fn ready_internal_error_never_hides_invalid_or_domain_siblings() {
-        for sibling in [json!({"jsonrpc":"2.0","id":1,"result":"0x1"}),
-            json!({"jsonrpc":"2.0","id":1,"result":"invalid"}),
+        for sibling in [json!({"jsonrpc":"2.0","id":1,"result":"invalid"}),
             json!({"jsonrpc":"2.0","id":0,"result":"0x1"}),
             json!({"jsonrpc":"2.0","id":99,"result":"0x1"}),
             json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"header not found"}}),
@@ -5566,7 +5658,7 @@ mod tests {
     }
 
     #[test]
-    fn ready_internal_retry_never_replays_source_prechecks_or_unpinned_state() {
+    fn ready_internal_retry_preserves_wrong_chain_evidence_and_rejects_unpinned_state() {
         let good=pinned_header();
         let pin=SourcePin {chain_id:1,block_hash:good["hash"].as_str().unwrap().into(),state_root:None};
         let (mut rpc,peer)=rpc_fixture_steps(vec![(200,json!([
@@ -5594,17 +5686,17 @@ mod tests {
             {"jsonrpc":"2.0","id":1,"method":"eth_getBalance","params":[Address::ZERO,tag]}]);
         let response=json!([{"jsonrpc":"2.0","id":0,"error":{"code":-32000,"message":"Internal error"}},
             {"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Internal error"}}]);
-        assert!(rpc.retryable_ready_internal_response(&request,&response));
+        assert!(rpc.ready_internal_retry_parts(&request,&response,None).is_some());
         for id in [0,99] {
             let mut bad=response.clone();bad[1]["id"]=json!(id);
-            assert!(!rpc.retryable_ready_internal_response(&request,&bad));
+            assert!(!rpc.ready_internal_retry_parts(&request,&bad,None).is_some());
         }
         let mut bad=response.clone();bad[1]["jsonrpc"]=json!("1.0");
-        assert!(!rpc.retryable_ready_internal_response(&request,&bad));
+        assert!(!rpc.ready_internal_retry_parts(&request,&bad,None).is_some());
         let mut bad=request.clone();bad[1]["params"][1]["blockHash"]=json!(format!("0x{}","22".repeat(32)));
-        assert!(!rpc.retryable_ready_internal_response(&bad,&response));
+        assert!(!rpc.ready_internal_retry_parts(&bad,&response,None).is_some());
         let mut bad=request.clone();bad[1]["method"]=json!("eth_getBlockByHash");
-        assert!(!rpc.retryable_ready_internal_response(&bad,&response));
+        assert!(!rpc.ready_internal_retry_parts(&bad,&response,None).is_some());
         assert_eq!(rpc.round_trips(),0);assert!(peer.join().unwrap().is_empty());
     }
 
