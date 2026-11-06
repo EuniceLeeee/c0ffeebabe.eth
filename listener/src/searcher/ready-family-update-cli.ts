@@ -13,7 +13,9 @@ import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 /** One authoritative checkpoint. Scratch supplements are never live inputs.
  * Configuration/credentials use the normal process environment; no signing.
  * build: --checkpoint PATH --archive DIR --from-block N --to-block N
- * update: --checkpoint PATH --archive DIR (Family activation is the normal config)
+ * update: --checkpoint PATH --archive DIR [--candidates FILE]
+ * FILE is an exact array of durable Family candidate snapshots, including new
+ * nominations as needed. Without it, use the previous pool plus current discovery.
  */
 export async function runReadyFamilyMaintenance(argv: readonly string[]): Promise<void> {
   const mode = argv[0];
@@ -21,10 +23,11 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
   const options = new Map<string, string>();
   for (let i = 1; i < argv.length; i += 2) {
     const key = argv[i]!, value = argv[i + 1];
-    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency"].includes(key) ||
+    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--candidates"].includes(key) ||
       value === undefined || options.has(key)) throw new Error("invalid Ready maintenance option");
     options.set(key, value);
   }
+  if (mode === "build" && options.has("--candidates")) throw new Error("--candidates applies to Ready updates");
   if (!options.has("--checkpoint") || !options.has("--archive")) throw new Error("checkpoint and archive paths required");
   const checkpointPath = resolve(options.get("--checkpoint")!);
   const archiveDirectory = resolve(options.get("--archive")!);
@@ -70,7 +73,8 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   } else {
     if (options.has("--from-block") || options.has("--to-block")) throw new Error("update cannot move the Ready source");
     if (!incumbent) throw new Error("update requires a completed baseline");
-    activeReadyMemos(incumbent);
+    if (!incumbent.inProgressRun) activeReadyMemos(incumbent);
+    else if (!incumbent.inProgressRun.reviewInputFingerprint) throw new Error("another Ready operation is in progress");
     if (!incumbent.readyGeneration!.familyPartitions) throw new Error("legacy Ready requires a new partitioned baseline");
     range = incumbent.readyGeneration!.universeRange;
     source = incumbent.readyGeneration!.cutoff;
@@ -99,9 +103,38 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   const base = incumbent!;
   const partitions = base.readyGeneration!.familyPartitions!;
   const enabledIds = [...new Set(wiring.requiredSourceCoverageKeys().map(key => key.slice(0, key.indexOf("|"))))].sort();
-  const needed = enabledIds.filter(id => readyFamilyNeedsSupplement({ partition: partitions[id],
+  const selectedFile = options.get("--candidates");
+  const needed = base.inProgressRun ? [] : enabledIds.filter(id => readyFamilyNeedsSupplement({ partition: partitions[id],
     discoveryDefinitionHash: wiring.familyDiscoveryDefinitionHash!(id), familyDefinitionHash: familyDefinitionHash(id),
     isVerifiedMemoCurrent: key => wiring.isReadyMemoDefinitionCurrent!(base.verifiedMemos[key]!) === true }));
+  if (base.inProgressRun || !isAdditionOnlyReadyUpdate(partitions, enabledIds, needed, selectedFile !== undefined)) {
+    const candidateFile = selectedFile === undefined ? null : await readFile(resolve(selectedFile));
+    const snapshots: unknown = candidateFile ? JSON.parse(candidateFile.toString("utf8")) :
+      enabledIds.flatMap(id => Object.values(partitions[id]?.candidatesByKey ?? {}));
+    if (!Array.isArray(snapshots)) throw new Error("expected an array of durable Family candidate snapshots");
+    const startupCandidates = snapshots.map(s => wiring.decodeCandidateSnapshot!(s) as Readonly<Record<string, unknown>>);
+    const keys = candidateFile ? new Set(startupCandidates.map(wiring.familyCandidateKey)) : undefined;
+    if (keys && keys.size !== startupCandidates.length) throw new Error("duplicate candidate in explicit Ready scope");
+    const reviewedWiring = createRebuildWiring({ ...common, activityArchive: archive,
+      readyThrottle: wiring.readyThrottle, startupCandidates });
+    const inputFingerprint = createHash("sha256").update(canonicalJson({ version: 1,
+      parent: [base.readyGeneration!.generation, base.readyGeneration!.universeHash, base.readyGeneration!.catalogHash],
+      range, source, definitions: enabledIds.map(id => [id, familyDefinitionHash(id)]),
+      executionIdentity: common.executionIdentity, sourcePlans: reviewedWiring.expectedSourcePlanFingerprints(),
+      selection: candidateFile ? createHash("sha256").update(candidateFile).digest("hex") : "previous-and-discovered",
+    })).digest("hex");
+    if (base.inProgressRun) {
+      if (base.inProgressRun.reviewInputFingerprint !== inputFingerprint) throw new Error("cannot resume Ready review with changed inputs");
+      await verifyArchivedInputs();
+    }
+    const ready = await rebuildUniverse({ ...reviewedWiring, store, runId: "ready-review-" + inputFingerprint,
+      previousReadyReview: { inputFingerprint, candidateKeys: keys }, resumeCompletedOutcomes: !!base.inProgressRun,
+      observationRange: range, attestationConcurrency: concurrency, log });
+    resolveStrictReadyRuntime(ready);
+    log(JSON.stringify({ status: "reviewed-ready", generation: ready.generation,
+      accounting: ready.candidateAccounting, activeInstances: ready.activeInstanceKeys.length, broadcast: false }));
+    return;
+  }
   const supplements = [];
   if (needed.length > 0) {
     const identity = createHash("sha256").update(canonicalJson({ parent: base.checkpointFingerprint,
@@ -153,6 +186,18 @@ export async function assertReadyStageManifest(path: string, manifest: string): 
   if (await readFile(path, "utf8") !== manifest) throw new Error("scoped checkpoint parent manifest mismatch");
 }
 
+export function isAdditionOnlyReadyUpdate(
+  partitions: Readonly<Record<string, ReadyFamilyPartition>>,
+  enabledIds: readonly string[], needed: readonly string[], hasCandidateSelection: boolean,
+): boolean {
+  const enabled = new Set(enabledIds);
+  const added = enabledIds.filter(id => !Object.hasOwn(partitions, id));
+  if (enabledIds.some(id => partitions[id]?.enabled === false)) return false;
+  return !hasCandidateSelection && added.length > 0 &&
+    Object.entries(partitions).every(([id, partition]) => !partition.enabled || enabled.has(id)) &&
+    needed.every(id => added.includes(id));
+}
+
 export function readyFamilyNeedsSupplement(input: {
   partition: ReadyFamilyPartition | undefined;
   discoveryDefinitionHash: string;
@@ -160,6 +205,7 @@ export function readyFamilyNeedsSupplement(input: {
   isVerifiedMemoCurrent: (candidateKey: string) => boolean;
 }): boolean {
   const partition = input.partition;
+  if (partition?.familyDefinitionHash !== undefined && partition.familyDefinitionHash !== input.familyDefinitionHash) return true;
   if (!partition || partition.discoveryDefinitionHash !== input.discoveryDefinitionHash) return true;
   return Object.values(partition.outcomesByCandidateKey).some(outcome =>
     (outcome.status === "verified" && !input.isVerifiedMemoCurrent(outcome.familyCandidateKey)) ||

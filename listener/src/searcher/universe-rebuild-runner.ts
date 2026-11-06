@@ -61,6 +61,10 @@ export class UniverseRunIncomplete extends Error {
 
 export interface UniverseRebuildDependencies {
   readonly readyThrottle?: ReadyRpcThrottle;
+  /** Production update identity, evaluated only for a new/reviewing Ready.
+   * An old interrupted run continues under its originally sealed policy. */
+  readonly readyReviewInputFingerprint?: () => string;
+  readonly hasExplicitStartupCandidates?: boolean;
   /** Freeze the canonical head, or one explicitly requested historical cutoff. */
   readonly freezeCanonicalHead: (
     requestedBlock?: number,
@@ -81,6 +85,7 @@ export interface UniverseRebuildDependencies {
   readonly familyCandidateKey: (candidate: unknown) => string;
   /** Present on new baselines to retain exact per-Family outcome partitions. */
   readonly candidateFamilyId?: (candidate: unknown) => string;
+  readonly familyDefinitionHash?: (familyId: string) => string;
   readonly familyDiscoveryDefinitionHash?: (familyId: string) => string;
   /** Unique family candidates for the run (dedupe by familyCandidateKey). */
   readonly dedupeFamilyCandidates: (
@@ -229,6 +234,12 @@ export interface UniverseRebuildDependencies {
 }
 
 export interface RebuildUniverseInput extends UniverseRebuildDependencies {
+  /** Current nominated universe. Only these inputs and newly discovered candidates are eligible.
+   * An optional exact selection is keyed by the normal Family+instance candidate key. */
+  readonly previousReadyReview?: {
+    readonly inputFingerprint: string;
+    readonly candidateKeys?: ReadonlySet<string>;
+  };
   /** Explicit copied-parent scope; persists across scratch resume and promotion. */
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly store: UniverseRebuildCheckpointStore;
@@ -336,25 +347,42 @@ export async function rebuildUniverse(
       }
     }
   }
-  checkpoint = await migrateAlreadyReadyKeptRun(input.store, checkpoint, log);
+  if (!checkpoint?.inProgressRun?.reviewInputFingerprint) {
+    checkpoint = await migrateAlreadyReadyKeptRun(input.store, checkpoint, log);
+  }
   const incumbentRun = checkpoint?.inProgressRun ?? null;
+  const defaultReview = !input.previousReadyReview && !familyUpdateScope && checkpoint?.readyGeneration?.familyPartitions &&
+    (!incumbentRun || incumbentRun.reviewInputFingerprint) && input.readyReviewInputFingerprint;
+  const review = input.previousReadyReview ?? (defaultReview ? { inputFingerprint: defaultReview(), candidateKeys: undefined } : undefined);
+  if (review && (!checkpoint?.readyGeneration?.familyPartitions || familyUpdateScope ||
+      !/^[0-9a-f]{64}$/.test(review.inputFingerprint))) {
+    throw new Error("Ready review requires a partitioned parent and bound current input");
+  }
+  if (incumbentRun && incumbentRun.reviewInputFingerprint !== review?.inputFingerprint) {
+    throw new Error("Ready review input differs from the unfinished run");
+  }
   if (input.resumeCompletedOutcomes && incumbentRun === null) {
     throw new Error("universe rebuild: completed-outcome resume requires an unfinished run");
   }
   const retainedCandidates = Object.freeze(
-    [
+    (review ? [] : [
       ...Object.values(checkpoint?.verifiedMemos ?? {}),
       // Failed candidates remain retryable even without new activity in the
       // rolling window. They still need a successful attestation to enter Graph.
       ...Object.values(checkpoint?.retryableAttemptsByCandidateKey ?? {}),
-    ]
+    ])
       .filter((entry) => input.isFamilyEnabled?.(entry.familyId) !== false)
       .sort((left, right) =>
         left.familyCandidateKey.localeCompare(right.familyCandidateKey)
       )
       .map((entry) => decodeCandidate(entry.candidateSnapshot)),
   );
-  const partitionCandidates = familyUpdateScope === undefined ? [] : familyUpdateScope.familyIds.flatMap(id =>
+  // A rolling update without a replacement range or replacement pool still
+  // includes the previous nominated pool. Explicit inputs define their own scope.
+  const retainedFamilies = familyUpdateScope?.familyIds ?? (defaultReview && !input.hasExplicitStartupCandidates &&
+    !explicitRange ? Object.keys(checkpoint?.readyGeneration?.familyPartitions ?? {})
+      .filter(id => input.isFamilyEnabled?.(id) !== false) : []);
+  const partitionCandidates = retainedFamilies.flatMap(id =>
     Object.values(checkpoint?.readyGeneration?.familyPartitions?.[id]?.candidatesByKey ?? {}).map(decodeCandidate));
   const retainedCandidateInputs = Object.freeze(
     [...retainedCandidates, ...partitionCandidates].map((candidate) => Object.freeze({
@@ -378,6 +406,9 @@ export async function rebuildUniverse(
   let candidates: readonly unknown[];
   let sourceReceipts: readonly DurableSourceReceipt[];
   if (incumbentRun !== null) {
+    if (review && !receiptsMatchCurrentSourcePlan(incumbentRun.sourceReceipts, input.expectedSourcePlanFingerprints())) {
+      throw new Error("Ready review discovery plan differs from the unfinished run");
+    }
     if (incumbentRun.runId !== input.runId) {
       throw new Error(
         "universe rebuild checkpoint: another run is in progress (" +
@@ -523,6 +554,13 @@ export async function rebuildUniverse(
       }
     }
   }
+  if (review?.candidateKeys) {
+    const selected = review.candidateKeys;
+    candidates = candidates.filter(candidate => selected.has(input.familyCandidateKey(candidate)));
+    if (new Set(candidates.map(input.familyCandidateKey)).size !== selected.size) {
+      throw new Error("Ready review could not resolve every selected Family candidate");
+    }
+  }
   log(
     "universe rebuild fixed source range: run=" + input.runId +
       " from=" + fromBlock + " cutoff=" + cutoff.number + ":" + cutoff.hash +
@@ -569,6 +607,7 @@ export async function rebuildUniverse(
         sourceReceipts,
       })
     : await input.store.beginOrResumeRun({
+        ...(review && { reviewInputFingerprint: review.inputFingerprint }),
         ...(familyUpdateScope === undefined ? {} : { familyUpdateScope }),
         expectedRevision: checkpoint?.revision ?? 0,
         runId: input.runId,
@@ -619,7 +658,7 @@ export async function rebuildUniverse(
   for (const [candidateKey, outcome] of Object.entries(
     run.outcomesByCandidateKey,
   ).sort(([left], [right]) => left.localeCompare(right))) {
-    if (outcome.status !== "verified") continue;
+    if (outcome.status !== "verified" || review) continue;
     const first = seenInstanceKeys.get(outcome.familyInstanceKey);
     if (first !== undefined) {
       const memo = checkpoint.verifiedMemos[candidateKey];
@@ -714,10 +753,10 @@ export async function rebuildUniverse(
       logAttestationProgress("progress");
     }
   };
-  let nextCandidate = 0;
+  type Phase = "ordinary" | "review" | "strict";
   const processCandidate = async (
-    candidate: unknown,
-  ): Promise<RunOutcome["status"]> => {
+    candidate: unknown, phase: Phase,
+  ): Promise<RunOutcome["status"] | "needs-strict"> => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
     if (input.resumeCompletedOutcomes && oldOutcome !== undefined &&
@@ -725,7 +764,7 @@ export async function rebuildUniverse(
       return oldOutcome.status;
     }
     let reusableMemo: DurableVerifiedMemo | null = null;
-    if (oldOutcome === undefined || oldOutcome.status === "verified") {
+    if (phase !== "strict" && (oldOutcome === undefined || oldOutcome.status === "verified")) {
       try {
         reusableMemo = await input.findReusableMemo({
           candidate,
@@ -765,6 +804,7 @@ export async function rebuildUniverse(
       }));
       return "verified";
     }
+    if (phase === "review") return "needs-strict";
     const sourceRetryable = input.preAttestationRetryable?.(candidate) ?? null;
     if (sourceRetryable !== null) {
       const attemptCount = oldOutcome?.status === "retryable"
@@ -856,40 +896,77 @@ export async function rebuildUniverse(
     throw new Error("universe rebuild attestation concurrency is invalid");
   }
   input.readyThrottle?.limitConcurrency(requestedConcurrency);
-  try {
-    if (input.readyThrottle) {
-      try {
-        await input.readyThrottle.runCandidates(candidates, processCandidate, recordAttestationProgress);
-      } catch (error) {
-        log("universe rebuild attestation stopped: processed=" + completedPending +
-          "/" + candidates.length + " pending=" + (candidates.length - completedPending) +
-          " error=" + (error instanceof Error ? error.message : String(error)));
-        throw error;
+  const reviewedCounts = { reusedPrevious: 0, restoredVerified: 0, newlyVerified: 0 };
+  const runPhase = async (items: readonly unknown[], phase: Phase, deferred?: unknown[]) => {
+    const work = async (candidate: unknown) => {
+      const status = await processCandidate(candidate, phase);
+      return { candidate, status };
+    };
+    const completed = ({ candidate, status }: Awaited<ReturnType<typeof work>>) => {
+      if (status === "needs-strict") {
+        if (!deferred) throw new Error("strict candidate deferred outside Ready review");
+        deferred.push(candidate);
       }
-    } else await Promise.all(Array.from({
-      length: Math.min(requestedConcurrency, Math.max(1, candidates.length)),
+      else {
+        if (review && status === "verified") {
+          if (phase === "strict") reviewedCounts.newlyVerified++;
+          else if (run.outcomesByCandidateKey[input.familyCandidateKey(candidate)]?.status === "verified") reviewedCounts.restoredVerified++;
+          else reviewedCounts.reusedPrevious++;
+        }
+        recordAttestationProgress(status);
+      }
+    };
+    if (input.readyThrottle) {
+      await input.readyThrottle.runCandidates(items, work, completed);
+      return;
+    }
+    let next = 0;
+    let failed = false;
+    const workers = await Promise.allSettled(Array.from({
+      length: Math.min(requestedConcurrency, items.length),
     }, async () => {
-      while (true) {
-        const index = nextCandidate++;
-        if (index >= candidates.length) return;
-        const candidate = candidates[index];
-        try {
-          recordAttestationProgress(await processCandidate(candidate));
-        } catch (error) {
-          log(
-            "universe rebuild attestation failed: candidate=" +
-              input.familyCandidateKey(candidate) +
-              " processed=" + completedPending +
-              "/" + candidates.length +
-              " pending=" + (candidates.length - completedPending) +
-              " error=" + (error instanceof Error
-                ? error.message
-                : String(error)),
-          );
+      while (!failed && next < items.length) {
+        const candidate = items[next++];
+        try { completed(await work(candidate)); }
+        catch (error) {
+          failed = true;
+          log("universe rebuild attestation failed: candidate=" + input.familyCandidateKey(candidate) +
+            " phase=" + phase + " error=" + (error instanceof Error ? error.message : String(error)));
           throw error;
         }
       }
     }));
+    for (const result of workers) if (result.status === "rejected") throw result.reason;
+  };
+  try {
+    if (review) {
+      const previous = new Set<string>();
+      for (const partition of Object.values(attestationCheckpoint.readyGeneration!.familyPartitions!)) {
+        if (!partition.enabled) continue;
+        for (const row of Object.values(partition.outcomesByCandidateKey)) {
+          if (row.status === "verified") previous.add(row.familyCandidateKey);
+        }
+      }
+      const recheck: unknown[] = [], remaining: unknown[] = [];
+      for (const candidate of candidates) {
+        const key = input.familyCandidateKey(candidate);
+        (previous.has(key) || run.outcomesByCandidateKey[key]?.status === "verified"
+          ? recheck : remaining).push(candidate);
+      }
+      await runPhase(recheck, "review", remaining);
+      log("Ready review: prior/current proofs checked=" + recheck.length +
+        " completed=" + completedPending + " remaining=" + remaining.length);
+      await runPhase(remaining, "strict");
+      log("Ready review results " + JSON.stringify({ ...reviewedCounts, terminalRejected: attestationCounts["terminal-rejected"],
+        retryable: attestationCounts.retryable }));
+    } else {
+      await runPhase(candidates, "ordinary");
+    }
+  } catch (error) {
+    log("universe rebuild attestation stopped: processed=" + completedPending +
+      "/" + candidates.length + " pending=" + (candidates.length - completedPending) +
+      " error=" + (error instanceof Error ? error.message : String(error)));
+    throw error;
   } finally {
     // Even an unexpected worker failure must preserve every sibling that
     // already completed. The failed key remains unaccounted and therefore
@@ -1010,6 +1087,7 @@ function buildReadyFamilyPartitions(
   return Object.freeze(Object.fromEntries([...candidatesByFamily].sort(([a], [b]) => a.localeCompare(b))
     .map(([familyId, candidates]) => [familyId, Object.freeze({
       enabled: true,
+      ...(input.familyDefinitionHash && { familyDefinitionHash: input.familyDefinitionHash(familyId) }),
       candidatesByKey: Object.freeze(candidates),
       candidateSetHash: hashUniverseCandidatePartition(candidates),
       discoveryDefinitionHash: input.familyDiscoveryDefinitionHash!(familyId),

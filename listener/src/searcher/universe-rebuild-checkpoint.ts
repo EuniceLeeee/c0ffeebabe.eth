@@ -154,6 +154,7 @@ export interface DurableSourceReceipt {
 }
 
 export interface InProgressUniverseRun {
+  readonly reviewInputFingerprint?: string;
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   readonly runId: string;
   readonly cutoff: CanonicalSource;
@@ -181,6 +182,7 @@ export interface ReadyFamilyUpdateScope {
 }
 
 export interface ReadyFamilyPartition {
+  readonly familyDefinitionHash?: string;
   readonly enabled: boolean;
   /** Exact durable candidates: membership must remain checkable after promotion. */
   readonly candidatesByKey: Readonly<Record<string, unknown>>;
@@ -2129,6 +2131,7 @@ export class UniverseRebuildCheckpointStore {
 
   /** Create the fixed-cutoff run or return the existing one for it. */
   async beginOrResumeRun(input: {
+    readonly reviewInputFingerprint?: string;
     readonly expectedRevision: number;
     readonly runId: string;
     readonly cutoff: CanonicalSource;
@@ -2162,6 +2165,7 @@ export class UniverseRebuildCheckpointStore {
           );
         }
         if (
+          existing.reviewInputFingerprint !== input.reviewInputFingerprint ||
           canonicalJson(existing.familyUpdateScope ?? null) !== canonicalJson(input.familyUpdateScope ?? null) ||
           existing.cutoff.number !== input.cutoff.number ||
           existing.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
@@ -2198,7 +2202,9 @@ export class UniverseRebuildCheckpointStore {
           throw new Error("Ready Family scoped run parent/source mismatch");
         }
       }
-      const inheritedOutcomes = inheritedQueuedRetryables(
+      // A review accounts every negative outcome in this run. A crash can then
+      // resume its journal without treating a parent retryable as newly checked.
+      const inheritedOutcomes = input.reviewInputFingerprint ? {} : inheritedQueuedRetryables(
         base.retryableAttemptsByCandidateKey,
         input.candidatesByKey,
       );
@@ -2206,6 +2212,7 @@ export class UniverseRebuildCheckpointStore {
         ...base,
         revision: base.revision + 1,
         inProgressRun: Object.freeze({
+          ...(input.reviewInputFingerprint && { reviewInputFingerprint: input.reviewInputFingerprint }),
           ...(input.familyUpdateScope === undefined ? {} : { familyUpdateScope: immutableReadyValue(input.familyUpdateScope) }),
           runId: input.runId,
           cutoff: Object.freeze({ ...input.cutoff }),

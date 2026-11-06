@@ -3088,6 +3088,17 @@ export function createRebuildWiring(input?: {
   } = {
     readyThrottle,
     candidateFamilyId,
+    hasExplicitStartupCandidates: input?.startupCandidates !== undefined,
+    readyReviewInputFingerprint: () => {
+      const ids = [...new Set([...sourceCoverageKeys.startup, ...activityPlan.coverageKeys]
+        .map(key => key.slice(0, key.indexOf("|"))))].sort();
+      const hash = createHash("sha256").update(canonicalJson({ policy: "ready-review-v1", planFingerprints,
+        definitions: ids.map(id => [id, familyDefinitionHash(id)]),
+        executionIdentity: input?.executionIdentity ?? null, explicitPool: input?.startupCandidates !== undefined }));
+      for (const candidate of input?.startupCandidates ?? []) hash.update(canonicalJson(encodeDurableValue(candidate))).update("\n");
+      return hash.digest("hex");
+    },
+    familyDefinitionHash,
     familyDiscoveryDefinitionHash,
     isFamilyEnabled: (familyId) => inScope(familyId) && !disabledFamilyIds.has(familyId),
     encodeCandidateSnapshot: (candidate) =>

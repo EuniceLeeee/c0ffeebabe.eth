@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertReadyStageManifest, readyFamilyNeedsSupplement, runReadyFamilyMaintenance, withReadyMaintenanceLease } from "../ready-family-update-cli.js";
+import { isAdditionOnlyReadyUpdate, assertReadyStageManifest, readyFamilyNeedsSupplement, runReadyFamilyMaintenance, withReadyMaintenanceLease } from "../ready-family-update-cli.js";
 import type { ReadyFamilyPartition } from "../universe-rebuild-checkpoint.js";
 
 const directory = await mkdtemp(join(tmpdir(), "ready-maintenance-test-"));
@@ -35,5 +35,15 @@ try {
   const verified = { ...partition, outcomesByCandidateKey: { verified: { status: "verified", familyCandidateKey: "verified" } } } as unknown as ReadyFamilyPartition;
   assert.equal(readyFamilyNeedsSupplement({ ...selection, partition: verified }), false);
   assert(readyFamilyNeedsSupplement({ ...selection, partition: verified, isVerifiedMemoCurrent: () => false }));
+  assert(readyFamilyNeedsSupplement({ ...selection, partition: { ...partition,
+    familyDefinitionHash: "old-definition", outcomesByCandidateKey: {} } }));
+  const active = { old: { ...partition, enabled: true } };
+  assert(isAdditionOnlyReadyUpdate(active, ["old", "new"], ["new"], false));
+  assert(!isAdditionOnlyReadyUpdate(active, ["old", "new"], ["old", "new"], false));
+  assert(!isAdditionOnlyReadyUpdate(active, ["old"], [], false));
+  assert(!isAdditionOnlyReadyUpdate({ ...active, known: { ...partition, enabled: false } },
+    ["old", "known", "new"], ["new"], false));
+  assert(!isAdditionOnlyReadyUpdate(active, ["new"], ["new"], false));
+  assert(!isAdditionOnlyReadyUpdate(active, ["old", "new"], ["new"], true));
   console.log("Ready maintenance CLI PASS: exclusive lease, error release, parent binding, option refusal; no RPC");
 } finally { await rm(directory, { recursive: true, force: true }); }

@@ -365,6 +365,75 @@ async function main(): Promise<void> {
       assert.equal(ready.candidateAccounting.verified, 3);
       assert.equal(f.scanCalls(), 1, "recovery continues the same sealed range without rescanning");
     }
+    {
+      const sharedPool = "0xed1050e2fe96f7327dc659613c79e41458e9cf05";
+      const kyber = "kyberswap-elastic", algebra = "swap:algebra-integral";
+      const owner = (id: string) => id === "kyber" ? kyber : algebra;
+      const cycles = [
+        ["kyber", "algebra", "keep", "stale", "removed"],
+        ["new", "kyber", "algebra", "removed", "keep", "stale"],
+      ];
+      let scan = 0;
+      const f = makeFixture(join(dir, "review-scope"));
+      const calls: string[] = [];
+      const access = (candidate: unknown) => candidate as { id: string; familyId: string; address: string };
+      const input: RebuildUniverseInput = {
+        ...f.input, attestationConcurrency: 1,
+        requiredSourceCoverageKeys: () => [kyber, algebra].map(id => id + "|startup-universe"),
+        scanSwapWindow: async ({ fromBlock }) => ({
+          observations: cycles[scan++]!.map(id => ({ id, familyId: owner(id),
+            address: ["kyber", "algebra"].includes(id) ? sharedPool : id })),
+          sourceReceipts: sourceReceipts(fromBlock).map(r => ({ ...r,
+            coverageKeys: [kyber, algebra].map(id => id + "|startup-universe") })),
+        }),
+        candidateFamilyId: c => access(c).familyId, familyDiscoveryDefinitionHash: () => "d".repeat(64),
+        dedupeFamilyCandidates: items => [...new Map(items.map(raw => {
+          const c = access((raw as { candidate?: unknown }).candidate ?? raw);
+          return [c.familyId + "|" + c.address, c];
+        })).values()],
+        findReusableMemo: async arg => {
+          calls.push("review:" + access(arg.candidate).id);
+          return f.input.findReusableMemo(arg);
+        },
+        attestFamilyInstanceOnce: async arg => {
+          calls.push("strict:" + access(arg.candidate).id);
+          return f.input.attestFamilyInstanceOnce(arg);
+        },
+        sealDurableVerifiedMemo: arg => sealFixtureMemo({ ...f.input.sealDurableVerifiedMemo(arg),
+          candidateSnapshot: arg.candidate, familyId: access(arg.candidate).familyId }),
+      };
+      f.terminalKeys.add("algebra");
+      f.failKeys.add("kyber");
+      await rebuildUniverse(input);
+      f.terminalKeys.clear();
+      f.failKeys.clear();
+      f.terminalKeys.add("kyber");
+      f.invalidReusableKeys.add("stale");
+      calls.length = 0;
+      const update = { ...input, runId: "review-new", previousReadyReview: {
+        inputFingerprint: "f".repeat(64), candidateKeys: new Set(["new","kyber","algebra","keep","stale"].map(id => "cand:" + id)),
+      } };
+      let interrupt = true;
+      await assert.rejects(rebuildUniverse({ ...update, attestFamilyInstanceOnce: async arg => {
+        if (interrupt) { interrupt = false; throw new Error("review interruption"); }
+        return input.attestFamilyInstanceOnce(arg);
+      } }), /review interruption/);
+      assert.equal((await f.store.load())!.inProgressRun!.reviewInputFingerprint, "f".repeat(64));
+      await assert.rejects(rebuildUniverse({ ...update, previousReadyReview: {
+        ...update.previousReadyReview, inputFingerprint: "0".repeat(64),
+      } }), /differs from the unfinished run/);
+      calls.length = 0;
+      const ready = await rebuildUniverse({ ...update, resumeCompletedOutcomes: true });
+      assert.deepEqual(calls.slice(0, 2).sort(), ["review:keep", "review:stale"]);
+      assert.deepEqual(calls.slice(2).sort(), ["strict:algebra", "strict:kyber", "strict:new", "strict:stale"]);
+      assert.equal(ready.familyPartitions![kyber]!.outcomesByCandidateKey["cand:kyber"]!.status, "terminal-rejected");
+      assert.equal(ready.familyPartitions![algebra]!.outcomesByCandidateKey["cand:algebra"]!.status, "verified");
+      const edges = (ready.graphSnapshot as { edges: { familyId: string; instanceKey: string }[] }).edges;
+      assert(edges.some(e => e.familyId === algebra && e.instanceKey === "inst:algebra"));
+      assert(!edges.some(e => e.familyId === kyber || e.instanceKey === "inst:removed"));
+      assert.equal(ready.candidateAccounting.total, 5);
+      assert.equal(activeReadyMemos((await f.store.load())!).length, 4);
+    }
     // Separate Ready directories inherit the ordinary rolling-rebuild state.
     // No old outcome, coverage receipt or Graph is treated as the new run.
     {
