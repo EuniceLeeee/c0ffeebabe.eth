@@ -330,7 +330,7 @@ async function main(): Promise<void> {
           }
           return f.input.attestFamilyInstanceOnce(input);
         } });
-      assert.equal(control.concurrency, 3);
+      assert.equal(control.concurrency, 4, "the completed cohort releases its temporary RPC cap");
       assert.equal(rateAttempts, 4);
       assert.equal(ready.candidateAccounting.verified, 3);
       assert.equal(ready.candidateAccounting.terminalRejected, 0);

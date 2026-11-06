@@ -19,6 +19,9 @@ export interface ReadyRpcThrottleState {
 /** One Ready run owns this policy; Families and live transports do not. */
 export class ReadyRpcThrottle {
   private concurrencyLimit: number;
+  private configuredConcurrency: number;
+  private pendingReads = 0;
+  private candidateSchedulers = 0;
   private batchLimit = 8;
   private responses = 0;
   private terminal?: Error;
@@ -31,6 +34,7 @@ export class ReadyRpcThrottle {
     if (!Number.isSafeInteger(initialConcurrency) || initialConcurrency < 1 || initialConcurrency > 4) {
       throw new Error("Ready concurrency must be between 1 and 4");
     }
+    this.configuredConcurrency = initialConcurrency;
     this.concurrencyLimit = initialConcurrency;
     if (initialState !== undefined) {
       if (initialState.stopped !== false ||
@@ -50,8 +54,21 @@ export class ReadyRpcThrottle {
   get batchMaxCount(): number { return this.batchLimit; }
   limitConcurrency(maximum: number): void {
     if (!Number.isSafeInteger(maximum) || maximum < 1) throw new Error("invalid Ready concurrency ceiling");
+    this.configuredConcurrency = Math.min(this.configuredConcurrency, maximum);
     this.concurrencyLimit = Math.min(this.concurrencyLimit, maximum);
   }
+  private get backedOff(): boolean {
+    return this.responses > 0 || this.concurrencyLimit < this.configuredConcurrency || this.batchLimit < 8;
+  }
+
+  private restoreAfterBatch(): void {
+    if (this.terminal || !this.backedOff) return;
+    this.concurrencyLimit = this.configuredConcurrency;
+    this.batchLimit = 8;
+    this.responses = 0;
+    this.log(this.snapshot());
+  }
+
   get inAttempt(): boolean { return this.attempts.getStore() !== undefined; }
   snapshot(): ReadyRpcThrottleState {
     return Object.freeze({ concurrency: this.concurrencyLimit, batchMaxCount: this.batchLimit,
@@ -120,16 +137,23 @@ export class ReadyRpcThrottle {
 
   /** Source reads outside candidate admission use the same response budget. */
   async read<T>(work: () => Promise<T>): Promise<T> {
-    for (;;) {
-      this.assertOpen();
-      try { return await work(); }
-      catch (error) {
-        // Only this provider's wire errors can start a fresh source read.
-        // An unowned simulator fatal is latched by wiring and cannot recover
-        // by repeating the same rejected operation (or spend a second budget).
-        if (this.inAttempt || !(error instanceof ReadyRpcRateError)) throw error;
-        this.observe(error);
+    this.pendingReads++;
+    let succeeded = false;
+    try {
+      for (;;) {
+        this.assertOpen();
+        try {
+          const result = await work();
+          succeeded = true;
+          return result;
+        } catch (error) {
+          if (this.inAttempt || !(error instanceof ReadyRpcRateError)) throw error;
+          this.observe(error);
+        }
       }
+    } finally {
+      this.pendingReads--;
+      if (succeeded && !this.pendingReads && !this.candidateSchedulers) this.restoreAfterBatch();
     }
   }
 
@@ -148,23 +172,33 @@ export class ReadyRpcThrottle {
       );
       active.add(pending);
     };
+    this.candidateSchedulers++;
     try {
       while (next < candidates.length || retries.length || active.size) {
         this.assertOpen();
-        while (active.size < this.concurrency && (retries.length || next < candidates.length)) {
+        // After a 429, drain the in-flight candidates and their retries before admitting fresh work.
+        // Healthy traffic keeps its rolling window, without a barrier between unrelated candidates.
+        const admitNew = !this.backedOff || (next === 0 && !active.size && !retries.length);
+        while (active.size < this.concurrency && (retries.length || (admitNew && next < candidates.length))) {
           launch(retries.shift() ?? next++);
         }
         const settled = await Promise.race(active);
         active.delete(settled.pending);
-        if (settled.ok) completed(settled.result);
-        else {
+        if (settled.ok) {
+          completed(settled.result);
+          if (!active.size && !retries.length) this.restoreAfterBatch();
+        } else {
           this.observe(settled.error);
           retries.push(settled.index);
         }
       }
     } finally {
       // Join already-started siblings before the runner flushes its checkpoint.
-      for (const settled of await Promise.all(active)) if (settled.ok) completed(settled.result);
+      try {
+        for (const settled of await Promise.all(active)) if (settled.ok) completed(settled.result);
+      } finally {
+        this.candidateSchedulers--;
+      }
     }
   }
 }

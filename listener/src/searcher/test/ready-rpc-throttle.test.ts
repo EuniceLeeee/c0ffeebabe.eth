@@ -10,7 +10,7 @@ import { createSourceCodeProviders } from "../source-code-cache.js";
 const quiet = () => {};
 const rate = () => new ReadyRpcRateError();
 
-test("three physical responses per level; no upgrade, no premature stop at 1/1", () => {
+test("three physical responses per level within a throttled batch; no premature stop at 1/1", () => {
   const control = new ReadyRpcThrottle(4, quiet);
   const levels = [[3, 8], [2, 8], [1, 8], [1, 4], [1, 2], [1, 1]];
   for (const [concurrency, batch] of levels) {
@@ -56,7 +56,37 @@ test("temporary failures requeue the same candidate; completion remains exact", 
   }, value => completed.push(value));
   assert.deepEqual(completed.sort(), [0, 1, 2, 3, 4, 5]);
   assert.equal(attempts.get(0), 4);
-  assert.equal(control.concurrency, 3);
+  assert.equal(control.concurrency, 4);
+});
+
+test("a throttled cohort drains before the next cohort reopens at the configured ceiling", async () => {
+  const control = new ReadyRpcThrottle(4, quiet);
+  control.limitConcurrency(3);
+  let attempts = 0;
+  let releaseSibling!: () => void;
+  const sibling = new Promise<void>(resolve => { releaseSibling = resolve; });
+  const completed = new Set<number>();
+  await control.runCandidates([0, 1, 2, 3, 4, 5], async candidate => {
+    if (candidate === 0) {
+      if (++attempts <= 3) throw rate();
+      assert.equal(control.concurrency, 2);
+      releaseSibling();
+    } else if (candidate === 1) {
+      await sibling;
+    } else if (candidate === 2) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+    } else {
+      assert(completed.has(0) && completed.has(1) && completed.has(2));
+      assert.equal(control.concurrency, 3);
+      assert.equal(control.batchMaxCount, 8);
+    }
+    return candidate;
+  }, candidate => {
+    assert(!completed.has(candidate));
+    completed.add(candidate);
+  });
+  assert.equal(attempts, 4);
+  assert.equal(completed.size, 6);
 });
 
 test("lowest-level exhaustion never marks the throttled candidate completed", async () => {
@@ -110,10 +140,13 @@ test("real HTTP batches count once each and shrink 8->4->2->1 without losing rea
     const results = await Promise.all(Array.from({ length: 8 }, (_, i) =>
       f.provider.send("eth_getCode", [ethers.toBeHex(i + 1, 20), "0x7b"])));
     assert.deepEqual(results, Array(8).fill("0x6000"));
-    assert.equal(f.control.concurrency, 1); assert.equal(f.control.batchMaxCount, 1);
+    assert.equal(f.control.concurrency, 4); assert.equal(f.control.batchMaxCount, 8);
     assert.equal(f.attempts(), 26);
     assert.deepEqual(f.sizes.slice(0, 18), [...Array(12).fill(8), ...Array(3).fill(4), ...Array(3).fill(2)]);
     assert(f.sizes.slice(18).every(size => size === 1));
+    await Promise.all(Array.from({ length: 8 }, (_, i) =>
+      f.provider.send("eth_getCode", [ethers.toBeHex(i + 21, 20), "0x7b"])));
+    assert.equal(f.sizes.at(-1), 8, "the next source-read batch returns to the configured width");
   } finally { await f.close(); }
 });
 
@@ -139,7 +172,7 @@ test("a shared physical batch fences every consumer even if each catches the rej
       completed.push(candidate);
     });
     assert.deepEqual(completed.sort(), [0,1,2,3]);
-    assert.equal(f.control.concurrency, 3);
+    assert.equal(f.control.concurrency, 4);
     assert.equal(f.control.snapshot().responsesAtLevel, 0);
   } finally { await f.close(); }
 });
@@ -192,7 +225,7 @@ test("shared cached code failures fence all consuming candidates, not only the c
       return candidate;
     }, candidate => { assert(healthy.has(candidate)); completed.push(candidate); });
     assert.deepEqual(completed.sort(), [0,1,2,3]);
-    assert.equal(f.control.concurrency, 3);
+    assert.equal(f.control.concurrency, 4);
     assert.equal(f.control.snapshot().responsesAtLevel, 0);
     assert.equal(f.attempts(), 4);
   } finally { await f.close(); }
