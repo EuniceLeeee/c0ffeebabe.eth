@@ -1,8 +1,9 @@
+import { canonicalJsonFingerprint } from "../universe-rebuild-checkpoint.js";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isAdditionOnlyReadyUpdate, assertReadyStageManifest, readyFamilyNeedsSupplement, runReadyFamilyMaintenance, withReadyMaintenanceLease } from "../ready-family-update-cli.js";
+import { isFamilySetOnlyReadyUpdate, assertReadyStageManifest, readyFamilyNeedsSupplement, runReadyFamilyMaintenance, withReadyMaintenanceLease } from "../ready-family-update-cli.js";
 import type { ReadyFamilyPartition } from "../universe-rebuild-checkpoint.js";
 
 const directory = await mkdtemp(join(tmpdir(), "ready-maintenance-test-"));
@@ -21,7 +22,8 @@ try {
   await assertReadyStageManifest(manifest, "parent-a");
   await assert.rejects(assertReadyStageManifest(manifest, "parent-b"), /parent manifest mismatch/);
   assert.equal(await readFile(manifest, "utf8"), "parent-a");
-  for (const args of [[], ["other"], ["build"], ["update", "--checkpoint", checkpoint, "--checkpoint", checkpoint]]) {
+  for (const args of [[], ["other"], ["build"], ["build", "--expect-update", "family-set"], ["update", "--expect-update", "unknown"],
+    ["update", "--checkpoint", checkpoint, "--checkpoint", checkpoint]]) {
     await assert.rejects(runReadyFamilyMaintenance(args));
   }
   const selection = { discoveryDefinitionHash: "discovery-v1", familyDefinitionHash: "definition-v2", isVerifiedMemoCurrent: () => true };
@@ -37,13 +39,15 @@ try {
   assert(readyFamilyNeedsSupplement({ ...selection, partition: verified, isVerifiedMemoCurrent: () => false }));
   assert(readyFamilyNeedsSupplement({ ...selection, partition: { ...partition,
     familyDefinitionHash: "old-definition", outcomesByCandidateKey: {} } }));
-  const active = { old: { ...partition, enabled: true } };
-  assert(isAdditionOnlyReadyUpdate(active, ["old", "new"], ["new"], false));
-  assert(!isAdditionOnlyReadyUpdate(active, ["old", "new"], ["old", "new"], false));
-  assert(!isAdditionOnlyReadyUpdate(active, ["old"], [], false));
-  assert(!isAdditionOnlyReadyUpdate({ ...active, known: { ...partition, enabled: false } },
-    ["old", "known", "new"], ["new"], false));
-  assert(!isAdditionOnlyReadyUpdate(active, ["new"], ["new"], false));
-  assert(!isAdditionOnlyReadyUpdate(active, ["old", "new"], ["new"], true));
+  const oldRows = { x: { address: "one", source: "receipt" } };
+  const active = { old: { ...partition, enabled: true,
+    candidateSetHash: canonicalJsonFingerprint(oldRows, "universe-candidate-partition-v1:") } };
+  const two = { ...active, removed: active.old };
+  assert(isFamilySetOnlyReadyUpdate(active, ["old","new"], ["new"]));
+  assert(isFamilySetOnlyReadyUpdate(two, ["old"], []));
+  assert(isFamilySetOnlyReadyUpdate(two, ["old","new"], ["new"], new Map([["old",oldRows]])));
+  assert(!isFamilySetOnlyReadyUpdate(two, ["old","new"], ["new"], new Map([["old",{ x: { address: "one", source: "changed" }}]])));
+  assert(!isFamilySetOnlyReadyUpdate(two, ["old","new"], ["old","new"]));
+  assert(!isFamilySetOnlyReadyUpdate(active, ["old"], []));
   console.log("Ready maintenance CLI PASS: exclusive lease, error release, parent binding, option refusal; no RPC");
 } finally { await rm(directory, { recursive: true, force: true }); }

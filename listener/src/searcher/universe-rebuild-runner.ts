@@ -239,9 +239,11 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
   readonly previousReadyReview?: {
     readonly inputFingerprint: string;
     readonly candidateKeys?: ReadonlySet<string>;
+    readonly retainedFamilyIds?: ReadonlySet<string>;
   };
   /** Explicit copied-parent scope; persists across scratch resume and promotion. */
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
+  readonly scopedCandidateKeys?: ReadonlySet<string>;
   readonly store: UniverseRebuildCheckpointStore;
   readonly runId: string;
   /**
@@ -353,7 +355,8 @@ export async function rebuildUniverse(
   const incumbentRun = checkpoint?.inProgressRun ?? null;
   const defaultReview = !input.previousReadyReview && !familyUpdateScope && checkpoint?.readyGeneration?.familyPartitions &&
     (!incumbentRun || incumbentRun.reviewInputFingerprint) && input.readyReviewInputFingerprint;
-  const review = input.previousReadyReview ?? (defaultReview ? { inputFingerprint: defaultReview(), candidateKeys: undefined } : undefined);
+  const review: RebuildUniverseInput["previousReadyReview"] = input.previousReadyReview ??
+    (defaultReview ? { inputFingerprint: defaultReview() } : undefined);
   if (review && (!checkpoint?.readyGeneration?.familyPartitions || familyUpdateScope ||
       !/^[0-9a-f]{64}$/.test(review.inputFingerprint))) {
     throw new Error("Ready review requires a partitioned parent and bound current input");
@@ -554,8 +557,9 @@ export async function rebuildUniverse(
       }
     }
   }
-  if (review?.candidateKeys) {
-    const selected = review.candidateKeys;
+  if (input.scopedCandidateKeys && !familyUpdateScope) throw new Error("candidate selection requires an explicit supplement scope");
+  const selected = review?.candidateKeys ?? input.scopedCandidateKeys;
+  if (selected) {
     candidates = candidates.filter(candidate => selected.has(input.familyCandidateKey(candidate)));
     if (new Set(candidates.map(input.familyCandidateKey)).size !== selected.size) {
       throw new Error("Ready review could not resolve every selected Family candidate");
@@ -896,6 +900,7 @@ export async function rebuildUniverse(
     throw new Error("universe rebuild attestation concurrency is invalid");
   }
   input.readyThrottle?.limitConcurrency(requestedConcurrency);
+  let addedProgress: { completed: number; total: number } | undefined;
   const reviewedCounts = { reusedPrevious: 0, restoredVerified: 0, newlyVerified: 0 };
   const runPhase = async (items: readonly unknown[], phase: Phase, deferred?: unknown[]) => {
     const work = async (candidate: unknown) => {
@@ -914,6 +919,12 @@ export async function rebuildUniverse(
           else reviewedCounts.reusedPrevious++;
         }
         recordAttestationProgress(status);
+        if (addedProgress) {
+          addedProgress.completed++;
+          if (addedProgress.completed % 100 === 0 || addedProgress.completed === addedProgress.total) {
+            log("Ready newly enabled Families: processed=" + addedProgress.completed + "/" + addedProgress.total);
+          }
+        }
       }
     };
     if (input.readyThrottle) {
@@ -940,6 +951,14 @@ export async function rebuildUniverse(
   };
   try {
     if (review) {
+      const survivors = review.retainedFamilyIds;
+      const retainedSeen = new Map<string, number>();
+      const parent = attestationCheckpoint.readyGeneration!;
+      if (survivors && (!incumbentRun || !input.resumeCompletedOutcomes || !input.candidateFamilyId ||
+          !input.isReadyMemoDefinitionCurrent || !input.familyDefinitionHash ||
+          canonicalJson(parent.cutoff) !== canonicalJson(cutoff) || parent.universeRange.fromBlock !== fromBlock)) {
+        throw new Error("retained Family outcomes require a bound fixed-source review resume");
+      }
       const previous = new Set<string>();
       for (const partition of Object.values(attestationCheckpoint.readyGeneration!.familyPartitions!)) {
         if (!partition.enabled) continue;
@@ -948,10 +967,60 @@ export async function rebuildUniverse(
         }
       }
       const recheck: unknown[] = [], remaining: unknown[] = [];
+      let retained = 0, alreadyHandled = 0;
+      if (survivors) {
+        for (const id of survivors) {
+          const p = parent.familyPartitions![id];
+          if (!p?.enabled || p.familyDefinitionHash !== input.familyDefinitionHash!(id) ||
+              p.discoveryDefinitionHash !== input.familyDiscoveryDefinitionHash!(id)) throw new Error("retained Family definition mismatch: " + id);
+        }
+      }
       for (const candidate of candidates) {
         const key = input.familyCandidateKey(candidate);
+        if (survivors) {
+          const id = input.candidateFamilyId!(candidate);
+          const current = run.outcomesByCandidateKey[key];
+          const partition = survivors.has(id) ? parent.familyPartitions![id] : undefined;
+          const inherited = partition?.outcomesByCandidateKey[key];
+          if (partition && !inherited) throw new Error("retained Family candidate is absent from the parent");
+          // The sealed parent owns surviving partitions. Completed attempts in
+          // newly enabled Families belong to this fixed run and can also resume.
+          const row = inherited ?? current;
+          if (row) {
+            if (partition && canonicalJson(partition.candidatesByKey[key]) !== canonicalJson(run.candidatesByKey[key])) {
+              throw new Error("retained Family nomination differs from the sealed run: " + key);
+            }
+            if (row.status === "verified") {
+              const memo = attestationCheckpoint.verifiedMemos[key];
+              if (!memo || memo.familyId !== id || memo.familyInstanceKey !== row.familyInstanceKey ||
+                  memo.memoFingerprint !== row.memoFingerprint || !input.isReadyMemoDefinitionCurrent!(memo) ||
+                  await claimInstanceKey(memo.familyInstanceKey, key) !== undefined) {
+                throw new Error("retained or resumed verified proof differs: " + key);
+              }
+            }
+            if (partition) {
+              retainedSeen.set(id, (retainedSeen.get(id) ?? 0) + 1);
+              if (!current || canonicalJson(current) !== canonicalJson(row)) writer.record(row);
+              retained++;
+            } else {
+              alreadyHandled++;
+            }
+            recordAttestationProgress(row.status);
+            continue;
+          }
+        }
         (previous.has(key) || run.outcomesByCandidateKey[key]?.status === "verified"
           ? recheck : remaining).push(candidate);
+      }
+      for (const id of survivors ?? []) {
+        if ((retainedSeen.get(id) ?? 0) !== Object.keys(parent.familyPartitions![id]!.candidatesByKey).length) {
+          throw new Error("retained Family membership changed: " + id);
+        }
+      }
+      if (survivors) {
+        addedProgress = { completed: alreadyHandled, total: candidates.length - retained };
+        log("Ready activation resume: retained=" + retained + " addedAlreadyHandled=" +
+          alreadyHandled + " addedRemaining=" + (recheck.length + remaining.length));
       }
       await runPhase(recheck, "review", remaining);
       log("Ready review: prior/current proofs checked=" + recheck.length +

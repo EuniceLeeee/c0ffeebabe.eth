@@ -3082,6 +3082,7 @@ export function createRebuildWiring(input?: {
   const disabledAdapterIds = new Set(disabledPlugins.flatMap(module => [
     ...(module.plugin.manifest.poolAdapterIds ?? []), ...module.plugin.manifest.ownedActionAdapterIds,
   ]));
+  const memoDefinitionHashes = new Map<string, ReadonlySet<string>>();
   const wiring: UniverseRebuildDependencies & {
     readonly candidateFamilyId: (candidate: unknown) => string;
     readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
@@ -3829,9 +3830,15 @@ export function createRebuildWiring(input?: {
         reasonCode: marker.reasonCode,
       });
     },
-    isReadyMemoDefinitionCurrent: (memo) =>
-      inScope(memo.familyId) && (memo.familyDefinitionHash === familyDefinitionHash(memo.familyId) ||
-      memo.familyDefinitionHash === familyMemoDefinitionHash(memo.familyId)) && memoPricingProjectionCompatible(memo),
+    isReadyMemoDefinitionCurrent: (memo) => {
+      if (!inScope(memo.familyId)) return false;
+      let accepted = memoDefinitionHashes.get(memo.familyId);
+      if (!accepted) {
+        accepted = new Set([familyDefinitionHash(memo.familyId), familyMemoDefinitionHash(memo.familyId)]);
+        memoDefinitionHashes.set(memo.familyId, accepted);
+      }
+      return accepted.has(memo.familyDefinitionHash) && memoPricingProjectionCompatible(memo);
+    },
     findReusableMemo: async (memoInput) => {
       assertOpen();
       const candidate = memoInput.candidate as

@@ -1541,7 +1541,7 @@ async function main(): Promise<void> {
 
     const updateDir = await mkdtemp(join(tmpdir(), "ready-family-update-"));
     try {
-      const owner = (id: string) => id === "a" ? "fixture:a" : id === "d" ? "fixture:new" : "fixture:b";
+      const owner = (id: string) => id === "a" ? "fixture:a" : id.startsWith("d") ? "fixture:new" : "fixture:b";
       let enabled = ["fixture:a", "fixture:b"];
       const definition = (id: string) => createHash("sha256").update(id).digest("hex");
       const make = (path: string, ids: string[], families: () => string[]) => {
@@ -1574,6 +1574,34 @@ async function main(): Promise<void> {
         };
         return { ...fixture, input };
       };
+      {
+        const path = join(updateDir, "mixed-activation-resume");
+        const oldIds = ["fixture:a", "fixture:b"];
+        const old = make(path, ["a","b","c"], () => oldIds);
+        old.terminalKeys.add("c");
+        const baseline = await rebuildUniverse({ ...old.input, familyDefinitionHash: definition });
+        const newIds = ["fixture:b", "fixture:new"];
+        const next = make(path, ["b","c","d","d2"], () => newIds);
+        const update = { ...next.input, attestationConcurrency: 1, runId: "sealed-review",
+          familyDefinitionHash: definition, previousReadyReview: { inputFingerprint: "9".repeat(64) } };
+        await assert.rejects(rebuildUniverse({ ...update, attestFamilyInstanceOnce: async arg => {
+          if ((arg.candidate as {id:string}).id === "d2") throw new Error("interrupt mixed");
+          return next.input.attestFamilyInstanceOnce(arg);
+        } }), /interrupt mixed/);
+        const calls: string[] = [], notes: string[] = [];
+        const finished = await rebuildUniverse({ ...update, resumeCompletedOutcomes: true,
+          log: line => notes.push(line),
+          previousReadyReview: { ...update.previousReadyReview, retainedFamilyIds: new Set(["fixture:b"]) },
+          attestFamilyInstanceOnce: async arg => {
+            calls.push((arg.candidate as {id:string}).id);
+            return next.input.attestFamilyInstanceOnce(arg);
+          } });
+        assert.deepEqual(calls, ["d2"]);
+        assert.deepEqual(finished.familyPartitions!["fixture:b"]!.outcomesByCandidateKey,
+          baseline.familyPartitions!["fixture:b"]!.outcomesByCandidateKey);
+        assert.deepEqual(finished.activeInstanceKeys, ["inst:b","inst:d","inst:d2"]);
+        assert(notes.some(s => s.includes("retained=2 addedAlreadyHandled=1 addedRemaining=1")));
+      }
       const base = make(updateDir, ["a", "b", "c"], () => enabled);
       // Give a retryable outcome its actual owning Family in this fixture.
       base.failKeys.add("c");
