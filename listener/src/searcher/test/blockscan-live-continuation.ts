@@ -276,3 +276,57 @@ test("an old observe-only target revert cannot filter a currently unpriced direc
   assert.equal(changed, false); assert.equal(simulations, 0); assert.equal(rejects.hasPool(edges[0]!), false);
   assert.equal(flight.exportContinuation().rows.length, 1, "old observation remains evidence, not a new rejection");
 });
+
+test("subset continuation retains clean rows and requotes a retained consumer of a removed edge", async () => {
+  const {projectLiveContinuationSubset} = await import("../blockscan-live-continuation.js");
+  const oldEdges = [edge("slow", ADDR.WETH,token(1)),edge("best",ADDR.WETH,token(1)), edge("next",token(1),token(2))];
+  const owners = new Map([["slow","F"],["best","removed"],["next","F"]]);
+  const states = new Map(oldEdges.map(e=>[e.canonicalEdgeId!,e.instanceKey!]));
+  const base = { ...prices(10),graph:{edges:oldEdges},pricingStateKeyByEdgeKey:states,pricingFamilyIdByEdgeKey:owners,
+    coverage:{...prices(10).coverage,expectedReadKeys:[], resolvedEdgeKeys:["slow","best","next"]},
+    resolvedFamilyIds:["F","removed"],incompleteFamilyIds:[], coverageByReadKey:new Map(),
+    freshnessByReadKey:new Map(),stateByStateKey:new Map(),coverageByEdgeKey:new Map() };
+  const quote = async (r:{edge:TokenEdge;amountIn:bigint})=>({source:source(10),amountIn:r.amountIn,
+    amountOut:r.amountIn * (r.edge.canonicalEdgeId==="best"?3n:2n)});
+  const effective=await build(10,{pricing:base,quote});
+  assert.equal(effective.rows.get("next")!.amountIn,300n);
+  const parent={version:1,identity:"old",pricing:{version:1,raw:base,pricing:{...base,effectiveMids:effective},
+    lineage:exportEffectiveMidReplayState(effective),disabledInstances:[]},startup:{version:1,rows:[]},
+    simRejects:{version:1,pools:[],routes:[]},amounts:{version:1,headers:[],samples:[]}} as unknown as import("../blockscan-live-continuation.js").LivePricingContinuation;
+  const graph={...prices(10),edges:[oldEdges[0]!,oldEdges[2]!]} as unknown as import("../venues/blockscan-state-capability.js").VerifiedGraphView;
+  const calls:string[]=[];
+  const input:Parameters<typeof projectLiveContinuationSubset>[0]={parent,identity:"new",weth:ADDR.WETH,graph,rawGraph:graph,priorFamilies:["F","removed"],liveFamilies:["F"],owner:e=>owners.get(e.canonicalEdgeId!),
+    rebuild:(pricing,previous,touched,disabled)=>build(10,{pricing,previous,touchedStateKeys:touched,disabledEdgeIds:disabled,
+      quote:async r=>{calls.push(r.edge.canonicalEdgeId!);return quote(r);}})};
+  const result=await projectLiveContinuationSubset(input);
+  assert.deepEqual(calls,["next"]);
+  const denied={...parent,simRejects:{version:1 as const,pools:["next"],routes:[]},startup:{version:1 as const,
+    rows:[["next",{key:"fixture",observation:{edgeId:"next",status:"revert",failureStage:"target",prefixEdges:["best"]}}] as const]}};
+  await assert.rejects(projectLiveContinuationSubset({...input,parent:denied}),/surviving prefix evidence/);
+  await assert.rejects(projectLiveContinuationSubset({...input,parent:{...denied,startup:parent.startup}}),/surviving prefix evidence/);
+  assert.deepEqual(calls,["next"],"an unproven pool denial must fail before requoting");
+  const automatic={...parent,pricing:{...parent.pricing,disabledInstances:[JSON.stringify(["F","next"])]}};
+  const reopened=await projectLiveContinuationSubset({...input,parent:automatic});
+  assert.deepEqual(calls,["next","next"]);
+  assert.equal(reopened.pricing.pricing.effectiveMids!.rows.get("next")!.amountIn,200n);
+  assert.deepEqual(reopened.pricing.disabledInstances,[]);
+  const unavailable=await build(10,{pricing:base,quote:async req=>req.edge.canonicalEdgeId==="slow"?
+    {source:source(10),amountIn:req.amountIn,amountOut:0n}:quote(req)});
+  const noSurvivingInput={...automatic,pricing:{...automatic.pricing,
+    pricing:{...parent.pricing.pricing,effectiveMids:unavailable},lineage:exportEffectiveMidReplayState(unavailable)}};
+  const pending=await projectLiveContinuationSubset({...input,parent:noSurvivingInput});
+  assert.equal(pending.pricing.pricing.effectiveMids!.rows.get("next")!.status,"missing-valuation");
+  assert.deepEqual(pending.pricing.disabledInstances,[]);
+  const dormant={...edge("standing",token(10),token(11)),leavesStandingPosition:true} as TokenEdge;
+  const withDormant=(snapshot:typeof parent.pricing.raw)=>({...snapshot,graph:{...snapshot.graph,edges:[...snapshot.graph.edges,dormant]}});
+  const legacy={...parent,pricing:{...parent.pricing,raw:withDormant(parent.pricing.raw),pricing:withDormant(parent.pricing.pricing)}};
+  const accepted=await projectLiveContinuationSubset({...input,parent:legacy,
+    owner:e=>e.canonicalEdgeId==="standing"?"removed":input.owner(e)});
+  assert(!accepted.pricing.pricing.effectiveMids!.rows.has("standing"));
+
+  assert.equal(result.pricing.pricing.effectiveMids!.rows.get("next")!.amountIn,200n);
+  assert(!result.pricing.pricing.effectiveMids!.rows.has("best"));
+  assert.equal(parent.pricing.pricing.effectiveMids!.rows.get("next")!.amountIn,300n);
+  await assert.rejects(projectLiveContinuationSubset({...input,liveFamilies:["F","new"]}),/expansion/);
+  await assert.rejects(projectLiveContinuationSubset({...input,graph:{...graph,edges:[oldEdges[1]!,oldEdges[2]!]}}),/metadata/);
+});

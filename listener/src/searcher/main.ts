@@ -1,12 +1,14 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { BlockScanStartupCache, startupCacheNamespace } from "./blockscan-startup-cache.js";
-import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveContinuationIdentity, compatibleLiveContinuationIdentities, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
+import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveContinuationIdentity, compatibleLiveContinuationIdentities, liveContinuationPointer, projectLiveContinuationSubset, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
 import { createBlockScanActivityTransport } from "./blockscan-activity-transport.js";
 import { startupRevertFilterEnabled } from "./blockscan-startup-filter.js";
 import { writeEffectiveMidProgress } from "./effective-mid-progress-file.js";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import { resolveProfitMode, validatePositiveGrossProfitMode, type ProfitMode } from "../shared/profit-mode.js";
 import "../shared/adapters/index.js";
@@ -80,6 +82,7 @@ import {
 } from "./production-family-startup-manifest.js";
 import {
   PRODUCTION_FAMILY_ACTIVATIONS,
+  PRODUCTION_STRICT_SHADOW_FAMILY_LOAD,
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./venues/production-family-composition.js";
 import { assertFamilyActivationEnvironment } from "./venues/production-families/activation.js";
@@ -106,7 +109,7 @@ import type {
   PoolIdentityFailureReason,
   RejectedPoolIdentity,
 } from "./venues/identity.js";
-import { UniverseRebuildCheckpointStore } from
+import { activeReadyMemos as sealedReadyMemos, canonicalJson, UniverseRebuildCheckpointStore } from
   "./universe-rebuild-checkpoint.js";
 import {
   UniverseRunIncomplete,
@@ -1508,6 +1511,13 @@ export async function initializeReadyProducer({
   readonly useReadyGeneration: boolean;
   readonly currentHead: number;
 }) {
+  const liveSubset = process.env.SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET === "1";
+  if (liveSubset && (!useReadyGeneration || blindUseIncumbentReady ||
+      process.env.SEARCHER_DRY_RUN !== "1" || process.env.SEARCHER_BLOCKSCAN_SUBMIT !== "0" ||
+      process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED !== "1" ||
+      process.env.SEARCHER_ENABLE_BACKRUN !== "0" || process.env.SEARCHER_ENABLE_MEMPOOL !== "0")) {
+    throw new Error("live Ready subset requires a continuation dry-run on a sealed Ready");
+  }
   const rebuildStore = new UniverseRebuildCheckpointStore({
     path: universeRebuildCheckpointPath,
   });
@@ -1531,7 +1541,7 @@ export async function initializeReadyProducer({
       );
     }
     readyUniverse = rebuildEnvelope.readyGeneration;
-    if (useReadyGeneration && !blindUseIncumbentReady) {
+    if (useReadyGeneration && !blindUseIncumbentReady && !liveSubset) {
       readyUniverse = await refreshReadyInstances({
         ...rebuildWiring,
         store: rebuildStore,
@@ -1587,13 +1597,31 @@ export async function initializeReadyProducer({
     throw new Error("strict startup readyGeneration failed root verification");
   }
   const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
-  const activeInstanceKeys = new Set(readyUniverse.activeInstanceKeys);
+  const liveFamilyIds = liveSubset
+    ? PRODUCTION_FAMILY_ACTIVATIONS.filter(row => row.enabled).map(row => String(row.familyId)).sort()
+    : undefined;
+  const liveIds = liveFamilyIds && new Set(liveFamilyIds);
+  if (liveFamilyIds) {
+    if (!readyUniverse.familyPartitions || liveFamilyIds.some(id => !readyUniverse.familyPartitions![id]?.enabled)) {
+      throw new Error("live Family selection expands the parent Ready");
+    }
+    await rebuildWiring.assertCanonicalHead(readyUniverse.cutoff);
+  }
+  const selectedMemos = liveIds
+    ? sealedReadyMemos(rebuildEnvelope).filter(memo => liveIds.has(memo.familyId))
+    : undefined;
+  if (selectedMemos?.some(memo => !rebuildWiring.isReadyMemoDefinitionCurrent!(memo))) {
+    throw new Error("retained live Family proof changed; update Ready before resuming");
+  }
+  const activeInstanceKeys = new Set(selectedMemos
+    ? selectedMemos.map(memo => memo.familyInstanceKey)
+    : readyUniverse.activeInstanceKeys);
   // Historical checkpoints can contain more than one memo per instance.
   // Current terminal outcomes revoke their candidate memo atomically, while
   // this defensive dedupe keeps runtime rehydration one-instance-per-key
   // during the one-time checkpoint transition.
   const seenReadyInstances = new Set<string>();
-  const activeReadyMemos = Object.values(rebuildEnvelope.verifiedMemos)
+  const activeReadyMemos = (selectedMemos ?? Object.values(rebuildEnvelope.verifiedMemos))
     .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
     .filter((memo) => {
       if (seenReadyInstances.has(memo.familyInstanceKey)) return false;
@@ -1643,17 +1671,32 @@ export async function initializeReadyProducer({
       "strict startup rebuild produced no observed/retained funding token",
     );
   }
+  let graph = strictReadyRuntime.graph as TokenEdge[];
+  if (liveIds) {
+    const excludedActions = new Set(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins.flatMap(
+      module => [...module.plugin.manifest.ownedActionAdapterIds] as string[],
+    ));
+    graph = graph.filter(edge => !excludedActions.has(edge.adapterId));
+    const publications = rebuildWiring.aggregateOnceByFamily([...readyInstances, ...fundingReadyEntries]);
+    const projected = rebuildWiring.buildGraphSnapshot(publications, readyUniverse.cutoff) as { edges: TokenEdge[] };
+    const byId = new Map(projected.edges.map(edge => [edge.canonicalEdgeId, edge]));
+    if (graph.length !== projected.edges.length || byId.size !== graph.length || graph.some(edge => {
+      const verified = byId.get(edge.canonicalEdgeId);
+      return !verified || canonicalJson(verified) !== canonicalJson(edge);
+    })) throw new Error("live subset edges differ from the sealed Ready and retained bindings");
+    console.log("[searcher/live-ready-scope] " + JSON.stringify({ parentGeneration: readyUniverse.generation,
+      parentGraphEdges: strictReadyRuntime.graph.length, liveGraphEdges: graph.length, liveFamilyIds }));
+  }
   const strictRuntimeRoot = new StrictProductionRuntimeRoot({
     catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     readySource: readyUniverse.cutoff,
-    readyGraph: strictReadyRuntime.graph,
+    readyGraph: graph,
     readyInstances,
     readyFundingAssets: fundingReadyEntries.map((entry) => Object.freeze({
       familyId: entry.familyId as never,
       asset: entry.asset,
     })),
   });
-  const graph = strictReadyRuntime.graph as TokenEdge[];
   const graphViewCoordinator = new StrictReadyGraphViewCoordinator({
     catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
     ready: readyUniverse,
@@ -1662,6 +1705,9 @@ export async function initializeReadyProducer({
   const baseline = resolveProducerBaseline({ ready: readyUniverse, currentHead });
   return {
     runtimeRoot: strictRuntimeRoot,
+    liveFamilyIds,
+    readyFingerprint: rebuildEnvelope.checkpointFingerprint,
+    parentFamilyIds: liveFamilyIds ? Object.keys(readyUniverse.familyPartitions!).filter(id => readyUniverse.familyPartitions![id]!.enabled).sort() : undefined,
     graph,
     graphViewCoordinator,
     flashTokens,
@@ -1682,6 +1728,74 @@ export async function initializeReadyProducer({
       observationScanFrom: baseline.observationScanFrom,
     }),
   };
+}
+
+/** Validate with the source process's full Family registry before the consumer loads its own Ready. */
+async function validateParentBeforeProjection(): Promise<void> {
+  if (process.env.PRIVATE_KEY || process.env.OWNER_PRIVATE_KEY || process.env.SEARCHER_DRY_RUN !== "1" ||
+      process.env.SEARCHER_BLOCKSCAN_SUBMIT !== "0") throw new Error("parent validation is read-only");
+  const dir = process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR!;
+  const prior = JSON.parse(readFileSync(resolve(dirname(dir), "request.json"), "utf8"));
+  const families = PRODUCTION_FAMILY_ACTIVATIONS.filter(row => row.enabled).map(row => String(row.familyId)).sort();
+  if (JSON.stringify(families) !== JSON.stringify(prior.families)) throw new Error("parent activation receipt changed");
+  const rpcUrl = liveRpcUrl(), provider = new ethers.JsonRpcProvider(rpcUrl);
+  try {
+    const executionIdentity = { executor: ethers.getAddress(process.env.BOTVM_ADDRESS!).toLowerCase(),
+      transactionOrigin: normalizeTransactionOrigin(process.env.BOTVM_OWNER!) };
+    const meta = await initializeReadyProducer({
+      universeRebuildCheckpointPath: process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH!, rpcUrl, startupCandidates: [],
+      executionIdentity, onSimulationFatal: reason => { throw new Error(reason.kind); },
+      blindUseIncumbentReady: false, useReadyGeneration: true, currentHead: await provider.getBlockNumber(),
+    });
+    if (meta.readyFingerprint !== prior.readyFingerprint) throw new Error("parent Ready checkpoint changed");
+    const before = liveContinuationPointer(dir);
+    const state = await new LivePricingContinuationStore(dir, before.identity).read();
+    if (!state) throw new Error("missing parent price data");
+    const cache = new BlockScanSimRejectCache();
+    const runtime = createBlockScanPriceRuntime({ provider, rpcUrl, ...executionIdentity, strictRuntimeRoot: meta.runtimeRoot,
+      blockScanRuntimeAbort: new AbortController(), blockScanCfg: undefined, isPoolSimRejected: () => false, recordPricing: () => {} });
+    await validateLiveContinuationAnchors(state, runtime.blockScanAmountReference, async n => {
+      const b = await provider.getBlock(n); if (!b?.hash) throw new Error("missing parent anchor"); return {hash:b.hash};
+    });
+    const view = (at: typeof state.pricing.pricing) => meta.graphViewCoordinator.build({
+      id: "source-continuation-check", edges: meta.graph, topologyKey: `strict-ready:${meta.lineage.generation}:${meta.lineage.graphHash}`,
+      generation: at.generation, sourceBlock: at.sourceBlock, sourceBlockHash: at.sourceBlockHash });
+    await runtime.currentRuntimeCoordinator.restoreHistoricalBaseline(state.pricing, { graph: view(state.pricing.pricing),
+      rawGraph: view(state.pricing.raw), weth: ADDR.WETH, control: { signal: new AbortController().signal, deadlineAtMs: Date.now()+180000 } });
+    const startup = createBlockScanStartupExecutionPreflight({ ...executionIdentity, simRejects: cache, concurrency: 1,
+      simulateStandalone: Object.assign(async () => { throw new Error("parent restore may not simulate"); },
+        { stats: () => { throw new Error("parent restore has no simulator"); } }) });
+    startup.restoreContinuation(state.startup); cache.restoreContinuation(state.simRejects, meta.graph);
+    if (liveContinuationPointer(dir).digest !== before.digest) throw new Error("parent journal advanced during validation");
+    console.log("[searcher/verified-subset-parent] " + JSON.stringify({ ...before,families,readyFingerprint:meta.readyFingerprint }));
+  } finally { provider.destroy(); }
+}
+
+async function liveSubsetParentProof() {
+  const dir = process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR;
+  const out = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR;
+  if (!dir) return;
+  if (process.env.SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET !== "1" || !out || !isAbsolute(dir) || resolve(dir)===resolve(out))
+    throw new Error("subset handoff requires distinct parent and child journals");
+  if (existsSync(resolve(out,"current.bin"))) return; // The authenticated consumer store owns ordinary resume.
+  const prior = JSON.parse(readFileSync(resolve(dirname(dir),"request.json"),"utf8"));
+  if (!Array.isArray(prior.families) || !prior.families.every((id:unknown) => typeof id === "string") ||
+      !prior.readyFingerprint || new Set(prior.families).size !== prior.families.length) throw new Error("missing parent activation receipt");
+  const enabled = new Set<string>(prior.families);
+  const current = PRODUCTION_FAMILY_ACTIVATIONS.filter(row=>row.enabled);
+  if (current.some(row=>!enabled.has(row.familyId))) throw new Error("cross-live Family expansion is unsupported");
+  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, MAINNET_RPC_URL:liveRpcUrl(), BOTVM_ADDRESS:process.env.BOTVM_ADDRESS,
+    BOTVM_OWNER:process.env.BOTVM_OWNER, SEARCHER_TEST_DISABLE_DOTENV:"1", SEARCHER_DRY_RUN:"1", SEARCHER_BLOCKSCAN_SUBMIT:"0",
+    SEARCHER_ENABLE_BACKRUN:"0", SEARCHER_ENABLE_MEMPOOL:"0", SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED:"1",
+    SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR:dir, SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH:process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH,
+    SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET:"1" };
+  for (const row of PRODUCTION_FAMILY_ACTIVATIONS) if (row.envKey) env[row.envKey]=enabled.has(row.familyId)?"1":"0";
+  const {stdout}=await promisify(execFile)(process.execPath,["--max-old-space-size=10000","--import","tsx",
+    fileURLToPath(import.meta.url),"--verify-subset-parent"],{env,timeout:600000,maxBuffer:16*1024*1024});
+  const tag="[searcher/verified-subset-parent] ";
+  const lines=stdout.split("\n").filter(line=>line.startsWith(tag));
+  if (lines.length!==1) throw new Error("full parent journal did not pass its original receiver");
+  return JSON.parse(lines[0]!.slice(tag.length)) as {identity:string;digest:string;families:string[];readyFingerprint:string};
 }
 
 async function main(): Promise<void> {
@@ -1715,6 +1829,7 @@ async function main(): Promise<void> {
 
   const rpcUrl = liveRpcUrl();
 
+  const validatedParent = await liveSubsetParentProof();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
   const dryRunBotVmCodeOverride = dryRunBotVmCodeOverrideEnabled(
@@ -2353,7 +2468,7 @@ async function main(): Promise<void> {
     ...rawBlockScanOverrides,
   ].map((candidate) => Object.freeze({ ...candidate })));
   const {
-    runtimeRoot: strictRuntimeRoot, graph: initialReadyGraph,
+    runtimeRoot: strictRuntimeRoot, graph: initialReadyGraph, liveFamilyIds, parentFamilyIds, readyFingerprint,
     graphViewCoordinator: strictReadyGraphViews, flashTokens,
     instanceCount: readyInstanceCount, lineage: readyUniverse, baselineSummary,
   } = await initializeReadyProducer({
@@ -2814,6 +2929,7 @@ async function main(): Promise<void> {
       fixedWethInput: blockScanStageSettings.fixedEffectiveWethInput?.toString() ?? null,
       spreadBps: blockScanCfg.minSpreadBps,
       cascade: resolveEffectiveAmountCascade(process.env.SEARCHER_BLOCKSCAN_EFFECTIVE_AMOUNT_CASCADE_ENABLED),
+      ...(liveFamilyIds && { liveFamilyIds, readyFingerprint }),
     };
     const identity = liveContinuationIdentity(continuationContext);
     const compatibilityPath = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY;
@@ -2826,16 +2942,75 @@ async function main(): Promise<void> {
         phase: "new-logical-round", previousCheckpointArchived: archived,
       })}`);
     }
-    const restored = continuePrices ? await store.read() : null;
+    let restored = continuePrices ? await store.read() : null;
+    const parentDir = process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR;
+    let importedParent = false;
+    const view = (at: {generation:number; sourceBlock:number; sourceBlockHash:string}) => strictReadyGraphViews.build({
+      id: "live-continuation", edges: graph, topologyKey: frozenProducerTopology.topologyKey,
+      generation: at.generation, sourceBlock: at.sourceBlock, sourceBlockHash: at.sourceBlockHash,
+    });
+    if (!restored && parentDir && liveFamilyIds && parentFamilyIds) {
+      if (!isAbsolute(parentDir) || resolve(parentDir) === resolve(continuationDirectory)) throw new Error("subset parent must be a separate existing journal");
+      if (!validatedParent || validatedParent.readyFingerprint !== readyFingerprint ||
+          validatedParent.digest !== liveContinuationPointer(parentDir).digest) throw new Error("validated parent journal or Ready changed");
+      const priorFamilies = validatedParent.families;
+      if (liveFamilyIds.some(id => !priorFamilies.includes(id)) || priorFamilies.some(id => !parentFamilyIds.includes(id))) {
+        throw new Error("cross-live Family expansion is unsupported");
+      }
+      const { liveFamilyIds: _selected, readyFingerprint: _parentReady, ...baseContext } = continuationContext;
+      const manifest = process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_COMPATIBILITY;
+      // Legacy full-Ready journals predate the liveFamilyIds context field.
+      const contexts: unknown[] = [{...baseContext,liveFamilyIds:priorFamilies,readyFingerprint}];
+      if (JSON.stringify(parentFamilyIds) === JSON.stringify(priorFamilies)) contexts.unshift(baseContext);
+      if (!contexts.some(cx => liveContinuationIdentity(cx) === validatedParent.identity ||
+          (manifest && compatibleLiveContinuationIdentities(cx,manifest).includes(validatedParent.identity)))) {
+        throw new Error("unreviewed subset parent identity");
+      }
+      // Accept exactly the same sealed, single-producer chain the full receiver verified.
+      const parent = await new LivePricingContinuationStore(parentDir,validatedParent.identity).read();
+      if (!parent || validatedParent.digest !== liveContinuationPointer(parentDir).digest) throw new Error("parent journal advanced during restore");
+      await validateLiveContinuationAnchors(parent, blockScanAmountReference, number => frozenProducerTopology.observeHeader(number));
+      const previous = parent.pricing.pricing, source = previous.effectiveMids!.source;
+      const control = {signal:blockScanRuntimeAbort.signal,deadlineAtMs:Date.now()+blockScanStartupWarmBudgetMs};
+      const sim = sourceSimulationFactory({source,control});
+      const backend = new PinnedRethQuoteBackend(config.rpcUrl,source.hash,{...control,transportLane:"producer-bulk",
+        scopeLabel:"live subset affected pricing",maxBatchSize:64,maxConcurrentBatches:8,retryRpcThrottle:true,
+        allowSingleCallFallback:false,transportScheduler:blockScanRethTransportScheduler,
+        onSourceUnavailable:error=>blockScanRuntimeAbort.abort(error),onRpcThrottle:error=>blockScanRuntimeAbort.abort(error)});
+      try {
+        const sessions = createEffectiveQuoteSessions(requiredEdgeIds => strictSessionFor({purpose:"exact-execution",
+          source,control,fundingAssets:[],requiredEdgeIds,exactCallBackend:backend,simulationTransport:sim.transport}));
+        const ownership = new Map<string,string>();
+        for (const module of [...PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins,...PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins])
+          for (const action of module.plugin.manifest.ownedActionAdapterIds) ownership.set(action,module.familyId);
+        restored = await projectLiveContinuationSubset({parent,identity,liveFamilies:liveFamilyIds,priorFamilies,
+          owner:edge=>ownership.get(edge.adapterId),
+          graph:view(previous),rawGraph:view(parent.pricing.raw),weth:ADDR.WETH,
+          rebuild:(raw, old, touched, disabled) => buildEffectiveMids({ pricing:raw, quoteGraph:view(previous),
+            previous:old,touchedStateKeys:touched,disabledEdgeIds:disabled,weth:ADDR.WETH,control,concurrency:1024,
+            fixedWethInput:blockScanStageSettings.fixedEffectiveWethInput,gasCostWei:blockScanAmountReference.estimateGasCost(source),
+            enumerationSpreadBps:blockScanCfg.minSpreadBps,cascadeAmountChanges:continuationContext.cascade,
+            prepareQuote:sessions.prepareQuote,quote:async request=>{
+              const quote=await sessions.sessionFor(request.edge).issueExact({...request,executor:executionIdentity.executor,runtimeEvidence:[]});
+              if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
+              return quote;
+            } }) });
+        if (control.signal.aborted) throw control.signal.reason;
+        if (validatedParent.digest !== liveContinuationPointer(parentDir).digest) throw new Error("parent journal advanced during projection");
+        importedParent = true;
+      } finally { await Promise.all([backend.closeAndDrain(),sim.closeAndDrain()]); }
+    }
+    if (liveFamilyIds && !restored) throw new Error("live subset requires a verified price continuation");
     if (restored) {
-      // Canonical anchors and current Ready/index are checked before installing
-      // data. No stored Funding, Exact handles, permit or final sim is restored.
-      await validateLiveContinuationAnchors(restored, blockScanAmountReference,
-        number => frozenProducerTopology.observeHeader(number));
-      const view = (at: typeof restored.pricing.pricing) => strictReadyGraphViews.build({
-        id: "live-continuation", edges: graph, topologyKey: frozenProducerTopology.topologyKey,
-        generation: at.generation, sourceBlock: at.sourceBlock, sourceBlockHash: at.sourceBlockHash,
-      });
+      if (importedParent) {
+        for (const at of [restored.pricing.raw, restored.pricing.pricing]) {
+          const actual = await frozenProducerTopology.observeHeader(at.sourceBlock);
+          if (actual.hash.toLowerCase() !== at.sourceBlockHash.toLowerCase()) throw new Error("subset price anchor reorged");
+        }
+      } else {
+        await validateLiveContinuationAnchors(restored, blockScanAmountReference,
+          number => frozenProducerTopology.observeHeader(number));
+      }
       await priceRuntime.currentRuntimeCoordinator.restoreHistoricalBaseline(restored.pricing, {
         graph: view(restored.pricing.pricing), rawGraph: view(restored.pricing.raw), weth: ADDR.WETH,
         control: { signal: blockScanRuntimeAbort.signal, deadlineAtMs: Date.now() + blockScanStartupWarmBudgetMs },
@@ -2843,6 +3018,7 @@ async function main(): Promise<void> {
       startupExecutionPreflight.restoreContinuation(restored.startup);
       blockScanSimRejects.restoreContinuation(restored.simRejects, graph);
       startupExecutionPreflight.defer(true);
+      if (importedParent) await store.write({ ...restored, pricing: priceRuntime.currentRuntimeCoordinator.exportHistoricalBaseline() });
       restoredContinuation = true;
       console.log(`[searcher/live-continuation] ${JSON.stringify({
         phase: "restored", sourceBlock: restored.pricing.pricing.sourceBlock,
@@ -3075,7 +3251,7 @@ async function main(): Promise<void> {
         startupCacheNamespace([1, Number(blockScanChainId), frozenProducerTopology.topologyKey,
           executionIdentity.executor, executionIdentity.transactionOrigin,
           blockScanStageSettings.fixedEffectiveWethInput?.toString() ?? null,
-          process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_NAMESPACE ?? null]))
+          process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_NAMESPACE ?? null, ...(liveFamilyIds ? [liveFamilyIds] : [])]))
       : undefined,
     nMinusOneFallbackEnabled: blockScanNMinusOneFallback,
     nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
@@ -7729,7 +7905,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((err) => {
+  (process.argv[2] === "--verify-subset-parent" ? validateParentBeforeProjection().then(() => process.exit(0)) : main()).catch((err) => {
     console.error(`[searcher/live] fatal: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   });

@@ -1,3 +1,8 @@
+import { applyStartupTargetFilters } from "./blockscan-startup-filter.js";
+import { blockScanEdgeKey, exactSetHash, type VerifiedGraphView } from "./venues/blockscan-state-capability.js";
+import { edgeInstanceKey } from "./venues/route-instance-identity.js";
+import type { TokenEdge } from "./planner/token-graph.js";
+import { restoreEffectiveMidReplayState, exportEffectiveMidReplayState } from "./blockscan-effective-mid.js";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { open, readFile, mkdir, rename, lstat, unlink, copyFile } from "node:fs/promises";
@@ -9,7 +14,7 @@ import { historicalBaselineData } from "./blockscan-historical-benchmark.js";
 import type { HistoricalPricingBaseline, StrictCurrentRuntimeCoordinator } from "./strict-current-runtime-coordinator.js";
 import type { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import type { StartupContinuationState, StartupExecutionPreflight } from "./blockscan-startup-execution-preflight.js";
-import type { SimRejectContinuation, BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
+import { type SimRejectContinuation, BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { exportEffectiveMidReplayDelta, type EffectiveMidReplayDelta,
   type EffectiveAmountReference, type EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
@@ -501,4 +506,133 @@ export class LivePricingContinuationWriter {
       reason: String(error).replace(/https?:\/\/[^\s"'`]+/g, "[REDACTED_RPC]") });
   }
   async flush(): Promise<void> { await this.pending; if (this.failure) throw this.failure; }
+}
+
+/** A sealed pointer is compared before and after both reads of the immutable source journal. */
+export function liveContinuationPointer(directory: string): {identity:string;digest:string} {
+  const bytes=readFileSync(join(directory,"current.bin"));
+  const digest=sha(bytes.subarray(65));
+  assert(bytes[64]===10 && bytes.subarray(0,64).toString()===digest,"invalid parent pointer checksum");
+  const p=deserialize(bytes.subarray(65));
+  assert(p.version===2 && p.pointer?.version===2 && /^[a-f0-9]{64}$/.test(p.pointer.identity),"invalid subset parent pointer");
+  return {identity:p.pointer.identity,digest:sha(bytes)};
+}
+
+/** Narrow saved data within one sealed Ready. Only the consumer's live view changes. */
+export async function projectLiveContinuationSubset(input: {
+  parent: LivePricingContinuation;
+  identity: string;
+  liveFamilies: readonly string[];
+  priorFamilies: readonly string[];
+  owner: (edge:TokenEdge)=>string | undefined;
+  rawGraph: VerifiedGraphView;
+  graph: VerifiedGraphView;
+  weth: string;
+  rebuild: (raw: BlockScanStateSnapshot, previous: EffectiveMidSnapshot,
+    touched: ReadonlySet<string>, disabled: ReadonlySet<string>) => Promise<EffectiveMidSnapshot>;
+}): Promise<LivePricingContinuation> {
+  const { parent, graph, rawGraph } = input;
+  const allowed = new Set(input.liveFamilies);
+  assert(allowed.size > 0 && allowed.size === input.liveFamilies.length &&
+    input.liveFamilies.every(id => input.priorFamilies.includes(id)), "cross-live Family expansion is unsupported");
+  const prior = parent.pricing.pricing, raw = parent.pricing.raw, effective = prior.effectiveMids;
+  assert(effective?.complete && graph.sourceBlock === prior.sourceBlock && graph.sourceBlockHash === prior.sourceBlockHash &&
+    rawGraph.sourceBlock === raw.sourceBlock && rawGraph.sourceBlockHash === raw.sourceBlockHash, "subset anchors differ");
+  const keys = new Set(graph.edges.map(blockScanEdgeKey));
+  const pricedKeys = new Set([...effective.rows.keys()].filter(k=>keys.has(k)));
+  const owners = prior.pricingFamilyIdByEdgeKey!, states = prior.pricingStateKeyByEdgeKey!;
+  for (const [before, after] of [[prior.graph, graph], [raw.graph, rawGraph]] as const) {
+    assert(before.edges.every(edge => input.priorFamilies.includes(input.owner(edge)!)), "unbound parent edge owner");
+    const expected = before.edges.filter(edge => allowed.has(input.owner(edge)!));
+    assert.equal(expected.length, after.edges.length, "live subset membership differs from saved pricing");
+    for (let i = 0; i < expected.length; i++) assert.deepEqual(expected[i], after.edges[i], "retained edge metadata changed");
+  }
+  restoreEffectiveMidReplayState(effective, parent.pricing.lineage, prior.graph.edges, input.weth);
+  const affected = new Set<string>();
+  const affectedRows = new Set<string>();
+  for (const [key, ref] of parent.pricing.lineage.byRow) {
+    if (keys.has(key) && parent.pricing.lineage.references[ref]!.path.some(step => !keys.has(step.edgeId))) {
+      const state = states.get(key); assert(state, "retained effective row lost its state key"); affected.add(state.toLowerCase()); affectedRows.add(key);
+    }
+  }
+  const filter = <V>(map: ReadonlyMap<string,V> | undefined) =>
+    new Map([...(map ?? [])].filter(([key]) => keys.has(key)));
+  const subStates = filter(raw.pricingStateKeyByEdgeKey), selectedStates = new Set(subStates.values());
+  // Strict production stores raw per-edge observations. Other read layouts need their own provenance.
+  assert(raw.coverage.expectedReadKeys.length === 0 && !raw.coverageByReadKey.size &&
+    !raw.freshnessByReadKey.size && !raw.stateByStateKey.size, "unsupported raw read layout");
+  const coverage = { ...raw.coverage };
+  for (const kind of ["expectedState","resolvedState","unresolvedState","expectedEdge","resolvedEdge","unavailableEdge",
+    "unresolvedEdge","refreshedEdge","carriedEdge"] as const) {
+    const source = raw.coverage[`${kind}Keys`];
+    if (source === undefined) continue;
+    const selected = kind.endsWith("State") ? selectedStates : keys;
+    const valid = source.filter(key => selected.has(key));
+    coverage[`${kind}Keys`] = valid;
+    coverage[`${kind}KeyHash`] = exactSetHash(valid);
+  }
+  const narrowed = { ...raw, graph: rawGraph, coverage, mids: filter(raw.mids), coverageByEdgeKey: filter(raw.coverageByEdgeKey),
+    pricingProvenanceByEdgeKey: filter(raw.pricingProvenanceByEdgeKey), pricingStateKeyByEdgeKey: subStates,
+    pricingFamilyIdByEdgeKey: filter(raw.pricingFamilyIdByEdgeKey), perBlockRefreshStateKeys: raw.perBlockRefreshStateKeys?.filter(k => selectedStates.has(k)),
+    resolvedFamilyIds: raw.resolvedFamilyIds.filter(id => allowed.has(id)), incompleteFamilyIds: raw.incompleteFamilyIds.filter(id => allowed.has(id)),
+    familyTelemetry: [], laneTelemetry: [], poolTopologySpikeReceipts: [] };
+  const groups = new Map(graph.edges.map(edge => [JSON.stringify([owners.get(blockScanEdgeKey(edge)),edgeInstanceKey(edge)]),true]));
+  const disabledInstances = parent.pricing.disabledInstances.filter(key => groups.has(key));
+  const disabledGroups = new Set(disabledInstances);
+  const pool = (edge: TokenEdge) => edge.instanceKey ?? JSON.stringify([edge.adapterId,edge.target.toLowerCase(),edge.poolId?.toLowerCase() ?? null]);
+  const selectedPools = new Set(graph.edges.map(pool));
+  const pools = parent.simRejects.pools.filter(id => selectedPools.has(id)), rejected = new Set(pools);
+  const rows = parent.startup.rows.filter(([id,entry]) => keys.has(id) &&
+    Array.isArray(entry.observation.prefixEdges) && entry.observation.prefixEdges.every(edge => keys.has(edge)));
+  // A bare previous final-sim pool key cannot prove which prefix established it.
+  // Carry a retained denial only if the normal target-revert policy independently
+  // derives it from a surviving observation. Otherwise refuse the migration.
+  const provedDenials = new BlockScanSimRejectCache();
+  applyStartupTargetFilters({enabled:true,edges:graph.edges,rows:rows.map(([,entry])=>entry.observation),
+    cache:provedDenials,record:()=>{}});
+  const provedPools = new Set(provedDenials.exportContinuation().pools);
+  assert(pools.every(key=>provedPools.has(key)), "retained pool denial lacks surviving prefix evidence");
+  const group = (edge: TokenEdge) => JSON.stringify([owners.get(blockScanEdgeKey(edge)),edgeInstanceKey(edge)]);
+  // An automatic all-directions failure is amount-dependent. Recheck the entire retained
+  // instance if a prefix disappeared, or its tombstone no longer carries the original prefix.
+  // An explicit attributed pool revert stays binding independently of this auto policy.
+  const recheck = new Set<string>();
+  for (const edge of graph.edges) {
+    const id = blockScanEdgeKey(edge), key = group(edge);
+    if (disabledGroups.has(key) && !rejected.has(pool(edge)) &&
+        (affectedRows.has(id) || effective.rows.get(id)?.status === "disabled-for-run")) recheck.add(key);
+  }
+  const disabled = new Set<string>();
+  for (const edge of graph.edges) {
+    const id = blockScanEdgeKey(edge), key = group(edge);
+    if (rejected.has(pool(edge)) || (disabledGroups.has(key) && !recheck.has(key))) disabled.add(id);
+    else if (recheck.has(key)) {
+      const state = states.get(id); assert(state, "automatic exclusion lost its state key");
+      affected.add(state.toLowerCase());
+    }
+  }
+  const next = await input.rebuild(narrowed, effective, affected, disabled);
+  assert(next.complete && next.rows.size === pricedKeys.size && [...next.rows.keys()].every(key => pricedKeys.has(key)), "incomplete subset price table");
+  // Apply the producer's positive-input, all-directions failure rule to the new evidence.
+  // In particular, missing valuation cannot keep an old automatic exclusion alive.
+  const perBlock = new Set(prior.perBlockRefreshStateKeys);
+  for (const edge of graph.edges) {
+    const key = group(edge);
+    if (!recheck.has(key)) continue;
+    const id = blockScanEdgeKey(edge), row = next.rows.get(id), state = states.get(id);
+    const failed = row && row.amountIn !== null && row.amountIn > 0n &&
+      (row.status === "quote-failed" || row.status === "unsupported" || row.status === "no-output") &&
+      (state === undefined || !perBlock.has(state));
+    if (!failed) disabledGroups.delete(key);
+  }
+  const lineage = exportEffectiveMidReplayState(next);
+  restoreEffectiveMidReplayState(next,lineage,graph.edges,input.weth);
+  const pricing = { ...narrowed, generation: prior.generation, sourceBlock: prior.sourceBlock, sourceBlockHash: prior.sourceBlockHash,
+    graph, effectiveMids: next, perBlockRefreshStateKeys: prior.perBlockRefreshStateKeys?.filter(k => selectedStates.has(k)),
+    pricingStateKeyByEdgeKey: filter(states), pricingFamilyIdByEdgeKey: filter(owners) };
+  console.log("[searcher/live-subset-restore] " + JSON.stringify({ source: next.source, parentRows: effective.rows.size,
+    liveRows: next.rows.size, invalidatedStateKeys: affected.size, recheckedAutoExclusions: recheck.size, families: input.liveFamilies, startupObservations: rows.length }));
+  return { version: 1, identity: input.identity, amounts: parent.amounts,
+    pricing: { version: 1, raw: narrowed, pricing, lineage, disabledInstances: [...disabledGroups] }, startup: {version:1,rows},
+    simRejects: { version:1, pools, routes: parent.simRejects.routes } };
 }
