@@ -94,3 +94,38 @@ the historical universe. Its immutable input SHA-256 is
 evidence are preserved; the new run owns a separate output. Build/unit results are
 not a claim that this new Ready run, all Family acceptance or live performance has
 passed.
+
+## 2026-11-06: bounded Ready internal-state RPC recovery
+
+The saved-universe Ready run encountered HTTP 200 JSON-RPC `-32000` /
+`Internal error` on a hash-pinned `eth_getStorageAt` request, which previously
+latched `source-fault` immediately. This is separate from the earlier 429
+downgrades. The original checkpoint, journal, failures and freeze remain intact.
+
+Only Ready-mode, hash-pinned storage/code/balance/nonce reads may use the existing
+three-attempt transport budget (initial attempt, then 1s and 3s). Every item must
+fail with the exact internal error, without result or error data; IDs must match
+and all requests must use the same EIP-1898 hash with `requireCanonical: true`.
+Mixed results, source prechecks, execution calls, quota/revert errors, malformed
+responses, non-200 status, Retry-After and exhausted attempts retain the existing
+rejection path. No successful sibling state is discarded. Live retry policy and
+EVM execution semantics are unchanged. Normal successful reads short-circuit
+before allocating or decoding state again.
+
+Validation: 108 Rust tests passed; optimized build passed. The same real
+`protocol:erc4626` candidate at the frozen block passed without injection, and the
+new CLI passed after injecting the recorded internal error at its exact storage
+read: two identical physical requests, one injected failure, verified outcome.
+The separate old-CLI injection attempt failed before reaching the target read
+(`injected=0`); it is preserved and is not counted as an injected baseline flip.
+The original production failure and deterministic HTTP regressions are retained.
+
+The current Ready continues while the workspace CLI is updated atomically. Its
+rollout record must append the old/new binary hashes, timestamp and observed
+daemon inode/start identities without rewriting the original freeze. This is a
+dual-binary Ready run: attempts already spawned retain their old executable;
+subsequent attempts use the new one. Cached/no-read and unobserved attempts are
+not assigned a binary by inference. A new child proves switch-over; naturally
+observed internal-error retry plus completion is separate recovery evidence.
+Ready completion, complete Family correctness and dry-run timing remain unclaimed
+until their actual artifacts exist.

@@ -431,6 +431,46 @@ impl RpcClient {
         rate_limited
     }
 
+    // Retry only all-failed Ready state reads at one canonical hash. Mixed
+    // results keep the original fail-closed path so no observed state is lost.
+    // Source prechecks, execution calls and live's retry policy are unchanged.
+    fn retryable_ready_internal_response(&self, request: &Value, response: &Value) -> bool {
+        if !self.pinned || self.ready_batch_limit.is_none() { return false; }
+        let internal = |item: &Value| item.get("result").is_none()
+            && item["error"]["code"].as_i64() == Some(-32000)
+            && item["error"]["message"].as_str().is_some_and(|s| s.trim().eq_ignore_ascii_case("Internal error"))
+            && item["error"].get("data").is_none();
+        // No allocation or repeated state decoding on normal successful reads.
+        if !response.as_array().map(|items| !items.is_empty() && items.iter().all(internal))
+            .unwrap_or_else(|| internal(response)) { return false; }
+        let requests: Vec<&Value> = request.as_array().map(|v| v.iter().collect())
+            .unwrap_or_else(|| vec![request]);
+        let responses: Vec<&Value> = response.as_array().map(|v| v.iter().collect())
+            .unwrap_or_else(|| vec![response]);
+        if request.is_array() != response.is_array() || requests.len() != responses.len() { return false; }
+        let mut pin = None;
+        for item in &requests {
+            let count = match item["method"].as_str() {
+                Some("eth_getStorageAt") => 3,
+                Some("eth_getCode" | "eth_getBalance" | "eth_getTransactionCount") => 2,
+                _ => return false,
+            };
+            let Some(params) = item["params"].as_array().filter(|p| p.len() == count) else { return false; };
+            let tag = &params[count - 1];
+            if tag.as_object().is_none_or(|v| v.len() != 2) || tag["requireCanonical"] != json!(true)
+                || !tag["blockHash"].as_str().is_some_and(|h| h.len() == 66 && h.starts_with("0x")
+                    && h[2..].bytes().all(|c| c.is_ascii_hexdigit())) { return false; }
+            if pin.is_some_and(|value| value != tag) { return false; }
+            pin = Some(tag);
+        }
+        let mut seen = HashSet::new();
+        responses.iter().all(|item| {
+            let Some(id) = item.get("id").and_then(Value::as_u64) else { return false; };
+            item["jsonrpc"] == "2.0" && seen.insert(id)
+                && requests.iter().any(|r| r.get("id").and_then(Value::as_u64) == Some(id))
+        })
+    }
+
     fn send_json(&self, body: &Value) -> Result<Value> {
         // Retry the identical read before checked_source can latch a transient
         // transport failure. The caller's operation timeout remains unchanged.
@@ -460,7 +500,9 @@ impl RpcClient {
                 }
             };
             let status = response.status();
-            let retry_after = rate_retry_after(response.headers().get(reqwest::header::RETRY_AFTER));
+            let retry_after_header = response.headers().get(reqwest::header::RETRY_AFTER);
+            let internal_retry_allowed = retry_after_header.is_none();
+            let retry_after = rate_retry_after(retry_after_header);
             let transient_status = matches!(status.as_u16(), 502 | 503 | 504);
             let json_content = response.headers().get(reqwest::header::CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok()).is_some_and(|v| v.to_ascii_lowercase().contains("json"));
@@ -496,6 +538,12 @@ impl RpcClient {
                 .is_some_and(|byte| matches!(*byte, b'{' | b'[' | b'"'));
             let mut has_rpc_response = false;
             if let Ok(value) = &decoded {
+                if can_retry && status.as_u16() == 200 && internal_retry_allowed
+                    && self.retryable_ready_internal_response(body, value) {
+                    diagnostic::rpc_failure("rpc-ready-internal-retry", body, attempt + 1,
+                        Some(status.as_u16()), Some(-32000), "internal-server-error", true);
+                    continue;
+                }
                 // A JSON-RPC-shaped reply must not be hidden by an HTTP retry,
                 // including wrong IDs/versions, incomplete batches and reverts.
                 has_rpc_response = value.is_array() || ["jsonrpc", "id", "result"].iter()
@@ -5441,6 +5489,138 @@ mod tests {
     }
 
     #[test]
+    fn ready_internal_state_error_recovers_with_identical_bound_reads() {
+        let params = json!([format!("{:#x}", Address::ZERO), format!("{:#066x}", U256::ZERO),
+            {"blockHash":format!("0x{}", "11".repeat(32)),"requireCanonical":true}]);
+        let word = json!(format!("{:#066x}", U256::from(42)));
+        for batch in [false, true] {
+            let (error, success) = if batch {
+                (json!([{"jsonrpc":"2.0","id":0,"error":{"code":-32000,"message":"Internal error"}},
+                    {"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Internal error"}}]),
+                 json!([{"jsonrpc":"2.0","id":1,"result":"0x2"},{"jsonrpc":"2.0","id":0,"result":word}]))
+            } else {
+                (json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Internal error"}}),
+                 json!({"jsonrpc":"2.0","id":1,"result":word}))
+            };
+            let (mut rpc, peer) = rpc_fixture_steps(vec![(200,error),(200,success)]);
+            rpc.pinned = true; rpc.ready_batch_limit = Some(2);
+            if batch {
+                let out = rpc.batch_call(&[("eth_getStorageAt",params.clone()),("eth_getBalance",json!([Address::ZERO,params[2]]))]).unwrap();
+                assert_eq!(out.into_iter().map(Result::unwrap).collect::<Vec<_>>(), vec![word.clone(),json!("0x2")]);
+            } else { assert_eq!(rpc.call("eth_getStorageAt",params.clone()).unwrap(), word); }
+            assert!(rpc.fatal.get().is_none());
+            let requests = peer.join().unwrap();assert_eq!(requests.len(),2);assert_eq!(requests[0],requests[1]);
+        }
+    }
+
+    #[test]
+    fn ready_internal_state_error_exhaustion_still_fences_source() {
+        let error = json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Internal error"}});
+        let (mut rpc,peer) = rpc_fixture_steps(vec![(200,error);RPC_ATTEMPT_DELAYS.len()]);
+        rpc.pinned = true;rpc.ready_batch_limit=Some(1);
+        assert!(rpc.call("eth_getBalance",json!([Address::ZERO,{"blockHash":format!("0x{}","11".repeat(32)),"requireCanonical":true}])).is_err());
+        assert_eq!(rpc.fatal.get(),Some(FatalReason::SourceFault));
+        let requests=peer.join().unwrap();assert_eq!(requests.len(),RPC_ATTEMPT_DELAYS.len());
+        assert!(requests.iter().all(|request| request==&requests[0]));
+    }
+
+    #[test]
+    fn ready_internal_error_never_hides_invalid_or_domain_siblings() {
+        for sibling in [json!({"jsonrpc":"2.0","id":1,"result":"0x1"}),
+            json!({"jsonrpc":"2.0","id":1,"result":"invalid"}),
+            json!({"jsonrpc":"2.0","id":0,"result":"0x1"}),
+            json!({"jsonrpc":"2.0","id":99,"result":"0x1"}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"header not found"}}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"execution reverted","data":"0x"}}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Internal error","data":"0x"}})] {
+            let (mut rpc,peer)=rpc_fixture_steps(vec![(200,json!([
+                {"jsonrpc":"2.0","id":0,"error":{"code":-32000,"message":"Internal error"}},sibling]))]);
+            rpc.pinned=true;rpc.ready_batch_limit=Some(2);
+            assert!(rpc.batch_call(&[("eth_getBalance",json!([Address::ZERO,{"blockHash":format!("0x{}","11".repeat(32)),"requireCanonical":true}])),("eth_getBalance",json!([Address::ZERO,{"blockHash":format!("0x{}","11".repeat(32)),"requireCanonical":true}]))]).is_err());
+            assert_eq!(rpc.fatal.get(),Some(FatalReason::SourceFault));assert_eq!(peer.join().unwrap().len(),1);
+        }
+    }
+
+    #[test]
+    fn ready_internal_retry_does_not_cover_live_or_execution_calls() {
+        for (ready,method) in [(false,"eth_getBalance"),(true,"eth_call"),(true,"debug_traceCall")] {
+            let (mut rpc,peer)=rpc_fixture_steps(vec![(200,json!({"jsonrpc":"2.0","id":1,
+                "error":{"code":-32000,"message":"Internal error"}}))]);
+            rpc.pinned=true;if ready {rpc.ready_batch_limit=Some(1);}
+            let params=json!([Address::ZERO,{"blockHash":format!("0x{}","11".repeat(32)),"requireCanonical":true}]);
+            assert!(rpc.call(method,params).is_err());assert_eq!(rpc.round_trips(),1);assert_eq!(peer.join().unwrap().len(),1);
+        }
+    }
+
+    #[test]
+    fn ready_internal_recovery_still_validates_response_identity_and_state() {
+        for reply in [json!({"jsonrpc":"2.0","id":99,"result":"0x1"}),
+            json!({"jsonrpc":"2.0","id":1,"result":"invalid"}),
+            json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"header not found"}})] {
+            let (mut rpc,peer)=rpc_fixture_steps(vec![(200,json!({"jsonrpc":"2.0","id":1,
+                "error":{"code":-32000,"message":"Internal error"}})),(200,reply)]);
+            rpc.pinned=true;rpc.ready_batch_limit=Some(1);
+            assert!(rpc.call("eth_getBalance",json!([Address::ZERO,{"blockHash":format!("0x{}","11".repeat(32)),"requireCanonical":true}])).is_err());
+            assert_eq!(rpc.fatal.get(),Some(FatalReason::SourceFault));assert_eq!(peer.join().unwrap().len(),2);
+        }
+    }
+
+    #[test]
+    fn ready_internal_retry_never_replays_source_prechecks_or_unpinned_state() {
+        let good=pinned_header();
+        let pin=SourcePin {chain_id:1,block_hash:good["hash"].as_str().unwrap().into(),state_root:None};
+        let (mut rpc,peer)=rpc_fixture_steps(vec![(200,json!([
+            {"jsonrpc":"2.0","id":0,"result":"0x2"},
+            {"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Internal error"}},
+            {"jsonrpc":"2.0","id":2,"result":good}]))]);
+        rpc.pinned=true;rpc.ready_batch_limit=Some(8);
+        assert!(verify_source(&rpc,300,&pin).is_err());
+        assert_eq!(rpc.fatal.get(),Some(FatalReason::SourceFault));assert_eq!(peer.join().unwrap().len(),1);
+        for tag in [json!("latest"),json!("0x12c"),json!({"blockHash":pin.block_hash,"requireCanonical":false}),
+            json!({"blockHash":"0x00","requireCanonical":true})] {
+            let (mut rpc,peer)=rpc_fixture_steps(vec![(200,json!({"jsonrpc":"2.0","id":1,
+                "error":{"code":-32000,"message":"Internal error"}}))]);
+            rpc.pinned=true;rpc.ready_batch_limit=Some(1);
+            assert!(rpc.call("eth_getBalance",json!([Address::ZERO,tag])).is_err());
+            assert_eq!(rpc.fatal.get(),Some(FatalReason::SourceFault));assert_eq!(peer.join().unwrap().len(),1);
+        }
+    }
+
+    #[test]
+    fn ready_internal_all_failed_batches_require_unique_ids_and_identical_pins() {
+        let (mut rpc,peer)=rpc_fixture_steps(Vec::new());rpc.pinned=true;rpc.ready_batch_limit=Some(2);
+        let tag=json!({"blockHash":format!("0x{}","11".repeat(32)),"requireCanonical":true});
+        let request=json!([{"jsonrpc":"2.0","id":0,"method":"eth_getBalance","params":[Address::ZERO,tag]},
+            {"jsonrpc":"2.0","id":1,"method":"eth_getBalance","params":[Address::ZERO,tag]}]);
+        let response=json!([{"jsonrpc":"2.0","id":0,"error":{"code":-32000,"message":"Internal error"}},
+            {"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Internal error"}}]);
+        assert!(rpc.retryable_ready_internal_response(&request,&response));
+        for id in [0,99] {
+            let mut bad=response.clone();bad[1]["id"]=json!(id);
+            assert!(!rpc.retryable_ready_internal_response(&request,&bad));
+        }
+        let mut bad=response.clone();bad[1]["jsonrpc"]=json!("1.0");
+        assert!(!rpc.retryable_ready_internal_response(&request,&bad));
+        let mut bad=request.clone();bad[1]["params"][1]["blockHash"]=json!(format!("0x{}","22".repeat(32)));
+        assert!(!rpc.retryable_ready_internal_response(&bad,&response));
+        let mut bad=request.clone();bad[1]["method"]=json!("eth_getBlockByHash");
+        assert!(!rpc.retryable_ready_internal_response(&bad,&response));
+        assert_eq!(rpc.round_trips(),0);assert!(peer.join().unwrap().is_empty());
+    }
+
+    #[test]
+    fn ready_internal_retry_requires_http_200_without_retry_after() {
+        let body=json!({"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Internal error"}}).to_string();
+        for reply in [RpcFixtureReply::Http(206,body.clone()),RpcFixtureReply::ReadyRetryAfter(body,"1")] {
+            let (mut rpc,peer)=rpc_transport_fixture(vec![reply]);rpc.pinned=true;rpc.ready_batch_limit=Some(1);
+            assert!(rpc.call("eth_getBalance",json!([Address::ZERO,
+                {"blockHash":format!("0x{}","11".repeat(32)),"requireCanonical":true}])).is_err());
+            assert_eq!(rpc.fatal.get(),Some(FatalReason::SourceFault));assert_eq!(rpc.round_trips(),1);
+            assert_eq!(peer.join().unwrap().len(),1);
+        }
+    }
+
+    #[test]
     fn ready_rpc_one_temporary_wire_response_reaches_the_ready_retry_owner_once() {
         for status in [200, 429] {
             let (mut rpc, peer) = rpc_fixture_steps(vec![(status, json!({"jsonrpc":"2.0","id":1,
@@ -6532,6 +6712,7 @@ mod tests {
         Http(u16, String),
         ContentType(u16, String, Option<&'static str>),
         RetryAfter(String, &'static str),
+        ReadyRetryAfter(String, &'static str),
         Disconnect,
         Timeout,
         TruncatedBody(u16),
@@ -6597,6 +6778,9 @@ mod tests {
                     }
                     RpcFixtureReply::RetryAfter(body, wait) => {
                         write!(stream, "HTTP/1.1 429 Fixture\r\nRetry-After: {wait}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                    }
+                    RpcFixtureReply::ReadyRetryAfter(body, wait) => {
+                        write!(stream, "HTTP/1.1 200 Fixture\r\nRetry-After: {wait}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
                     }
                     RpcFixtureReply::Disconnect => {}
                     RpcFixtureReply::Timeout => std::thread::sleep(Duration::from_millis(500)),
