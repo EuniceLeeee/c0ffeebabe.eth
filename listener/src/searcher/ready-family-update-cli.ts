@@ -1,3 +1,4 @@
+import { loadBotVmRuntimeCode } from "../shared/executor/botvm-executor.js";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { copyFile, mkdir, open, readFile, unlink } from "node:fs/promises";
@@ -23,12 +24,16 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
   const options = new Map<string, string>();
   for (let i = 1; i < argv.length; i += 2) {
     const key = argv[i]!, value = argv[i + 1];
-    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--candidates", "--expect-update"].includes(key) ||
+    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--candidates", "--expect-update", "--revalidate-proofs"].includes(key) ||
       value === undefined || options.has(key)) throw new Error("invalid Ready maintenance option");
     options.set(key, value);
   }
   if (options.has("--expect-update") && (mode !== "update" || options.get("--expect-update") !== "family-set")) {
     throw new Error("--expect-update family-set requires update mode");
+  }
+  const proofRuntimeHash = options.get("--revalidate-proofs");
+  if (proofRuntimeHash !== undefined && (mode !== "update" || !/^0x[0-9a-f]{64}$/.test(proofRuntimeHash) || options.has("--expect-update"))) {
+    throw new Error("--revalidate-proofs requires update and a lower-case executor runtime hash");
   }
   if (mode === "build" && options.has("--candidates")) throw new Error("--candidates applies to Ready updates");
   if (!options.has("--checkpoint") || !options.has("--archive")) throw new Error("checkpoint and archive paths required");
@@ -57,6 +62,10 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   if (!rpcUrl || !executor || !transactionOrigin) throw new Error("configured RPC and execution identity required");
   const concurrency = Number(options.get("--concurrency") ?? 24);
   if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 1024) throw new Error("invalid attestation concurrency");
+  const proofRuntimeHash = options.get("--revalidate-proofs");
+  if (proofRuntimeHash && loadBotVmRuntimeCode(transactionOrigin).keccak256 !== proofRuntimeHash) {
+    throw new Error("Ready proof runtime differs from the installed executor artifact");
+  }
   const common = { rpcUrl, executionIdentity: { executor, transactionOrigin } };
   const store = new UniverseRebuildCheckpointStore({ path: checkpointPath });
   const incumbent = await store.load();
@@ -126,7 +135,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   const needed = enabledIds.filter(id => readyFamilyNeedsSupplement({ partition: partitions[id],
     discoveryDefinitionHash: wiring.familyDiscoveryDefinitionHash!(id), familyDefinitionHash: familyDefinitionHash(id),
     isVerifiedMemoCurrent: key => !!base.verifiedMemos[key] && wiring.isReadyMemoDefinitionCurrent!(base.verifiedMemos[key]!) }));
-  const activationOnly = isFamilySetOnlyReadyUpdate(partitions, enabledIds, needed, candidateFile ? selected : undefined);
+  const activationOnly = !proofRuntimeHash && isFamilySetOnlyReadyUpdate(partitions, enabledIds, needed, candidateFile ? selected : undefined);
   if (options.has("--expect-update") && !activationOnly) {
     throw new Error("requested Family-set update also changes rules or retained candidates; full review not started");
   }
@@ -141,7 +150,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     const inputFingerprint = createHash("sha256").update(canonicalJson({ version: 1,
       parent: [base.readyGeneration!.generation, base.readyGeneration!.universeHash, base.readyGeneration!.catalogHash],
       range, source, definitions: enabledIds.map(id => [id, familyDefinitionHash(id)]),
-      executionIdentity: common.executionIdentity, sourcePlans: reviewedWiring.expectedSourcePlanFingerprints(),
+      ...(proofRuntimeHash && { proofRuntimeHash }), executionIdentity: common.executionIdentity, sourcePlans: reviewedWiring.expectedSourcePlanFingerprints(),
       selection: candidateFile ? createHash("sha256").update(candidateFile).digest("hex") : "previous-and-discovered",
     })).digest("hex");
     if (base.inProgressRun) {
@@ -149,7 +158,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
       await verifyArchivedInputs();
     }
     const ready = await rebuildUniverse({ ...reviewedWiring, store, runId: "ready-review-" + inputFingerprint,
-      previousReadyReview: { inputFingerprint, candidateKeys: keys,
+      previousReadyReview: { inputFingerprint, candidateKeys: keys, ...(proofRuntimeHash && { revalidateParentProofs: true }),
         ...(activationOnly && { retainedFamilyIds: new Set(enabledIds.filter(id => partitions[id]?.enabled)) }) }, resumeCompletedOutcomes: !!base.inProgressRun,
       observationRange: range, attestationConcurrency: concurrency, log });
     resolveStrictReadyRuntime(ready);

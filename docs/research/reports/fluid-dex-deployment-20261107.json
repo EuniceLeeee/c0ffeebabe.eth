@@ -1,0 +1,129 @@
+{
+  "deployment": {
+    "transactionHash": "0x49c7ee5993932790f9fe097accffaaa8102696167106e2ef3023578d46a5840c",
+    "chainId": 1,
+    "executor": "0x3A1A0D1F6293D5DEB82CAF420eDe157A538D38c2",
+    "owner": "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c",
+    "oldExecutor": "0xe3526237666222937afe1e251f1AAA8a9392bE57",
+    "blockNumber": 26357203,
+    "blockHash": "0x30c8c42f4cc53e218625fd007988ce719383478117393ec91db2fbb381f2b7e3",
+    "gasUsed": "5180640",
+    "paidEth": "0.00091987580608896",
+    "artifactSha256": "3653fc23d2376d5815f861b8e862cb2ef9ad9abbe12a92abfbce2f6ba0bb220b",
+    "runtimeCodeKeccak256": "0xaa678ef6a03701bac0255d4fd9d0ce93f680752776f97dac4ee4415550e1c57b"
+  },
+  "build": {
+    "contract": "src/BotVM.sol:BotVM",
+    "sourceCommit": "4ac3e8599c03f64b6ee3a652c48a431ec926333a",
+    "compiler": "0.8.26+commit.8a97fa7a",
+    "evmVersion": "cancun",
+    "viaIR": true,
+    "optimizerRuns": 200,
+    "runtimeBytes": 23720,
+    "previousCompilerRuntimeBytes": 25272,
+    "buildCommand": "forge build src/BotVM.sol --use 0.8.26"
+  },
+  "cause": "The previous deployed runtime rejected reading a deliberately reverted call inside the read-only subprogram. A FluidDexSwapResult(uint256) carries the quote. The candidate requires a reverting call of the declared length and the Family checks the typed payload. A successful state-changing call is rejected.",
+  "verifiedOnMainnetState": {
+    "block": 26357203,
+    "codeOverrides": false,
+    "quoteOverrides": "none",
+    "deliveryOverrides": "only the input token balance for the simulated payer",
+    "routes": [
+      {
+        "pool": "0xc0652bddcff7739dadf0c9567584b35ca63eb8e1",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xf1c9acdc66974dfb6decb12aa385b9cd01190e38",
+        "amountIn": "20000000000000000",
+        "amountOut": "18528595661000000",
+        "passed": [
+          "quote-only",
+          "ordinary",
+          "direct"
+        ]
+      },
+      {
+        "pool": "0xc0652bddcff7739dadf0c9567584b35ca63eb8e1",
+        "tokenIn": "0xf1c9acdc66974dfb6decb12aa385b9cd01190e38",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "20000000000000000",
+        "amountOut": "21575301041000000",
+        "passed": [
+          "quote-only",
+          "ordinary",
+          "direct"
+        ]
+      },
+      {
+        "pool": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "amountIn": "50000000",
+        "amountOut": "50057441",
+        "passed": [
+          "quote-only",
+          "ordinary",
+          "direct"
+        ]
+      },
+      {
+        "pool": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+        "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "50000000",
+        "amountOut": "49941924",
+        "passed": [
+          "quote-only",
+          "ordinary",
+          "direct"
+        ]
+      },
+      {
+        "pool": "0x836951eb21f3df98273517b7249dceff270d34bf",
+        "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "50000000",
+        "amountOut": "22376027608000000",
+        "passed": [
+          "quote-only",
+          "ordinary",
+          "direct"
+        ]
+      },
+      {
+        "pool": "0x836951eb21f3df98273517b7249dceff270d34bf",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "amountIn": "20000000000000000",
+        "amountOut": "44601203",
+        "passed": [
+          "quote-only",
+          "ordinary",
+          "direct"
+        ]
+      }
+    ],
+    "diagnostics": "Both the zero key and keyed hop failure control were verified using the deployed code."
+  },
+  "verification": {
+    "botVmCoreTests": 208,
+    "historicalFork": {
+      "number": 26222895,
+      "directions": 6,
+      "noInputControls": 12,
+      "independentRollbackProofsForStrictResourceLimited": 2,
+      "forcedRollbackControls": 24
+    },
+    "fixtureCompatibility": {
+      "rerun": 72,
+      "originalAssertionsPassed": 66,
+      "originalAssertionsFailed": 6,
+      "explanation": "Four tested calldata before production asset-boundary wrapping. The emitted production strict calldata passed the four controls on both executors. One expected rejection for an allowed one-unit refund, and one expected an unprotected Silo probe that already enforces protections. Preserve the original failures separately."
+    }
+  },
+  "evidenceSha256": {
+    "deployment-third-verified-onchain.json": "3e701cb3fc87b4e56189bdae9e472945277831d0f7e7618c811de2bd9d59ee3f",
+    "deployment-verified-onchain.json": "e692b52f0d79aba8515a61e165cd25b4f01062bdf9a49c04398d46773139210a",
+    "review.json": "8e5da30de9d2c861fb919d1f0ac71c1655c6d484c39c0ae311c797fee8bd7d25"
+  }
+}

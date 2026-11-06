@@ -240,6 +240,8 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
     readonly inputFingerprint: string;
     readonly candidateKeys?: ReadonlySet<string>;
     readonly retainedFamilyIds?: ReadonlySet<string>;
+    /** Fresh proof context. Only outcomes sealed by this exact review may resume. */
+    readonly revalidateParentProofs?: boolean;
   };
   /** Explicit copied-parent scope; persists across scratch resume and promotion. */
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
@@ -966,7 +968,8 @@ export async function rebuildUniverse(
           if (row.status === "verified") previous.add(row.familyCandidateKey);
         }
       }
-      const recheck: unknown[] = [], remaining: unknown[] = [];
+      const recheck: unknown[] = [], strictPrevious: unknown[] = [], remaining: unknown[] = [];
+      if (survivors && review.revalidateParentProofs) throw new Error("cannot retain parent outcomes under a new proof context");
       let retained = 0, alreadyHandled = 0;
       if (survivors) {
         for (const id of survivors) {
@@ -1009,8 +1012,13 @@ export async function rebuildUniverse(
             continue;
           }
         }
-        (previous.has(key) || run.outcomesByCandidateKey[key]?.status === "verified"
-          ? recheck : remaining).push(candidate);
+        if (review.revalidateParentProofs && previous.has(key) && !run.outcomesByCandidateKey[key]) {
+          strictPrevious.push(candidate);
+        } else if (previous.has(key) || run.outcomesByCandidateKey[key]?.status === "verified") {
+          recheck.push(candidate);
+        } else {
+          remaining.push(candidate);
+        }
       }
       for (const id of survivors ?? []) {
         if ((retainedSeen.get(id) ?? 0) !== Object.keys(parent.familyPartitions![id]!.candidatesByKey).length) {
@@ -1023,7 +1031,8 @@ export async function rebuildUniverse(
           alreadyHandled + " addedRemaining=" + (recheck.length + remaining.length));
       }
       await runPhase(recheck, "review", remaining);
-      log("Ready review: prior/current proofs checked=" + recheck.length +
+      if (strictPrevious.length) await runPhase(strictPrevious, "strict");
+      log("Ready review: prior/current proofs checked=" + (recheck.length + strictPrevious.length) +
         " completed=" + completedPending + " remaining=" + remaining.length);
       await runPhase(remaining, "strict");
       log("Ready review results " + JSON.stringify({ ...reviewedCounts, terminalRejected: attestationCounts["terminal-rejected"],

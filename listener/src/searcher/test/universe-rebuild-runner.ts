@@ -98,12 +98,12 @@ async function startupReadyFromMain(
   assert(start >= 0 && end > start, "main Ready selection/root-check boundary must exist");
   const run = new Function(
     "rebuildStore", "rebuildWiring", "refreshReadyInstances", "rebuildUniverse",
-    "UniverseRunIncomplete", "blindUseIncumbentReady", "useReadyGeneration", "console", "process",
+    "UniverseRunIncomplete", "blindUseIncumbentReady", "useReadyGeneration", "liveSubset", "console", "process",
     `return (async () => { ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
   );
   return run(wiring.store, wiring, refresh,
     async () => { throw new Error("Ready reuse must not start discovery/rebuild"); },
-    UniverseRunIncomplete, flags.blind, flags.useReadyGeneration,
+    UniverseRunIncomplete, flags.blind, flags.useReadyGeneration, false,
     { log(message: string) { wiring.log?.(message); } }, { env: {} });
 }
 
@@ -433,6 +433,30 @@ async function main(): Promise<void> {
       assert(!edges.some(e => e.familyId === kyber || e.instanceKey === "inst:removed"));
       assert.equal(ready.candidateAccounting.total, 5);
       assert.equal(activeReadyMemos((await f.store.load())!).length, 4);
+
+      // Even an unchanged Family hash cannot keep a behavior proof made by a different executor.
+      cycles.push(["new", "kyber", "algebra", "keep", "stale"]);
+      f.invalidReusableKeys.clear();
+      f.terminalKeys.clear();
+      f.terminalKeys.add("algebra");
+      const changed = { ...update, runId: "new-proof-environment",
+        previousReadyReview: { ...update.previousReadyReview, revalidateParentProofs: true, inputFingerprint: "4".repeat(64) } };
+      const parents: string[] = [];
+      await assert.rejects(rebuildUniverse({ ...changed, attestFamilyInstanceOnce: async arg => {
+        if (parents.length === 1) throw new Error("after one new proof");
+        parents.push(access(arg.candidate).id);
+        return input.attestFamilyInstanceOnce(arg);
+      } }), /after one new proof/);
+      assert.equal(parents.length, 1);
+      assert.equal((await f.store.load())!.inProgressRun!.outcomesByCandidateKey["cand:" + parents[0]!]!.status, "verified");
+      calls.length = 0;
+      const changedReady = await rebuildUniverse({ ...changed, resumeCompletedOutcomes: true });
+      assert.deepEqual(calls.filter(v => v.startsWith("review:")), ["review:" + parents[0]!]);
+      assert.deepEqual([...parents.map(id => "strict:" + id), ...calls.filter(v => v.startsWith("strict:"))].sort(),
+        ["strict:algebra", "strict:keep", "strict:kyber", "strict:new", "strict:stale"]);
+      assert.equal(calls.at(-1), "strict:kyber", "old admitted candidates are strictly checked before the old rejection");
+      assert.equal(changedReady.familyPartitions![algebra]!.outcomesByCandidateKey["cand:algebra"]!.status, "terminal-rejected");
+      assert.equal(changedReady.familyPartitions![kyber]!.outcomesByCandidateKey["cand:kyber"]!.status, "verified");
     }
     // Separate Ready directories inherit the ordinary rolling-rebuild state.
     // No old outcome, coverage receipt or Graph is treated as the new run.

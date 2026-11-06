@@ -23,6 +23,8 @@ try {
   await assert.rejects(assertReadyStageManifest(manifest, "parent-b"), /parent manifest mismatch/);
   assert.equal(await readFile(manifest, "utf8"), "parent-a");
   for (const args of [[], ["other"], ["build"], ["build", "--expect-update", "family-set"], ["update", "--expect-update", "unknown"],
+    ["update", "--revalidate-proofs", "invalid"], ["build", "--revalidate-proofs", "0x" + "a".repeat(64)],
+    ["update", "--revalidate-proofs", "0x" + "a".repeat(64), "--expect-update", "family-set"],
     ["update", "--checkpoint", checkpoint, "--checkpoint", checkpoint]]) {
     await assert.rejects(runReadyFamilyMaintenance(args));
   }
