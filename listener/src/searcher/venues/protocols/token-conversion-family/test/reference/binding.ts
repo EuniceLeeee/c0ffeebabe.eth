@@ -1,6 +1,6 @@
 import { hashCanonical } from "../../../../canonical-value.js";
 import { assertRouteBound, sameAddress } from "../../../standard-family/common.js";
-import { FAMILY, LINEAGE, XWIN_LINEAGE } from "./manifest.js";
+import { FAMILY, LINEAGE, XWIN_LINEAGE } from "../fixture-identifiers.js";
 import type { ConversionDescriptor, ConversionRoute } from "./types.js";
 export function staticProjection(d: ConversionDescriptor) {
   return { variant: d.variant, target: d.target.toLowerCase(), asset: d.asset.toLowerCase(), codeHash: d.codeHash,

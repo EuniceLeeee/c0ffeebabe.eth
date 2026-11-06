@@ -42,7 +42,7 @@ export interface DeclarativeQuoteOutput {
 }
 export type DeclarativeConversionExecution = SharedConversionExecution & (
   | { readonly version: 1; readonly approval?: Value; readonly call: Value; readonly steps?: never }
-  | { readonly version: 2; readonly steps: readonly Value[]; readonly deferred?: Value; readonly framedSettlement?: { readonly version: 1; readonly recipient: "executor" | "target"; readonly debtInput: boolean; readonly expectedOutput: FrameValue; readonly nativeBoundary?: true; readonly frame?: Value }; readonly quoteOutput?: DeclarativeQuoteOutput; readonly call?: never; readonly approval?: never }
+  | { readonly version: 2; readonly steps: readonly Value[]; readonly deferred?: Value; readonly framedSettlement?: { readonly version: 1; readonly recipient: "executor" | "target"; readonly debtInput: boolean; readonly expectedOutput?: FrameValue; readonly returnedWords?: { readonly debt: string; readonly negativeOutput: string }; readonly nativeBoundary?: true; readonly frame?: Value }; readonly quoteOutput?: DeclarativeQuoteOutput; readonly call?: never; readonly approval?: never }
 );
 type RuntimeValue = bigint | number | string | boolean | { runtime: string };
 type Check = { left: RuntimeValue; operator: "eq" | "gte"; right: RuntimeValue };
@@ -628,7 +628,9 @@ export function buildDeclarativeExecutionProgram(
         operations.push({ kind: "frame", spec, math: options.math, depth: 0, ...(deferred ? { settlement: {
           request, executor: input.executor, tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut,
           recipient: definition.framedSettlement!.recipient === "executor" ? input.executor : input.route.target,
-          minimum: minAmountOut, fullInput: !budgetInput, expectedOutput: resolved(definition.framedSettlement!.expectedOutput), ...(native ? { native } : {}),
+          minimum: minAmountOut, fullInput: !budgetInput,
+          ...(definition.framedSettlement!.returnedWords ? { returnedWords: definition.framedSettlement!.returnedWords }
+            : { expectedOutput: resolved(definition.framedSettlement!.expectedOutput) }), ...(native ? { native } : {}),
           constraints: ([[debit[0], "debt"], [credit[0], "output"]] as const).flatMap(([effect, actual]) =>
             ([["equals", "eq"], ["minimum", "gte"], ["maximum", "lte"]] as const).flatMap(([field, operator]) =>
               effect[field] === undefined ? [] : [{ actual, operator, value: effect[field] }])),
@@ -953,11 +955,19 @@ function validateSettlementDeclaration(definition: DeclarativeConversionExecutio
       throw new Error("callback settlement operations require framedSettlement declaration");
   }
   if (definition.version === 2 && definition.framedSettlement !== undefined) {
-    keys(definition.framedSettlement, ["version", "recipient", "debtInput", "expectedOutput", "nativeBoundary", "frame"], "framed settlement");
+    keys(definition.framedSettlement, ["version", "recipient", "debtInput", "expectedOutput", "returnedWords", "nativeBoundary", "frame"], "framed settlement");
     const spec = definition.framedSettlement;
+    if (spec.returnedWords !== undefined) {
+      keys(spec.returnedWords, ["debt", "negativeOutput"], "settlement returned words");
+      assertPublicRuntimeCaptureName(spec.returnedWords.debt);
+      assertPublicRuntimeCaptureName(spec.returnedWords.negativeOutput);
+      if (spec.returnedWords.debt === spec.returnedWords.negativeOutput || spec.recipient !== "target" ||
+          definition.quoteOutput || spec.nativeBoundary)
+        throw new Error("invalid signed-return settlement witness");
+    }
     const terminal = spec.frame === undefined ? definition.steps.at(-1) : { frame: spec.frame };
     if (spec.frame !== undefined && literalCallbackFrame(spec.frame)) validateDeclarativeCallbackFrame(spec.frame);
-    if (spec.version !== 1 || !["executor", "target"].includes(spec.recipient) || typeof spec.debtInput !== "boolean" || spec.expectedOutput === undefined ||
+    if (spec.version !== 1 || !["executor", "target"].includes(spec.recipient) || typeof spec.debtInput !== "boolean" || (spec.expectedOutput === undefined) === (spec.returnedWords === undefined) ||
         spec.nativeBoundary !== undefined && spec.nativeBoundary !== true ||
         definition.deferred !== undefined || !terminal?.frame || terminal.frame.callback.steps.filter((s: any) => s.continuation !== undefined).length !== 1 ||
         terminal.frame.callback.steps.some((s: any) => s.frame !== undefined) ||

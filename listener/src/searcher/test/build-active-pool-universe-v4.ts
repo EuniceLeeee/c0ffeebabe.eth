@@ -18,7 +18,11 @@ import { loadPoolUniverse, type PoolUniverseEntry } from "../pool-universe.js";
 import { v4PoolId } from "../planner/token-graph.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { AdapterFamilyRegistry } from "../venues/adapter-family-registry.js";
-import { univ4Adapter } from "../venues/swaps/univ4.js";
+import { createUniV4SwapObservation } from "../venues/swap-observation.js";
+import { univ4LandedEvents } from "../venues/swaps/univ4.js";
+import { univ4PoolDiscovery } from "../venues/swaps/univ4-pool-discovery.js";
+import { createStrictRegistryProjection } from "../venues/strict-catalog-registry-projection.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from "../venues/production-family-composition.js";
 import { UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK } from "../venues/swaps/univ4-common.js";
 import { PRODUCTION_IDENTITY_ADMISSION } from "../venues/admission.js";
 import {
@@ -561,8 +565,15 @@ async function main(): Promise<void> {
   assert(batchEntries.length === 2, `expected two batch-resolved entries, got ${batchEntries.length}`);
   console.log("[pool-universe-v4] materializer consumes batch PoolKey resolver: PASS");
 
-  const v4Registry =
-    new AdapterFamilyRegistry([univ4Adapter]).landedPoolDiscovery();
+  const v4 = createStrictRegistryProjection(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG)
+    .find(family => family.id === "univ4");
+  if (!v4 || v4.kind !== "swap") throw new Error("expected the production V4 swap family");
+  // This regression exercises the historical PoolId retry materializer against
+  // its event IDs. Strict Ready owns production discovery.
+  const v4Registry = new AdapterFamilyRegistry([{ ...v4, landedEvents: univ4LandedEvents,
+    poolDiscovery: univ4PoolDiscovery,
+    observation: createUniV4SwapObservation({ adapterIds: ["univ4-unlock"], canonicalIntakeTargets: [poolManager],
+      landedEvents: univ4LandedEvents.swaps }) }], undefined, { strictProjected: true }).landedPoolDiscovery();
   assert(
     !v4Registry.consumesAddressRetries("univ4") &&
       v4Registry.consumesMaterializationRetries("univ4"),

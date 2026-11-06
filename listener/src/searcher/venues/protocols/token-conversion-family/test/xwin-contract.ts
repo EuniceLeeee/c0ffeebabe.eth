@@ -7,9 +7,7 @@ import { createStrictCentralAdapterRuntime } from "../../../../strict-central-ad
 import { executeAdapterWork } from "../../../../adapter-work-intent.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource, ObservedEffects, RequestRequirements } from "../../../adapter-request-program.js";
 import { ABI, MAX_UINT } from "./reference/variants.js";
-import { FAMILY } from "./reference/manifest.js";
-import { xwinIdentity } from "./reference/xwin-identity.js";
-import { identity as conversionIdentity } from "./reference/identity.js";
+import { FAMILY } from "./fixture-identifiers.js";
 import { createConversionExact } from "./reference/exact.js";
 import { xwinCurrent, xwinSimulationCurrent } from "./reference/xwin-pricing.js";
 import { xwinPrefix } from "./reference/sequential.js";
@@ -46,6 +44,8 @@ function cachedCode(a: string) {
 const PROXY_CODE = cachedCode(TARGET), IMPL_CODE = cachedCode(IMPL);
 const PROXY = proveXwinProxy(PROXY_CODE);
 const NAV_ABI = new Interface(["function getUnitPrice() view returns(uint256)"]);
+const conversionIdentity = productionPlugin.identity;
+const xwinIdentity = conversionIdentity.variants.find(v => v.lineageId === "token-conversion:xwin-allocations-v1")!;
 const simulationExact = createConversionExact("simulation");
 function simulationFixtureCatalog() {
   function mutable<T>(value: T): T {
@@ -310,7 +310,7 @@ test("xWin pause evidence must be present and match the surface block, hash and 
 test("xWin pause admission leaves the non-xWin identity variant isolated", () => {
   const candidate = { candidateKind: "token-conversion" as const, target: TARGET, variantHint: "btb-bear-v1" as const };
   const variants = conversionIdentity.variants.filter(variant => variant.applies(candidate));
-  assert.deepEqual(variants.map(variant => variant.id), ["btb-bear-code-and-effects"]);
+  assert.deepEqual(variants.map(variant => variant.lineageId), ["token-conversion:btb-bear-v1"]);
   assert.equal(xwinIdentity.applies(candidate), false);
   const requests = variants[0]!.buildRequests({ candidate, step: 0 });
   assert.deepEqual(requests.map(request => request.id), ["identity-code"]);

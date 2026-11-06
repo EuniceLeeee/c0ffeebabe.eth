@@ -1,3 +1,5 @@
+import { plugin as univ2Json } from "../venues/production-families/univ2-standard.production.js";
+import { plugin as univ4Json } from "../venues/production-families/univ4.production.js";
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
@@ -24,10 +26,7 @@ import {
 } from "../venues/blockscan-state-capability.js";
 import {
 } from "../venues/swaps/balancer-v3.js";
-import {
-  ANGSTROM_MAINNET_HOOK,
-} from "../venues/swaps/angstrom-attestation.js";
-import { angstromV4Adapter } from "../venues/swaps/angstrom-v4.js";
+import { checkAngstromTwoWaySpot } from "./angstrom-price-fixture.js";
 import {
   BLOCKSCAN_MULTICALL3,
   blockScanErc20Iface,
@@ -60,7 +59,6 @@ import {
 } from "../venues/swaps/fluid-dex.js";
 import {
   univ2BlockScanState,
-  univ2StandardAdapter,
 } from "../venues/swaps/univ2-standard.js";
 import {
   univ3BlockScanState,
@@ -68,7 +66,6 @@ import {
 } from "../venues/swaps/univ3-standard.js";
 import {
   univ4BlockScanState,
-  univ4Adapter,
 } from "../venues/swaps/univ4.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
 import { TRUSTED_V2_LINEAGES } from "../venues/v2-lineage.js";
@@ -153,7 +150,7 @@ await runUniV3ExtremePrice();
 await runUniV3FactoryBoundPrecision();
 await runUniV3FactoryBoundQuotes();
 await runUniV4();
-await runAngstromV4();
+checkAngstromTwoWaySpot();
 await runUniV4ExtremePrice();
 await runUniV4DirectionIsolation();
 await runInactiveUniPools();
@@ -332,7 +329,7 @@ function runViewQuoteFactoryStateKeyCaptureBoundary(): void {
 
 async function runUniV2(): Promise<void> {
   const edges = twoTokenEdges("univ2-swap");
-  const result = await execute(univ2StandardAdapter.id, univ2BlockScanState, edges, (read) => {
+  const result = await execute(univ2Json.manifest.familyId, univ2BlockScanState, edges, (read) => {
     const selector = read.data.slice(0, 10);
     if (selector === v2Iface.getFunction("getReserves")!.selector) {
       return v2Iface.encodeFunctionResult("getReserves", [
@@ -1008,7 +1005,7 @@ async function runUniV4(): Promise<void> {
     poolId,
     v4PoolKey: key,
   }));
-  const result = await execute(univ4Adapter.id, univ4BlockScanState, edges, (read) => {
+  const result = await execute(univ4Json.manifest.familyId, univ4BlockScanState, edges, (read) => {
     const selector = read.data.slice(0, 10);
     if (selector === v4StateIface.getFunction("getSlot0")!.selector) {
       return v4StateIface.encodeFunctionResult("getSlot0", [
@@ -1026,53 +1023,6 @@ async function runUniV4(): Promise<void> {
   assert.equal(result.mids.get(blockScanEdgeKey(edges[0]))?.mid, 4);
   assert.equal(result.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.25);
   assert.equal(result.initialReads.length, 2);
-}
-
-async function runAngstromV4(): Promise<void> {
-  const key = {
-    currency0: TOKEN0,
-    currency1: TOKEN1,
-    fee: 0x80_0000,
-    tickSpacing: 10,
-    hooks: ANGSTROM_MAINNET_HOOK,
-  };
-  const poolId = v4PoolId(key);
-  const edges = twoTokenEdges("angstrom-v4-swap").map((edge) => ({
-    ...edge,
-    target: ADDR.UNISWAP_V4_POOL_MANAGER,
-    poolId,
-    v4PoolKey: key,
-  }));
-  const result = await execute(
-    angstromV4Adapter.id,
-    angstromV4Adapter.pricingState,
-    edges,
-    (read) => {
-      const selector = read.data.slice(0, 10);
-      if (selector === v4StateIface.getFunction("getSlot0")!.selector) {
-        return v4StateIface.encodeFunctionResult("getSlot0", [
-          2n * Q96,
-          0,
-          0,
-          3_000,
-        ]);
-      }
-      if (
-        selector === v4StateIface.getFunction("getLiquidity")!.selector
-      ) {
-        return v4StateIface.encodeFunctionResult(
-          "getLiquidity",
-          [1_000n * UNIT],
-        );
-      }
-      throw new Error(`unexpected Angstrom spot-state read ${read.id}`);
-    },
-  );
-  assert.equal(result.staticReads.length, 0);
-  assert.equal(result.initialReads.length, 2);
-  assert.equal(result.dependentReads.length, 0);
-  assert.equal(result.mids.get(blockScanEdgeKey(edges[0]))?.mid, 4);
-  assert.equal(result.mids.get(blockScanEdgeKey(edges[1]))?.mid, 0.25);
 }
 
 async function runUniV4ExtremePrice(): Promise<void> {
@@ -1094,7 +1044,7 @@ async function runUniV4ExtremePrice(): Promise<void> {
     v4PoolKey: key,
   }));
   const result = await execute(
-    univ4Adapter.id,
+    univ4Json.manifest.familyId,
     univ4BlockScanState,
     edges,
     (read) => {
@@ -1174,7 +1124,7 @@ async function runUniV4DirectionIsolation(): Promise<void> {
   }));
   for (const failure of ["revert", "malformed"] as const) {
     const result = await execute(
-      univ4Adapter.id,
+      univ4Json.manifest.familyId,
       univ4BlockScanState,
       edges,
       (read) => {
@@ -1306,7 +1256,7 @@ function assertExtremeDirectionScans(
 async function runInactiveUniPools(): Promise<void> {
   const v2Edges = twoTokenEdges("univ2-swap");
   const inactiveV2 = await execute(
-    univ2StandardAdapter.id,
+    univ2Json.manifest.familyId,
     univ2BlockScanState,
     v2Edges,
     (read) => {
@@ -1370,7 +1320,7 @@ async function runInactiveUniPools(): Promise<void> {
       v4PoolKey: key,
     }));
     const inactiveV4 = await execute(
-      univ4Adapter.id,
+      univ4Json.manifest.familyId,
       univ4BlockScanState,
       v4Edges,
       (read) => {

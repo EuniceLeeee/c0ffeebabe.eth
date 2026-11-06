@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "domain": "swap",
+  "familyId": "fluid-dex",
+  "instanceKey": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+  "lineageId": "fluid-dex:factory-child",
+  "source": {
+    "number": 26222895,
+    "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+  },
+  "executor": "0x3A1A0D1F6293D5DEB82CAF420eDe157A538D38c2",
+  "owner": "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c",
+  "trials": [
+    {
+      "id": "usdc-to-usdt-50",
+      "routeKey": "fluid-dex\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f0xdac17f958d2ee523a2206206994597c13d831ec7\u001f0-1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "50000000",
+      "expectedAmountOut": "50054989",
+      "recipients": [
+        "0x3A1A0D1F6293D5DEB82CAF420eDe157A538D38c2",
+        "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c"
+      ],
+      "requiredSettlement": [
+        "quote-output",
+        "direct-output"
+      ]
+    },
+    {
+      "id": "usdt-to-usdc-50",
+      "routeKey": "fluid-dex\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0xdac17f958d2ee523a2206206994597c13d831ec7\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f1-0",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "50000000",
+      "expectedAmountOut": "49944371",
+      "recipients": [
+        "0x3A1A0D1F6293D5DEB82CAF420eDe157A538D38c2",
+        "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c"
+      ],
+      "requiredSettlement": [
+        "quote-output",
+        "direct-output"
+      ]
+    },
+    {
+      "id": "usdc-to-usdt-original-input-at-cutoff",
+      "routeKey": "fluid-dex\u001f0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f0xdac17f958d2ee523a2206206994597c13d831ec7\u001f0-1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "71008690260",
+      "recipients": [
+        "0x3A1A0D1F6293D5DEB82CAF420eDe157A538D38c2",
+        "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c"
+      ],
+      "requiredSettlement": [
+        "quote-output",
+        "direct-output"
+      ]
+    }
+  ]
+}

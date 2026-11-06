@@ -2606,7 +2606,42 @@
               }
             }
           }
-        ]
+        ],
+        "applies": {
+          "op": "or",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$candidate",
+                        "variantHint"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$candidate",
+                    "variantHint"
+                  ]
+                },
+                "btb-bear-v1"
+              ]
+            }
+          ]
+        }
       }
     }
   },

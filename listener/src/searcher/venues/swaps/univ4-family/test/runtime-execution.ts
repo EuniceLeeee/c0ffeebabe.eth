@@ -3,8 +3,7 @@ import test from "node:test";
 import { ethers } from "ethers";
 import { ADDR } from "../../../../../shared/constants/addresses.js";
 import { instanceKey } from "../../../adapter-family-identifiers.js";
-import { univ4Execution } from "../execution.js";
-import { UNIV4_FAMILY_ID, UNIV4_MANAGER_LINEAGE_ID } from "../manifest.js";
+import { plugin as productionV4 } from "../../../production-families/univ4.production.js";
 import { univ4Routes } from "../routes.js";
 import { buildUniV4RuntimeLeg } from "../runtime-execution.js";
 import { applyRuntimeAssetBoundary } from "../../../../execution-asset-boundary.js";
@@ -38,7 +37,7 @@ function fixture(native: boolean, reverse: boolean) {
   const poolId = ethers.keccak256(abi.encode(["address", "address", "uint24", "int24", "address"],
     [key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]));
   const descriptor: UniV4Descriptor = {
-    familyId: UNIV4_FAMILY_ID, lineageId: UNIV4_MANAGER_LINEAGE_ID,
+    familyId: productionV4.manifest.familyId, lineageId: productionV4.manifest.supportedLineages[0]!,
     instanceKey: instanceKey(`${manager}:${poolId}`), provenance: [], runtimeRequirements: [],
     poolId, poolKey: key, graphToken0: native ? ADDR.WETH : token0, graphToken1: token1,
     managerBinding: { manager, stateView: other, quoter: other, managerCodeHash: codeHash }, hookPolicy: "no-hook",
@@ -162,7 +161,7 @@ function packedDelta(input: Input, inputDelta: bigint, outputDelta: bigint): str
 }
 interface ReplyOverrides { debt?: bigint; delta?: string; settled?: string }
 function exercise(input: Input, amount: bigint, output: bigint, overrides: ReplyOverrides = {}, seen: string[] = []) {
-  const leg = univ4Execution.buildRuntimeLeg(input);
+  const leg = buildUniV4RuntimeLeg(input);
   assert(leg); assert.equal(leg.actionAdapterId, "univ4-unlock");
   const { descriptor: d, route } = input, zero = route.direction === "zero-for-one";
   const debt = overrides.debt ?? amount;
@@ -205,8 +204,30 @@ function exercise(input: Input, amount: bigint, output: bigint, overrides: Reply
   return seen;
 }
 
-test("V4 runtime hook is wired and unsupported hook variants return null", () => {
-  assert.equal(univ4Execution.buildRuntimeLeg, buildUniV4RuntimeLeg);
+// The lower-level callback encoder below remains shared with FeeHook. This
+// test independently exercises the live no-hook JSON owner and its own key.
+test("issued V4 JSON encodes both directions and rejects a foreign hook", () => {
+  for (const { input } of cases) {
+    const { descriptor } = input;
+    const manager = ADDR.UNISWAP_V4_POOL_MANAGER;
+    const pool = { ...descriptor,
+      managerBinding: { ...descriptor.managerBinding, manager,
+        stateView: ADDR.UNISWAP_V4_STATE_VIEW, quoter: ADDR.UNISWAP_V4_QUOTER },
+      instanceKey: instanceKey([manager.toLowerCase(), descriptor.poolId.toLowerCase()].join("\u001f")),
+    };
+    const route = productionV4.routes.project({ descriptor: pool }).find(r => r.direction === input.route.direction);
+    assert(route);
+    const request = { descriptor: pool, route, executor,
+      source: { number: 1, hash: `0x${"11".repeat(32)}`, generation: 1 }, runtimeEvidence: [] };
+    const leg = productionV4.execution.buildRuntimeLeg!(request);
+    assert(leg); assert.equal(leg.actionAdapterId, "univ4-unlock");
+    assert(ethers.getBytes(leg.program).length > 0);
+    assert.throws(() => productionV4.execution.buildRuntimeLeg!({ ...request,
+      descriptor: { ...pool, poolKey: { ...pool.poolKey, hooks: other } } }), /hook|pool key/i);
+  }
+});
+
+test("shared V4 runtime encoder rejects unsupported hook variants", () => {
   for (const { input } of cases) {
     assert.equal(buildUniV4RuntimeLeg({ ...input, descriptor: { ...input.descriptor, hookPolicy: "fee-hook" } }), null);
     assert.equal(buildUniV4RuntimeLeg({ ...input, descriptor: { ...input.descriptor,

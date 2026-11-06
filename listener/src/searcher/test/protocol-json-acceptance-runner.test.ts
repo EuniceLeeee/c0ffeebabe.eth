@@ -173,10 +173,10 @@ test("CLI saves structured early failures with restrictive permissions and never
 // A generic, synthetic conversion fixture. The actual Family issuer, Graph,
 // exact/quoted/runtime dispatch, scheduler and fact checker are exercised here.
 // Only provider responses and VM host balances are synthetic, not EVM evidence.
-async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | "old-inventory"; missingRuntime?: boolean; unsampledRoute?: boolean } = {}) {
+async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | "old-inventory"; missingRuntime?: boolean; unsampledRoute?: boolean; direct?: boolean; callback?: boolean; wrongOnchainQuote?: boolean } = {}) {
   const input = sample(), family = familyId(input.familyId), lineage = lineageId(input.lineageId), actionId = "fixture-convert";
   const calls: string[] = [], simulations: string[] = [];
-  const emit = () => new RuntimeAmountProgram().call(target, abi.encodeFunctionData("convert", [0n, executor]), { patches: [{ offset: 4, reg: 0 }] });
+  const emit = (recipient = executor) => new RuntimeAmountProgram().call(target, abi.encodeFunctionData("convert", [0n, recipient]), { patches: [{ offset: 4, reg: 0 }] });
   const plugin = defineProtocolFamily<any, any, any, any, any, any, any>({
     manifest: { familyId: family, domain: "protocol", ownedActionAdapterIds: [actionId], requiredInfraActionAdapterIds: [],
       supportedLineages: [lineage], allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }] },
@@ -219,7 +219,17 @@ async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | 
         decode: ({ initialResults }: any) => { assert(initialResults[0].ok); return { amountOut: BigInt(initialResults[0].data), evidence: {} }; } } }],
       cacheCompatibilityProjection: ({ route }: any) => ({ routeKey: route.routeKey }) },
     execution: { runtimeProjection: () => ({ allowanceSpender: null, prewarmQuoteCalls: [] }),
-      buildRuntimeLeg: () => options.missingRuntime ? null : ({ actionAdapterId: actionId, program: hexlify(emit().bytes()) }),
+      buildRuntimeLeg: ({ settlement }: any) => {
+        if (options.missingRuntime) return null;
+        const recipient = settlement?.recipient ?? executor;
+        const program = settlement?.kind === "quote-output"
+          ? new RuntimeAmountProgram().call(target, abi.encodeFunctionData("preview", [0n, recipient]), {
+            static: true, patches: [{ offset: 4, reg: 0 }] }).load(0, 0)
+          : emit(recipient);
+        return { actionAdapterId: actionId, program: hexlify(program.bytes()), ...(settlement && { settlementRequest: settlement }), settlement: {
+          ...(options.direct ? { directOutput: true, quoteOutput: true } : {}),
+          ...(options.callback ? { deferredInput: target } : {}) } };
+      },
       buildFragment: ({ route, amountIn }: any) => ({ requirements: [], nodes: [{ adapterId: actionId, target,
         tokenIn: route.tokenIn, tokenOut: route.tokenOut, amount: amountIn, params: {}, children: [] }] }),
       expectedEffects: () => [{ kind: "token-delta", token: tokenOut, account: "executor", direction: "increase" }] },
@@ -244,6 +254,7 @@ async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | 
       assert.equal(request.call.executionMode, "executor-program"); assert.equal(request.call.to.toLowerCase(), executor);
       simulations.push(request.id);
       const balances = new Map((request.overrideIntent?.tokenBalances ?? []).map(row => [row.token.toLowerCase(), row.amount]));
+      const externalOutput = new Map<string, bigint>();
       const before = new Map(balances), script = getBytes(AbiCoder.defaultAbiCoder().decode(["bytes"], `0x${request.call.data.slice(10)}`)[0]);
       try {
         let cursor = 0;
@@ -252,11 +263,21 @@ async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | 
           const size = script[cursor + 33]! * 65536 + script[cursor + 34]! * 256 + script[cursor + 35]!;
           const program = hexlify(script.slice(cursor + 36, cursor + 36 + size)); cursor += 36 + size;
           inspectRuntime(program, amount, { call(call) {
-            const parsed = abi.parseTransaction(call); assert.equal(parsed?.name, "convert"); assert.equal(call.target.toLowerCase(), target);
-            const amount = BigInt(parsed.args[0]); assert((balances.get(tokenIn) ?? 0n) >= amount, "fixture insufficient input");
+            const parsed = abi.parseTransaction(call); assert(parsed);
+            if (parsed.name === "balanceOf") {
+              assert.equal(call.target.toLowerCase(), tokenOut);
+              const recipient: string = parsed.args[0].toLowerCase();
+              return abi.encodeFunctionResult("balanceOf", [recipient === executor ? balances.get(tokenOut) ?? 0n : externalOutput.get(recipient) ?? 0n]);
+            }
+            assert.equal(call.target.toLowerCase(), target);
+            const amount = BigInt(parsed.args[0]), recipient: string = parsed.args[1].toLowerCase();
+            const output = amount * (recipient === executor ? 2n : 3n);
+            if (parsed.name === "preview") return abi.encodeFunctionResult("preview", [output + (options.wrongOnchainQuote ? 1n : 0n)]);
+            assert.equal(parsed.name, "convert"); assert((balances.get(tokenIn) ?? 0n) >= amount, "fixture insufficient input");
             const debit = options.fault === "zero-debit" ? 0n : options.fault === "old-inventory" ? amount + 1n : amount;
             balances.set(tokenIn, balances.get(tokenIn)! - debit);
-            balances.set(tokenOut, balances.get(tokenOut)! + amount * 2n - (options.fault === "short-credit" ? 1n : 0n));
+            if (recipient === executor) balances.set(tokenOut, (balances.get(tokenOut) ?? 0n) + output - (options.fault === "short-credit" ? 1n : 0n));
+            else externalOutput.set(recipient, (externalOutput.get(recipient) ?? 0n) + output);
             return abi.encodeFunctionResult("convert", [amount * 2n]);
           } }, { output: true });
         }
@@ -264,7 +285,8 @@ async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | 
       return { data: "0x", effects: { tokenDeltas: (request.observeTokenBalances ?? []).map(row => {
         assert(typeof row.account === "string");
         return { token: row.token, account: row.account,
-          delta: row.account.toLowerCase() === executor ? (balances.get(row.token.toLowerCase()) ?? 0n) - (before.get(row.token.toLowerCase()) ?? 0n) : 0n };
+          delta: row.account.toLowerCase() === executor ? (balances.get(row.token.toLowerCase()) ?? 0n) - (before.get(row.token.toLowerCase()) ?? 0n)
+            : row.token.toLowerCase() === tokenOut ? externalOutput.get(row.account.toLowerCase()) ?? 0n : 0n };
       }),
         nativeDeltas: [{ account: executor, delta: 0n }], logs: [] } };
     } },
@@ -320,4 +342,46 @@ test("case source, actor and identity must agree before execution; copying a han
   await runProtocolJsonAcceptance(fixture.sample, context, report);
   assert.equal(report.result, "incomplete-or-failed"); assert.equal(fixture.simulations.length, 0);
   assert.match(report.samples[0].error, /issuer|issued|handle/i);
+});
+
+test("an omitted production settlement capability cannot turn an old requirement or requested recipient green", async () => {
+  const fixture = await issuedFixture();
+  const report: any = {};
+  await runProtocolJsonAcceptance({ ...fixture.sample, trials: [{ ...fixture.sample.trials[0],
+    requiredSettlement: ["quote-output"], recipients: [owner] }] }, fixture.context, report);
+  assert.equal(report.result, "incomplete-or-failed");
+  assert.equal(report.coverage.executedRoutes, 1, "normal execution retains its own evidence");
+  assert.deepEqual(report.samples[0].verifiedSettlement, []);
+  assert.deepEqual(report.samples[0].missingDeclarations.sort(), ["direct-output","quote-output"]);
+  assert.equal(report.samples[0].executions.length, 6);
+});
+
+test("callback settlement needs separate execution facts and never erases normal results", async () => {
+  const fixture = await issuedFixture({ callback: true }), report: any = {};
+  await runProtocolJsonAcceptance(fixture.sample, fixture.context, report);
+  assert.equal(report.result, "incomplete-or-failed"); assert.equal(report.samples[0].result, "partial");
+  assert.deepEqual(report.coverage.settlementGaps[0].unverified, ["deferred-input"]);
+  assert.equal(report.samples[0].executions.filter((e: any) => e.result === "pass").length, 6);
+});
+
+test("settlement coverage requires a read-only result and real credit to both recipient types", async () => {
+  for (const wrongOnchainQuote of [false, true]) {
+    const fixture = await issuedFixture({ direct: true, wrongOnchainQuote }), report: any = {};
+    await runProtocolJsonAcceptance({ ...fixture.sample, trials: [{ ...fixture.sample.trials[0],
+      requiredSettlement: ["quote-output", "direct-output"] }] }, fixture.context, report);
+    if (wrongOnchainQuote) {
+      assert.equal(report.result, "incomplete-or-failed"); assert.equal(report.samples[0].result, "failed");
+      assert(report.samples[0].executions.some((e: any) => e.encoding === "quote-only" && !e.facts.passed));
+      assert.equal(report.coverage.executedRoutes, 1, "a failed quote-only probe preserves completed ordinary execution evidence");
+      assert(report.samples[0].executions.some((e: any) => e.encoding === "runtime-direct" && e.probe === "forced-revert" && e.result === "pass"));
+      assert.equal(report.samples[0].verifiedSettlement.length, 0);
+      continue;
+    }
+    assert.equal(report.result, "pass", JSON.stringify(report.samples[0].error));
+    assert.equal(report.referenceSettlementCoverage, "requirements-met-for-this-case");
+    const row = report.samples[0];
+    assert.deepEqual(row.verifiedSettlement.sort(), ["direct-output", "quote-output"]);
+    assert.equal(row.executions.filter((e: any) => e.facts.classification==="read-only-quote" && !e.request.overrideIntent.tokenBalances).length, 2);
+    assert.equal(row.executions.filter((e: any) => e.encoding==="runtime-direct" && e.result==="pass").length, 6);
+  }
 });

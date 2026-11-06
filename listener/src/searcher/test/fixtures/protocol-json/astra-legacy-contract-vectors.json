@@ -1,0 +1,81 @@
+{
+  "sourceCommit": "598a0128a44b0bee990b04ca18d0633af4a09c56",
+  "scope": "legacy TS outputs on the AstraBackend contract fixture",
+  "edges": [
+    {
+      "adapterId": "astra-multitoken-change",
+      "target": "0x00000000000000000000000000000000000000A1",
+      "tokenIn": "0x00000000000000000000000000000000000000B1",
+      "tokenOut": "0x00000000000000000000000000000000000000b2",
+      "slotKind": "protocol",
+      "protocolAction": "convert",
+      "leavesStandingPosition": false
+    },
+    {
+      "adapterId": "astra-multitoken-change",
+      "target": "0x00000000000000000000000000000000000000A1",
+      "tokenIn": "0x00000000000000000000000000000000000000B1",
+      "tokenOut": "0x00000000000000000000000000000000000000b3",
+      "slotKind": "protocol",
+      "protocolAction": "convert",
+      "leavesStandingPosition": false
+    },
+    {
+      "adapterId": "astra-multitoken-change",
+      "target": "0x00000000000000000000000000000000000000A1",
+      "tokenIn": "0x00000000000000000000000000000000000000b2",
+      "tokenOut": "0x00000000000000000000000000000000000000B1",
+      "slotKind": "protocol",
+      "protocolAction": "convert",
+      "leavesStandingPosition": false
+    },
+    {
+      "adapterId": "astra-multitoken-change",
+      "target": "0x00000000000000000000000000000000000000A1",
+      "tokenIn": "0x00000000000000000000000000000000000000b2",
+      "tokenOut": "0x00000000000000000000000000000000000000b3",
+      "slotKind": "protocol",
+      "protocolAction": "convert",
+      "leavesStandingPosition": false
+    },
+    {
+      "adapterId": "astra-multitoken-change",
+      "target": "0x00000000000000000000000000000000000000A1",
+      "tokenIn": "0x00000000000000000000000000000000000000b3",
+      "tokenOut": "0x00000000000000000000000000000000000000B1",
+      "slotKind": "protocol",
+      "protocolAction": "convert",
+      "leavesStandingPosition": false
+    },
+    {
+      "adapterId": "astra-multitoken-change",
+      "target": "0x00000000000000000000000000000000000000A1",
+      "tokenIn": "0x00000000000000000000000000000000000000b3",
+      "tokenOut": "0x00000000000000000000000000000000000000b2",
+      "slotKind": "protocol",
+      "protocolAction": "convert",
+      "leavesStandingPosition": false
+    }
+  ],
+  "mids": [
+    {
+      "kind": "protocol",
+      "pool": "0x00000000000000000000000000000000000000A1",
+      "mid": 2,
+      "feeBps": 0,
+      "reserveA": "10000000000000000000000",
+      "reserveB": "20000000000000000000000",
+      "depthProxy": 1e+22
+    }
+  ],
+  "exact": "22",
+  "fragment": [
+    {
+      "target": "0x00000000000000000000000000000000000000A1",
+      "tokenIn": "0x00000000000000000000000000000000000000B1",
+      "tokenOut": "0x00000000000000000000000000000000000000b2",
+      "amount": "11"
+    }
+  ],
+  "expectedData": "0x5e5144eb00000000000000000000000000000000000000000000000000000000000000b100000000000000000000000000000000000000000000000000000000000000b2000000000000000000000000000000000000000000000000000000000000000b0000000000000000000000000000000000000000000000000000000000000016"
+}

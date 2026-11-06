@@ -10,10 +10,10 @@ import { createUniV3Exact } from "../../../swaps/univ3-family/exact.js";
 import { univ3Routes } from "../../../swaps/univ3-family/routes.js";
 import type { UniV3Descriptor } from "../../../swaps/univ3-family/types.js";
 import { v3SwapToState, type V3PoolState } from "../../../../solver/v3-math.js";
-import { quoteXwinTransition, type XwinLocalFundState } from "./reference/xwin-transition.js";
+import { quoteXwinTransition, type XwinLocalFundState } from "../../../token-conversion-math.js";
 import { quoteBearTrial, quoteXwinTrial, type XwinTrialFund } from "./reference/trial-state.js";
 import { createConversionExact } from "./reference/exact.js";
-import { FAMILY, LINEAGE, XWIN_LINEAGE } from "./reference/manifest.js";
+import { FAMILY, LINEAGE, XWIN_LINEAGE } from "./fixture-identifiers.js";
 import type { ConversionDescriptor, ConversionRoute } from "./reference/types.js";
 
 const { routes } = conversionPlugin;

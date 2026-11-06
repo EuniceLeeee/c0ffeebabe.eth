@@ -5,8 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAddress, keccak256, TypedDataEncoder, zeroPadValue, hexlify } from "ethers";
 import { ABI, MAX_UINT, proveBearRuntime, proveLocalAssetRuntime, bearTransferReceipt } from "./reference/variants.js";
-import { FAMILY } from "./reference/manifest.js";
-import { identity } from "./reference/identity.js";
+import { FAMILY } from "./fixture-identifiers.js";
 import { exactProgram } from "./reference/exact.js";
 import { bearCapacity, quoteBear } from "./reference/bear-local.js";
 import { provePlainConversionAssetRuntime } from "./reference/asset-runtime.js";
@@ -25,7 +24,7 @@ import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { refreshFixture } from "./refresh-fixture.js";
 
-const { discovery } = conversionPlugin;
+const { discovery, identity } = conversionPlugin;
 
 
 // Raw evidence stays outside Git. Required input: the supplied read-only cache.
@@ -96,9 +95,9 @@ test("asset dependency closure rejects external, proxy, environmental and unknow
   const candidate = { candidateKind: "token-conversion" as const, target: TARGET };
   const evidence = { phase: "code", asset: ASSET, codeHash };
   const step = { candidate, step: 1, evidence };
-  const unproven = identity.variants[0]!.decode({ step, results: [returned("identity-asset-code", "0x6000fa")] });
-  const decision = identity.variants[0]!.decide({ ...step, evidence: unproven });
-  assert.equal(decision.status, "retryable");
+  // The current JSON pins asset code integrity and requires independent getter and effect results.
+  // A bytecode-only reply cannot produce a verified identity.
+  assert.throws(() => identity.variants[0]!.decode({ step, results: [returned("identity-asset-code", "0x6000fa")] }), /missing/);
 });
 
 test("receipt proof distinguishes mint from taxed transfer and rejects false receipts", () => {

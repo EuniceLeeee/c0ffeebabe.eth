@@ -18,6 +18,35 @@ const quantity = (value: unknown): bigint => {
   return BigInt(value);
 };
 
+/** Attest the exact production entry selected by the catalog. A JSON file beside a legacy entry is insufficient. */
+export async function inspectAcceptanceEntry(family: { sourceFile: string; definitionBoundaryHash: string;
+  plugin: { manifest: { familyId: string } } }) {
+  const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog } = await import("../venues/production-family-composition.js");
+  const installed = catalog.listAll().find(item => item.plugin === family.plugin);
+  if (!installed) return { kind: "not-installed", sourceFile: family.sourceFile } as const;
+  assert.equal(family.sourceFile, installed.sourceFile);
+  assert.equal(family.definitionBoundaryHash, installed.definitionBoundaryHash);
+  assert(/^[a-z0-9-]+\.production\.ts$/.test(installed.sourceFile));
+  const root = resolve(ROOT, "listener");
+  const file = resolve(root, "src/searcher/venues/production-families", installed.sourceFile);
+  const source = readFileSync(file, "utf8");
+  const provenance = { sourceFile: installed.sourceFile, entrySha256: hash(source), definitionBoundaryHash: installed.definitionBoundaryHash };
+  if (!source.startsWith("// Generated from Family JSON by build-declarative-production.ts.")) return { kind: "handwritten", ...provenance } as const;
+  const ref = /^\/\/ Definition: (src\/searcher\/venues\/[a-z0-9/-]+\.json)$/m.exec(source);
+  assert(ref, "generated entry missing its definition");
+  const definitionFile = resolve(root, ref[1]), bytes = readFileSync(definitionFile);
+  const document = JSON.parse(bytes.toString());
+  const { renderDeclarativeProductionEntry } = await import("../build-declarative-production.js");
+  const rendered = renderDeclarativeProductionEntry({ rootDirectory: root, definitionFile, entryFile: file, document });
+  assert.equal(rendered.familyId, family.plugin.manifest.familyId);
+  assert.equal(rendered.source, source, "installed entry differs from the production generator");
+  if (rendered.format === "bindings-v1") return { kind: "json-bindings", ...provenance } as const;
+  const variants = [document.standard, ...rendered.childFiles.map(f => JSON.parse(readFileSync(f,"utf8")))];
+  return { kind: "declarative-json", ...provenance, definitionFile: ref[1], definitionSha256: hash(bytes),
+    variants: variants.map(({ id, lineageId }) => ({ id, lineageId })), childDefinitions: rendered.childFiles.map(f =>
+      ({ file: relative(root,f), sha256: hash(readFileSync(f)) })) } as const;
+}
+
 export interface ProtocolJsonAcceptanceContextInput {
   readonly readyPath: string;
   readonly rpcFile: string;

@@ -154,7 +154,7 @@ test("callback frame cannot be mixed with a normal call", () => {
 });
 
 const prefixAbi = new Interface(["function continueRoute(uint256) returns(uint256)"]);
-function deferredExecution(options: { debtInput?: boolean; recipient?: "target" | "executor"; fault?: string; configure?: (definition: any) => void; runtimeWitness?: boolean } = {}) {
+function deferredExecution(options: { debtInput?: boolean; recipient?: "target" | "executor"; fault?: string; configure?: (definition: any) => void; runtimeWitness?: boolean; returnedWords?: boolean } = {}) {
   const d: any = definition(), cap = 19n, debt = options.debtInput ? 7n : cap, output = 38n, paymentAmount = 11n;
   d.framedSettlement = { version: 1, recipient: options.recipient ?? "target", debtInput: true, expectedOutput: 38n };
   d.steps[0].frame.callback.steps[0].when = options.recipient === "executor" ? true : "$fundedSettlement";
@@ -163,6 +163,11 @@ function deferredExecution(options: { debtInput?: boolean; recipient?: "target" 
     d.framedSettlement.expectedOutput = ref("parentOutput");
     d.steps.unshift({ id: "observe", static: true, call: { target: INNER, signature: "function observe(uint256) view returns(uint256)",
       args: [ref("amountIn")], save: { parentOutput: 0 } } });
+  }
+  if (options.returnedWords) {
+    delete d.framedSettlement.expectedOutput;
+    d.framedSettlement.returnedWords = { debt: "returnedDebt", negativeOutput: "returnedCredit" };
+    d.steps[0].frame.call.save = { returnedDebt: 0, returnedCredit: 1 };
   }
   options.configure?.(d);
   const recipient = options.recipient === "executor" ? EXECUTOR : POOL;
@@ -205,7 +210,11 @@ function deferredExecution(options: { debtInput?: boolean; recipient?: "target" 
     if (options.fault === "post-callback-fresh-output") outputBalance = 104n;
     if (options.fault === "post-callback-fresh-input") inputBalance++;
     if (options.fault === "native") native--;
-    return outerAbi.encodeFunctionResult("swap", [debt, -output]);
+    if (options.fault === "empty-return") return "0x";
+    return outerAbi.encodeFunctionResult("swap", [
+      options.fault === "wrong-debt" ? debt + 1n : debt,
+      options.fault === "wrong-credit" ? -output + 1n : options.fault === "unsigned-credit" ? output : -output,
+    ]);
   } });
   assert.equal(continuations, 1); assert.equal(inputBalance, 101n); assert.equal(outputBalance, 103n + output - paymentAmount);
   assert.equal(poolBalance, 107n + debt); assert.equal(native, 17n);
@@ -464,3 +473,12 @@ test("callback aliases can only rename a signature with the same ABI layout", ()
     assert.throws(() => validateDeclarativeCallbackFrame(frame), /layout|duplicate/);
   }
 });
+
+
+for (const debtInput of [false, true])
+  test(`signed return words check callback receipt and pool debit with ${debtInput ? "debt-based" : "fixed"} input`, () =>
+    deferredExecution({ returnedWords: true, debtInput }));
+for (const fault of ["short-output", "zero-debt", "old-output", "short-prefix", "fake-prefix", "old-input",
+  "post-callback-input", "post-callback-output", "post-callback-fresh-output", "post-callback-fresh-input",
+  "native", "empty-return", "wrong-debt", "wrong-credit", "unsigned-credit"])
+  test(`signed return words reject ${fault}`, () => assert.throws(() => deferredExecution({ returnedWords: true, fault })));

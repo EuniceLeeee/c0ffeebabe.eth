@@ -11,7 +11,7 @@ import {
 } from "../venues/blockscan-state-capability.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
 import { erc4626SiloRedeemAdapter } from "../venues/protocols/erc4626-silo-redeem.js";
-import { eigenpieAdapter } from "../venues/protocols/eigenpie.js";
+import { checkDirectedProtocolPrices } from "./directed-protocol-price-fixture.js";
 import { goldxAdapter } from "../venues/protocols/goldx.js";
 import {
   metronomeHgusdcAdapter,
@@ -25,17 +25,10 @@ import {
 } from "../venues/protocols/self-burn-native-discovery.js";
 import { selfBurnNativeAdapter } from "../venues/protocols/self-burn-native.js";
 import { wstethAdapter } from "../venues/protocols/wsteth.js";
-import { astraMultiTokenAdapter } from
-  "../venues/protocols/astra-multitoken.js";
-import {
-  ASTRA_MULTITOKEN_EDGE_ADAPTER,
-  astraMultiTokenIface,
-} from "../venues/protocols/astra-multitoken-discovery.js";
 import { etherTokenNativeRedeemAdapter } from
   "../venues/protocols/ethertoken-native-redeem.js";
 import { ETHERTOKEN_NATIVE_REDEEM_EDGE_ADAPTER } from
   "../venues/protocols/ethertoken-native-redeem-discovery.js";
-import { eigenpieIface } from "../venues/protocols/eigenpie-discovery.js";
 import { metronomeSynthPoolIface } from "../venues/protocols/protocol-quote.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { STRICT_PROJECTED_FAMILY_TEST_REGISTRY } from "./strict-family-test-compat.js";
@@ -171,32 +164,6 @@ const cases: readonly Case[] = [
     },
   },
   {
-    name: "Astra current directed getReturn",
-    familyId: astraMultiTokenAdapter.id,
-    capability: astraMultiTokenAdapter.pricingState,
-    edges: [
-      edge(
-        ASTRA_MULTITOKEN_EDGE_ADAPTER,
-        vault,
-        tokenA,
-        tokenB,
-        "convert",
-      ),
-    ],
-    response(read) {
-      if (selector(read) === selectorOf(decimalsIface, "decimals")) {
-        return uint8(18);
-      }
-      if (selector(read) === selectorOf(astraMultiTokenIface, "getReturn")) {
-        return astraMultiTokenIface.encodeFunctionResult(
-          "getReturn",
-          [1_007_000_000_000_000_000n],
-        );
-      }
-      throw new Error(`unexpected Astra read ${read.id}`);
-    },
-  },
-  {
     name: "EtherToken current supply-bound native redeem",
     familyId: etherTokenNativeRedeemAdapter.id,
     capability: etherTokenNativeRedeemAdapter.pricingState,
@@ -236,22 +203,6 @@ const cases: readonly Case[] = [
         return psmIface.encodeFunctionResult("tin", [1_000_000_000_000_000n]);
       }
       throw new Error(`unexpected PSM read ${read.id}`);
-    },
-  },
-  {
-    name: "Eigenpie pair-scoped quote and receipt attestation",
-    familyId: eigenpieAdapter.id,
-    capability: eigenpieAdapter.pricingState,
-    edges: [edge("eigenpie-deposit-asset", router, tokenA, tokenB, "wrap")],
-    response(read) {
-      if (selector(read) === selectorOf(decimalsIface, "decimals")) return uint8(18);
-      if (selector(read) === selectorOf(eigenpieIface, "getMLRTAmountToMint")) {
-        return eigenpieIface.encodeFunctionResult(
-          "getMLRTAmountToMint",
-          [1_010_000_000_000_000_000n, tokenB],
-        );
-      }
-      throw new Error(`unexpected Eigenpie read ${read.id}`);
     },
   },
   {
@@ -434,7 +385,7 @@ const cases: readonly Case[] = [
   },
 ];
 
-const pureFixtureFamilyIds = new Set<string>();
+const pureFixtureFamilyIds = new Set<string>(checkDirectedProtocolPrices());
 for (const item of cases) {
   let schema = await item.capability.compileStaticSchema({
     edges: item.edges,

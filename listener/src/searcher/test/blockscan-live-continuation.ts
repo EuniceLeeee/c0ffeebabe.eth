@@ -270,7 +270,7 @@ test("reviewed migration binds both complete file inventories, exact changes and
     await writeFile(join(directory, "review.txt"), "fixture review evidence");
     await change(transport);
     assert.throws(() => compatibleLiveContinuationIdentity(context, manifest, consumer), /code changed/);
-    for (const file of ["compiler.ts", "encoder.ts", "searcher/venues/swaps/univ4-family/pricing.ts", "searcher/execution-asset-boundary.ts"]) {
+    for (const file of ["compiler.ts", "encoder.ts", "searcher/venues/swaps/univ4-family/math.ts", "searcher/execution-asset-boundary.ts"]) {
       const original = await readFile(join(consumer, file));
       await change(file);
       await writeFile(manifest, JSON.stringify(proof()));

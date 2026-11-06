@@ -7,7 +7,7 @@ import { ASTRA_MULTITOKEN_CHANGE_TOPIC } from "./fixtures/protocol-json/astra-mu
 
 import { plugin as ellaPlugin } from "../venues/production-families/ella-exchange.production.js";
 import { curvePlainPricing } from "../venues/swaps/curve-plain-family/pricing.js";
-import { univ4FeeHookPricing } from "../venues/swaps/univ4-fee-hook-family/pricing.js";
+import { plugin as univ4FeeHook } from "../venues/production-families/univ4-fee-hook.production.js";
 import { UNIV4_SWAP_TOPIC, UNIV4_INITIALIZE_TOPIC, UNIV4_MODIFY_LIQUIDITY_TOPIC } from "../venues/swaps/univ4-abi.js";
 import { plugin as erc4626SiloRedeemJsonPlugin } from "../venues/production-families/erc4626-silo-redeem.production.js";
 import { plugin as etherTokenNativeRedeemJsonPlugin } from "../venues/production-families/ethertoken-native-redeem.production.js";
@@ -45,14 +45,14 @@ const cases: readonly [string, Pricing, (pool: string, key: string) => any][] = 
   ["self-burn", selfBurnNativePricing, (token, instanceKey) => ({ token, nativeAnchor: shared, instanceKey })],
   ["ella", ellaPlugin.pricing!, (pool, instanceKey) => ({ instance: { familyId:ellaPlugin.manifest.familyId,lineageId:ellaPlugin.manifest.supportedLineages[0],pool, token: shared, factory: other, oracle, aggregator: address(203), instanceKey } })],
   ["curve-plain", curvePlainPricing, (pool) => ({ instance: { pool, binding: { coins: [shared, other], registry: oracle, codeHash: hash(888) } } })],
-  ["v4-fee-hook", univ4FeeHookPricing, (_, key) => ({ poolId: key,
-    managerBinding: { manager: oracle, stateView: other, quoter: address(203) }, poolKey: { currency0: shared, currency1: other } })],
+  ["v4-fee-hook", univ4FeeHook.pricing, (_, key) => ({ lineageId: univ4FeeHook.manifest.supportedLineages[0], instanceKey: key, poolId: key,
+    managerBinding: { manager: oracle, stateView: other, quoter: address(203) }, hookModel: "tiered", graphToken0: shared, graphToken1: other, poolKey: { currency0: shared, currency1: other, fee: 0x800000, tickSpacing: 10, hooks: address(204) } })],
 ];
 const normalized = (keys: readonly string[]) => [...new Set(keys.map(key => key.toLowerCase()))].sort();
 let comparisons = 0;
 for (const [name, pricing, descriptor] of cases) {
   const entries: MutationPricingEntry<any, any>[] = [1, 2, 3].map(n => {
-    const stateKey = hash(n), routes = [{ routeKey: stateKey, instanceKey: stateKey }], d = descriptor(address(n), stateKey);
+    const stateKey = hash(n), routes = [{ routeKey: stateKey, instanceKey: stateKey, ...(name === "v4-fee-hook" && { poolId: stateKey }) }], d = descriptor(address(n), stateKey);
     const owner = ({ astra: astraMultiTokenProductionPlugin, eigenpie: eigenpieProductionPlugin, silo: erc4626SiloRedeemJsonPlugin, ethertoken: etherTokenNativeRedeemJsonPlugin, "self-burn": selfBurnNativeJsonPlugin, "hg-usdc": metronomeHgUsdcJsonPlugin, metronome: metronomeSynthJsonPlugin } as Record<string, typeof erc4626SiloRedeemJsonPlugin>)[name];
     const bound = owner ? { ...d, familyId: owner.manifest.familyId, lineageId: owner.manifest.supportedLineages[0] } : d;
     try { return { descriptor: bound, routes, stateKey, dependencies: pricing.dependencies({ descriptor: bound, routes }) }; }

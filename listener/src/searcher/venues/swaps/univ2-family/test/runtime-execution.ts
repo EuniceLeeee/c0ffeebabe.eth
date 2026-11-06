@@ -15,9 +15,8 @@ import { identifyTokenTransferModel } from "../../../token-transfer-semantics/in
 import { UNIV2_FACTORY_LINEAGE_ID, UNIV2_FAMILY_ID } from "./fixture-manifest.js";
 const univ2Routes = v2Json.routes!;
 import type { UniV2Descriptor } from "../types.js";
-import { univ3Execution } from "../../univ3-family/execution.js";
-import { UNIV3_FACTORY_LINEAGE_ID, UNIV3_FAMILY_ID } from "../../univ3-family/manifest.js";
-import { univ3Routes } from "../../univ3-family/routes.js";
+import { plugin as univ3 } from "../../../production-families/univ3-standard.production.js";
+import { UNIV3_STATE_READER_INTERFACE } from "../../univ3-family/state-reader.js";
 import type { UniV3Descriptor } from "../../univ3-family/types.js";
 import { MOONISWAP_ACTION, MOONISWAP_ID, MOONISWAP_LINEAGE, POOL } from "../../mooniswap-family/codec.js";
 import { mooniswapExecution } from "../../mooniswap-family/execution.js";
@@ -34,8 +33,8 @@ const univ2Execution={buildRuntimeLeg(input:any){return v2Json.execution!.buildR
 const v2: UniV2Descriptor = { tokenTransfers:[identifyTokenTransferModel(token0,"0x6000"),identifyTokenTransferModel(token1,"0x6000")], ...base, familyId: UNIV2_FAMILY_ID, lineageId: UNIV2_FACTORY_LINEAGE_ID,
   quoteModel: { kind: "constant-product" }, feeRule: { kind: "constant-bps", feeBps: 30n, evidence: "standard-v2-default" },
   factoryBinding: { factory, reversePool: pool } };
-const v3: UniV3Descriptor = { ...base, familyId: UNIV3_FAMILY_ID, lineageId: UNIV3_FACTORY_LINEAGE_ID,
-  fee: 3000n, tickSpacing: 60, factoryBinding: { factory, reversePool: pool },
+const v3: UniV3Descriptor = { ...base, familyId: univ3.manifest.familyId, lineageId: univ3.manifest.supportedLineages[0],
+  fee: 3000n, tickSpacing: 60, factoryBinding: { factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984", reversePool: pool },
   quoterBinding: { quoter: null, router: null, provenance: "unavailable" },
   swapAccess: { kind: "no-is-swapper-getter", codeHash: `0x${"66".repeat(32)}` } };
 const moon: MooniswapDescriptor = { ...base, familyId: MOONISWAP_ID, lineageId: MOONISWAP_LINEAGE, codeHash: `0x${"77".repeat(32)}` };
@@ -236,7 +235,7 @@ test("V2 non-xyk preserves pre-transfer quoting and callback settlement, includi
 test("V2 runtime rejects incompatible routes/fees", () => {
   const route = univ2Routes.project({ descriptor: v2 })[0], input = { descriptor: v2, route, executor, runtimeEvidence: [] };
   for (const bad of [{ ...route, pool: factory }, { ...route, tokenIn: token1 }, { ...route, tokenOut: token0 },
-    { ...route, direction: "one-for-zero" as const }, { ...route, feeBps: 25n }, { ...route, familyId: UNIV3_FAMILY_ID },
+    { ...route, direction: "one-for-zero" as const }, { ...route, feeBps: 25n }, { ...route, familyId: univ3.manifest.familyId },
     { ...route, instanceKey: instanceKey(factory) }, { ...route, bindingRef: { ...route.bindingRef, fingerprint: "foreign" } }]) {
     assert.throws(() => univ2Execution.buildRuntimeLeg({ ...input, route: bad }), /binding/);
   }
@@ -248,16 +247,28 @@ test("V2 runtime rejects incompatible routes/fees", () => {
 });
 
 test("V3 declares callback debt while shared settlement pays only that debt in both directions", () => {
-  for (const route of univ3Routes.project({ descriptor: v3 })) {
-    const amountIn = 100n, amountOut = 7n;
-    const leg = univ3Execution.buildRuntimeLeg({ descriptor: v3, route, executor, runtimeEvidence: [] });
-    const fragment = univ3Execution.buildFragment({ descriptor: v3, route, executor, runtimeEvidence: [],
-      amountIn, quotedAmountOut: amountOut, minAmountOut: 0n,
-      exactEvidence: { kind: "univ3-local-ticks",
-        source: { number: 20000000, hash: `0x${"aa".repeat(32)}`, generation: 1 },
-        pool, quoter: null, caller: executor, tokenIn: route.tokenIn, tokenOut: route.tokenOut,
-        fee: v3.fee, amountIn, amountOut, sqrtPriceX96After: 1n << 96n,
-        initializedTicksCrossed: 0, gasEstimate: 0n },
+  for (const route of univ3.routes.project({ descriptor: v3 })) {
+    const amountIn = 100n;
+    const input = { descriptor: v3, route, executor, source: v2Source, amountIn, runtimeEvidence: [] };
+    const method = univ3.exact.methods(input).find(item => item.kind === "request-program");
+    assert(method?.kind === "request-program");
+    const [read] = method.program.buildRequests(input);
+    assert.equal(read.id, "local-pool-state");
+    const bytes = UNIV3_STATE_READER_INTERFACE.encodeFunctionResult("getFullStateWithRelativeBitmaps", [{
+      pool, blockTimestamp: 1000, slot0: { sqrtPriceX96: 1n << 96n, tick: 0, observationIndex: 0,
+        observationCardinality: 1, observationCardinalityNext: 1, feeProtocol: 0, unlocked: true },
+      tickSpacing: 60, liquidity: 10n ** 18n, maxLiquidityPerTick: (1n << 128n) - 1n,
+      observation: { blockTimestamp: 999, tickCumulative: 0n, secondsPerLiquidityCumulativeX128: 0n, initialized: true },
+      tickBitmap: [], ticks: [],
+    }]);
+    const quote = method.program.decode({ programInput: input, dependentEvidence: [], initialResults: [{
+      id: read.id, ok: true, completion: "returned", source: v2Source, data: bytes,
+      provenance: { kind: "fixture", fingerprint: "v3-frozen-unit-rate" },
+    }] });
+    assert.equal(quote.amountOut, 98n);
+    const leg = univ3.execution.buildRuntimeLeg(input);
+    const fragment = univ3.execution.buildFragment({
+      ...input, minAmountOut: 1n, quotedAmountOut: quote.amountOut, exactEvidence: quote.evidence,
     });
     assert.equal(fragment.nodes.length, 1);
     assert.deepEqual(univ3Adapter.encode(fragment.nodes[0], executor, new Uint8Array()),
@@ -283,16 +294,37 @@ test("runtime program node is bounded and cannot hide legacy callback children",
   assert.throws(() => encodeRuntimeAmountNode(node, new Uint8Array([1])), /node shape/);
 });
 
+// The JSON wrapper measures balances before and after the callback. Only the
+// pool call may move these balances; the independent VM inspector observes both.
+const UNIV3_CALLBACK = new ethers.Interface(["function uniswapV3SwapCallback(int256,int256,bytes)"]);
+function inspectV3(leg: RuntimeAmountLeg, route: { tokenIn: string; tokenOut: string }, amount: bigint,
+  debt: bigint, received: bigint, swap: (call: RuntimeCall) => string) {
+  let completed = false;
+  return inspectRuntime(leg.program, amount, { nativeBalance: () => 17n, call(call) {
+    if (call.static) {
+      assert.equal(call.data.slice(0, 10), erc20.getFunction("balanceOf")!.selector);
+      assert.equal(erc20.decodeFunctionData("balanceOf", call.data)[0], executor);
+      if (call.target.toLowerCase() === route.tokenIn.toLowerCase())
+        return abi.encode(["uint256"], [ethers.MaxUint256 - (completed && debt >= 0n ? debt : 0n)]);
+      assert.equal(call.target.toLowerCase(), route.tokenOut.toLowerCase());
+      return abi.encode(["uint256"], [123n + (completed ? received : 0n)]);
+    }
+    assert.equal(call.target, pool); assert.equal(completed, false);
+    const returned = swap(call); completed = true; return returned;
+  } });
+}
+
 test("V3 runtime callback pays actual debt in both directions", () => {
-  for (const route of univ3Routes.project({ descriptor: v3 })) for (const amount of [1n, 123456789n, (1n << 255n) - 1n]) {
-    const leg = univ3Execution.buildRuntimeLeg({ descriptor: v3, route, executor, runtimeEvidence: [] });
+  for (const route of univ3.routes.project({ descriptor: v3 })) for (const amount of [1n, 123456789n, (1n << 255n) - 1n]) {
+    const leg = univ3.execution.buildRuntimeLeg({ descriptor: v3, route, executor, source: v2Source, runtimeEvidence: [] });
     assert.equal(leg.actionAdapterId, "univ3-swap");
-    for (const debt of [0n, amount / 2n, amount]) {
+    for (const debt of new Set([0n, amount / 2n, amount])) {
     let calls = 0;
-    run(leg, amount, call => {
+    const runSwap = () => {
+    inspectV3(leg, route, amount, debt, 7n, call => {
       calls++; assert.equal(call.target, pool); assert(!call.static);
       assert.equal(call.incoming, 132); assert.equal(call.outgoing, 196);
-      assert.deepEqual(call.patches, [{ offset: 68, reg: 0 }, { offset: 197, reg: 0 }]);
+      assert.deepEqual(call.patches, [{ offset: 68, reg: 0 }, { offset: 197, reg: 0 }, { offset: 384, reg: 0 }]);
       const zeroForOne = route.direction === "zero-for-one";
       const decoded = UNIV3_POOL_INTERFACE.decodeFunctionData("swap", call.data);
       assert.deepEqual([...decoded].slice(0, 4), [executor, zeroForOne, amount, zeroForOne ? MIN_SQRT_RATIO + 1n : MAX_SQRT_RATIO - 1n]);
@@ -303,43 +335,47 @@ test("V3 runtime callback pays actual debt in both directions", () => {
       const args = zeroForOne ? [debt, -7n, decoded[4]] : [-7n, debt, decoded[4]];
       const callbackData = ethers.id("uniswapV3SwapCallback(int256,int256,bytes)").slice(0, 10) + abi.encode(["int256", "int256", "bytes"], args).slice(2);
       let payments = 0;
-      run({ actionAdapterId: "callback", program: ethers.hexlify(script.slice(36)) }, amount, payment => {
+      inspectRuntime(ethers.hexlify(script.slice(36)), amount, { calldata: callbackData, call(payment) {
         payments++; assert.equal(payment.target, route.tokenIn); assert(!payment.static);
         assert.equal(payment.incoming, 0);
         assert.deepEqual([...erc20.decodeFunctionData("transfer", payment.data)], [pool, debt]);
         return "0x";
-      }, undefined, callbackData);
+      } });
       assert.equal(payments, 1);
       const dummy = UNIV3_POOL_INTERFACE.decodeFunctionData("swap", call.template);
       assert.equal(dummy[2], 0n);
       assert.equal(BigInt(ethers.hexlify(ethers.getBytes(dummy[4]).slice(1, 33))), 0n);
       return abi.encode(["int256", "int256"], zeroForOne ? [debt, -7n] : [-7n, debt]);
     });
+    };
+    if (debt === 0n) assert.throws(runSwap, /checked uint256 math/, "zero debt cannot settle a swap");
+    else runSwap();
     assert.equal(calls, 1);
     }
   }
 });
 
 test("V3 and shared settlement reject debt above cap, negative debt, malformed data and signed overflow", () => {
-  for (const route of univ3Routes.project({ descriptor: v3 })) {
-    const leg = univ3Execution.buildRuntimeLeg({ descriptor: v3, route, executor, runtimeEvidence: [] });
+  for (const route of univ3.routes.project({ descriptor: v3 })) {
+    const leg = univ3.execution.buildRuntimeLeg({ descriptor: v3, route, executor, source: v2Source, runtimeEvidence: [] });
     for (const debt of [101n, -100n]) {
-      assert.throws(() => run(leg, 100n, () => abi.encode(["int256", "int256"],
+      assert.throws(() => inspectV3(leg, route, 100n, debt, 7n, () => abi.encode(["int256", "int256"],
         route.direction === "zero-for-one" ? [debt, -7n] : [-7n, debt])), /checked uint256 math/);
-      assert.throws(() => run(leg, 100n, call => {
+      assert.throws(() => inspectV3(leg, route, 100n, debt, 7n, call => {
         const script = ethers.getBytes(UNIV3_POOL_INTERFACE.decodeFunctionData("swap", call.data)[4]);
         const deltas = route.direction === "zero-for-one" ? [debt, -7n] : [-7n, debt];
-        const callbackData = "0x12345678" + abi.encode(["int256", "int256"], deltas).slice(2);
-        run({ actionAdapterId: "callback", program: ethers.hexlify(script.slice(36)) }, 100n,
-          () => assert.fail("invalid debt reached transfer"), undefined, callbackData);
+        const callbackData = UNIV3_CALLBACK.encodeFunctionData("uniswapV3SwapCallback", [...deltas, ethers.hexlify(script)]);
+        inspectRuntime(ethers.hexlify(script.slice(36)), 100n, {
+          calldata: callbackData, call: () => assert.fail("invalid debt reached transfer"),
+        });
         return "0x";
       }), /checked uint256 math/);
     }
-    assert.throws(() => run(leg, 100n, () => "0x"), /return word bounds/);
-    assert.throws(() => run(leg, 1n << 255n, () => assert.fail("overflow reached swap")), /runtime amount mismatch/);
-    assert.throws(() => univ3Execution.buildRuntimeLeg({ descriptor: v3, route: { ...route, tokenIn: route.tokenOut }, executor, runtimeEvidence: [] }), /binding/);
-    assert.throws(() => univ3Execution.buildRuntimeLeg({ descriptor: v3, route: { ...route, fee: 500n }, executor, runtimeEvidence: [] }), /binding/);
-    assert.throws(() => univ3Execution.buildRuntimeLeg({ descriptor: v3, route: { ...route, bindingRef: { ...route.bindingRef, fingerprint: "foreign" } }, executor, runtimeEvidence: [] }), /binding/);
+    assert.throws(() => inspectV3(leg, route, 100n, 100n, 7n, () => "0x"), /word bounds/);
+    assert.throws(() => inspectV3(leg, route, 1n << 255n, 0n, 0n, () => assert.fail("overflow reached swap")), /checked uint256 math|runtime amount mismatch/);
+    assert.throws(() => univ3.execution.buildRuntimeLeg({ descriptor: v3, route: { ...route, tokenIn: route.tokenOut }, executor, source: v2Source, runtimeEvidence: [] }), /binding/);
+    assert.throws(() => univ3.execution.buildRuntimeLeg({ descriptor: v3, route: { ...route, fee: 500n }, executor, source: v2Source, runtimeEvidence: [] }), /binding/);
+    assert.throws(() => univ3.execution.buildRuntimeLeg({ descriptor: v3, route: { ...route, bindingRef: { ...route.bindingRef, fingerprint: "foreign" } }, executor, source: v2Source, runtimeEvidence: [] }), /binding/);
   }
 });
 

@@ -5,7 +5,7 @@ import { assertSameSource, assertSource, callRequest, codeRequest, requireRuntim
 import { UNIV3_STATE_READER, UNIV3_STATE_READER_INTERFACE, UNIV3_STATE_WORD_RADIUS, readUniV3State, type UniV3StateBinding } from "../../../../swaps/univ3-family/state-reader.js";
 import { ABI, nonzero } from "./variants.js";
 import { assertXwinBinding, checkXwinDependencies, decodeXwinSurface, xwinDependencyRequests, XWIN_IMPLEMENTATION_SLOT, type XwinSurface, type XwinPrefixStep } from "./xwin.js";
-import { quoteXwinTransition, type XwinLocalFundState, type XwinLocalSwapRoute } from "./xwin-transition.js";
+import { quoteXwinTransition, type XwinLocalFundState, type XwinLocalSwapRoute } from "../../../../token-conversion-math.js";
 import type { ConversionDescriptor, Direction } from "./types.js";
 import { assertXwinRouterRuntime, assertXwinChainlinkFeedRuntime, assertXwinChainlinkAggregatorRuntime, assertXwinTokenRuntime, assertXwinFiatImplementationRuntime, proveXwinDependencyProxy, XWIN_FIAT_IMPLEMENTATION_SLOT, XWIN_FIAT_ADMIN_SLOT } from "./xwin-dependency-runtime.js";
 import { storageState, tokenBalanceState, tokenSupplyState } from "../../../../local-state-models/resources.js";

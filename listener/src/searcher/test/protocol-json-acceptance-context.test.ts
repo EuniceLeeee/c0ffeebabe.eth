@@ -174,3 +174,17 @@ test("source fingerprint includes dirty runtime files while keeping fixture/test
     assert.throws(() => acceptanceSourceFingerprint(root), /symlink/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("an installed JSON entry must reproduce the generated entry and identify the applicable root and variant files", async () => {
+  const { inspectAcceptanceEntry } = await import("./protocol-json-acceptance-context.js");
+  const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog } = await import("../venues/production-family-composition.js");
+  const conversion = catalog.listAll().find(x => x.plugin.manifest.familyId === "protocol:token-conversion")!;
+  const record = await inspectAcceptanceEntry(conversion);
+  assert.equal(record.kind, "declarative-json");
+  if (record.kind !== "declarative-json") throw new Error("JSON production entry required");
+  assert(record.variants.some(v => v.id === "xwin-allocations-v1"));
+  assert(record.childDefinitions.every(f => /^[a-f0-9]{64}$/.test(f.sha256)));
+  const other = { ...conversion, plugin: { manifest: conversion.plugin.manifest } };
+  assert.equal((await inspectAcceptanceEntry(other)).kind, "not-installed");
+  await assert.rejects(inspectAcceptanceEntry({ ...conversion, sourceFile: "borrowed.production.ts" }));
+});

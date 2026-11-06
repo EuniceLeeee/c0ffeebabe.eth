@@ -3,8 +3,11 @@ import { ethers } from "ethers";
 import type { AdapterRequestResult } from "../venues/adapter-request-program.js";
 import type { CanonicalSource } from "../venues/adapter-request-program.js";
 import { ADDR } from "../../shared/constants/addresses.js";
-import { UNIV4_POOL_MANAGER_INTERFACE, UNIV4_STATE_VIEW_INTERFACE } from "../venues/swaps/univ4-abi.js";
-import { univ4FeeHookStrictFamilyPlugin } from "../venues/swaps/univ4-fee-hook-family-plugin.js";
+import { UNIV4_POOL_MANAGER_INTERFACE } from "../venues/swaps/univ4-abi.js";
+import { plugin as univ4FeeHookStrictFamilyPlugin } from "../venues/production-families/univ4-fee-hook.production.js";
+import { DEFAULT_SEARCHER_EXECUTOR, DEFAULT_SEARCHER_OWNER } from "../../shared/executor/botvm-executor.js";
+import { executeAdapterWork } from "../adapter-work-intent.js";
+import { openHistoricalFamilyEvm } from "./historical-family-evm.js";
 import { UNIV4_FEE_HOOK_ADDRESS, UNIV4_FEE_HOOK_CODE_HASH, UNIV4_FEE_HOOK_PATTERN_IDS } from "../venues/swaps/univ4-fee-hook-family/manifest.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
 
@@ -14,7 +17,7 @@ import { v4PoolId } from "../venues/swaps/univ4-common.js";
  * chain truth. Runs: discovery decode of the real Initialize log, identity
  * active proof (manager/hook code + state view reads pinned at the swap
  * block), instance compile, route projection (fee-hook owned adapter), and a
- * real quoter exact quote. Requires MAINNET_RPC_URL (archive).
+ * real executor-bound receipt Exact quote on an isolated local EVM. Requires MAINNET_RPC_URL (archive).
  */
 const rpcUrl = process.env.MAINNET_RPC_URL;
 if (rpcUrl === undefined || rpcUrl.length === 0) {
@@ -40,7 +43,7 @@ async function findEvidence() {
     address: ADDR.UNISWAP_V4_POOL_MANAGER,
     topics: [INIT_TOPIC, POOL_ID],
     fromBlock: 25_800_000,
-    toBlock: 25_820_000,
+    toBlock: SWAP_BLOCK,
   });
   assert.equal(inits.length, 1, "exactly one Initialize log for the pool");
   const init = inits[0]!;
@@ -70,11 +73,12 @@ async function runRequest(
   source: CanonicalSource,
   blockTag: number,
 ): Promise<AdapterRequestResult> {
+  assert.equal(blockTag, source.number);
   let data: string;
   if (request.kind === "get-code" && request.address !== undefined) {
-    data = await provider.getCode(request.address, blockTag);
+    data = await provider.send("eth_getCode", [request.address, { blockHash: source.hash, requireCanonical: true }]);
   } else if (request.kind === "eth-call" && request.to !== undefined && request.data !== undefined) {
-    data = await provider.call({ to: request.to, data: request.data, blockTag });
+    data = await provider.send("eth_call", [{ to: request.to, data: request.data }, { blockHash: source.hash, requireCanonical: true }]);
   } else {
     throw new Error("unsupported probe request kind " + request.kind);
   }
@@ -110,22 +114,29 @@ const candidate = univ4FeeHookStrictFamilyPlugin.discovery.decodeCandidate({
   matchedPatternId: UNIV4_FEE_HOOK_PATTERN_IDS.initialize,
 });
 assert(candidate !== null, "fee-hook discovery must decode the real Initialize log");
+const poolKey = {
+  currency0: candidate.currency0,
+  currency1: candidate.currency1,
+  fee: Number(candidate.fee),
+  tickSpacing: Number(candidate.tickSpacing),
+  hooks: candidate.hooks,
+};
 assert.equal(candidate.poolId.toLowerCase(), POOL_ID.toLowerCase());
 assert.equal(
-  candidate.poolKey.currency0.toLowerCase(), USDC.toLowerCase(),
+  poolKey.currency0.toLowerCase(), USDC.toLowerCase(),
   "currency0 must be USDC",
 );
 assert.equal(
-  candidate.poolKey.currency1.toLowerCase(), WETH.toLowerCase(),
+  poolKey.currency1.toLowerCase(), WETH.toLowerCase(),
   "currency1 must be WETH",
 );
-assert.equal(candidate.poolKey.fee, 0x800000, "dynamic fee flag");
-assert.equal(candidate.poolKey.tickSpacing, 10);
+assert.equal(poolKey.fee, 0x800000, "dynamic fee flag");
+assert.equal(poolKey.tickSpacing, 10);
 assert.equal(
-  candidate.poolKey.hooks.toLowerCase(), UNIV4_FEE_HOOK_ADDRESS.toLowerCase(),
+  poolKey.hooks.toLowerCase(), UNIV4_FEE_HOOK_ADDRESS.toLowerCase(),
   "poolKey must name the audited hook",
 );
-assert.equal(v4PoolId(candidate.poolKey).toLowerCase(), POOL_ID.toLowerCase());
+assert.equal(v4PoolId(poolKey).toLowerCase(), POOL_ID.toLowerCase());
 
 // 2. Identity: real active proof at the swap block.
 const variant = univ4FeeHookStrictFamilyPlugin.identity.variants[0]!;
@@ -151,7 +162,7 @@ assert.equal(
 assert.ok(identity.facts.hookCodeHash.startsWith("0x"));
 console.log(
   "identity: verified subject=" + identity.subject +
-    " managerCodeHash=" + identity.facts.managerBinding.managerCodeHash.slice(0, 10) +
+    " managerCodeHash=" + evidence.managerCodeHash.slice(0, 10) +
     " hookCodeHash=" + identity.facts.hookCodeHash.slice(0, 10) +
     " evidenceProvenance=" + identity.provenance[0]!.kind,
 );
@@ -188,7 +199,7 @@ console.log(
   ).join(", "),
 );
 
-// 5. Exact: real quoter quote at the swap block, direction from the real swap.
+// 5. Quote the observed input using the active tiered-hook executor receipt.
 const decodedSwap = UNIV4_POOL_MANAGER_INTERFACE.decodeEventLog(
   "Swap", swap.data, swap.topics,
 );
@@ -204,37 +215,44 @@ const route = routes.find((item) =>
 )!;
 const amountIn = zeroForOne ? -amount0 : -amount1;
 assert(amountIn > 0n, "retained Swap input must be positive");
-const exactInput = {
-  descriptor,
-  route,
-  amountIn,
-  source,
-  executor: ADDR.UNISWAP_V4_POOL_MANAGER,
-  runtimeEvidence: Object.freeze([]),
-};
-const method = univ4FeeHookStrictFamilyPlugin.exact.methods(exactInput).find(
-  (item) => item.id === "univ4-fee-hook-quoter",
-)!;
-if (method.kind !== "request-program") throw new Error("quoter method shape changed");
-const program = method.program;
-const exactRequests = (program as { buildRequests(input: unknown): readonly unknown[] })
-  .buildRequests({ descriptor, route, amountIn, source });
-assert.equal(exactRequests.length, 1);
-const quoteResults = Object.freeze(await Promise.all(exactRequests.map((request) =>
-  runRequest(request as never, source, swap.blockNumber),
-)));
-const quote = (program as {
-  decode(input: { programInput: unknown; initialResults: readonly unknown[] }): unknown;
-}).decode({ programInput: { descriptor, route, amountIn, source }, initialResults: quoteResults });
-const quoteRecord = quote as { amountOut: bigint; evidence: { amountOut: bigint; poolId: string } };
-assert.equal(
-  quoteRecord.evidence.poolId.toLowerCase(), POOL_ID.toLowerCase(),
-);
-assert(quoteRecord.amountOut > 0n, "retained Swap amount must quote positively");
-console.log(
-  "exact: " + (zeroForOne ? "USDC" : "WETH") + " " + amountIn + " -> amountOut=" +
-    quoteRecord.amountOut + " evidenceKind=" +
-    (quoteRecord.evidence as { kind?: string }).kind,
-);
-
-console.log("univ4-fee-hook live probe PASS (adaptation and retained exact quote verified)");
+const executor = ethers.getAddress(process.env.SEARCHER_TEST_EXECUTOR ?? DEFAULT_SEARCHER_EXECUTOR);
+const owner = ethers.getAddress(process.env.SEARCHER_TEST_OWNER ?? DEFAULT_SEARCHER_OWNER);
+const session = await openHistoricalFamilyEvm(provider, rpcUrl, source, executor, owner);
+const { runtime, control } = session;
+try {
+  const exactInput = { descriptor, route, amountIn, source, executor, transactionOrigin: owner, runtimeEvidence: [] };
+  const method = univ4FeeHookStrictFamilyPlugin.exact.methods(exactInput)
+    .find(item => item.id === "tiered-executor-receipt");
+  assert(method?.kind === "request-program");
+  const reqs = method.program.buildRequests(exactInput);
+  assert.equal(reqs.length, 1);
+  assert.equal(reqs[0].kind, "effect-delta-simulation");
+  const outcome = await executeAdapterWork({
+    runtime, control,
+    intent: {
+      stage: "exact-refine", familyId: univ4FeeHookStrictFamilyPlugin.manifest.familyId,
+      source, generation: source.generation, programInput: exactInput,
+      program: {
+        requirements: () => method.program.requirements(exactInput),
+        buildRequests: () => reqs,
+        decode: ({ results }) => results,
+      },
+    },
+  });
+  assert.equal(outcome.status, "resolved", "the executor receipt must be resolved");
+  if (outcome.status !== "resolved") throw new Error("fee-hook Exact did not resolve");
+  const result = outcome.executed.evidence[0];
+  assert(result.ok && result.completion === "returned" && result.effects);
+  const quote = method.program.decode({ programInput: exactInput, initialResults: [result], dependentEvidence: [] });
+  assert(quote.amountOut > 0n);
+  assert.equal(quote.evidence.poolId.toLowerCase(), POOL_ID.toLowerCase());
+  const delta = (token: string) => result.effects!.tokenDeltas!.filter(
+    row => row.account.toLowerCase() === executor.toLowerCase() && row.token.toLowerCase() === token.toLowerCase());
+  assert.deepEqual(delta(route.tokenIn).map(row => row.delta), [-amountIn]);
+  assert.deepEqual(delta(route.tokenOut).map(row => row.delta), [quote.amountOut]);
+  console.log("exact: input=" + amountIn + " output=" + quote.amountOut + " method=" + method.id);
+  console.log("univ4-fee-hook live probe PASS (historical source, tiered executor receipt)");
+} finally {
+  await session.close();
+  provider.destroy();
+}

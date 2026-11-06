@@ -30,12 +30,14 @@ export interface DeclarativeCallbackFrame {
   };
 }
 export interface FrameContinuation { readonly debt: FrameValue; readonly output: FrameValue }
+export interface ReturnedSettlementWords { readonly debt: string; readonly negativeOutput: string }
 export interface FramedSettlementContext {
   readonly request: Extract<RuntimeSettlementRequest, { kind: "deferred-input" }>;
   readonly executor: string; readonly tokenIn: string; readonly tokenOut: string; readonly recipient: string;
   readonly minimum: bigint; readonly fullInput: boolean;
   /** Parent read/math witness, compared with actual callback receipt and final balance. */
-  readonly expectedOutput: FrameValue;
+  readonly expectedOutput?: FrameValue;
+  readonly returnedWords?: ReturnedSettlementWords;
   readonly constraints: readonly { actual: "debt" | "output"; operator: "eq" | "gte" | "lte"; value: FrameValue }[];
   readonly native?: { input: boolean; output: boolean };
 }
@@ -298,8 +300,15 @@ export function emitDeclarativeCallbackFrame(spec: DeclarativeCallbackFrame, emi
     };
     ops.push({ kind: "seed", name: "frameInputBefore", value: opening.input },
       { kind: "seed", name: "frameOutputBefore", value: opening.output },
-      { kind: "seed", name: "frameRecipientBefore", value: opening.recipient },
-      { kind: "seed", name: "frameExpectedOutput", value: settlement.expectedOutput });
+      { kind: "seed", name: "frameRecipientBefore", value: opening.recipient });
+    if (settlement.returnedWords) {
+      const saves = spec.call.save ?? {}, { fn } = iface(spec.call.signature);
+      const debt = saves[settlement.returnedWords.debt], credit = saves[settlement.returnedWords.negativeOutput];
+      if (debt === credit || fn.outputs[debt!]?.type !== "int256" || fn.outputs[credit!]?.type !== "int256")
+        throw new Error("settlement requires two distinct signed return words");
+    } else {
+      ops.push({ kind: "seed", name: "frameExpectedOutput", value: settlement.expectedOutput! });
+    }
     if (settlement.native) ops.push({ kind: "seed", name: "frameNativeBefore", value: opening.native! },
       { kind: "native-open", context: settlement });
   }
@@ -342,7 +351,8 @@ export function emitDeclarativeCallbackFrame(spec: DeclarativeCallbackFrame, emi
     } else if (step.frame) ops.push({ kind: "frame", spec: step.frame, math, depth: depth + 1 });
     else if (step.check) ops.push({ kind: "check", check: step.check });
     else if (step.continuation) {
-      ops.push({ kind: "check", check: { left: step.continuation.output, operator: "eq", right: ref("frameExpectedOutput") } });
+      if (!settlement!.returnedWords)
+        ops.push({ kind: "check", check: { left: step.continuation.output, operator: "eq", right: ref("frameExpectedOutput") } });
       for (const constraint of settlement!.constraints) {
         const actual = step.continuation[constraint.actual];
         ops.push({ kind: "check", check: constraint.operator === "lte"
@@ -384,7 +394,26 @@ export function emitDeclarativeCallbackFrame(spec: DeclarativeCallbackFrame, emi
     // The callee must not consume old actor inventory after callback return.
     emit.check({ left: emit.capture("frameFinalInput", settlement.tokenIn, settlement.executor), operator: "eq", right: opening.input });
     const finalOutput = emit.word(emit.capture("frameFinalOutput", settlement.tokenOut, settlement.executor));
-    const before = emit.word(opening.output), expected = emit.word(settlement.expectedOutput), paid = emit.word(settlement.request.paymentAmount);
+    const before = emit.word(opening.output), paid = emit.word(settlement.request.paymentAmount);
+    let expected: ReturnType<typeof emit.word>;
+    if (settlement.returnedWords) {
+      const debt = ref(settlement.returnedWords.debt);
+      emit.check({ left: debt, operator: "gte", right: 1n });
+      emit.check({ left: ref("amountIn"), operator: "gte", right: debt });
+      const finalRecipient = emit.word(emit.capture("frameReturnedRecipient", settlement.tokenIn, settlement.recipient));
+      const recipientBefore = emit.word(opening.recipient), paidDebt = emit.word(debt), net = emit.take();
+      emit.program.math("sub", net, finalRecipient.reg, recipientBefore.reg).equal(net, paidDebt.reg);
+      [finalRecipient, recipientBefore, paidDebt, { reg: net, temporary: true }].forEach(emit.release);
+      const signed = ref(settlement.returnedWords.negativeOutput);
+      emit.check({ left: signed, operator: "gte", right: 1n << 255n });
+      const raw = emit.word(signed), max = emit.word(MaxUint256), one = emit.word(1n);
+      expected = { reg: emit.take(), temporary: true };
+      emit.program.math("sub", expected.reg, max.reg, raw.reg).math("add", expected.reg, expected.reg, one.reg);
+      [raw, max, one].forEach(emit.release);
+      const minimum = emit.word(settlement.minimum > 0n ? settlement.minimum : 1n), guard = emit.take();
+      emit.program.math("sub", guard, expected.reg, minimum.reg);
+      [minimum, {reg: guard, temporary: true}].forEach(emit.release);
+    } else expected = emit.word(settlement.expectedOutput!);
     const scratch = emit.take();
     emit.program.math("add", scratch, before.reg, expected.reg).math("sub", scratch, scratch, paid.reg).equal(finalOutput.reg, scratch);
     [finalOutput, before, expected, paid, { reg: scratch, temporary: true }].forEach(emit.release);
@@ -410,7 +439,7 @@ export function emitCallbackContinuation(program: RuntimeAmountProgram, spec: Fr
     const one = word(1n), minimum = word(context.minimum > 0n ? context.minimum : 1n);
     program.math("sub", scratch, debt, one).math("sub", scratch, 0, debt)
       .math("sub", scratch, output, minimum).math("sub", scratch, output, amount);
-    if (context.fullInput && context.request.paymentInput !== "debt") program.equal(debt, 0);
+    if ((context.fullInput || context.returnedWords) && context.request.paymentInput !== "debt") program.equal(debt, 0);
     balance(context.tokenOut, context.executor, scratch).math("sub", scratch, scratch, beforeOut).equal(scratch, output);
     balance(context.tokenIn, context.executor, scratch).equal(scratch, beforeIn);
     program.run(context.request.paymentProgram, context.request.paymentInput === "debt" ? debt : amount, other).equal(other, debt);

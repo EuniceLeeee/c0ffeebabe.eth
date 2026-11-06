@@ -6,7 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { ethers } from 'ethers';
 import { fileURLToPath } from 'node:url';
 import { RuntimeAmountProgram, runtimePayment, runtimeProgramScript, runtimeAmountFlowAdapter } from '../../adapters/runtime-amount-program.js';
-import { univ4Execution } from '../venues/swaps/univ4-family/execution.js';
+import { plugin as noHookV4 } from '../venues/production-families/univ4.production.js';
 import { univ4FeeHookExecution } from '../venues/swaps/univ4-fee-hook-family/execution.js';
 import { univ4FeeHookRoutes } from '../venues/swaps/univ4-fee-hook-family/routes.js';
 import { UNIV4_FEE_HOOK_FAMILY_ID, UNIV4_FEE_HOOK_LINEAGE_ID, UNIV4_FEE_HOOK_ADDRESS } from '../venues/swaps/univ4-fee-hook-family/manifest.js';
@@ -17,14 +17,12 @@ import type { ResolvedPlanNode } from '../../types.js';
 import { poolKeyFingerprint } from '../venues/swaps/univ4-family/codec.js';
 import { loadBotVmRuntimeCode, buildExecuteCalldata } from '../../shared/executor/botvm-executor.js';
 import { buildUniV4RuntimeLeg } from '../venues/swaps/univ4-family/runtime-execution.js';
-import { univ4Routes } from '../venues/swaps/univ4-family/routes.js';
-import { UNIV4_FAMILY_ID, UNIV4_MANAGER_LINEAGE_ID } from '../venues/swaps/univ4-family/manifest.js';
 import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary, mapRuntimeAssetSettlementRequest } from '../execution-asset-boundary.js';
 import { ADDR } from '../../shared/constants/addresses.js';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url)).replace(/\/$/, ''), abi = ethers.AbiCoder.defaultAbiCoder();
 const token0 = '0x' + '11'.repeat(20), token1 = '0x' + '22'.repeat(20);
-const manager = '0x' + '33'.repeat(20), executor = '0x' + '44'.repeat(20), owner = '0x' + '55'.repeat(20);
+const manager = ADDR.UNISWAP_V4_POOL_MANAGER, executor = '0x' + '44'.repeat(20), owner = '0x' + '55'.repeat(20);
 const returnLeg = '0x' + '66'.repeat(20), other = '0x' + '77'.repeat(20);
 const continuation = '0x' + '88'.repeat(20);
 const wrapFaultAbi = new ethers.Interface(['function configureWrapFault(int256,int256,int256)']);
@@ -57,8 +55,8 @@ const artifact = (name: string) => {
 const pinEvidence = () => {
   const sourceFiles = [
     'listener/src/searcher/venues/swaps/univ4-family/runtime-execution.ts',
-    'listener/src/searcher/venues/swaps/univ4-family/execution.ts',
-    'listener/src/searcher/venues/swaps/univ4-family/routes.ts',
+    'listener/src/searcher/venues/swaps/univ4-family/univ4.json',
+    'listener/src/searcher/venues/declarative-execution.ts',
     'listener/src/searcher/venues/swaps/univ4-fee-hook-family/execution.ts',
     'listener/src/searcher/venues/swaps/univ4-fee-hook-family/routes.ts',
     'listener/src/searcher/venues/swaps/univ4-fee-hook-family/sat1.ts',
@@ -147,14 +145,14 @@ try {
     const hooks = variant === 'sat1' ? '0x2a0a30dd78af7698e6f40212b8b8324fce2ee888' : feeHook ? UNIV4_FEE_HOOK_ADDRESS : ethers.ZeroAddress;
     const key = { currency0: native ? ethers.ZeroAddress : token0, currency1: token1, fee: 3000, tickSpacing: 60, hooks };
     const poolId = ethers.keccak256(abi.encode(['address', 'address', 'uint24', 'int24', 'address'], Object.values(key)));
-    const descriptor: any = { familyId: feeHook ? UNIV4_FEE_HOOK_FAMILY_ID : UNIV4_FAMILY_ID,
-      lineageId: feeHook ? UNIV4_FEE_HOOK_LINEAGE_ID : UNIV4_MANAGER_LINEAGE_ID,
-      instanceKey: manager + ':' + poolId, provenance: [], runtimeRequirements: [], poolId, poolKey: key,
+    const descriptor: any = { familyId: feeHook ? UNIV4_FEE_HOOK_FAMILY_ID : noHookV4.manifest.familyId,
+      lineageId: feeHook ? UNIV4_FEE_HOOK_LINEAGE_ID : noHookV4.manifest.supportedLineages[0],
+      instanceKey: feeHook ? manager + ':' + poolId : [manager.toLowerCase(), poolId].join('\u001f'), provenance: [], runtimeRequirements: [], poolId, poolKey: key,
       graphToken0: native ? ADDR.WETH : token0, graphToken1: token1,
-      managerBinding: { manager, stateView: other, quoter: other, managerCodeHash: ethers.keccak256(managerCode) },
+      managerBinding: { manager, stateView: feeHook ? other : ADDR.UNISWAP_V4_STATE_VIEW, quoter: feeHook ? other : ADDR.UNISWAP_V4_QUOTER, managerCodeHash: ethers.keccak256(managerCode) },
       hookPolicy: feeHook ? 'fee-hook' : 'no-hook', ...(feeHook ? { hook: hooks } : {}),
       ...(variant === 'sat1' ? { hookModel: 'sat1' } : {}) };
-    const route = (feeHook ? univ4FeeHookRoutes : univ4Routes).project({ descriptor })[reverse ? 1 : 0];
+    const route = (feeHook ? univ4FeeHookRoutes : noHookV4.routes).project({ descriptor })[reverse ? 1 : 0];
     const hookData = feeHook ? hookDataFor(descriptor, executor, !reverse) : '0x';
     const rawLeg = feeHook ? univ4FeeHookExecution.buildRuntimeLeg({ descriptor, route, executor }) : buildUniV4RuntimeLeg({ descriptor, route, executor });
     assert(rawLeg);
@@ -170,7 +168,18 @@ try {
         tokenIn: route.tokenIn, tokenOut: route.tokenOut, amountIn: 100n, amountOut: 7n,
         gasEstimate: 0n, hookData },
     };
-    const fragment = (feeHook ? univ4FeeHookExecution : univ4Execution).buildFragment(execution);
+    // Zero-minimum scenarios below intentionally exercise the shared callback
+    // encoder in isolation. Live no-hook quotes require a positive minimum.
+    const fragment = feeHook ? univ4FeeHookExecution.buildFragment(execution) : {
+      requirements: [], nodes: [{ adapterId: rawLeg.actionAdapterId, target: manager, tokenIn: route.tokenIn,
+        tokenOut: route.tokenOut, amount: 100n, params: { runtimeAmountProgram: rawLeg.program }, children: [] }],
+    };
+    const noHookQuoted = (minimum: bigint) => {
+      const { gasEstimate: _fixtureOnly, ...exactEvidence } = execution.exactEvidence;
+      return noHookV4.execution.buildFragment({ ...execution, minAmountOut: minimum,
+        source: exactEvidence.source, exactEvidence: { ...exactEvidence, quoter: descriptor.managerBinding.quoter } });
+    };
+    if (!feeHook) assert.throws(() => noHookQuoted(0n), /incompatible exact evidence/);
     assert.equal(fragment.nodes.length, 1);
     const rawQuotedScript = compile(fragment.nodes[0]);
     const issuedFragment = applyQuotedAssetBoundary({ route, executor, amountIn: 100n, minimum: 0n, fragment });
@@ -203,7 +212,8 @@ try {
     if (native) {
       const build = (request: any) => {
         const mapped = mapRuntimeAssetSettlementRequest({ route, executor, request }); assert(mapped);
-        const raw = (feeHook ? univ4FeeHookExecution : univ4Execution).buildRuntimeLeg({ descriptor, route, executor, settlement: mapped });
+        const invocation = { descriptor, route, executor, settlement: mapped };
+        const raw = feeHook ? univ4FeeHookExecution.buildRuntimeLeg(invocation) : buildUniV4RuntimeLeg(invocation);
         assert(raw, `${name} explicit settlement supported`);
         assert.deepEqual(raw.settlementRequest, mapped);
         // This is the same graph/native request mapping performed by the issuer.
@@ -330,7 +340,7 @@ try {
       await tx(route.tokenOut, tokenAbi.encodeFunctionData('mint', [executor, 777n]));
       await tx(route.tokenOut, tokenAbi.encodeFunctionData('mint', [manager, 1000n]));
       await tx(manager, managerAbi.encodeFunctionData('configure', [100n, received, 0n]));
-      const guarded = applyQuotedAssetBoundary({ route, executor, amountIn: 100n, minimum: 7n, fragment });
+      const guarded = applyQuotedAssetBoundary({ route, executor, amountIn: 100n, minimum: 7n, fragment: feeHook ? fragment : noHookQuoted(7n) });
       const receipt = await tx(executor, buildExecuteCalldata(compile(guarded.nodes[0])));
       assert.equal(receipt.status === '0x1', success, `${name} measured minimum received=${received}`);
       assert.equal(await balance(route.tokenIn, executor), success ? 1000n : 1100n);

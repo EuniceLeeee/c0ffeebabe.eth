@@ -11,7 +11,7 @@ import type { CanonicalSource } from "../../../adapter-request-program.js";
 import { createVerifiedGraphView } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import type { FamilyCapabilityCatalog } from "../../../family-capability-catalog.js";
-import { FAMILY } from "./reference/manifest.js";
+import { FAMILY } from "./fixture-identifiers.js";
 
 // Only the transport/state is synthetic. Admission, graph projection, amount
 // reference selection, raw/effective publication and refresh are production code.

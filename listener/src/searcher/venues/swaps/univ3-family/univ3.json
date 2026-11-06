@@ -6898,7 +6898,7 @@
                   "pool"
                 ]
               },
-              "signature": "function swap(address recipient,bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96,bytes data)",
+              "signature": "function swap(address recipient,bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96,bytes data) returns (int256 amount0, int256 amount1)",
               "args": [
                 "$recipient",
                 true,
@@ -6907,7 +6907,29 @@
                 },
                 "4295128740"
               ],
-              "dataArgument": 4
+              "dataArgument": 4,
+              "save": {
+                "returnedDebt": 0,
+                "returnedCreditWord": 1
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "amountIn"
+                  },
+                  "operator": "gte",
+                  "right": {
+                    "runtime": "returnedDebt"
+                  }
+                },
+                {
+                  "left": {
+                    "runtime": "returnedCreditWord"
+                  },
+                  "operator": "gte",
+                  "right": "57896044618658097711785492504343953926634992332820282019728792003956564819968"
+                }
+              ]
             },
             "callback": {
               "signature": "function uniswapV3SwapCallback(int256 amount0Delta,int256 amount1Delta,bytes data)",
@@ -6992,7 +7014,7 @@
                   "pool"
                 ]
               },
-              "signature": "function swap(address recipient,bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96,bytes data)",
+              "signature": "function swap(address recipient,bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96,bytes data) returns (int256 amount0, int256 amount1)",
               "args": [
                 "$recipient",
                 false,
@@ -7001,7 +7023,29 @@
                 },
                 "1461446703485210103287273052203988822378723970341"
               ],
-              "dataArgument": 4
+              "dataArgument": 4,
+              "save": {
+                "returnedDebt": 1,
+                "returnedCreditWord": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "amountIn"
+                  },
+                  "operator": "gte",
+                  "right": {
+                    "runtime": "returnedDebt"
+                  }
+                },
+                {
+                  "left": {
+                    "runtime": "returnedCreditWord"
+                  },
+                  "operator": "gte",
+                  "right": "57896044618658097711785492504343953926634992332820282019728792003956564819968"
+                }
+              ]
             },
             "callback": {
               "signature": "function uniswapV3SwapCallback(int256 amount0Delta,int256 amount1Delta,bytes data)",
@@ -7084,7 +7128,168 @@
           },
           "account": "$recipient"
         }
-      ]
+      ],
+      "framedSettlement": {
+        "version": 1,
+        "recipient": "target",
+        "debtInput": true,
+        "returnedWords": {
+          "debt": "returnedDebt",
+          "negativeOutput": "returnedCreditWord"
+        },
+        "frame": {
+          "call": {
+            "target": {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            },
+            "signature": "function swap(address recipient,bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96,bytes data) returns (int256 amount0, int256 amount1)",
+            "args": [
+              "$recipient",
+              {
+                "op": "eq",
+                "args": [
+                  "$route.direction",
+                  "zero-for-one"
+                ]
+              },
+              {
+                "runtime": "amountIn"
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "zero-for-one"
+                    ]
+                  },
+                  "4295128740",
+                  "1461446703485210103287273052203988822378723970341"
+                ]
+              }
+            ],
+            "dataArgument": 4,
+            "save": {
+              "returnedDebt": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "zero-for-one"
+                    ]
+                  },
+                  0,
+                  1
+                ]
+              },
+              "returnedCreditWord": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "zero-for-one"
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "amountIn"
+                },
+                "operator": "gte",
+                "right": {
+                  "runtime": "returnedDebt"
+                }
+              },
+              {
+                "left": {
+                  "runtime": "returnedCreditWord"
+                },
+                "operator": "gte",
+                "right": "57896044618658097711785492504343953926634992332820282019728792003956564819968"
+              }
+            ]
+          },
+          "callback": {
+            "signature": "function uniswapV3SwapCallback(int256 amount0Delta,int256 amount1Delta,bytes data)",
+            "dataArgument": 2,
+            "captures": {
+              "capital": {
+                "runtime": "amountIn"
+              }
+            },
+            "arguments": [
+              {
+                "index": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.direction",
+                        "zero-for-one"
+                      ]
+                    },
+                    0,
+                    1
+                  ]
+                },
+                "name": "debt",
+                "encoding": "positive",
+                "maximum": {
+                  "runtime": "capital"
+                }
+              },
+              {
+                "index": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.direction",
+                        "zero-for-one"
+                      ]
+                    },
+                    1,
+                    0
+                  ]
+                },
+                "name": "credit",
+                "encoding": "negative",
+                "minimum": 1
+              }
+            ],
+            "steps": [
+              {
+                "id": "continuePayment",
+                "continuation": {
+                  "debt": {
+                    "runtime": "debt"
+                  },
+                  "output": {
+                    "runtime": "credit"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
     }
   },
   "modules": {

@@ -4,7 +4,7 @@ import { storageState, tokenBalanceState, tokenSupplyState } from "../../../../l
 import { readV3TrialState, v3TrialStateRef, v3TrialStateEffects, type V3TrialBinding } from "../../../../local-state-models/v3-state.js";
 import { staticProjection } from "./binding.js";
 import { quoteBear, type BearState } from "./bear-local.js";
-import { quoteXwinTransition, type XwinLocalFundState } from "./xwin-transition.js";
+import { quoteXwinTransition, type XwinLocalFundState } from "../../../../token-conversion-math.js";
 import type { ConversionDescriptor, ConversionExactEvidence, ConversionRoute } from "./types.js";
 
 type Input = ExactQuoteInput<ConversionDescriptor, ConversionRoute>;

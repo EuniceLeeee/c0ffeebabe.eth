@@ -1,6 +1,6 @@
 import { plugin as eigenpieProductionPlugin } from "./venues/production-families/eigenpie.production.js";
 import { plugin as astraMultiTokenProductionPlugin } from "./venues/production-families/astra-multitoken.production.js";
-import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
+import { createStrictCentralAdapterRuntime, type StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 import assert from "node:assert/strict";
 import {
   executeAdapterFamilyLifecycleBatch,
@@ -34,9 +34,8 @@ import {
 } from "./venues/swaps/univ3-abi.js";
 import { UNIV3_SWAP_CALL_PATTERN_ID } from
   "./venues/swaps/univ3-family/codec.js";
-import { univ3Exact } from "./venues/swaps/univ3-family/exact.js";
-import { univ3Execution } from "./venues/swaps/univ3-family/execution.js";
-import { UNIV4_FAMILY_ID } from "./venues/swaps/univ4-family/manifest.js";
+import { UNIV3_STATE_READER_INTERFACE } from "./venues/swaps/univ3-family/state-reader.js";
+import { plugin as univ4Plugin } from "./venues/production-families/univ4.production.js";
 import { UNIV4_SWAP_CALL_PATTERN_ID } from
   "./venues/swaps/univ4-family/codec.js";
 import {
@@ -46,8 +45,6 @@ import {
 } from "./venues/swaps/univ4-abi.js";
 import { normalizeV4PoolKey, v4PoolId } from "./venues/swaps/univ4-common.js";
 import { ADDR } from "../shared/constants/addresses.js";
-import { univ4Exact } from "./venues/swaps/univ4-family/exact.js";
-import { univ4Execution } from "./venues/swaps/univ4-family/execution.js";
 import {
   v3SwapExactInput,
   v3SwapToState,
@@ -276,14 +273,6 @@ import type {
 } from "./adapter-work-intent.js";
 import { projectFamilyRouteGraph } from
   "./adapter-family-graph-runtime.js";
-import type { UniV3Descriptor, UniV3Route } from
-  "./venues/swaps/univ3-family/types.js";
-import type { UniV3ExactEvidence } from
-  "./venues/swaps/univ3-family/types.js";
-import type { UniV4Descriptor, UniV4Route } from
-  "./venues/swaps/univ4-family/types.js";
-import type { UniV4ExactEvidence } from
-  "./venues/swaps/univ4-family/types.js";
 import type { ExpectedEffect } from
   "./venues/adapter-family-plugin.js";
 import { plugin as erc4626Plugin } from "./venues/production-families/erc4626.production.js";
@@ -465,7 +454,7 @@ class FixtureScheduler implements CentralAdapterScheduler {
   }
 }
 
-function fixtureRuntime(pool: PoolContext): CentralAdapterRuntime {
+export function univ2FixtureRuntime(pool: PoolContext): CentralAdapterRuntime {
   let now = 1_000;
   return {
     clock: { nowMs: () => now++ },
@@ -658,7 +647,7 @@ export async function runUniv2Lifecycle(
     })],
     source: canonical,
     generation: canonical.generation,
-    runtime: fixtureRuntime(pool),
+    runtime: univ2FixtureRuntime(pool),
     publisher: { publish: (value) => { publication = value; } },
   });
   assert(result.publication);
@@ -819,7 +808,7 @@ async function buildUniv2CaseCapture(input: {
         assert(handle, "strict capture requires an issued UniV2 route");
         const quote = await executeFamilyExactQuote({
           family: pricedFamily, route: handle, amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
-          source: input.source, generation: input.source.generation, runtime: fixtureRuntime(pool),
+          source: input.source, generation: input.source.generation, runtime: univ2FixtureRuntime(pool),
           executor: MIGRATION_CAPTURE_EXECUTOR, runtimeEvidence: [], actionOwnership: CATALOG,
         });
         if (quote.status !== "resolved") throw new Error(`univ2 capture exact: ${quote.outcome.reasonCode}`);
@@ -899,7 +888,7 @@ async function buildUniv2CaseCapture(input: {
           }),
         }));
         const effects = execution.expectedEffects;
-        assertConservedUniv2Effects(effects, route);
+        assertConservedPoolEffects(effects, route);
         if (quote.amountOut < minAmountOut) {
           throw new Error("univ2 capture final simulation repayment failed");
         }
@@ -1123,7 +1112,7 @@ export function fixtureCaptureStages(): readonly ArchitectureMigrationStage[] {
  * (transfer amountIn in, swap amountOut out) and is verified by the capture
  * repayment check.
  */
-function assertConservedUniv2Effects(
+function assertConservedPoolEffects(
   effects: readonly ExpectedEffect[],
   route: { readonly tokenIn: string; readonly tokenOut: string },
 ): void {
@@ -1134,12 +1123,12 @@ function assertConservedUniv2Effects(
     ["token-delta:executor:increase", route.tokenOut],
   ]);
   if (effects.length !== 4) {
-    throw new Error("univ2 capture final simulation effects size mismatch");
+    throw new Error("capture final simulation effects size mismatch");
   }
   for (const effect of effects) {
     if (effect.kind !== "token-delta") {
       throw new Error(
-        "univ2 capture final simulation effect must be token-delta",
+        "capture final simulation effect must be token-delta",
       );
     }
     const key = `${effect.kind}:${effect.account}:${effect.direction}`;
@@ -1152,6 +1141,8 @@ function assertConservedUniv2Effects(
 export const UNIV3_FIXTURE_FACTORY =
   "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 export const UNIV3_FIXTURE_POOL = `0x${"33".repeat(20)}`;
+// Synthetic dispatcher exposing only swap with a reverting fallback.
+export const UNIV3_FIXTURE_POOL_CODE = "0x608060405234801561001057600080fd5b506004361061002f5760003560e01c8063128acb08146100345761002f565b600080fd5b600080fd";
 export const UNIV3_FIXTURE_TOKEN0 = `0x${"11".repeat(20)}`;
 export const UNIV3_FIXTURE_TOKEN1 = `0x${"22".repeat(20)}`;
 export const UNIV3_FIXTURE_FEE = 500n;
@@ -1221,7 +1212,16 @@ function univ3SuccessResult(
   canonical: CanonicalSource,
   ctx: UniV3PoolContext,
 ): AdapterRequestResult {
-  const data = request.id === "pool-factory"
+  const data = request.id === "pool-swap-access-code" ? UNIV3_FIXTURE_POOL_CODE
+    : request.id === "local-pool-state" ? UNIV3_STATE_READER_INTERFACE.encodeFunctionResult("getFullStateWithRelativeBitmaps", [{
+      pool: ctx.pool, blockTimestamp: 1000,
+      slot0: { sqrtPriceX96: ctx.sqrtPriceX96, tick: 0, observationIndex: 0, observationCardinality: 1,
+        observationCardinalityNext: 1, feeProtocol: 0, unlocked: true },
+      liquidity: ctx.liquidity, tickSpacing: ctx.tickSpacing, maxLiquidityPerTick: (1n << 128n) - 1n,
+      observation: { blockTimestamp: 999, tickCumulative: 0n, secondsPerLiquidityCumulativeX128: 0n, initialized: true },
+      tickBitmap: [], ticks: [],
+    }])
+    : request.id === "pool-factory"
     ? UNIV3_POOL_INTERFACE.encodeFunctionResult("factory", [ctx.factory])
     : request.id === "pool-token0"
     ? UNIV3_POOL_INTERFACE.encodeFunctionResult("token0", [ctx.token0])
@@ -1421,7 +1421,10 @@ export async function captureUniv3RealCase(input: {
  */
 export async function captureUniv3OnchainCase(input: {
   readonly source: CanonicalSource;
-  readonly provider: OnchainUniv2Provider;
+  readonly provider: OnchainUniv2Provider & {
+    getCode(address: string, block: number): Promise<string>;
+    getStorage(address: string, slot: string, block: number): Promise<string>;
+  };
   readonly pool: string;
   readonly tokenA?: string;
   readonly tokenB?: string;
@@ -1507,7 +1510,17 @@ export async function captureUniv3OnchainCase(input: {
       BigInt(input.liquidity) !== liquidity) {
     throw new Error("univ3 onchain liquidity mismatch");
   }
-  return buildUniv3CaseCapture({
+  const runtime = createStrictCentralAdapterRuntime({
+    executor: MIGRATION_CAPTURE_EXECUTOR, generationFence: { assertCurrent(generation, source) {
+      assert.equal(generation, input.source.generation); assert.deepEqual(source, input.source);
+    } },
+    provider: {
+      call: ({ blockTag, ...tx }, number) => input.provider.call(tx, blockTag ?? number),
+      getCode: (address, number) => input.provider.getCode(address, number),
+      getStorage: (address, slot, number) => input.provider.getStorage(address, slot, number),
+    },
+  });
+  return buildUniv3CaseCapture({ runtime,
     source: input.source,
     caseId: input.caseId ?? `univ3:${input.source.number}`,
     evidenceRefs: Object.freeze([
@@ -1530,10 +1543,12 @@ async function buildUniv3CaseCapture(input: {
   readonly source: CanonicalSource;
   readonly caseId?: string;
   readonly ctx: UniV3PoolContext;
+  readonly runtime?: CentralAdapterRuntime;
   readonly evidenceRefs: readonly string[];
 }): Promise<RawFamilyMigrationCaseCapture> {
   const ctx = input.ctx;
-  const publication = await runUniv3Lifecycle(input.source, ctx);
+  const runtime = input.runtime ?? univ3FixtureRuntime(ctx);
+  const publication = await runUniv3Lifecycle(input.source, ctx, runtime);
   const { evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
     UNIV3_FAMILY_ID,
@@ -1602,10 +1617,7 @@ async function buildUniv3CaseCapture(input: {
         order,
       }),
     }));
-  const exactByRouteKey = new Map<
-    string,
-    { readonly amountOut: bigint; readonly evidence: UniV3ExactEvidence }
-  >();
+  const exactByRouteKey = new Map<string, { handle: FamilyRouteRuntimeHandle; quote: SealedFamilyExactQuoteHandle }>();
   const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
   const edgeByRouteKey = new Map(
     edges.map((edge) => {
@@ -1617,38 +1629,20 @@ async function buildUniv3CaseCapture(input: {
     for (const route of [...instance.routes].sort(
       (left, right) => left.routeKey.localeCompare(right.routeKey),
     )) {
-      const exactInput = Object.freeze({
-        descriptor: instance.descriptor as unknown as UniV3Descriptor,
-        route: route as unknown as UniV3Route,
-        amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
-        source: input.source,
-        executor: MIGRATION_CAPTURE_EXECUTOR,
-        runtimeEvidence: Object.freeze([]),
+      const handle = instance.routeHandles.find(item => item.routeKey === route.routeKey);
+      assert(handle, "strict capture requires an issued UniV3 route");
+      const decoded = await executeFamilyExactQuote({
+        family, route: handle, amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN, source: input.source,
+        generation: input.source.generation, runtime, executor: MIGRATION_CAPTURE_EXECUTOR, runtimeEvidence: [],
+        actionOwnership: CATALOG,
       });
-      const exactMethod = univ3Exact.methods(exactInput).find(
-        (method) => method.kind === "request-program" && method.id === "quoter-v2",
-      );
-      if (exactMethod === undefined || exactMethod.kind !== "request-program") {
-        throw new Error("univ3 exact request program is missing");
-      }
-      const program = exactMethod.program;
-      const requests = program.buildRequests(exactInput);
-      const results = requests.map((request) =>
-        univ3SuccessResult(request, input.source, ctx)
-      );
-      const decoded = program.decode({
-        programInput: exactInput,
-        initialResults: results,
-        dependentEvidence: Object.freeze([]),
-      });
+      if (decoded.status !== "resolved") throw new Error(`univ3 capture exact: ${decoded.outcome.reasonCode}`);
+      assert(decoded.amountOut > 0n, "unavailable amount cannot be captured as execution");
       const edge = edgeByRouteKey.get(route.routeKey);
       if (edge === undefined) {
         throw new Error(`univ3 exact route ${route.routeKey} has no edge`);
       }
-      exactByRouteKey.set(route.routeKey, {
-        amountOut: decoded.amountOut,
-        evidence: decoded.evidence as UniV3ExactEvidence,
-      });
+      exactByRouteKey.set(route.routeKey, { handle, quote: decoded });
       exactQuotes.push(Object.freeze({
         id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
         value: Object.freeze({
@@ -1676,20 +1670,15 @@ async function buildUniv3CaseCapture(input: {
       if (quote === undefined || edge === undefined) {
         throw new Error(`univ3 execution route ${route.routeKey} has no quote`);
       }
-      const descriptor = instance.descriptor as unknown as UniV3Descriptor;
-      const univ3Route = route as unknown as UniV3Route;
       const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
-      const minAmountOut = quote.amountOut;
-      const fragment = univ3Execution.buildFragment({
-        descriptor,
-        route: univ3Route,
-        amountIn,
-        quotedAmountOut: quote.amountOut,
-        minAmountOut,
-        exactEvidence: quote.evidence,
-        executor: MIGRATION_CAPTURE_EXECUTOR,
-        runtimeEvidence: Object.freeze([]),
+      const minAmountOut = quote.quote.amountOut;
+      const execution = buildFamilyExecutionFragment({
+        family, route: quote.handle, exact: quote.quote, minAmountOut,
+        source: input.source, executor: MIGRATION_CAPTURE_EXECUTOR, runtimeEvidence: [], runtime,
+        actionOwnership: CATALOG,
       });
+      if (execution.status !== "resolved") throw new Error(`univ3 capture execution: ${execution.outcome.reasonCode}`);
+      const fragment = execution.fragment;
       const node = fragment.nodes[0]!;
       executionFragments.push(Object.freeze({
         id: `${edge.id}\u001fexec:${amountIn}`,
@@ -1699,7 +1688,7 @@ async function buildUniv3CaseCapture(input: {
           tokenOut: route.tokenOut,
           canonicalEdgeId: edge.id,
           amountIn: amountIn.toString(),
-          amountOut: quote.amountOut.toString(),
+          amountOut: quote.quote.amountOut.toString(),
           minAmountOut: minAmountOut.toString(),
           actionAdapterId: node.adapterId,
           executionTarget: node.target,
@@ -1708,14 +1697,9 @@ async function buildUniv3CaseCapture(input: {
           ),
         }),
       }));
-      const effects = univ3Execution.expectedEffects({
-        descriptor,
-        route: univ3Route,
-        amountIn,
-        quotedAmountOut: quote.amountOut,
-      });
-      assertConservedUniv2Effects(effects, route);
-      if (quote.amountOut < minAmountOut) {
+      const effects = execution.expectedEffects;
+      assertConservedPoolEffects(effects, route);
+      if (quote.quote.amountOut < minAmountOut) {
         throw new Error("univ3 capture final simulation repayment failed");
       }
       finalSimulations.push(Object.freeze({
@@ -1726,7 +1710,7 @@ async function buildUniv3CaseCapture(input: {
           tokenOut: route.tokenOut,
           canonicalEdgeId: edge.id,
           amountIn: amountIn.toString(),
-          amountOut: quote.amountOut.toString(),
+          amountOut: quote.quote.amountOut.toString(),
           minAmountOut: minAmountOut.toString(),
           effectsFingerprint: hashCanonical(
             effects as unknown as CanonicalValue,
@@ -1735,7 +1719,7 @@ async function buildUniv3CaseCapture(input: {
           repayment: "satisfied",
           evInput: Object.freeze({
             amountIn: amountIn.toString(),
-            amountOut: quote.amountOut.toString(),
+            amountOut: quote.quote.amountOut.toString(),
           }),
         }),
       }));
@@ -1851,7 +1835,7 @@ function univ4SuccessResult(
 ): AdapterRequestResult {
   const data = request.id === "manager-code"
     ? "0x00"
-    : request.id === "identity-slot0" || request.id === "current-slot0"
+    : request.id === "identity-slot0" || request.id === "current-slot0" || request.id === "core-slot0"
     ? UNIV4_STATE_VIEW_INTERFACE.encodeFunctionResult("getSlot0", [
         ctx.sqrtPriceX96,
         0,
@@ -1859,7 +1843,7 @@ function univ4SuccessResult(
         ctx.lpFee,
       ])
     : request.id === "identity-liquidity" ||
-        request.id === "current-liquidity"
+        request.id === "current-liquidity" || request.id === "core-liquidity"
     ? UNIV4_STATE_VIEW_INTERFACE.encodeFunctionResult("getLiquidity", [
         ctx.liquidity,
       ])
@@ -1942,7 +1926,7 @@ async function runUniv4Lifecycle(
   runtime: CentralAdapterRuntime = univ4FixtureRuntime(ctx),
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
-    UNIV4_FAMILY_ID,
+    univ4Plugin.manifest.familyId,
   );
   let publication: AdapterFamilyPublication | null = null;
   const swapCalldata = UNIV4_POOL_MANAGER_INTERFACE.encodeFunctionData(
@@ -1973,7 +1957,7 @@ async function runUniv4Lifecycle(
     runtime,
     publisher: { publish: (value) => { publication = value; } },
   });
-  assert(result.publication);
+  assert(result.publication, JSON.stringify(result.outcomes));
   assert(publication);
   return publication;
 }
@@ -2146,7 +2130,7 @@ async function buildUniv4CaseCapture(input: {
   const publication = await runUniv4Lifecycle(input.source, ctx);
   const { evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
-    UNIV4_FAMILY_ID,
+    univ4Plugin.manifest.familyId,
   );
   const edges: RawMigrationStageCapture["items"][number][] = [];
   const prices: RawMigrationStageCapture["items"][number][] = [];
@@ -2212,11 +2196,8 @@ async function buildUniv4CaseCapture(input: {
         order,
       }),
     }));
-  // This legacy fixture supplies Quoter responses, not a verified tick snapshot.
-  const referenceExact = univ4Exact;
   const exactByRouteKey = new Map<
-    string,
-    { readonly amountOut: bigint; readonly evidence: UniV4ExactEvidence }
+    string, { handle: FamilyRouteRuntimeHandle; quote: SealedFamilyExactQuoteHandle }
   >();
   const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
   const edgeByRouteKey = new Map(
@@ -2229,38 +2210,19 @@ async function buildUniv4CaseCapture(input: {
     for (const route of [...instance.routes].sort(
       (left, right) => left.routeKey.localeCompare(right.routeKey),
     )) {
-      const exactInput = Object.freeze({
-        descriptor: instance.descriptor as unknown as UniV4Descriptor,
-        route: route as unknown as UniV4Route,
-        amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
-        source: input.source,
-        executor: MIGRATION_CAPTURE_EXECUTOR,
-        runtimeEvidence: Object.freeze([]),
+      const handle = instance.routeHandles.find((item) => item.routeKey === route.routeKey);
+      assert(handle, "strict capture requires an issued UniV4 route");
+      const quote = await executeFamilyExactQuote({
+        family, route: handle, amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN, source: input.source,
+        generation: input.source.generation, runtime: univ4FixtureRuntime(ctx),
+        executor: MIGRATION_CAPTURE_EXECUTOR, runtimeEvidence: [], actionOwnership: CATALOG,
       });
-      const exactMethod = referenceExact.methods().find(
-        (method) => method.kind === "request-program" && method.id === "univ4-quoter-with-output-balance",
-      );
-      if (exactMethod === undefined || exactMethod.kind !== "request-program") {
-        throw new Error("univ4 exact request program is missing");
-      }
-      const program = exactMethod.program;
-      const requests = program.buildRequests(exactInput);
-      const results = requests.map((request) =>
-        univ4SuccessResult(request, input.source, ctx)
-      );
-      const decoded = program.decode({
-        programInput: exactInput,
-        initialResults: results,
-        dependentEvidence: Object.freeze([]),
-      });
+      if (quote.status !== "resolved") throw new Error(`univ4 capture exact: ${quote.outcome.reasonCode}`);
       const edge = edgeByRouteKey.get(route.routeKey);
       if (edge === undefined) {
         throw new Error(`univ4 exact route ${route.routeKey} has no edge`);
       }
-      exactByRouteKey.set(route.routeKey, {
-        amountOut: decoded.amountOut,
-        evidence: decoded.evidence as UniV4ExactEvidence,
-      });
+      exactByRouteKey.set(route.routeKey, { handle, quote });
       exactQuotes.push(Object.freeze({
         id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
         value: Object.freeze({
@@ -2269,7 +2231,7 @@ async function buildUniv4CaseCapture(input: {
           tokenOut: route.tokenOut,
           canonicalEdgeId: edge.id,
           amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
-          amountOut: decoded.amountOut.toString(),
+          amountOut: quote.amountOut.toString(),
           feeBps: (Number(ctx.lpFee) / 100).toString(),
         }),
       }));
@@ -2281,25 +2243,20 @@ async function buildUniv4CaseCapture(input: {
     for (const route of [...instance.routes].sort(
       (left, right) => left.routeKey.localeCompare(right.routeKey),
     )) {
-      const quote = exactByRouteKey.get(route.routeKey);
+      const captured = exactByRouteKey.get(route.routeKey);
       const edge = edgeByRouteKey.get(route.routeKey);
-      if (quote === undefined || edge === undefined) {
+      if (captured === undefined || edge === undefined) {
         throw new Error(`univ4 execution route ${route.routeKey} has no quote`);
       }
-      const descriptor = instance.descriptor as unknown as UniV4Descriptor;
-      const univ4Route = route as unknown as UniV4Route;
+      const { handle, quote } = captured;
       const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
       const minAmountOut = quote.amountOut;
-      const fragment = univ4Execution.buildFragment({
-        descriptor,
-        route: univ4Route,
-        amountIn,
-        quotedAmountOut: quote.amountOut,
-        minAmountOut,
-        exactEvidence: quote.evidence,
-        executor: MIGRATION_CAPTURE_EXECUTOR,
-        runtimeEvidence: Object.freeze([]),
+      const execution = buildFamilyExecutionFragment({
+        family, route: handle, exact: quote, minAmountOut, executor: MIGRATION_CAPTURE_EXECUTOR,
+        runtimeEvidence: [], actionOwnership: CATALOG,
       });
+      if (execution.status !== "resolved") throw new Error(`univ4 capture execution: ${execution.outcome.reasonCode}`);
+      const fragment = execution.fragment;
       executionFragments.push(Object.freeze({
         id: `${edge.id}\u001fexec:${amountIn}`,
         value: Object.freeze({
@@ -2317,13 +2274,11 @@ async function buildUniv4CaseCapture(input: {
           ),
         }),
       }));
-      const effects = univ4Execution.expectedEffects({
-        descriptor,
-        route: univ4Route,
-        amountIn,
-        quotedAmountOut: quote.amountOut,
-      });
-      assertConservedUniv4Effects(effects, amountIn, quote.amountOut);
+      const effects = execution.expectedEffects;
+      assertConservedPoolEffects(effects, route);
+      if (amountIn <= 0n || quote.amountOut <= 0n || quote.amountOut >= amountIn * 100n) {
+        throw new Error("univ4 capture final simulation amounts are inconsistent");
+      }
       finalSimulations.push(Object.freeze({
         id: `${edge.id}\u001fsim:${amountIn}`,
         value: Object.freeze({
@@ -2350,7 +2305,7 @@ async function buildUniv4CaseCapture(input: {
   const instances = publication.instances;
   const summary = definedFamilyPluginContractSummary(family.plugin);
   return Object.freeze({
-    familyId: UNIV4_FAMILY_ID,
+    familyId: univ4Plugin.manifest.familyId,
     caseId: input.caseId ?? `univ4:${input.source.number}`,
     inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
     stateAnchorNumber: input.source.number,
@@ -2368,30 +2323,6 @@ async function buildUniv4CaseCapture(input: {
       finalSimulations: exercisedStage(finalSimulations, evidenceRefs),
     }),
   });
-}
-
-function assertConservedUniv4Effects(
-  effects: readonly ExpectedEffect[],
-  amountIn: bigint,
-  amountOut: bigint,
-): void {
-  if (effects.length !== 2) {
-    throw new Error("univ4 capture final simulation effects size mismatch");
-  }
-  const [inEffect, outEffect] = effects;
-  if (
-    inEffect.kind !== "token-delta" ||
-    inEffect.account !== "executor" ||
-    inEffect.direction !== "decrease" ||
-    outEffect.kind !== "token-delta" ||
-    outEffect.account !== "executor" ||
-    outEffect.direction !== "increase"
-  ) {
-    throw new Error("univ4 capture final simulation effects are malformed");
-  }
-  if (amountIn <= 0n || amountOut <= 0n || amountOut >= amountIn * 100n) {
-    throw new Error("univ4 capture final simulation amounts are inconsistent");
-  }
 }
 
 const FUNDING_ERC20_INTERFACE = new ethers.Interface([
@@ -9727,7 +9658,7 @@ function angstromSuccessResult(
     request.kind === "get-code"
       ? "0x00"
       : request.id === "identity-slot0" ||
-          request.id === "current-slot0"
+          request.id === "current-slot0" || request.id === "core-slot0"
         ? UNIV4_STATE_VIEW_INTERFACE.encodeFunctionResult(
             "getSlot0",
             [1n << 96n, 0n, 0n, 3_000n],

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dodoV2ActionAdapter } from "../../adapters/dodo-v2.js";
 import { dodoV2Adapter } from "../venues/swaps/dodo-v2.js";
-import { univ2StandardAdapter } from "../venues/swaps/univ2-standard.js";
+import { univ2AdapterFixture as univ2StandardAdapter } from "../venues/swaps/univ2-family/test/projected-fixture.js";
 import {
   defineSwapFamily,
   explicitReverseBindingUnsupported,

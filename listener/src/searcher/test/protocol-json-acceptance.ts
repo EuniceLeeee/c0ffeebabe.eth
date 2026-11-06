@@ -15,10 +15,13 @@ import { planFragmentNodes } from "../solver/plan-fragment-requirements.js";
 import { buildFamilyExecutionFragment, buildFamilyRuntimeAmountLeg, executeFamilyExactQuote } from "../venues/adapter-family-runtime.js";
 import type { AdapterRequest, AdapterRequestResult } from "../venues/adapter-request-program.js";
 import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../venues/production-infra-actions.js";
-import { openProtocolJsonAcceptanceContext, ProtocolJsonAcceptanceContextError, type ProtocolJsonAcceptanceContext } from "./protocol-json-acceptance-context.js";
-import { parseProtocolJsonAcceptanceCase, checkProtocolJsonExecutionFacts, checkProtocolJsonRevertFacts,
+import { inspectAcceptanceEntry, openProtocolJsonAcceptanceContext, ProtocolJsonAcceptanceContextError, type ProtocolJsonAcceptanceContext } from "./protocol-json-acceptance-context.js";
+import { parseProtocolJsonAcceptanceCase, checkProtocolJsonExecutionFacts, checkProtocolJsonRevertFacts, checkReadOnlyQuoteFacts,
+  type AcceptanceSettlementMode,
   type ProtocolJsonAcceptanceCase, type ProtocolJsonAcceptanceTrial } from "./protocol-json-acceptance-facts.js";
 
+const safeError = (error: unknown) => String(error instanceof Error ? error.message : error)
+  .replace(/https?:\/\/[^\s"<>]+/g, "[REDACTED_URL]");
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const json = (value: unknown) => JSON.stringify(value, (_key, item) =>
@@ -104,6 +107,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
     assert(adapter, `unowned action ${node.adapterId}`);
     return adapter.encode(node, executor, concatBytes(...node.children.map(encode)));
   };
+  report.implementation = await inspectAcceptanceEntry(family);
   report.source = source; report.evidence = context.evidence; report.samples = [];
   report.scope = "Current-source Ready rehydration and fresh same-state local EVM single-leg execution";
   report.notClaimed = ["original transaction pre-call parity", "new natural valuation", "opportunity replay", "performance", "all variants"];
@@ -123,11 +127,14 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
     return outcome.executed.evidence[0]!;
   };
   for (const trial of sample.trials) {
+    const required = new Set<AcceptanceSettlementMode>(trial.requiredSettlement ?? []);
+    if (trial.recipients?.length) required.add("direct-output");
+    const recipients = [...new Set([executor, context.owner, ...(trial.recipients ?? [])].map(address => address.toLowerCase()))];
     const row: Record<string, any> = { id: trial.id, result: "failed", executions: [] };
     report.samples.push(row); checkpoint();
     try {
       const route = selectAcceptanceRoute(instance.routes, trial), handle = instance.routeHandles.find(handle => handle.routeKey === route.routeKey)!;
-      assert(handle); covered.add(route.routeKey);
+      assert(handle); covered.add(route.routeKey); row.routeKey = route.routeKey;
       assert(context.graph.some(edge => edge.instanceKey === instance.instanceKey &&
         same(edge.tokenIn, route.tokenIn) && same(edge.tokenOut, route.tokenOut)), "admitted direction missing from production graph");
       const base = { family, route: handle, source, executor, runtimeEvidence: [], actionOwnership: catalog };
@@ -154,61 +161,108 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
         { encoding: "runtime", script: runtimeProgramScript(getBytes(leg.program), amountIn), recipient: executor, inputMode: leg.inputMode },
       ];
       row.settlement = leg.settlement ?? {};
-      if (leg.settlement?.deferredInput || leg.settlement?.deferredDebtInput || leg.settlement?.settleOutput)
-        throw new Error("callback settlement requires the existing callback suite; this single-leg runner cannot claim it");
-      if (leg.settlement?.directOutput) {
-        const recipients = [...new Set([executor, context.owner, ...(trial.recipients ?? [])].map(address => address.toLowerCase()))];
+      const caps = leg.settlement;
+      const declared: AcceptanceSettlementMode[] = [];
+      if (caps?.directOutput) declared.push("direct-output");
+      if (caps?.quoteOutput) declared.push("quote-output");
+      if (caps?.deferredInput) declared.push("deferred-input");
+      if (caps?.deferredDebtInput) declared.push("deferred-debt-input");
+      if (caps?.settleOutput) declared.push("settle-output");
+      for (const mode of declared) required.add(mode);
+      row.missingDeclarations = [...required].filter(mode => !declared.includes(mode));
+      if (caps?.directOutput) assert(recipients.length > 1, "direct-output needs a distinct external recipient");
+      if (caps?.quoteOutput) {
+        for (const recipient of recipients) {
+          const prepared = build({ kind: "quote-output", recipient }); assert(prepared, "declared quote output missing");
+          const read = new RuntimeAmountProgram().run(prepared.program, 0, 1, true);
+          // The executor is also the caller/receiver of specified-amount Exact. External recipients can have a different rate.
+          if (same(recipient, executor)) read.constant(2, quote.amountOut).equal(1, 2);
+          else read.constant(2, 1n).math("sub", 3, 1, 2);
+          scripts.push({ encoding: "quote-only", recipient, script: runtimeProgramScript(read.bytes(), amountIn) });
+        }
+      }
+      if (caps?.directOutput) {
         for (const recipient of recipients) {
           const direct = build({ kind: "direct-output", recipient }); assert(direct, "declared direct output missing");
-          const prepared = leg.settlement.quoteOutput ? build({ kind: "quote-output", recipient }) : null;
-          if (leg.settlement.quoteOutput) assert(prepared, "declared quote output missing");
+          const prepared = caps.quoteOutput ? build({ kind: "quote-output", recipient }) : null;
+          if (caps.quoteOutput) assert(prepared, "declared quote output missing");
           scripts.push({ encoding: "runtime-direct", recipient, inputMode: direct.inputMode, dynamicQuote: prepared !== null,
             script: prepared ? runtimeProgramScript(directQuoteReceiptProgram({ quote: prepared, direct, tokenOut: route.tokenOut, recipient }).bytes(), amountIn)
               : runtimeProgramScript(getBytes(direct.program), amountIn) });
         }
       }
-      for (const execution of scripts) for (const probe of ["positive", "no-input", "forced-revert"] as const) {
+      for (const execution of scripts) for (const probe of (execution.encoding === "quote-only"
+        ? ["positive"] as const : ["positive", "no-input", "forced-revert"] as const)) {
         const record: Record<string, any> = { encoding: execution.encoding, recipient: execution.recipient, probe, result: "failed" };
         row.executions.push(record); checkpoint();
-        const script = probe === "forced-revert" ? concatBytes(execution.script,
-          runtimeProgramScript(new RuntimeAmountProgram().constant(0, 0n).constant(1, 1n).equal(0, 1).bytes())) : execution.script;
-        const caller = { kind: "executor" as const };
-        const observations = [route.tokenIn, route.tokenOut].flatMap(token =>
-          [...new Set([executor, execution.recipient].map(address => address.toLowerCase()))].map(account => ({ token, account })));
-        for (const extra of trial.protectedBalances ?? []) if (!observations.some(row => same(row.token, extra.token) && same(row.account, extra.account))) observations.push(extra);
-        const request: AdapterRequest = { id: `${trial.id}-${row.executions.length}`, kind: "effect-delta-simulation", required: false,
-          call: { caller, executionMode: "executor-program", to: executor, data: buildSubscriptCalldata(script) },
-          overrideIntent: { caller, nativeBalanceWei: 17n, tokenBalances: [
-            { token: route.tokenIn, amount: probe === "no-input" ? 0n : amountIn + 101n },
-            { token: route.tokenOut, amount: quote.amountOut + 103n },
-          ] }, observeTokenBalances: observations, observe: effects };
-        record.scriptSha256 = hash(script); record.request = request;
-        record.resultEvidence = await dispatch(request); checkpoint();
-        const common = { requestId: request.id, result: record.resultEvidence as AdapterRequestResult, source,
-          tokenIn: route.tokenIn, tokenOut: route.tokenOut, executor, recipient: execution.recipient,
-          protectedBalances: trial.protectedBalances };
-        if (probe === "positive") {
-          const expected = execution.dynamicQuote ? delta(common.result, route.tokenOut, execution.recipient) : quote.amountOut;
-          record.outputComparison = execution.dynamicQuote ? "same-state runtime quote equality enforced in executed script" : "specified-amount Exact";
-          record.facts = checkProtocolJsonExecutionFacts({ ...common, amountIn, quoteAmountOut: expected,
-            inputMode: execution.inputMode ?? "exact", inputToleranceRawUnits: trial.inputToleranceRawUnits,
-            outputToleranceRawUnits: execution.dynamicQuote ? 0 : trial.outputToleranceRawUnits });
-        } else record.facts = checkProtocolJsonRevertFacts({ ...common, probe });
-        assert(record.facts.passed, JSON.stringify(record.facts)); record.result = "pass"; checkpoint();
+        try {
+          const script = probe === "forced-revert" ? concatBytes(execution.script,
+            runtimeProgramScript(new RuntimeAmountProgram().constant(0, 0n).constant(1, 1n).equal(0, 1).bytes())) : execution.script;
+          const caller = { kind: "executor" as const };
+          const observations = [route.tokenIn, route.tokenOut].flatMap(token =>
+            [...new Set([executor, execution.recipient].map(address => address.toLowerCase()))].map(account => ({ token, account })));
+          for (const extra of trial.protectedBalances ?? []) if (!observations.some(row => same(row.token, extra.token) && same(row.account, extra.account))) observations.push(extra);
+          const request: AdapterRequest = { id: `${trial.id}-${row.executions.length}`, kind: "effect-delta-simulation", required: false,
+            call: { caller, executionMode: "executor-program", to: executor, data: buildSubscriptCalldata(script) },
+            overrideIntent: execution.encoding === "quote-only" ? { caller } : { caller, nativeBalanceWei: 17n, tokenBalances: [
+              { token: route.tokenIn, amount: probe === "no-input" ? 0n : amountIn + 101n },
+              { token: route.tokenOut, amount: quote.amountOut + 103n },
+            ] }, observeTokenBalances: observations, observe: effects };
+          record.scriptSha256 = hash(script); record.request = request;
+          record.resultEvidence = await dispatch(request); checkpoint();
+          const common = { requestId: request.id, result: record.resultEvidence as AdapterRequestResult, source,
+            tokenIn: route.tokenIn, tokenOut: route.tokenOut, executor, recipient: execution.recipient,
+            protectedBalances: trial.protectedBalances };
+          if (execution.encoding === "quote-only") {
+            record.facts = checkReadOnlyQuoteFacts(common);
+          } else if (probe === "positive") {
+            const recipientSpecific = execution.dynamicQuote && !same(execution.recipient, executor);
+            const expected = recipientSpecific ? delta(common.result, route.tokenOut, execution.recipient) : quote.amountOut;
+            record.outputComparison = recipientSpecific ? "recipient-specific quote equality enforced in executed script" : "specified-amount Exact";
+            record.facts = checkProtocolJsonExecutionFacts({ ...common, amountIn, quoteAmountOut: expected,
+              inputMode: execution.inputMode ?? "exact", inputToleranceRawUnits: trial.inputToleranceRawUnits,
+              outputToleranceRawUnits: execution.dynamicQuote ? 0 : trial.outputToleranceRawUnits });
+          } else record.facts = checkProtocolJsonRevertFacts({ ...common, probe });
+          if (!record.facts.passed) throw new Error(JSON.stringify(record.facts));
+          record.result = "pass";
+        } catch (error) {
+          record.error = safeError(error);
+          row.error ??= record.error;
+          if (control?.signal.aborted) throw error;
+        }
+        checkpoint();
       }
-      row.result = "pass"; successful.add(route.routeKey);
     } catch (error) {
-      row.error = String(error instanceof Error ? error.message : error).replace(/https?:\/\/[^\s"<>]+/g, "[REDACTED_URL]");
-      row.result = "failed";
+      row.error ??= safeError(error);
     }
+    const proved = (encoding: string, recipient: string, probes: readonly string[]) => probes.every(probe =>
+      row.executions.some((e: any) => e.encoding === encoding && same(e.recipient, recipient) && e.probe === probe && e.result === "pass"));
+    const controls = ["positive", "no-input", "forced-revert"];
+    const ordinary = proved("quoted", executor, controls) && proved("runtime", executor, controls);
+    if (ordinary) successful.add(row.routeKey);
+    const verified = new Set<AcceptanceSettlementMode>();
+    if (recipients.length > 1 && recipients.every(r => proved("runtime-direct", r, controls))) verified.add("direct-output");
+    if (recipients.every(r => proved("quote-only", r, ["positive"]))) verified.add("quote-output");
+    row.requiredSettlement = [...required];
+    row.verifiedSettlement = [...verified];
+    row.unverifiedSettlement = [...required].filter(mode => !verified.has(mode));
+    row.result = row.error || !ordinary ? "failed" : row.unverifiedSettlement.length ? "partial" : "pass";
     checkpoint();
   }
   report.coverage = { scope: "one-admitted-instance", familyId: sample.familyId, domain: sample.domain ?? "protocol",
     instanceKey: sample.instanceKey, lineageId: sample.lineageId,
+    otherDeclaredLineages: family.plugin.manifest.supportedLineages.filter(lineage => lineage !== sample.lineageId),
+    settlementGaps: report.samples.filter((row: any) => row.unverifiedSettlement?.length || row.missingDeclarations?.length)
+      .map((row: any) => ({ trial: row.id, routeKey: row.routeKey, missingDeclaration: row.missingDeclarations ?? [],
+        unverified: row.unverifiedSettlement ?? row.requiredSettlement })),
     admittedRoutes: instance.routes.length, sampledRoutes: covered.size, executedRoutes: successful.size,
     unsampledRoutes: instance.routes.filter(route => !covered.has(route.routeKey)).map(route => ({ routeKey: route.routeKey, tokenIn: route.tokenIn, tokenOut: route.tokenOut })) };
   report.result = report.samples.every((row: any) => row.result === "pass" && row.executions.length > 0) &&
     successful.size === instance.routes.length && guard.counts.forbiddenDuringRuntimeBuild === 0 ? "pass" : "incomplete-or-failed";
+  report.referenceSettlementCoverage = sample.trials.every(trial => trial.requiredSettlement !== undefined)
+    ? (report.result === "pass" ? "requirements-met-for-this-case" : "incomplete-for-this-case")
+    : "prior-settlement-requirements-not-specified";
+  report.declaredVariantsAtThisLineage = report.implementation.variants?.filter((v: { lineageId: string }) => v.lineageId === sample.lineageId);
   report.familyAcceptance = "sample evidence only; combine current variant coverage, interface review and production performance evidence";
   checkpoint();
   return report;

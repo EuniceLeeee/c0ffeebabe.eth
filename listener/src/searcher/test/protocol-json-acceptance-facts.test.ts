@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MaxUint256, toBeHex } from "ethers";
-import { parseProtocolJsonAcceptanceCase, checkProtocolJsonExecutionFacts, checkProtocolJsonRevertFacts,
+import { checkReadOnlyQuoteFacts, parseProtocolJsonAcceptanceCase, checkProtocolJsonExecutionFacts, checkProtocolJsonRevertFacts,
   type ProtocolJsonExecutionFactInput } from "./protocol-json-acceptance-facts.js";
 import type { AdapterRequestResult } from "../venues/adapter-request-program.js";
 
@@ -202,4 +202,24 @@ test("RPC failures, missing/partial rollback observations and fake success canno
     (r: any) => { r.effects.tokenDeltas.push(r.effects.tokenDeltas[0]); },
     (r: any) => { r.effects.totalSupplyDeltas = [{ token: tokenIn, delta: 1n }]; },
   ]) { const r = reverted(); change(r); rejects(r); }
+});
+
+test("requirements select settlement probes without admitting the Family or asserting success", () => {
+  const data: any = caseData();
+  for (const invalid of [true, {}, ["callback"], ["quote-output", "quote-output"], ["pass"]]) {
+    data.trials[0].requiredSettlement = invalid;
+    assert.throws(() => parseProtocolJsonAcceptanceCase(data), /required settlement/);
+  }
+  data.trials[0].requiredSettlement = ["direct-output","quote-output"];
+  const parsed = parseProtocolJsonAcceptanceCase(data); data.trials[0].requiredSettlement.pop();
+  assert.deepEqual(parsed.trials[0].requiredSettlement, ["direct-output", "quote-output"]);
+});
+
+test("read-only execution requires measured unchanged token/native balances and no retained logs", () => {
+  const zero = result(0n,0n);
+  assert(checkReadOnlyQuoteFacts(input(zero)).passed);
+  assert(!checkReadOnlyQuoteFacts(input(result(1n,0n))).passed);
+  assert(zero.ok && zero.effects);
+  assert(!checkReadOnlyQuoteFacts(input({ ...zero, effects: { ...zero.effects, tokenDeltas: [] } })).passed);
+  assert(!checkReadOnlyQuoteFacts(input({ ...zero, effects: { ...zero.effects, nativeDeltas: [{ account: executor, delta: 1n }] } })).passed);
 });

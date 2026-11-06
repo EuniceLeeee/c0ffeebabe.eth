@@ -4,8 +4,6 @@ import { createHash } from "node:crypto";
 import { ethers } from "ethers";
 import { inspectRuntime } from "./runtime-program-testkit.js";
 import { bytesToHex } from "../../encoder.js";
-import { astraMultiTokenChangeActionAdapter } from "../../adapters/astra-multitoken.js";
-import type { StateBackend } from "../../shared/state/state-backend.js";
 import type {
   CentralAdapterRuntime,
   CentralAdapterScheduler,
@@ -25,10 +23,6 @@ import {
   type AdapterRequestResult,
   type CanonicalSource,
 } from "../venues/adapter-request-program.js";
-import type {
-  StateRead,
-  StateReadResult,
-} from "../venues/blockscan-state-capability.js";
 import catalogSource from "../generated/family-capability-shadow.generated.json";
 import {
   capabilityManifestHash,
@@ -52,12 +46,7 @@ import {
   ASTRA_MULTITOKEN_CHANGE_SELECTOR,
   ASTRA_MULTITOKEN_INTERFACE,
 } from "./fixtures/protocol-json/astra-multitoken-fixture.js";
-import {
-  astraMultiTokenAdapter,
-} from "../venues/protocols/astra-multitoken.js";
-import {
-  astraMultiTokenEdge,
-} from "../venues/protocols/astra-multitoken-discovery.js";
+import previous from "./fixtures/protocol-json/astra-legacy-contract-vectors.json" with { type: "json" };
 
 const TARGET = ethers.getAddress("0x00000000000000000000000000000000000000A1");
 const BAD_TARGET = ethers.getAddress("0x00000000000000000000000000000000000000A2");
@@ -254,24 +243,8 @@ async function main(): Promise<void> {
   assert.equal(new Set(routes.map((route) => route.routeKey)).size, 6);
   assert.equal(new Set(routes.map((route) => route.bindingRef.fingerprint)).size, 1);
 
-  const legacyEdges = routes.map((route) => astraMultiTokenEdge(
-    descriptor.target,
-    route.tokenIn,
-    route.tokenOut,
-  ));
-  assert.deepEqual(
-    routes.map(routeSemantics),
-    legacyEdges.map((edge) => ({
-      adapterId: edge.adapterId,
-      target: edge.target,
-      tokenIn: edge.tokenIn,
-      tokenOut: edge.tokenOut,
-      slotKind: edge.slotKind,
-      protocolAction: edge.protocolAction,
-      leavesStandingPosition: edge.leavesStandingPosition,
-    })),
-    "strict all-directed-pairs projection preserves legacy Astra semantics",
-  );
+  assert.deepEqual(routes.map(routeSemantics), previous.edges,
+    "all six directions preserve the sealed legacy route semantics");
 
   assert.throws(
     () => astraMultiTokenStrictFamilyPlugin.pricing.compileDraft({
@@ -329,38 +302,9 @@ async function main(): Promise<void> {
   assert.equal(strictMids.size, 1);
   assert.equal(strictMids.get(selected.routeKey)?.mid, 2);
 
-  const legacyState = astraMultiTokenAdapter.pricingState;
-  let legacySchema = await legacyState.compileStaticSchema({
-    edges: [legacyEdges[0]],
-    deadlineAtMs: Date.now() + 10_000,
-    signal: new AbortController().signal,
-  });
-  const legacyStaticReads = legacyState.buildStaticSchemaReads!({
-    schema: legacySchema,
-    edges: [legacyEdges[0]],
-    sourceBlock: SOURCE.number,
-    sourceBlockHash: SOURCE.hash,
-  });
-  legacySchema = legacyState.hydrateStaticSchema!(
-    legacySchema,
-    await stateResults(legacyStaticReads, backend),
-  );
-  const legacyCurrentReads = legacyState.buildCurrentBlockReads({
-    schema: legacySchema,
-    edges: [legacyEdges[0]],
-    sourceBlock: SOURCE.number,
-    sourceBlockHash: SOURCE.hash,
-  });
-  const legacySnapshot = legacyState.decodeState(
-    legacySchema,
-    await stateResults(legacyCurrentReads, backend),
-  );
-  const legacyMids = legacyState.deriveMids(legacySnapshot, [legacyEdges[0]]);
-  assert.deepEqual(
-    [...strictMids.values()].map(midSemantics),
-    [...legacyMids.values()].map(midSemantics),
-    "descriptor-only per-route pricing preserves the legacy current getReturn mid",
-  );
+  const previousMids = previous.mids.map(row => ({ ...row,
+    reserveA: BigInt(row.reserveA), reserveB: BigInt(row.reserveB) }));
+  assert.deepEqual([...strictMids.values()].map(midSemantics), previousMids);
 
   const amountIn = 11n;
   const exactInput = Object.freeze({
@@ -384,15 +328,7 @@ async function main(): Promise<void> {
     initialResults: await adapterResults(exactRequests, backend),
     dependentEvidence: [],
   });
-  const legacyExact = await astraMultiTokenAdapter.quoteExact({
-    state: backend as unknown as StateBackend,
-    target: TARGET,
-    edgeAdapterId: "astra-multitoken-change",
-    tokenIn: TOKEN_A,
-    tokenOut: TOKEN_B,
-    amountIn,
-  });
-  assert.equal(strictExact.amountOut, legacyExact);
+  assert.equal(strictExact.amountOut, BigInt(previous.exact));
   assert.equal(strictExact.amountOut, 22n);
   const zeroInput = Object.freeze({ ...exactInput, amountIn: 0n });
   const zeroMethod = astraMultiTokenStrictFamilyPlugin.exact.methods(zeroInput)[0];
@@ -447,18 +383,11 @@ async function main(): Promise<void> {
       executor: ACTOR,
       runtimeEvidence: [],
     });
-  const legacyFragment = await astraMultiTokenAdapter.buildPlanFragment({
-    edge: legacyEdges[0],
-    amountIn,
-    amountOut: strictExact.amountOut,
-    executor: ACTOR,
-    state: backend as unknown as StateBackend,
-  });
   assert.equal(strictFragment.nodes.length, 1);
-  assert.equal(strictFragment.nodes[0].target, legacyFragment.nodes[0].target);
-  assert.equal(strictFragment.nodes[0].tokenIn, legacyFragment.nodes[0].tokenIn);
-  assert.equal(strictFragment.nodes[0].tokenOut, legacyFragment.nodes[0].tokenOut);
-  assert.equal(strictFragment.nodes[0].amount, legacyFragment.nodes[0].amount);
+  assert.equal(strictFragment.nodes[0].target, previous.fragment[0].target);
+  assert.equal(strictFragment.nodes[0].tokenIn, previous.fragment[0].tokenIn);
+  assert.equal(strictFragment.nodes[0].tokenOut, previous.fragment[0].tokenOut);
+  assert.equal(strictFragment.nodes[0].amount, BigInt(previous.fragment[0].amount));
   assert.throws(
     () => astraMultiTokenStrictFamilyPlugin.execution.buildFragment({
       descriptor,
@@ -486,8 +415,7 @@ async function main(): Promise<void> {
   assert.equal(BigInt(bytesToHex(wire.slice(1, 33))), amountIn);
   assert.equal(Number(BigInt(bytesToHex(wire.slice(33, 36)))), wire.length - 36);
   assert.equal(bytesToHex(wire.slice(36)), program);
-  const legacyEncoded = astraMultiTokenChangeActionAdapter.encode(legacyFragment.nodes[0], ACTOR, new Uint8Array());
-  const expectedData = bytesToHex(legacyEncoded.slice(24));
+  const expectedData = previous.expectedData;
   const erc20 = new ethers.Interface([
     "function balanceOf(address) view returns(uint256)", "function approve(address,uint256) returns(bool)",
     "function allowance(address,address) view returns(uint256)",
@@ -773,26 +701,6 @@ async function executeAdapterRequest(
     }
     throw error;
   }
-}
-
-async function stateResults(
-  reads: readonly StateRead[],
-  backend: AstraBackend,
-): Promise<readonly StateReadResult[]> {
-  return Object.freeze(await Promise.all(reads.map(async (read) =>
-    Object.freeze({
-      id: read.id,
-      ok: true as const,
-      sourceBlock: read.sourceBlock,
-      sourceBlockHash: read.sourceBlockHash,
-      provenance: Object.freeze({
-        kind: "eip1898" as const,
-        source: SOURCE,
-        requireCanonical: true as const,
-      }),
-      data: await backend.call({ to: read.to, data: read.data }),
-    })
-  )));
 }
 
 function routeSemantics(route: {

@@ -7,7 +7,7 @@ import type {
   PendingTransactionEvidenceInput,
   SwapAdapter,
 } from "../venues/route-leg-adapter.js";
-import { univ2StandardAdapter } from "../venues/swaps/univ2-standard.js";
+import { univ2AdapterFixture as univ2StandardAdapter } from "../venues/swaps/univ2-family/test/projected-fixture.js";
 import { univ3StandardAdapter } from "../venues/swaps/univ3-standard.js";
 
 const familyA = {

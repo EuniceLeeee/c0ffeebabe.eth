@@ -1,11 +1,6 @@
 import { ethers } from "ethers";
 import { ADDR } from "../../../shared/constants/addresses.js";
-import { isStateCallAbortedError } from "../../../shared/state/state-backend.js";
-import type { ResolvedPlanNode } from "../../../shared/types/plan.js";
-import { deriveEdgeTaxonomy } from "../../strategy-taxonomy.js";
-import type { PoolEntry, TokenEdge, TokenQueryBackend, V4PoolKey } from "../../planner/token-graph.js";
-import type { V4PostImpactSeed } from "../../solver/pool-state-cache.js";
-import { quoteV4ExactInLocal } from "../../solver/v4-math.js";
+import type { TokenEdge, V4PoolKey } from "../../planner/token-graph.js";
 import type {
   BlockScanStateCapability,
   StateRead,
@@ -21,24 +16,6 @@ import {
   type CompiledStateInstance,
   type CompileStateInstanceInput,
 } from "../blockscan-state-capability.js";
-import type {
-  ExactQuoteContext,
-  PlanBuildContext,
-  PlanFragment,
-  PreparedRouteContext,
-  PreparedRouteQuoteResult,
-  SwapAdapter,
-  V4QuotePathStats,
-} from "../route-leg-adapter.js";
-import { RouteInstanceNotApplicableError } from "../route-instance-availability.js";
-import {
-  createUniV4SwapObservation,
-  type PoolImpact,
-} from "../swap-observation.js";
-import type {
-  LocalVictimApplyContext,
-  LocalVictimApplyResult,
-} from "../victim-runtime-capability.js";
 import {
   defineSwapLandedEvents,
   singletonIndexedBytes32Emitter,
@@ -57,34 +34,20 @@ import {
   requireRead,
 } from "./blockscan-state-shared.js";
 import {
-  int24,
-  normalizeV4Currency,
   normalizeV4PoolKey,
   realV4Currency,
   rejectNativeWethV4Pool,
-  UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK,
   uint24,
-  v4HooksAffectSwap,
   v4PoolId,
   validateV4CurrencyPair,
 } from "./univ4-common.js";
-import { univ4PoolDiscovery } from "./univ4-pool-discovery.js";
-
-const MIN_SQRT_PRICE = 4295128740n;
-const MAX_SQRT_PRICE = 1461446703485210103287273052203988822378723970341n;
 const MAX_UINT128 = (1n << 128n) - 1n;
 const DYNAMIC_FEE_FLAG = 0x800000;
-const UNISWAP_UNIVERSAL_ROUTER_V1 = "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad";
-const UNISWAP_UNIVERSAL_ROUTER_V2 = "0x66a9893cc07d91d95644aedd05d03f95e1dba8af";
-const initializeIface = new ethers.Interface([
-  "event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)",
-]);
-const poolKeyCache = new Map<string, V4PoolKey>();
 const univ4Emitter = singletonIndexedBytes32Emitter(
   ADDR.UNISWAP_V4_POOL_MANAGER,
   1,
 );
-const univ4LandedEvents = defineSwapLandedEvents({
+export const univ4LandedEvents = defineSwapLandedEvents({
   swaps: [{
     id: "univ4-swap",
     topic: UNIV4_SWAP_TOPIC,
@@ -564,195 +527,6 @@ function uniV4PrecisionOutput(
   return snapshot.precisionOutputs.get(id);
 }
 
-export const univ4Adapter = Object.freeze({
-  id: "univ4",
-  kind: "swap",
-  livePoolState: { kind: "singleton-v4" },
-  poolAdapters: ["univ4"],
-  routeIdentity: {
-    instanceKey(pool: PoolEntry) {
-      if (!pool.poolId) throw new Error("univ4 route identity requires poolId");
-      return JSON.stringify([
-        pool.address.toLowerCase(),
-        pool.poolId.toLowerCase(),
-      ]);
-    },
-    executionVariantKey(edge: TokenEdge) {
-      if (!edge.poolId) throw new Error("univ4 execution identity requires poolId");
-      return JSON.stringify([edge.adapterId, edge.poolId.toLowerCase()]);
-    },
-  },
-  planExecutionIdentity: {
-    resolve(node) {
-      const swaps = node.children.filter((child) =>
-        child.adapterId === "univ4-swap"
-      );
-      if (swaps.length !== 1) {
-        throw new Error(
-          "univ4 resolved plan must contain one pool-bound swap child",
-        );
-      }
-      const swap = swaps[0];
-      const key = normalizeV4PoolKey({
-        currency0: resolvedPlanString(swap, "currency0"),
-        currency1: resolvedPlanString(swap, "currency1"),
-        fee: resolvedPlanSafeNumber(swap, "fee"),
-        tickSpacing: resolvedPlanSafeNumber(swap, "tickSpacing"),
-        hooks: resolvedPlanString(swap, "hooks"),
-      }, "univ4 resolved plan execution identity");
-      return {
-        routeTarget: node.target,
-        poolId: v4PoolId(key),
-      };
-    },
-  },
-  identityPolicies: [{
-    poolAdapter: "univ4",
-    policy: "trusted-singleton-seed",
-    canonicalAddress: ADDR.UNISWAP_V4_POOL_MANAGER,
-    canonicalVenueId: "univ4",
-    canonicalIdentitySource: "v4-manager",
-  }],
-  edgeAdapterIds: ["univ4-unlock"],
-  allowedTaxonomy: [{ slotKind: "swap" }],
-  requiresProtocolEdgesFlag: false,
-  ownedActionAdapterIds: [
-    "univ4-unlock",
-    "univ4-swap",
-    "univ4-take",
-    "univ4-sync",
-    "univ4-settle",
-    "univ4-settle-value",
-  ],
-  requiredInfraActionAdapterIds: [
-    "erc20-transfer",
-    "weth-deposit-value",
-    "weth-withdraw-amount",
-  ],
-  landedEvents: univ4LandedEvents,
-  poolDiscovery: univ4PoolDiscovery,
-  observation: createUniV4SwapObservation({
-    adapterIds: ["univ4-unlock"],
-    canonicalIntakeTargets: [
-      ADDR.UNISWAP_V4_POOL_MANAGER,
-      UNISWAP_UNIVERSAL_ROUTER_V1,
-      UNISWAP_UNIVERSAL_ROUTER_V2,
-    ],
-    landedEvents: univ4LandedEvents.swaps,
-  }),
-  victimModel: {
-    id: "pool-swap:univ4",
-    mode: "replay",
-    runtime: {
-      localApply: {
-        cacheBacked: false,
-        needsMutablePoolRefresh: false,
-        apply: applyUniV4Victim,
-      },
-      exactPostImpact: uniV4ExactPostImpact,
-      buildOverlay: null,
-    },
-  },
-  pricingState: univ4BlockScanState,
-  prepared: {
-    quote: quoteUniV4Prepared,
-    quoteUnsupportedReason: null,
-    encodeQuotePrewarm: async (ctx: PreparedRouteContext) => [{
-      from: ethers.ZeroAddress,
-      to: ADDR.UNISWAP_V4_QUOTER,
-      calldata: encodeUniV4QuoteExactInputSingle(
-        ctx.request.tokenIn,
-        ctx.request.tokenOut,
-        ctx.request.amountIn,
-        ctx.request.v4PoolKey ?? ctx.edge?.v4PoolKey,
-      ),
-      gasLimit: 3_000_000,
-    }],
-    allowanceSpender: () => null,
-    prewarmAddresses: () => [],
-  },
-
-  buildEdges: buildUniV4Edges,
-  quoteExact: quoteUniV4Exact,
-  buildPlanFragment: buildUniV4PlanFragment,
-} satisfies SwapAdapter);
-
-function resolvedPlanString(
-  node: ResolvedPlanNode,
-  field: string,
-): string {
-  const value = node.params[field];
-  if (typeof value !== "string") {
-    throw new Error(`univ4 resolved plan ${field} must be a string`);
-  }
-  return value;
-}
-
-function resolvedPlanSafeNumber(
-  node: ResolvedPlanNode,
-  field: string,
-): number {
-  const value = node.params[field];
-  if (typeof value !== "bigint") {
-    throw new Error(`univ4 resolved plan ${field} must be an integer`);
-  }
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) {
-    throw new Error(`univ4 resolved plan ${field} exceeds safe integer range`);
-  }
-  return parsed;
-}
-
-function applyUniV4Victim(
-  ctx: LocalVictimApplyContext,
-): LocalVictimApplyResult | null {
-  const postImpact = uniV4ExactPostImpact(ctx.impact, ctx.blockNumber);
-  if (
-    !postImpact ||
-    ctx.impact.amountOut === undefined ||
-    ctx.impact.amountOut <= 0n
-  ) {
-    return null;
-  }
-  return { postImpact, amountOut: ctx.impact.amountOut };
-}
-
-function uniV4ExactPostImpact(
-  impact: PoolImpact,
-  blockNumber: number,
-): V4PostImpactSeed | null {
-  if (!impact.v4PostState) return null;
-  return {
-    kind: "v4",
-    poolManager: impact.pool,
-    poolId: impact.v4PostState.poolId,
-    sqrtPriceX96: impact.v4PostState.sqrtPriceX96,
-    tick: impact.v4PostState.tick,
-    liquidity: impact.v4PostState.liquidity,
-    lpFee: impact.v4PostState.lpFee,
-    blockNumber,
-  };
-}
-
-async function quoteUniV4Prepared(ctx: PreparedRouteContext): Promise<PreparedRouteQuoteResult> {
-  const data = encodeUniV4QuoteExactInputSingle(
-    ctx.request.tokenIn,
-    ctx.request.tokenOut,
-    ctx.request.amountIn,
-    ctx.request.v4PoolKey ?? ctx.edge?.v4PoolKey,
-  );
-  const quoted = await ctx.callPrepared(ADDR.UNISWAP_V4_QUOTER, data, {
-    gasLimit: 3_000_000,
-  });
-  return {
-    amountOut: BigInt(
-      uniV4QuoterIface.decodeFunctionResult("quoteExactInputSingle", quoted.output)[0],
-    ),
-    latencyMs: quoted.latencyMs,
-    cacheStats: quoted.cacheStats,
-  };
-}
-
 export function encodeUniV4QuoteExactInputSingle(
   tokenIn: string,
   tokenOut: string,
@@ -767,215 +541,6 @@ export function encodeUniV4QuoteExactInputSingle(
     exactAmount: amountIn,
     hookData: "0x",
   }]);
-}
-
-async function buildUniV4Edges(
-  pool: PoolEntry,
-  backend: TokenQueryBackend,
-): Promise<TokenEdge[]> {
-  if (!pool.fixedTokenIn || !pool.fixedTokenOut) {
-    throw new Error(`univ4 pool ${pool.address} requires fixedTokenIn/fixedTokenOut`);
-  }
-  const poolKey = await resolveV4PoolKey(pool, backend);
-  const poolId = v4PoolId(poolKey);
-  if (
-    !pool.poolId ||
-    normalizeBytes32(pool.poolId, "poolId") !== poolId
-  ) {
-    throw new Error(
-      `univ4 PoolKey does not match registered poolId ${pool.poolId ?? "missing"}`,
-    );
-  }
-  if (v4HooksAffectSwap(poolKey.hooks)) {
-    throw new RouteInstanceNotApplicableError(
-      `univ4-standard excludes swap-affecting hooks ${poolKey.hooks}`,
-    );
-  }
-  const tIn = normalizeV4Currency(pool.fixedTokenIn, "fixedTokenIn", "univ4 PoolKey");
-  const tOut = normalizeV4Currency(pool.fixedTokenOut, "fixedTokenOut", "univ4 PoolKey");
-  validateGraphPair(pool.address, poolKey, tIn, tOut);
-  const graphIn = tIn === ethers.ZeroAddress ? ADDR.WETH : tIn;
-  const graphOut = tOut === ethers.ZeroAddress ? ADDR.WETH : tOut;
-  if (graphIn.toLowerCase() === graphOut.toLowerCase()) {
-    throw new RouteInstanceNotApplicableError(
-      "univ4-standard excludes pools whose currencies collapse to one graph token",
-    );
-  }
-  const nativeCurrency0 = poolKey.currency0 === ethers.ZeroAddress;
-  const nativeCurrency1 = poolKey.currency1 === ethers.ZeroAddress;
-  const taxonomy = deriveEdgeTaxonomy("swap");
-  const common = {
-    adapterId: "univ4-unlock",
-    target: pool.address,
-    slotKind: "swap" as const,
-    v4PoolKey: poolKey,
-    poolId,
-    nativeCurrency0,
-    nativeCurrency1,
-    score: pool.score,
-    ...taxonomy,
-  };
-  return [
-    { ...common, tokenIn: graphIn, tokenOut: graphOut },
-    { ...common, tokenIn: graphOut, tokenOut: graphIn },
-  ];
-}
-
-async function quoteUniV4Exact(ctx: ExactQuoteContext): Promise<bigint> {
-  const { state, tokenIn, tokenOut, amountIn, v4PoolKey, v4QuoteStats: stats } = ctx;
-  if (!tokenIn || !tokenOut) throw new Error("univ4 quote requires tokenIn/tokenOut");
-  if (amountIn <= 0n) return 0n;
-  const key = validateQuoteInput(tokenIn, tokenOut, amountIn, v4PoolKey);
-  if (isLocalQuoteEligible(key)) {
-    try {
-      const amountOut = await quoteV4ExactInLocal(state, key, tokenIn, tokenOut, amountIn);
-      if (stats) stats.local++;
-      return amountOut;
-    } catch (error) {
-      if (isStateCallAbortedError(error)) throw error;
-      if (stats) stats.localFailures++;
-    }
-  } else if (stats) {
-    stats.hookSkipped++;
-  }
-
-  if (stats) stats.fallback++;
-  const data = encodeUniV4QuoteExactInputSingle(tokenIn, tokenOut, amountIn, key);
-  const result = await state.call({ to: ADDR.UNISWAP_V4_QUOTER, data });
-  return BigInt(uniV4QuoterIface.decodeFunctionResult("quoteExactInputSingle", result)[0]);
-}
-
-async function buildUniV4PlanFragment(ctx: PlanBuildContext): Promise<PlanFragment> {
-  const { edge, amountIn, amountOut, rawOut } = ctx;
-  if (!edge.v4PoolKey) {
-    throw new Error(`univ4-unlock edge missing v4PoolKey: ${edge.tokenIn} -> ${edge.tokenOut}`);
-  }
-  const key = normalizeV4PoolKey(edge.v4PoolKey, "plan-builder: v4 PoolKey");
-  rejectNativeWethV4Pool(key, "plan-builder");
-  const realIn = realV4Currency(edge.tokenIn, key, "tokenIn", "plan-builder: v4");
-  const realOut = realV4Currency(edge.tokenOut, key, "tokenOut", "plan-builder: v4");
-  validateV4CurrencyPair(realIn, realOut, key, "plan-builder");
-  const zeroForOne = realIn.toLowerCase() === key.currency0.toLowerCase();
-  const inputIsNative = realIn.toLowerCase() === ethers.ZeroAddress.toLowerCase();
-  const outputIsNative = realOut.toLowerCase() === ethers.ZeroAddress.toLowerCase();
-  const takeAmount = rawOut ?? amountOut;
-
-  const children: ResolvedPlanNode[] = [
-    {
-      adapterId: "univ4-swap",
-      target: edge.target,
-      tokenIn: edge.tokenIn,
-      tokenOut: edge.tokenOut,
-      amount: amountIn,
-      params: {
-        currency0: key.currency0,
-        currency1: key.currency1,
-        fee: BigInt(key.fee),
-        tickSpacing: BigInt(key.tickSpacing),
-        hooks: key.hooks,
-        zeroForOne,
-        amountSpecified: -amountIn,
-        sqrtPriceLimit: zeroForOne ? MIN_SQRT_PRICE : MAX_SQRT_PRICE,
-      },
-      children: [],
-    },
-    {
-      adapterId: "univ4-take",
-      target: edge.target,
-      tokenIn: "",
-      tokenOut: edge.tokenOut,
-      amount: takeAmount,
-      params: { currency: realOut },
-      children: [],
-    },
-  ];
-
-  if (outputIsNative) {
-    children.push({
-      adapterId: "weth-deposit-value",
-      target: ADDR.WETH,
-      tokenIn: realOut,
-      tokenOut: ADDR.WETH,
-      amount: takeAmount,
-      params: {},
-      children: [],
-    });
-  }
-
-  if (inputIsNative) {
-    children.push(
-      {
-        adapterId: "weth-withdraw-amount",
-        target: ADDR.WETH,
-        tokenIn: ADDR.WETH,
-        tokenOut: realIn,
-        amount: amountIn,
-        params: {},
-        children: [],
-      },
-      {
-        adapterId: "univ4-sync",
-        target: edge.target,
-        tokenIn: realIn,
-        tokenOut: "",
-        amount: 0n,
-        params: { currency: ethers.ZeroAddress },
-        children: [],
-      },
-      {
-        adapterId: "univ4-settle-value",
-        target: edge.target,
-        tokenIn: "",
-        tokenOut: "",
-        amount: amountIn,
-        params: {},
-        children: [],
-      },
-    );
-  } else {
-    children.push(
-      {
-        adapterId: "univ4-sync",
-        target: edge.target,
-        tokenIn: realIn,
-        tokenOut: "",
-        amount: 0n,
-        params: { currency: realIn },
-        children: [],
-      },
-      {
-        adapterId: "erc20-transfer",
-        target: realIn,
-        tokenIn: realIn,
-        tokenOut: realIn,
-        amount: amountIn,
-        params: { to: edge.target, amount: amountIn },
-        children: [],
-      },
-      {
-        adapterId: "univ4-settle",
-        target: edge.target,
-        tokenIn: "",
-        tokenOut: "",
-        amount: 0n,
-        params: {},
-        children: [],
-      },
-    );
-  }
-
-  return {
-    requirements: [],
-    nodes: [{
-      adapterId: "univ4-unlock",
-      target: edge.target,
-      tokenIn: edge.tokenIn,
-      tokenOut: edge.tokenOut,
-      amount: 0n,
-      params: {},
-      children,
-    }],
-  };
 }
 
 function validateQuoteInput(
@@ -1006,84 +571,6 @@ function v4ZeroForOne(
   if (realIn.toLowerCase() === key.currency0.toLowerCase()) return true;
   if (realIn.toLowerCase() === key.currency1.toLowerCase()) return false;
   throw new Error(`V4 quoter: tokens ${tokenIn} -> ${tokenOut} do not match PoolKey`);
-}
-
-function isLocalQuoteEligible(key: V4PoolKey): boolean {
-  return key.hooks.toLowerCase() === ethers.ZeroAddress.toLowerCase() &&
-    !v4HooksAffectSwap(key.hooks);
-}
-
-async function resolveV4PoolKey(pool: PoolEntry, backend: TokenQueryBackend): Promise<V4PoolKey> {
-  if (hasInlineV4PoolKey(pool)) return v4PoolKeyFromEntry(pool);
-  if (pool.poolId && backend.getLogs) {
-    const cacheKey = pool.poolId.toLowerCase();
-    const cached = poolKeyCache.get(cacheKey);
-    if (cached) return cached;
-    const logs = await backend.getLogs({
-      address: ADDR.UNISWAP_V4_POOL_MANAGER,
-      topics: [UNIV4_INITIALIZE_TOPIC, normalizeBytes32(pool.poolId, "poolId")],
-      fromBlock: ethers.toQuantity(UNISWAP_V4_POOL_MANAGER_DEPLOY_BLOCK),
-      toBlock: "latest",
-    });
-    const first = logs[0];
-    if (first) {
-      const parsed = initializeIface.parseLog({ topics: first.topics, data: first.data });
-      if (parsed) {
-        const key = {
-          currency0: normalizeV4Currency(String(parsed.args.currency0), "currency0", "univ4 PoolKey"),
-          currency1: normalizeV4Currency(String(parsed.args.currency1), "currency1", "univ4 PoolKey"),
-          fee: uint24(Number(parsed.args.fee), "fee", "univ4 PoolKey"),
-          tickSpacing: int24(Number(parsed.args.tickSpacing), "tickSpacing", "univ4 PoolKey"),
-          hooks: normalizeV4Currency(String(parsed.args.hooks), "hooks", "univ4 PoolKey"),
-        };
-        poolKeyCache.set(cacheKey, key);
-        return key;
-      }
-    }
-  }
-  return v4PoolKeyFromEntry(pool);
-}
-
-function hasInlineV4PoolKey(pool: PoolEntry): boolean {
-  return pool.currency0 !== undefined && pool.currency1 !== undefined && pool.fee !== undefined &&
-    pool.tickSpacing !== undefined && pool.hooks !== undefined;
-}
-
-function v4PoolKeyFromEntry(pool: PoolEntry): V4PoolKey {
-  const missing: string[] = [];
-  if (pool.currency0 === undefined) missing.push("currency0");
-  if (pool.currency1 === undefined) missing.push("currency1");
-  if (pool.fee === undefined) missing.push("fee");
-  if (pool.tickSpacing === undefined) missing.push("tickSpacing");
-  if (pool.hooks === undefined) missing.push("hooks");
-  if (missing.length > 0) {
-    const id = pool.poolId ? `${pool.address} poolId=${pool.poolId}` : pool.address;
-    throw new Error(`univ4 pool ${id} missing PoolKey field(s): ${missing.join(", ")}`);
-  }
-  return normalizeV4PoolKey({
-    currency0: pool.currency0!,
-    currency1: pool.currency1!,
-    fee: pool.fee!,
-    tickSpacing: pool.tickSpacing!,
-    hooks: pool.hooks!,
-  }, "univ4 PoolKey");
-}
-
-function normalizeBytes32(value: string, field: string): string {
-  if (!/^0x[0-9a-fA-F]{64}$/.test(value)) {
-    throw new Error(`univ4 ${field} must be bytes32, got ${value}`);
-  }
-  return value.toLowerCase();
-}
-
-function validateGraphPair(pool: string, key: V4PoolKey, tokenIn: string, tokenOut: string): void {
-  const currencies = new Set([key.currency0.toLowerCase(), key.currency1.toLowerCase()]);
-  if (!currencies.has(tokenIn.toLowerCase()) || !currencies.has(tokenOut.toLowerCase())) {
-    throw new Error(
-      `univ4 pool ${pool} fixed tokens ${tokenIn}/${tokenOut} do not match PoolKey ` +
-        `${key.currency0}/${key.currency1}`,
-    );
-  }
 }
 
 function statePoolId(edge: TokenEdge): string {
@@ -1124,5 +611,3 @@ function statePoolFromResults(
   if (!read) throw new Error(`missing block-scan read prefix ${prefix}`);
   return read.id.slice(prefix.length);
 }
-
-export type { V4QuotePathStats };

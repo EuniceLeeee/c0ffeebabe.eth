@@ -122,7 +122,7 @@ export interface XwinFundFeeState {
   readonly blocksPerDay: bigint;
   readonly lastManagerFeeCollection: bigint;
 }
-function accrueXwinFundFee(s: XwinFundFeeState, blockNumber: bigint): XwinFundFeeState {
+export function accrueXwinFundFee(s: XwinFundFeeState, blockNumber: bigint): XwinFundFeeState {
   const elapsed = sub(blockNumber, s.lastManagerFeeCollection);
   const supply = add(s.supply, s.pendingMFee);
   if (supply === 0n) return { ...s, lastManagerFeeCollection: blockNumber };
@@ -130,20 +130,20 @@ function accrueXwinFundFee(s: XwinFundFeeState, blockNumber: bigint): XwinFundFe
   const perBlock = div(annualShares, mul(s.blocksPerDay, 365n));
   return { ...s, pendingMFee: add(s.pendingMFee, mul(elapsed, perBlock)), lastManagerFeeCollection: blockNumber };
 }
-function xwinAllocationAmount(weightBps: bigint, unallocatedBase: bigint): bigint {
+export function xwinAllocationAmount(weightBps: bigint, unallocatedBase: bigint): bigint {
   return div(mul(weightBps, unallocatedBase), BPS);
 }
-function xwinTokenValue(balance: bigint, priceInBaseUnits: bigint, tokenUnit: bigint): bigint {
+export function xwinTokenValue(balance: bigint, priceInBaseUnits: bigint, tokenUnit: bigint): bigint {
   return div(mul(balance, priceInBaseUnits), tokenUnit);
 }
-function xwinMintShares(vaultAfter: bigint, fundSupply: bigint, unitPriceBefore: bigint, baseDecimals: number): bigint {
+export function xwinMintShares(vaultAfter: bigint, fundSupply: bigint, unitPriceBefore: bigint, baseDecimals: number): bigint {
   if (!Number.isInteger(baseDecimals) || baseDecimals < 0 || baseDecimals > 18) throw new Error("unsupported xWin decimals");
   checked(fundSupply, "xWin supply");
   if (fundSupply === 0n) return mul(vaultAfter, 10n ** BigInt(18 - baseDecimals));
   return sub(div(mul(vaultAfter, WAD), unitPriceBefore), fundSupply);
 }
-function xwinRedeemRatio(shares: bigint, fundSupply: bigint): bigint { return div(mul(shares, WAD), fundSupply); }
-function xwinRedeemBalance(ratio: bigint, balance: bigint): bigint { return div(mul(ratio, balance), WAD); }
+export function xwinRedeemRatio(shares: bigint, fundSupply: bigint): bigint { return div(mul(shares, WAD), fundSupply); }
+export function xwinRedeemBalance(ratio: bigint, balance: bigint): bigint { return div(mul(ratio, balance), WAD); }
 export interface XwinPerformanceFeeState {
   readonly performanceFee: bigint;
   readonly unitPriceAfterSales: bigint;
@@ -154,7 +154,7 @@ export interface XwinPerformanceFeeState {
   readonly collectionPeriod: bigint;
   readonly lockingDiscountBps: bigint | null;
 }
-function xwinWithdrawAfterFee(amountOut: bigint, shares: bigint, s: XwinPerformanceFeeState): { amountOut: bigint; fee: bigint } {
+export function xwinWithdrawAfterFee(amountOut: bigint, shares: bigint, s: XwinPerformanceFeeState): { amountOut: bigint; fee: bigint } {
   checked(amountOut, "xWin amountOut"); checked(s.performanceFee, "xWin performanceFee");
   if (s.performanceFee === 0n) return { amountOut, fee: 0n };
   checked(s.unitPriceAfterSales, "xWin unitPriceAfterSales"); checked(s.watermarkUnitprice, "xWin watermark");
@@ -167,7 +167,7 @@ function xwinWithdrawAfterFee(amountOut: bigint, shares: bigint, s: XwinPerforma
   if (s.lockingDiscountBps !== null) fee = sub(fee, div(mul(fee, s.lockingDiscountBps), BPS));
   return { amountOut: sub(amountOut, fee), fee };
 }
-function xwinSwapInput(amount: bigint, feeBps: bigint, price: bigint, slippageBps: bigint, tokenUnit: bigint) {
+export function xwinSwapInput(amount: bigint, feeBps: bigint, price: bigint, slippageBps: bigint, tokenUnit: bigint) {
   const fee = div(mul(amount, feeBps), BPS);
   const amountIn = sub(amount, fee);
   const grossQuote = mul(amountIn, price);
@@ -206,14 +206,14 @@ function balance(s: XwinLocalFundState, token: string): bigint {
   if (value === undefined) throw new Error("xWin missing token balance");
   return checked(value, "xWin balance");
 }
-function xwinLocalVaultValue(s: XwinLocalFundState): bigint {
+export function xwinLocalVaultValue(s: XwinLocalFundState): bigint {
   let value = xwinTokenValue(balance(s, s.baseToken), unit(s.baseDecimals), unit(s.baseDecimals));
   for (const target of s.targets) {
     if (target.token !== s.baseToken) value = add(value, xwinTokenValue(balance(s, target.token), target.priceInBase, unit(target.decimals)));
   }
   return value;
 }
-function xwinLocalUnitPrice(s: XwinLocalFundState): bigint {
+export function xwinLocalUnitPrice(s: XwinLocalFundState): bigint {
   const supply = add(s.supply, s.pendingMFee);
   return supply === 0n ? unit(s.baseDecimals) : mul(xwinLocalVaultValue(s), WAD) / supply;
 }
@@ -339,7 +339,7 @@ export const xwinLocalStateMathModel: DeclarativeMathModel = {
     bigint(row.baseTokenAmt, "xWin baseTokenAmt"); bigint(row.blockNumber, "xWin blockNumber");
     integer(row.baseDecimals, "xWin base decimals");
     array(row.balances, "xWin balances"); array(row.targets, "xWin targets"); array(row.swaps, "xWin swaps");
-    array(row.pools, "xWin pools"); array(row.locked, "xWin locked");
+    array(row.pools, "xWin pools"); flag(record(row.locked, ["waived"], "xWin locked").waived, "xWin waived");
   },
   evaluate(value) {
     const row = record(value, ["numbers", "baseToken", "baseDecimals", "baseTokenAmt", "balances", "targets", "swaps", "pools", "blockNumber", "locked"], "xWin local input");

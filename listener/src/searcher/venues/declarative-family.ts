@@ -43,6 +43,7 @@ type Values = ReturnType<typeof compileDeclarativeValues>;
 type Variant = { document: Data; execution: DeclarativeConversionExecution; values: Values; modules: ReturnType<typeof readFamilyModules>;
   quoteFlow?: ReturnType<typeof compileDeclarativeReadFlow>; pricingFlow?: ReturnType<typeof compileDeclarativeReadFlow>;
   quoteProofEvaluation?: boolean;
+  directMutationInput?: boolean;
   trialState?: ReturnType<typeof compileDeclarativeTrialState<Descriptor, Route, Data>> };
 export interface DeclarativeFamilyTypes {
   readonly candidate: FamilyCandidate;
@@ -60,6 +61,14 @@ export type TypedDeclarativeProtocol<T extends DeclarativeFamilyTypes> = Protoco
   T["descriptor"], T["pricingDraft"], unknown, T["pricingStatic"]
 >;
 const forbidden = new Set(["__proto__", "prototype", "constructor", "module", "export", "handler"]);
+
+// Called once per variant. A named program may capture the full environment.
+function usesOnlyMutationInput(value: unknown): boolean {
+  if (typeof value === "string") return !value.startsWith("$") || /^\$(?:observation|descriptor)(?:\.|$)/.test(value);
+  if (value === null || typeof value !== "object") return true;
+  const node = value as Data;
+  return node.op !== "expression" && node.op !== "program" && Object.values(node).every(usesOnlyMutationInput);
+}
 
 function data(value: unknown, label: string): asserts value is Data {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be a record`);
@@ -185,6 +194,8 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
       environment: input => environment(variant, input), evidence,
     });
     const quote = modules.blocks.quoteFlow as DeclarativeQuoteFlow;
+    variant.directMutationInput = !Object.hasOwn(v.context ?? {}, "observation") &&
+      !Object.hasOwn(v.context ?? {}, "descriptor") && usesOnlyMutationInput(v.pricing.mutationPredicate);
     const extendedProof = (value: unknown): boolean => !!value && typeof value === "object" &&
       ((value as Data).version === 2 || Object.values(value).some(extendedProof));
     variant.quoteProofEvaluation = extendedProof(quote.chainQuote);
@@ -418,7 +429,8 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
   }
   function acceptsMutation(input: Data): boolean {
     const v = select(input.descriptor), predicate = v.document.pricing.mutationPredicate;
-    return predicate === undefined || v.values.evaluate(predicate, environment(v, input)) === true;
+    return predicate === undefined ||
+      v.values.evaluate(predicate, v.directMutationInput ? input : environment(v, input)) === true;
   }
   if (!Array.isArray(document.pricing.mutationKinds) || document.pricing.mutationKinds.some((kind: string) => !["log", "call"].includes(kind)))
     throw new Error("invalid declaration mutation kinds");

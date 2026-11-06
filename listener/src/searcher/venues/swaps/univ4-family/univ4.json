@@ -5903,31 +5903,6 @@
             ]
           },
           {
-            "op": "sameAddress",
-            "args": [
-              {
-                "op": "get",
-                "args": [
-                  "$observation",
-                  "address"
-                ]
-              },
-              {
-                "op": "get",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      "$descriptor",
-                      "managerBinding"
-                    ]
-                  },
-                  "manager"
-                ]
-              }
-            ]
-          },
-          {
             "op": "eq",
             "args": [
               {
@@ -5958,6 +5933,31 @@
                       "poolId"
                     ]
                   }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$observation",
+                  "address"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "managerBinding"
+                    ]
+                  },
+                  "manager"
                 ]
               }
             ]

@@ -43,7 +43,9 @@ import {
 } from "../venues/registry-ids.js";
 import { curvePlainAdapter } from "../venues/swaps/curve-plain.js";
 import { curveUnderlyingAdapter } from "../venues/swaps/curve-underlying.js";
-import { univ2StandardAdapter } from "../venues/swaps/univ2-standard.js";
+import { runUniv2Lifecycle, univ2FixtureRuntime } from "../architecture-migration-fixture-replay.js";
+import { projectFamilyRouteGraph } from "../adapter-family-graph-runtime.js";
+import { executeFamilyExactQuote, buildFamilyExecutionFragment } from "../venues/adapter-family-runtime.js";
 import { erc4626Adapter } from "../venues/protocols/erc4626.js";
 import { goldxAdapter } from "../venues/protocols/goldx.js";
 import { metronomeHgusdcAdapter } from "../venues/protocols/metronome.js";
@@ -1041,70 +1043,39 @@ async function main(): Promise<void> {
   console.log("[route-adapters] declared venue identity attestation: PASS");
 
   const pool: PoolEntry = { address: pair, adapter: "univ2", token0, token1, score: 7 };
-  // F8: production route surfaces are strict-only; the legacy univ2 family
-  // exercises the legacy graph/quote/plan machinery through its own registry.
-  const legacyUniv2Registry = new RouteLegRegistry([univ2StandardAdapter]);
-  const edges = await legacyUniv2Registry.buildEdges(pool, backend);
-  assert(edges.length === 2, `univ2 edge count ${edges.length}`);
-  assert(edges[0].adapterId === "univ2-swap", `edge adapter ${edges[0].adapterId}`);
-  assert(edges[0].tokenIn === ethers.getAddress(token0), `edge token0 ${edges[0].tokenIn}`);
-  assert(edges[0].tokenOut === ethers.getAddress(token1), `edge token1 ${edges[0].tokenOut}`);
-  assert(edges.every((edge) => edge.v2FeeBps === 30n), "unmeasured V2 edge uses standard fee");
-  assert(edges.every((edge) => edge.edgeKind === "swap" && !edge.leavesStandingPosition), "edge taxonomy");
-  assert(edges.every((edge) => edge.score === 7), "edge score propagation");
-  console.log("[route-adapters] univ2 graph equivalence: PASS");
-
-  const amountIn = 10_000n;
-  const legacyUniv2Adapter = legacyUniv2Registry.forFamily("univ2-standard");
-  const quoted = await legacyUniv2Adapter.quoteExact({
-    state: backend as never,
-    target: pair,
-    edgeAdapterId: "univ2-swap",
-    tokenIn: token0,
-    tokenOut: token1,
-    amountIn,
+  const source = { number: 22_000_000, generation: 1, hash: `0x${"ab".repeat(32)}` };
+  const poolState = { pool: pair, factory: provisionalV2Factory, token0, token1,
+    reserves: { reserve0: 1_000_000n, reserve1: 2_000_000n, blockTimestampLast: 1 } };
+  const catalog = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+  const family = catalog.forFamily("univ2-standard");
+  const [instance] = (await runUniv2Lifecycle(source, poolState, catalog)).instances;
+  const scores = new Map(instance.routes.map(route => [route.routeKey, 7]));
+  const edges = instance.routes.map(route => {
+    const handle = instance.routeHandles.find(candidate => candidate.routeKey === route.routeKey);
+    assert(handle, "UniV2 route handle");
+    return projectFamilyRouteGraph({ family, descriptor: instance.descriptor, route, handle }, scores).edge;
   });
-  assert(
-    quoted === quoteV2ExactInput(1_000_000n, 2_000_000n, amountIn, 30n),
-    `univ2 quote ${quoted}`,
-  );
-  assert(
-    legacyUniv2Adapter.prepared?.quote !== null &&
-      legacyUniv2Adapter.prepared?.quote !== undefined,
-    "univ2 prepared quote",
-  );
-  const preparedV2Context = {
-    request: {
-      adapterId: "univ2-swap", target: pair, tokenIn: token0, tokenOut: token1, amountIn,
-    },
-    edge: edges[0],
-    async callPrepared(to: string, data: string) {
-      return {
-        output: await backend.call({ to, data }),
-        latencyMs: 1,
-        cacheStats: { warmHits: 1, coldMisses: 0 },
-      };
-    },
-    readChain: (req: { to: string; data: string }) => backend.call(req),
-  };
-  const preparedV2Quote = await legacyUniv2Adapter.prepared!.quote(preparedV2Context);
-  assert(preparedV2Quote.amountOut === quoted, `univ2 prepared quote ${preparedV2Quote.amountOut}`);
-  const preparedV2Calls = await legacyUniv2Adapter.prepared!.encodeQuotePrewarm!(preparedV2Context);
-  assert(preparedV2Calls.length === 1, `univ2 prepared prewarm count ${preparedV2Calls.length}`);
-  console.log("[route-adapters] univ2 quote equivalence: PASS");
-
-  const fragment = await legacyUniv2Adapter.buildPlanFragment({
-    edge: edges[0],
-    amountIn,
-    amountOut: quoted,
-    executor: "0x00000000000000000000000000000000000000E1",
-    state: backend as never,
-  });
-  assert(fragment.requirements.length === 0, "univ2 has no sibling requirement");
-  assert(fragment.nodes.length === 1, "univ2 one wrapper node");
-  assert(fragment.nodes[0].adapterId === "univ2-swap", "univ2 wrapper action");
-  assert(fragment.nodes[0].children[0]?.adapterId === "erc20-transfer", "univ2 callback transfer");
-  console.log("[route-adapters] univ2 plan fragment equivalence: PASS");
+  assert(edges.length === 2 && edges[0].adapterId === "univ2-swap", "two V2 graph directions");
+  assert(ethers.getAddress(edges[0].tokenIn) === ethers.getAddress(token0) &&
+         ethers.getAddress(edges[0].tokenOut) === ethers.getAddress(token1), "V2 forward tokens");
+  assert(edges.every(edge => edge.edgeKind === "swap" && !edge.leavesStandingPosition && edge.score === 7),
+    "V2 graph preserves taxonomy and the central score");
+  const amountIn = 10_000n, executor = "0x00000000000000000000000000000000000000E1";
+  const route = instance.routeHandles.find(candidate => candidate.routeKey === instance.routes[0].routeKey)!;
+  const quote = await executeFamilyExactQuote({ family, route, amountIn, source, generation: source.generation,
+    executor, runtime: univ2FixtureRuntime(poolState), runtimeEvidence: [], actionOwnership: catalog });
+  assert(quote.status === "resolved", "V2 exact resolves");
+  const quoted = quote.amountOut;
+  assert(quoted === quoteV2ExactInput(1_000_000n, 2_000_000n, amountIn, 30n), "V2 curve / fee");
+  const built = buildFamilyExecutionFragment({ family, route, exact: quote, minAmountOut: quoted,
+    executor, runtimeEvidence: [], actionOwnership: catalog });
+  assert(built.status === "resolved", "V2 execution resolves");
+  const fragment = built.fragment;
+  assert(fragment.requirements.length === 0 && fragment.nodes.length === 1, "one V2 execution node");
+  assert(fragment.nodes[0].adapterId === "univ2-swap" &&
+    fragment.nodes[0].children.length === 0 && typeof fragment.nodes[0].params.runtimeAmountProgram === "string",
+    "issued V2 program owns its transfer and pair call");
+  console.log("[route-adapters] issued V2 graph, reserve quote and payment program: PASS");
 
   const retiredCurveRegistry = new RouteLegRegistry([curvePlainAdapter]);
   assert(

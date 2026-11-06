@@ -15,7 +15,12 @@ export function acceptanceFamilyDomain(familyId: unknown, domain: unknown = "pro
 }
 
 export interface ProtectedAcceptanceBalance { readonly token: string; readonly account: string }
+export const settlementModes = ["direct-output", "quote-output", "deferred-input", "deferred-debt-input", "settle-output"] as const;
+export type AcceptanceSettlementMode = typeof settlementModes[number];
+
 export interface ProtocolJsonAcceptanceTrial {
+  /** Behaviors independently required by this case. A declaration never satisfies a requirement. */
+  readonly requiredSettlement?: readonly AcceptanceSettlementMode[];
   readonly id: string; readonly routeKey?: string;
   readonly tokenIn: string; readonly tokenOut: string; readonly amountIn: string;
   readonly outputToleranceRawUnits?: 0 | 1; readonly inputToleranceRawUnits?: 0 | 1;
@@ -31,7 +36,7 @@ export interface ProtocolJsonAcceptanceCase {
 export interface AcceptanceFactViolation { readonly code: string; readonly detail: string }
 export interface ProtocolJsonAcceptanceFacts {
   readonly passed: boolean;
-  readonly classification: "executed-as-quoted" | "observed-revert" | "transport-failure" | "unexpected-completion" | "invalid-observation" | "effect-mismatch";
+  readonly classification: "executed-as-quoted" | "observed-revert" | "read-only-quote" | "transport-failure" | "unexpected-completion" | "invalid-observation" | "effect-mismatch";
   readonly requestId: string; readonly source: CanonicalSource;
   readonly violations: readonly AcceptanceFactViolation[];
   readonly observed: Readonly<Record<string, string | number | boolean | null>>;
@@ -113,7 +118,14 @@ export function parseProtocolJsonAcceptanceCase(raw: unknown): ProtocolJsonAccep
   const ids = new Set<string>();
   const trials = raw.trials.map((trial: unknown) => {
     shape(trial, ["id", "tokenIn", "tokenOut", "amountIn"],
-      ["outputToleranceRawUnits", "inputToleranceRawUnits", "expectedAmountOut", "recipients", "protectedBalances", "routeKey"]);
+      ["outputToleranceRawUnits", "inputToleranceRawUnits", "expectedAmountOut", "recipients", "protectedBalances", "routeKey", "requiredSettlement"]);
+    let requiredSettlement: readonly AcceptanceSettlementMode[] | undefined;
+    if (trial.requiredSettlement !== undefined) {
+      const modes = trial.requiredSettlement;
+      if (!Array.isArray(modes) || !modes.every(mode => settlementModes.includes(mode)) ||
+          new Set(modes).size !== modes.length) throw new Error("invalid or duplicate required settlement mode");
+      requiredSettlement = Object.freeze([...modes]);
+    }
     if (trial.routeKey !== undefined) text(trial.routeKey);
     text(trial.id); if (ids.has(trial.id)) throw new Error("duplicate acceptance trial id"); ids.add(trial.id);
     const tokenIn = address(trial.tokenIn), tokenOut = address(trial.tokenOut);
@@ -127,6 +139,7 @@ export function parseProtocolJsonAcceptanceCase(raw: unknown): ProtocolJsonAccep
     tolerance(trial.inputToleranceRawUnits); tolerance(trial.outputToleranceRawUnits);
     return Object.freeze({ id: trial.id, tokenIn, tokenOut, amountIn: decimal(trial.amountIn, true),
       ...(trial.routeKey !== undefined ? { routeKey: trial.routeKey } : {}),
+      ...(requiredSettlement !== undefined ? { requiredSettlement } : {}),
       ...(trial.inputToleranceRawUnits !== undefined ? { inputToleranceRawUnits: trial.inputToleranceRawUnits } : {}),
       ...(trial.outputToleranceRawUnits !== undefined ? { outputToleranceRawUnits: trial.outputToleranceRawUnits } : {}),
       ...(trial.expectedAmountOut !== undefined ? { expectedAmountOut: decimal(trial.expectedAmountOut) } : {}),
@@ -207,7 +220,7 @@ function observation(input: FactInput, completion: "returned" | "reverted-as-dec
     for (const key of required) if (!tokens.has(key)) fail("missing-token-delta", key);
     if (!natives.has(executor)) fail("missing-native-delta", executor);
   };
-  const finish = (observed: ProtocolJsonAcceptanceFacts["observed"], success: "executed-as-quoted" | "observed-revert",
+  const finish = (observed: ProtocolJsonAcceptanceFacts["observed"], success: "executed-as-quoted" | "observed-revert" | "read-only-quote",
     rollbackEvidence?: ProtocolJsonAcceptanceFacts["rollbackEvidence"]): ProtocolJsonAcceptanceFacts => ({
       passed: violations.length === 0, classification: violations.length ? classification : success,
       requestId: input.requestId, source: { ...source }, violations, observed,
@@ -215,6 +228,16 @@ function observation(input: FactInput, completion: "returned" | "reverted-as-dec
   return { executor, recipient, tokenIn, tokenOut, debitKey, creditKey, protectedBalances,
     tokens, natives, tokenRows, nativeRows, violations, fail, complete, finish,
     mismatch() { if (classification === "invalid-observation" && !violations.length) classification = "effect-mismatch"; } };
+}
+
+/** A returned VM quote must also leave each observed asset in place. The script checks the quote value. */
+export function checkReadOnlyQuoteFacts(input: FactInput): ProtocolJsonAcceptanceFacts {
+  const facts = observation(input, "returned");
+  facts.complete(); facts.mismatch();
+  for (const [key, delta] of facts.tokens) if (delta !== 0n) facts.fail("quote-token-delta", key);
+  for (const [account, delta] of facts.natives) if (delta !== 0n) facts.fail("quote-native-delta", account);
+  if (input.result.ok && input.result.effects?.logs?.length) facts.fail("quote-logs", "read-only quote retained logs");
+  return facts.finish({ tokenObservations: facts.tokens.size, nativeObservations: facts.natives.size }, "read-only-quote");
 }
 
 export function checkProtocolJsonExecutionFacts(input: ProtocolJsonExecutionFactInput): ProtocolJsonAcceptanceFacts {

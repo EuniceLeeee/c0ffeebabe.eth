@@ -89,7 +89,7 @@ export const univ4PoolIdMathModel: DeclarativeMathModel = {
 };
 
 /** Per-direction precision probe amount, or null when the integer reserve
- * proxies already clear the scanner floor. Mirrors univ4-family/pricing.ts. */
+ * proxies already clear the scanner floor. */
 export const univ4PrecisionAmountMathModel: DeclarativeMathModel = {
   id: "univ4:precision-amount",
   version: 1,

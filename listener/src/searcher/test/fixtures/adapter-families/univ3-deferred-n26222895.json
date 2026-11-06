@@ -1,0 +1,608 @@
+{
+  "version": 1,
+  "family": "univ3-standard",
+  "capability": "deferred-input",
+  "source": {
+    "number": 26222895,
+    "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+    "generation": 12
+  },
+  "candidate": {
+    "adapter": "univ3",
+    "address": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+    "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+    "blockNumber": 26222895,
+    "candidateKind": "univ3-pool",
+    "familyId": "univ3-standard",
+    "hintedFactory": null,
+    "hintedFee": null,
+    "hintedTickSpacing": null,
+    "hintedToken0": null,
+    "hintedToken1": null,
+    "logIndex": 362,
+    "pluginCandidateKey": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+    "pool": "0xc7bBeC68d12a0d1830360F8Ec58fA599bA1b0e9b",
+    "sourceKind": "pool-swap-log",
+    "transactionHash": "0x1a3b9a02e4ef88dbf31ecdfcffd6130599d2b4b17e0caa3b8ba0c40e84078582"
+  },
+  "executor": "0x3A1A0D1F6293D5DEB82CAF420eDe157A538D38c2",
+  "transactionOrigin": "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c",
+  "executorCode": {
+    "hash": "0xaa678ef6a03701bac0255d4fd9d0ce93f680752776f97dac4ee4415550e1c57b",
+    "historical": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+    "localCodeOverlay": true,
+    "protocolOverrides": false
+  },
+  "paymentRecipient": "0x000000000000000000000000000000000000cafe",
+  "escrowFactory": "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+  "pair": "0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852",
+  "scope": "Fixed-block strict re-admission and local EVM. Only executor code and opening executor balances are provisioned. The continuation recovers exactly the input preseeded by this test in a zero-surplus pair. No historical arbitrage or live timing claim.",
+  "directions": [
+    {
+      "direction": "zero-for-one",
+      "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "tokenOut": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "amountIn": "100000000000000",
+      "out": "241012",
+      "trials": [
+        {
+          "name": "fixed",
+          "paymentAmount": "60253",
+          "refund": "100000000000000",
+          "prefund": "100000000000000",
+          "draw": "60253",
+          "requestId": "u3-deferred-fixed-0",
+          "scriptHash": "0x1d445f2c128c485fc6cb61a75175aabc3be2c20dbc4e1280b268dd570dbfab36",
+          "receipt": {
+            "id": "u3-deferred-fixed-0",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "68c3e1c7cbfe4feebf67315840380f6302f4bf35b1c08406585c37c89eec2fc8"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "returned",
+            "data": "0x",
+            "tokenDeltas": [
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "-100000000000000"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+                "delta": "100000000000000"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x000000000000000000000000000000000000cafe",
+                "delta": "0"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+                "delta": "0"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "180759"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+                "delta": "-241012"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x000000000000000000000000000000000000cafe",
+                "delta": "60253"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+                "delta": "0"
+              }
+            ],
+            "nativeDeltas": [
+              {
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "0"
+              }
+            ],
+            "logCount": 6
+          }
+        },
+        {
+          "name": "debt",
+          "paymentAmount": "60253",
+          "refund": "100000000000000",
+          "prefund": "100000000000000",
+          "draw": "60253",
+          "requestId": "u3-deferred-debt-0",
+          "scriptHash": "0x39132aca7742ce083cc1b226fa1aac7415e0df1be9a503b1a2a8fe5f30046dc1",
+          "receipt": {
+            "id": "u3-deferred-debt-0",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "fd99e1339cce7cb83ea8ffcb218441ca7e17a57d3765ed58581b9104ece4a9c9"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "returned",
+            "data": "0x",
+            "tokenDeltas": [
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "-100000000000000"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+                "delta": "100000000000000"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x000000000000000000000000000000000000cafe",
+                "delta": "0"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+                "delta": "0"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "180759"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+                "delta": "-241012"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x000000000000000000000000000000000000cafe",
+                "delta": "60253"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+                "delta": "0"
+              }
+            ],
+            "nativeDeltas": [
+              {
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "0"
+              }
+            ],
+            "logCount": 6
+          }
+        },
+        {
+          "name": "unfunded",
+          "paymentAmount": "60253",
+          "refund": "100000000000000",
+          "prefund": "0",
+          "draw": "60253",
+          "requestId": "u3-deferred-unfunded-0",
+          "scriptHash": "0x325c169d7d0bef16694c8543a438941a63e52e2f0352d2ba84072e9d271e9b11",
+          "receipt": {
+            "id": "u3-deferred-unfunded-0",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "510f62c2ac2001ef466fd2421e876a651384ad5cace5ec46eea95e13107087cc"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        },
+        {
+          "name": "short-debt",
+          "paymentAmount": "60253",
+          "refund": "100000000000000",
+          "prefund": "99999999999999",
+          "draw": "60253",
+          "requestId": "u3-deferred-short-debt-0",
+          "scriptHash": "0x36097a3b531db82665417384117eb2bc24f66985ca85a7a7d0780f502c9621a8",
+          "receipt": {
+            "id": "u3-deferred-short-debt-0",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "c3f729bf5ce6f37559c66a3dc333e4ab092ae8dd029679220e01164268582dce"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        },
+        {
+          "name": "wrong-receipt",
+          "paymentAmount": "60253",
+          "refund": "99999999999999",
+          "prefund": "100000000000000",
+          "draw": "60253",
+          "requestId": "u3-deferred-wrong-receipt-0",
+          "scriptHash": "0x3e6f888cc91ec57186d20127a81cdefa04b3d2d12eae3992c036e350d653c7a5",
+          "receipt": {
+            "id": "u3-deferred-wrong-receipt-0",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "3e67b3c0acf4b35d1013aec5b802ab6049d211e319affcb763666cff5e118cf9"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        },
+        {
+          "name": "excess-draw",
+          "paymentAmount": "60253",
+          "refund": "100000000000000",
+          "prefund": "100000000000000",
+          "draw": "60254",
+          "requestId": "u3-deferred-excess-draw-0",
+          "scriptHash": "0x400155bcf1dda0061901f99cde4132d37747b9fd044fbe57cf33e992f04aa1a9",
+          "receipt": {
+            "id": "u3-deferred-excess-draw-0",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "17db43caa994d8846ea5f79acf4f7f67a8039dd7d48aa9d570e112bf0db37134"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        },
+        {
+          "name": "zero-debt",
+          "paymentAmount": "60253",
+          "refund": "0",
+          "prefund": "0",
+          "draw": "60253",
+          "requestId": "u3-deferred-zero-debt-0",
+          "scriptHash": "0xb4ee8b9aeca98060589c1926543ee08be98fdfb93590098ebc4311d595eb258e",
+          "receipt": {
+            "id": "u3-deferred-zero-debt-0",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "c1b7d13daa52a1cb2c6dc70c917b3e9d184eac9d73c3266fa559d8705e0e3ccf"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "direction": "one-for-zero",
+      "tokenIn": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "amountIn": "100",
+      "out": "41072588327",
+      "trials": [
+        {
+          "name": "fixed",
+          "paymentAmount": "10268147081",
+          "refund": "100",
+          "prefund": "100",
+          "draw": "10268147081",
+          "requestId": "u3-deferred-fixed-1",
+          "scriptHash": "0xc9ae5dd4d2bfa46fb9b4b64bc427aa40ebbb012fe38be7ddfe1e40c4440c62f9",
+          "receipt": {
+            "id": "u3-deferred-fixed-1",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "923c82abbbec97700ad49c4a1e0344a30ae3ef8f5d0869a7668647143e88d04d"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "returned",
+            "data": "0x",
+            "tokenDeltas": [
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "-100"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+                "delta": "100"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x000000000000000000000000000000000000cafe",
+                "delta": "0"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+                "delta": "0"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "30804441246"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+                "delta": "-41072588327"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x000000000000000000000000000000000000cafe",
+                "delta": "10268147081"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+                "delta": "0"
+              }
+            ],
+            "nativeDeltas": [
+              {
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "0"
+              }
+            ],
+            "logCount": 6
+          }
+        },
+        {
+          "name": "debt",
+          "paymentAmount": "10268147081",
+          "refund": "100",
+          "prefund": "100",
+          "draw": "10268147081",
+          "requestId": "u3-deferred-debt-1",
+          "scriptHash": "0x8d5dd4ae130e1bdea45b8b6760031514a844503ad398a7bef65d1564eb1a43f7",
+          "receipt": {
+            "id": "u3-deferred-debt-1",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "6d04c1d7d0389c7845e5098c76ef4037bac67b7aee364e4ba1118b8958993772"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "returned",
+            "data": "0x",
+            "tokenDeltas": [
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "-100"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+                "delta": "100"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x000000000000000000000000000000000000cafe",
+                "delta": "0"
+              },
+              {
+                "token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+                "account": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+                "delta": "0"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "30804441246"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+                "delta": "-41072588327"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x000000000000000000000000000000000000cafe",
+                "delta": "10268147081"
+              },
+              {
+                "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                "account": "0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852",
+                "delta": "0"
+              }
+            ],
+            "nativeDeltas": [
+              {
+                "account": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+                "delta": "0"
+              }
+            ],
+            "logCount": 6
+          }
+        },
+        {
+          "name": "unfunded",
+          "paymentAmount": "10268147081",
+          "refund": "100",
+          "prefund": "0",
+          "draw": "10268147081",
+          "requestId": "u3-deferred-unfunded-1",
+          "scriptHash": "0x8c058fd46cd9429d9ddd3621bb231f94e996c60f2071d08043fd87fe5d6762c2",
+          "receipt": {
+            "id": "u3-deferred-unfunded-1",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "f9250ad300f29425fcd4626a00071063651a3f4f31659e9d0a022c756a75afef"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        },
+        {
+          "name": "short-debt",
+          "paymentAmount": "10268147081",
+          "refund": "100",
+          "prefund": "99",
+          "draw": "10268147081",
+          "requestId": "u3-deferred-short-debt-1",
+          "scriptHash": "0xc7c52d85a18d7e034a544b9e651bfdb6cfe24b5d6ac4c6938a986877b52dd239",
+          "receipt": {
+            "id": "u3-deferred-short-debt-1",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "b5d070931c97691351f6bfa3b678077cc94dae65f280d186ce68875b11db3445"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        },
+        {
+          "name": "wrong-receipt",
+          "paymentAmount": "10268147081",
+          "refund": "99",
+          "prefund": "100",
+          "draw": "10268147081",
+          "requestId": "u3-deferred-wrong-receipt-1",
+          "scriptHash": "0x28b599a4669199aac98e1377efb28c7d7823dc2a4da7fe8246462c91464bd154",
+          "receipt": {
+            "id": "u3-deferred-wrong-receipt-1",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "a2ac77923dd6fef8c5174d0e1a8fbc57a7e318f4eb5a8793b7c7c364d1d5499c"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        },
+        {
+          "name": "excess-draw",
+          "paymentAmount": "10268147081",
+          "refund": "100",
+          "prefund": "100",
+          "draw": "10268147082",
+          "requestId": "u3-deferred-excess-draw-1",
+          "scriptHash": "0xadcdfb84a7d1edb18669d59c6a64de5438b67689df9d868662e820c8ce5aa4a0",
+          "receipt": {
+            "id": "u3-deferred-excess-draw-1",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "517298ad5c4d04ab8d40ad8fd7b2f2d488026af7725bf11b598c36b6cb6a122d"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        },
+        {
+          "name": "zero-debt",
+          "paymentAmount": "10268147081",
+          "refund": "0",
+          "prefund": "0",
+          "draw": "10268147081",
+          "requestId": "u3-deferred-zero-debt-1",
+          "scriptHash": "0x285a46fb113a325665337592a0dd366839f6eabfccbbc263c26a11d1d9bdeb59",
+          "receipt": {
+            "id": "u3-deferred-zero-debt-1",
+            "provenance": {
+              "kind": "strict-simulation-transport",
+              "fingerprint": "11fc4239ecf1d0d16b4179c1bae4923bdda315ac49bc688a33c3a2e02c71136c"
+            },
+            "source": {
+              "number": 26222895,
+              "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+              "generation": 12
+            },
+            "completion": "reverted-as-declared",
+            "data": "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001572756e74696d652065787465726e616c2063616c6c0000000000000000000000",
+            "tokenDeltas": [],
+            "nativeDeltas": [],
+            "logCount": 0
+          }
+        }
+      ]
+    }
+  ]
+}

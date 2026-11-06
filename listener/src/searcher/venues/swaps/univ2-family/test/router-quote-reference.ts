@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
-import type { AdapterRequest, AdapterRequestResult } from "../../adapter-request-program.js";
-import { decodeAddressResult, requireSuccessfulResult, sameAddress, UNIV2_FACTORY_INTERFACE } from "./codec.js";
-import type { UniV2Descriptor, UniV2Route } from "./types.js";
+import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
+import { decodeAddressResult, requireSuccessfulResult, sameAddress, UNIV2_FACTORY_INTERFACE } from "../codec.js";
+import type { UniV2Descriptor, UniV2Route } from "../types.js";
 
 export const UNIV2_QUOTE_ROUTER_INTERFACE = new ethers.Interface([
   "function factory() view returns (address)",
@@ -44,10 +44,17 @@ export function routerQuoteRequests(
 
 export function decodeRouterQuote(
   descriptor: UniV2Descriptor, amountIn: bigint, expectedAmountOut: bigint,
-  results: readonly AdapterRequestResult[],
+  source: CanonicalSource, results: readonly AdapterRequestResult[],
 ): { readonly router: string; readonly amountOut: bigint } {
   const router = uniV2QuoteRouter(descriptor);
   if (router === null) throw new Error("univ2 missing nominated quote router");
+  if (results.length !== ROUTER_QUOTE_REQUEST_IDS.length || ROUTER_QUOTE_REQUEST_IDS.some(id => results.filter(result => result.id === id).length !== 1)) {
+    throw new Error("ambiguous request set for router quote");
+  }
+  if (results.some(result => result.source.number !== source.number ||
+      result.source.generation !== source.generation || result.source.hash.toLowerCase() !== source.hash.toLowerCase())) {
+    throw new Error("foreign source for router quote");
+  }
   const factory = decodeAddressResult(results, ROUTER_QUOTE_REQUEST_IDS[0], UNIV2_QUOTE_ROUTER_INTERFACE, "factory");
   const pool = decodeAddressResult(results, ROUTER_QUOTE_REQUEST_IDS[1], UNIV2_FACTORY_INTERFACE, "getPair");
   if (!sameAddress(factory, descriptor.factoryBinding.factory) ||

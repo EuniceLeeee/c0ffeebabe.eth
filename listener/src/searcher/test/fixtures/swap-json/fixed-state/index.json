@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "stateScope": "canonical-block-end",
+  "actorCodeAtExecutionBlock": "0x",
+  "actorOnlyCodeOverlay": true,
+  "protocolOverrides": false,
+  "deployment": {
+    "transactionHash": "0x49c7ee5993932790f9fe097accffaaa8102696167106e2ef3023578d46a5840c",
+    "blockNumber": 26357203,
+    "blockHash": "0x30c8c42f4cc53e218625fd007988ce719383478117393ec91db2fbb381f2b7e3",
+    "executor": "0x3A1A0D1F6293D5DEB82CAF420eDe157A538D38c2",
+    "owner": "0xb8578B6de173C8554FF0390dB5a7effA567DDA3c",
+    "runtimeCodeKeccak256": "0xaa678ef6a03701bac0255d4fd9d0ce93f680752776f97dac4ee4415550e1c57b",
+    "artifactSha256": "3653fc23d2376d5815f861b8e862cb2ef9ad9abbe12a92abfbce2f6ba0bb220b"
+  },
+  "cases": [
+    {
+      "case": "fluid-dex--usdc-usdt-gen12.json",
+      "sha256": "219ff2c09cadcd0157b688532f1cf34a2081d763ce4a7bb45bb80d1311a14fec",
+      "instanceKey": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+      "executionSource": {
+        "number": 26222895,
+        "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      },
+      "discoveryReceipt": {
+        "transactionHash": "0xab43d83c61fca1b05857c13e05284a434adae8de99e02eef474f367fa017cfac",
+        "blockNumber": 26222880,
+        "blockHash": "0xe2ab0c238f44852ae57682ea63621f52d4740b6c537e96567909694e61f81aa2",
+        "status": 1,
+        "poolLog": {
+          "address": "0x667701e51b4d1ca244f17c78f7ab8744b4c99f9b",
+          "logIndex": "0xef",
+          "topics": [
+            "0xdc004dbca4ef9c966218431ee5d9133d337ad018dd5b5c5493722803f75c64f7"
+          ],
+          "data": "0x0000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000108872a054000000000000000000000000000000000000000000000000000000108d1d897100000000000000000000000036dcdcef3f7b57ec83b830b75761fd497e4d8edc"
+        },
+        "inputTransfer": {
+          "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "logIndex": "0xeb",
+          "topics": [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x00000000000000000000000036dcdcef3f7b57ec83b830b75761fd497e4d8edc",
+            "0x00000000000000000000000052aa899454998be5b000ad077a46bbe360f4e497"
+          ],
+          "data": "0x000000000000000000000000000000000000000000000000000000108872a054"
+        }
+      },
+      "originalAmountTrial": "usdc-to-usdt-original-input-at-cutoff",
+      "originalAmountOut": "71086999921"
+    },
+    {
+      "case": "fluid-dex--usdc-weth-gen12.json",
+      "sha256": "b438875e6f8c4e2ce5b04b63e6453cb7648f312c06cb11305ba26325e4296fd6",
+      "instanceKey": "0x836951eb21f3df98273517b7249dceff270d34bf",
+      "executionSource": {
+        "number": 26222895,
+        "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      },
+      "discoveryReceipt": {
+        "transactionHash": "0xff2e901fc2fe3433b557c86e3a4c317281b41b53454ca3b02923d7c875ec100d",
+        "blockNumber": 26222884,
+        "blockHash": "0xd73034cd83b26b5cf228b33b83a83c92b70bbfd3cf615bda86e21f744c632459",
+        "status": 1,
+        "poolLog": {
+          "address": "0x836951eb21f3df98273517b7249dceff270d34bf",
+          "logIndex": "0x1d",
+          "topics": [
+            "0xdc004dbca4ef9c966218431ee5d9133d337ad018dd5b5c5493722803f75c64f7"
+          ],
+          "data": "0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000147abbe350000000000000000000000000000000000000000000000001fa82bf684da3b8000000000000000000000000093c30e6e09f698cfea99b09b5166ed90cfaedd17"
+        },
+        "inputTransfer": {
+          "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+          "logIndex": "0x1a",
+          "topics": [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x00000000000000000000000051c72848c68a965f66fa7a88855f9f7784502a7f",
+            "0x00000000000000000000000052aa899454998be5b000ad077a46bbe360f4e497"
+          ],
+          "data": "0x0000000000000000000000000000000000000000000000000000000147abbe35"
+        }
+      },
+      "originalAmountTrial": "usdc-to-weth-original-input-at-cutoff",
+      "originalAmountOut": "2281121549054000000"
+    }
+  ]
+}

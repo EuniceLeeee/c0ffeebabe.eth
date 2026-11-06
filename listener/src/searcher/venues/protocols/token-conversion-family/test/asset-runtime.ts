@@ -5,9 +5,11 @@ import { test } from "node:test";
 import { keccak256, TypedDataEncoder, zeroPadValue } from "ethers";
 import { proveConversionAssetRuntime } from "./reference/asset-runtime.js";
 import { proveLocalAssetRuntime } from "./reference/variants.js";
-import { identity } from "./reference/identity.js";
+import { plugin } from "../../../production-families/token-conversion.production.js";
 import { ABI } from "./reference/variants.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
+
+const { identity } = plugin;
 
 const directory = process.env.TOKEN_CONVERSION_ASSET_EVIDENCE;
 assert(directory, "TOKEN_CONVERSION_ASSET_EVIDENCE must name saved source/compiler evidence");

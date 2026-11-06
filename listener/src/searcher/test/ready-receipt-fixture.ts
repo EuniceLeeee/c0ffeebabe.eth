@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { buildFamilyRouteGraphView } from "../adapter-family-graph-runtime.js";
 import {
-  runUniv2Lifecycle, runUniv3Lifecycle, univ3FixtureRuntime, type UniV3PoolContext,
+  runUniv2Lifecycle, runUniv3Lifecycle, univ3FixtureRuntime, UNIV3_FIXTURE_POOL_CODE, type UniV3PoolContext,
 } from "../architecture-migration-fixture-replay.js";
 import type { CentralAdapterRuntime } from "../adapter-work-intent.js";
 import { StrictProductionRuntimeRoot } from "../strict-production-runtime-session.js";
@@ -40,7 +40,7 @@ export function receiptV3FixtureRuntime(ctx: UniV3PoolContext): CentralAdapterRu
   // Synthetic Solidity-shaped dispatcher with only swap's selector and a
   // reverting fallback. The production classifier derives swapAccess itself;
   // this is fixture evidence, not deployed-code or historical execution proof.
-  const code = "0x608060405234801561001057600080fd5b506004361061002f5760003560e01c8063128acb08146100345761002f565b600080fd5b600080fd";
+  const code = UNIV3_FIXTURE_POOL_CODE;
   return {
     ...runtime,
     scheduler: {

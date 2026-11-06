@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { xwinTokenValue } from "./reference/xwin-math.js";
+import { xwinTokenValue } from "../../../token-conversion-math.js";
 import { XWIN_IMPLEMENTATION_HASH } from "./reference/xwin.js";
 
 // Stored eth_call state, not a conversion/swap execution or production replay.

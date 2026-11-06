@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { AbiCoder, id } from "ethers";
+import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -55,4 +58,45 @@ test("Swap samples cannot forge a pass, borrow old output, or replace route-key 
   changed(index => { complete(index).source.hash = "0x" + "11".repeat(32); }, /equal|assertion/i);
   changed(index => { complete(index).amounts[0].provenance.sha256 = "11".repeat(32); }, /provenance/);
   changed(index => { complete(index).missing.push("current amounts"); }, /missing fields/);
+});
+
+test("Fluid fixed-state inputs keep discovery receipts separate from execution and deployment", () => {
+  const root = join(dirname(swapJsonSamplesPath), "fixed-state");
+  const index = JSON.parse(readFileSync(join(root, "index.json"), "utf8"));
+  assert.equal(index.stateScope, "canonical-block-end");
+  assert.equal(index.actorCodeAtExecutionBlock, "0x");
+  assert.equal(index.actorOnlyCodeOverlay, true);
+  assert.equal(index.protocolOverrides, false);
+  assert.equal(index.cases.length, 2);
+  for (const entry of index.cases) {
+    const bytes = readFileSync(join(root, entry.case));
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), entry.sha256);
+    const sample = parseProtocolJsonAcceptanceCase(JSON.parse(bytes.toString()));
+    assert.equal(sample.transactionHash, undefined);
+    assert.deepEqual(sample.source, entry.executionSource);
+    assert.equal(sample.executor.toLowerCase(), index.deployment.executor.toLowerCase());
+    assert.equal(sample.owner.toLowerCase(), index.deployment.owner.toLowerCase());
+    assert(sample.source.number < index.deployment.blockNumber);
+    const receipt = entry.discoveryReceipt;
+    assert.equal(receipt.status, 1);
+    assert(receipt.blockNumber < sample.source.number);
+    assert.notEqual(receipt.blockHash, sample.source.hash);
+    assert.equal(receipt.poolLog.address.toLowerCase(), sample.instanceKey);
+    const [forward, input, output] = AbiCoder.defaultAbiCoder().decode(
+      ["bool", "uint256", "uint256", "address"], receipt.poolLog.data);
+    assert.equal(forward, true);
+    assert.equal(output.toString(), entry.originalAmountOut);
+    const original = sample.trials.find(trial => trial.id === entry.originalAmountTrial);
+    assert(original);
+    assert.equal(original.tokenIn.toLowerCase(), receipt.inputTransfer.address.toLowerCase());
+    assert.equal(receipt.inputTransfer.topics[0], id("Transfer(address,address,uint256)"));
+    assert.equal(input.toString(), original.amountIn);
+    assert.equal(input, BigInt(receipt.inputTransfer.data));
+    assert.equal(original.expectedAmountOut, undefined, "the earlier output cannot be reused at the cutoff");
+    assert.equal(new Set(sample.trials.map(trial => trial.tokenIn)).size, 2);
+    for (const trial of sample.trials) {
+      assert.deepEqual(trial.requiredSettlement, ["quote-output", "direct-output"]);
+      assert.deepEqual(trial.recipients, [sample.executor, sample.owner]);
+    }
+  }
 });
