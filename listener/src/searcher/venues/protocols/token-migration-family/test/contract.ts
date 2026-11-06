@@ -5,11 +5,11 @@ import test from "node:test";
 import { ethers } from "ethers";
 import { plugin } from "../../../production-families/token-migration.production.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../../../adapter-request-program.js";
-import type { Candidate } from "../types.js";
-import { ABI, ERC20, IMMUTABLES, MAX, calculate, verifyRuntime, resultSet } from "../codec.js";
-import { LOG_ID, TOPIC } from "../discovery.js";
-import { decodeQuote } from "../state.js";
-import { action } from "../action.js";
+import type { Candidate } from "./fixture-types.js";
+import { ABI, ERC20, IMMUTABLES, MAX, calculate, verifyRuntime, resultSet } from "./fixture-codec.js";
+
+import { decodeQuote } from "./fixture-state.js";
+import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
 import type { ResolvedPlanNode } from "../../../../../types.js";
 import { runStrictFamilyLifecycle } from "../../../../strict-family-lifecycle-runner.js";
 import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
@@ -17,9 +17,13 @@ import { StrictProductionRuntimeRoot } from "../../../../strict-production-runti
 import { buildFamilyRouteGraphView } from "../../../../adapter-family-graph-runtime.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { executeFamilyExactQuote } from "../../../adapter-family-runtime.js";
-import { FAMILY } from "../manifest.js";
+import { FAMILY } from "./fixture-manifest.js";
 import { buildEffectiveMids, DEFAULT_EFFECTIVE_WETH_INPUT } from "../../../../blockscan-effective-mid.js";
 import { createVerifiedGraphView } from "../../../blockscan-state-capability.js";
+
+const action = plugin.actionAdapters.find(a => a.id === "token-migration")!;
+const LOG_ID = "token-migration-migrated";
+const TOPIC = ABI.getEvent("TokensMigrated")!.topicHash as `0x${string}`;
 
 // Explicit read-only public evidence input; no RPC, fixtures promoted to chain
 // acceptance, or copies of raw receipts committed to the repository.
@@ -95,7 +99,7 @@ function setup(b = binding, target = TARGET) {
 }
 function quote(s = setup(), amountIn = AMOUNT) {
   const input = { descriptor: s.descriptor, route: s.route, amountIn, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] };
-  const method = plugin.exact.methods(input)[0]; assert(method.kind === "request-program");
+  const method = plugin.exact.methods(input).find(member => member.kind === "request-program"); assert(method?.kind === "request-program");
   const requests = method.program.buildRequests(input), results = requests.map(s.f.answer);
   const result = method.program.decode({ programInput: input, initialResults: results, dependentEvidence: [] });
   return { input, method, requests, results, result };
@@ -154,7 +158,7 @@ test("identity rejects bad token evidence; missing, reverted and mixed-source ev
   const f = fixture();
   const d = identify(f, undefined, r => r.id === "output-code" ? success(r.id, "0x") : f.answer(r));
   assert.equal(d.status, "chain-proven-rejected");
-  assert.throws(() => identify(f, undefined, r => r.id === "code" ? { id: r.id, ok: false, failure: "rpc", source: SOURCE } : f.answer(r)), /unresolved/);
+  assert.throws(() => identify(f, undefined, r => r.id === "code" ? { id: r.id, ok: false, failure: "rpc", source: SOURCE } : f.answer(r)), /required adapter request code failed: rpc/);
   assert.throws(() => identify(f, undefined, r => r.id === "input-code" ? { ...f.answer(r), source: { ...SOURCE, number: SOURCE.number + 1 } } : f.answer(r)), /foreign source/);
   assert.throws(() => identify(f, undefined, r => r.id === "code" ? { ...success(r.id, runtime), completion: "reverted-as-declared" } : f.answer(r)), /did not return/);
   assert.throws(() => identify(f, undefined, r => r.id === "input-decimals" ? success(r.id, w(78n)) : f.answer(r)), /scale/);
@@ -190,7 +194,8 @@ test("chain quoter receives actual amounts, floors exactly, and checks overflow"
   assert.equal(quote(s, 10n ** 18n).result.amountOut, 43750n);
   assert.equal(calculate(11n, 7n, 3n), 25n);
   assert.equal(calculate(MAX / 7n, 7n, 3n), (MAX / 7n * 7n) / 3n);
-  for (const amount of [-1n, 0n, MAX + 1n, MAX]) assert.throws(() => quote(s, amount), /positive|bounds/);
+  for (const amount of [-1n, MAX + 1n, MAX]) assert.throws(() => quote(s, amount), /negative|uint256|bounds/);
+  assert.throws(() => quote(s, 0n), /positive input/);
   assert.throws(() => quote(s, 1n), /zero output/);
 });
 test("halt and finite output inventory are dynamic, recoverable quote constraints", () => {
@@ -205,7 +210,10 @@ test("halt and finite output inventory are dynamic, recoverable quote constraint
 test("pricing is pure; inventory-only and halt changes refresh declared state keys", () => {
   const s = setup();
   const draft = plugin.pricing.compileDraft({ descriptor: s.descriptor, routes: [s.route], stateKey: s.route.instanceKey });
-  const descriptor = plugin.pricing.finalizePricingDescriptor({ draft, staticEvidence: undefined, sharedBindings: [] });
+  const statics = plugin.pricing.staticEvidence!;
+  assert.deepEqual(statics.buildRequests(draft), []);
+  const staticEvidence = statics.decode({ programInput: draft, initialResults: [], dependentEvidence: [] });
+  const descriptor = plugin.pricing.finalizePricingDescriptor({ draft, staticEvidence, sharedBindings: [] });
   const read = () => plugin.pricing.current.decodeSnapshot({ descriptor, initialResults: plugin.pricing.current.buildRequests({ descriptor, source: SOURCE, routes: [s.route] }).map(s.f.answer), dependentEvidence: [] });
   const snapshot = read(); const amounts = s.f.amounts.length;
   const mids = plugin.pricing.current.deriveMids({ descriptor, snapshot, routes: [s.route] });
@@ -224,26 +232,32 @@ test("execution encodes exact approve/pull/reset and no balance-wide migration o
   const built = fragment(); const node = built.fragment.nodes[0] as ResolvedPlanNode;
   assert.equal(built.fragment.nodes.length, 1);
   const bytes = action.encode(node, EXECUTOR, new Uint8Array());
-  const calls: { target: string; data: string }[] = [];
-  for (let pc = 0; pc < bytes.length;) {
-    assert.equal(bytes[pc], 0); const length = bytes[pc + 21] * 65536 + bytes[pc + 22] * 256 + bytes[pc + 23];
-    calls.push({ target: ethers.getAddress(ethers.hexlify(bytes.slice(pc + 1, pc + 21))), data: ethers.hexlify(bytes.slice(pc + 24, pc + 24 + length)) });
-    pc += 24 + length;
-  }
+  assert.equal(bytes[0], 0x0e); assert.equal(BigInt(ethers.hexlify(bytes.slice(1, 33))), AMOUNT);
+  assert.equal(Number(BigInt(ethers.hexlify(bytes.slice(33, 36)))), bytes.length - 36);
+  let paid = false;
+  const trace = inspectRuntime(ethers.hexlify(bytes.slice(36)), AMOUNT, { nativeBalance: () => 0n, call(call) {
+    if (call.static) {
+      assert.equal(ERC20.decodeFunctionData("balanceOf", call.data)[0], EXECUTOR);
+      return w(call.target.toLowerCase() === binding.tokenIn.toLowerCase() ? AMOUNT + 17n - (paid ? AMOUNT : 0n) : 19n + (paid ? OUT : 0n));
+    }
+    if (call.target.toLowerCase() === TARGET.toLowerCase()) { paid = true; return "0x"; }
+    assert.equal(call.target.toLowerCase(), binding.tokenIn.toLowerCase()); return w(1n);
+  } });
+  const calls = trace.calls.filter(call => !call.static);
   assert.deepEqual(calls.map(c => c.target), [binding.tokenIn, binding.tokenIn, TARGET, binding.tokenIn]);
   assert.deepEqual([0, 1, 3].map(i => ERC20.decodeFunctionData("approve", calls[i].data)[1]), [0n, AMOUNT, 0n]);
   assert.equal(calls[2].data, ABI.encodeFunctionData("migrateBIT", [AMOUNT]));
   assert(!action.matchTrace(TARGET, ABI.getFunction("migrateAllBIT")!.selector));
   assert(action.matchTrace(TARGET, ABI.getFunction("migrateBIT")!.selector));
-  assert.throws(() => action.encode({ ...node, amount: 0n }, EXECUTOR, new Uint8Array()), /invalid/);
-  assert.throws(() => action.encode(node, EXECUTOR, new Uint8Array([1])), /invalid/);
+  assert.throws(() => action.encode({ ...node, amount: 0n }, EXECUTOR, new Uint8Array()), /shape/);
+  assert.throws(() => action.encode(node, EXECUTOR, new Uint8Array([1])), /shape/);
 });
 test("execution rejects changed input/output/recipient/binding/min-output evidence", () => {
   const { input } = fragment();
   for (const bad of [{ ...input, amountIn: AMOUNT + 1n }, { ...input, quotedAmountOut: OUT + 1n },
     { ...input, executor: FOREIGN }, { ...input, minAmountOut: OUT + 1n },
     { ...input, exactEvidence: { ...input.exactEvidence, bindingFingerprint: ethers.ZeroHash } }]) {
-    assert.throws(() => plugin.execution.buildFragment(bad), /incompatible/);
+    assert.throws(() => plugin.execution.buildFragment(bad), /evidence mismatch|incompatible exact evidence|invalid quoted/);
   }
 });
 

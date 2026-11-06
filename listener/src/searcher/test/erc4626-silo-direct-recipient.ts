@@ -4,15 +4,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
 import { inspectRuntime } from "./runtime-program-testkit.js";
-import { erc4626SiloRedeemExecution as execution } from "../venues/protocols/erc4626-silo-redeem-family/execution.js";
-import { erc4626SiloRedeemInstance as instance } from "../venues/protocols/erc4626-silo-redeem-family/instance.js";
-import { erc4626SiloRedeemRoutes as routes } from "../venues/protocols/erc4626-silo-redeem-family/routes.js";
-import { ERC4626_SILO_INTERFACE as silo } from "../venues/protocols/erc4626-silo-redeem-family/shared.js";
+import { ERC4626_SILO_INTERFACE as silo } from "../venues/protocols/erc4626-silo-redeem-family/test/fixture-shared.js";
 import { RUNTIME_ERC20 } from "../venues/runtime-execution.js";
 import { RuntimeAmountProgram } from "../../adapters/runtime-amount-program.js";
+import { plugin as erc4626SiloRedeemJsonPlugin } from "../venues/production-families/erc4626-silo-redeem.production.js";
+
+const execution = erc4626SiloRedeemJsonPlugin.execution;
+const instance = erc4626SiloRedeemJsonPlugin.instance;
+const routes = erc4626SiloRedeemJsonPlugin.routes;
+
 const address = (n: number) => ethers.getAddress(ethers.toBeHex(n, 20));
 const actor = address(101), receiver = address(102), vault = address(1), payoutToken = address(2), underlyingAsset = address(3);
-const d = instance.compileDraft({ vault, payoutToken, underlyingAsset, provenance: [] } as any);
+const d = instance.compileDraft({ familyId: erc4626SiloRedeemJsonPlugin.manifest.familyId, lineageId: erc4626SiloRedeemJsonPlugin.manifest.supportedLineages[0], vault, payoutToken, underlyingAsset, provenance: [] } as any);
 const r = routes.project({ descriptor: d })[0];
 const key = (token: string, owner: string) => token.toLowerCase() + ':' + owner.toLowerCase();
 const word = (n: bigint) => ethers.toBeHex(n, 32);
@@ -72,12 +75,21 @@ test("Silo direct rejects zero/under/over debit, false receipt, supply change an
     }}), fault);
   }
 });
-test("Silo rejects unavailable settlement modes/reserved recipients and retains default bytes", () => {
+test("Silo rejects unavailable settlement modes/reserved recipients and retains default redeem call", () => {
   assert.equal(build(receiver, "quote-output"), null);assert.equal(build(receiver, "deferred-input"), null);
   for (const recipient of [ethers.ZeroAddress, vault, payoutToken, underlyingAsset]) assert.throws(() => build(recipient));
-  const old = new RuntimeAmountProgram().call(vault,
-    new ethers.Interface(["function redeem(address,uint256,address,address)"]).encodeFunctionData("redeem", [payoutToken, 0n, actor, actor]),
-    { patches: [{ offset: 36, reg: 0 }] });
-  assert.equal(build()!.program, ethers.hexlify(old.bytes()));
+  const amount = 91n, expected = silo.encodeFunctionData("redeem", [payoutToken, amount, actor, actor]);
+  let withdrew = false;
+  const trace = inspectRuntime(build()!.program, amount, { nativeBalance: () => 37n, call(call) {
+    if (call.data.slice(0, 10) === expected.slice(0, 10)) {
+      assert.equal(call.target.toLowerCase(), vault.toLowerCase()); assert.equal(call.data, expected);
+      withdrew = true; return word(amount + 7n);
+    }
+    const fn = RUNTIME_ERC20.parseTransaction({data: call.data}) ?? silo.parseTransaction({data: call.data})!;
+    if (fn.name === "totalSupply") return word(1000n - (withdrew ? amount : 0n));
+    assert.equal(fn.name, "balanceOf"); assert.equal(fn.args[0], actor); assert(call.static);
+    return word(call.target.toLowerCase() === vault.toLowerCase() ? 200n - (withdrew ? amount : 0n) : 103n + (withdrew ? amount + 7n : 0n));
+  } });
+  assert.equal(trace.calls.filter(call => !call.static).length, 1);
   assert.equal(build()!.settlement?.directOutput, true, "default probe advertises the implemented direct mode");
 });

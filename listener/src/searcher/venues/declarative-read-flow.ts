@@ -11,6 +11,7 @@ export interface DeclarativeReadFlow {
   readonly version: 1;
   readonly steps: readonly {
     readonly id: string;
+    readonly when?: Value;
     readonly requirements: Value;
     readonly requests: Value;
     readonly decode?: readonly Value[];
@@ -55,7 +56,11 @@ export function validateDeclarativeReadFlow(raw: unknown): asserts raw is Declar
   const seen = new Set<string>();
   for (const step of raw.steps) {
     const hasDecode = Object.hasOwn(step, "decode");
-    keys(step, ["id", "requirements", "requests", hasDecode ? "decode" : "result"], "read-flow step");
+    keys(step, ["id", "requirements", "requests", hasDecode ? "decode" : "result", ...(Object.hasOwn(step, "when") ? ["when"] : [])], "read-flow step");
+    if (step.when !== undefined) {
+      if (!seen.size) throw new Error("the initial read-flow step must be unconditional");
+      references(step.when, new Set()); // Selection depends only on this invocation, before any evidence is acquired.
+    }
     if (typeof step.id !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*$/.test(step.id) || forbidden.has(step.id) || seen.has(step.id))
       throw new Error("invalid or duplicate read-flow step id");
     references(step.requirements, seen); references(step.requests, seen); references(hasDecode ? step.decode : step.result, seen);
@@ -91,9 +96,19 @@ export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues,
     });
     return { ...input, steps: checked, results };
   };
-  function requestsAt(index: number, input: ReadFlowInput, steps: Record<string, Value>, seen: ReadonlySet<string>) {
+  const conditional = definition.steps.some(step => step.when !== undefined);
+  function invocationSteps(input: ReadFlowInput) {
+    if (!conditional) return definition.steps;
+    return definition.steps.filter(step => {
+      if (step.when === undefined) return true;
+      const enabled = values.evaluate(step.when, env(input, {}));
+      if (typeof enabled !== "boolean") throw new Error("read-flow step condition must be boolean");
+      return enabled;
+    });
+  }
+  function requestsAt(step: (typeof definition.steps)[number], input: ReadFlowInput, steps: Record<string, Value>, seen: ReadonlySet<string>) {
     const environment = env(input, steps);
-    const declared = values.evaluate(definition.steps[index]!.requests, environment);
+    const declared = values.evaluate(step.requests, environment);
     const requests = materializeRequests ? materializeRequests(declared, environment) : declared;
     if (!Array.isArray(requests) || requests.some(request => !request || typeof request !== "object" ||
       typeof request.id !== "string" || !request.id.length || seen.has(request.id)) ||
@@ -101,7 +116,7 @@ export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues,
       throw new Error("invalid or duplicate read-flow request ids");
     return freeze(requests) as readonly AdapterRequest[];
   }
-  function decodeAt(index: number, input: ReadFlowInput, steps: Record<string, Value>,
+  function decodeAt(step: (typeof definition.steps)[number], input: ReadFlowInput, steps: Record<string, Value>,
     requests: readonly AdapterRequest[], results: readonly AdapterRequestResult[]): Value {
     if (!Array.isArray(results) || results.length !== requests.length || new Set(results.map(result => result.id)).size !== results.length ||
       results.some(result => !requests.some(request => request.id === result.id)))
@@ -112,17 +127,18 @@ export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues,
       if (!result.ok && requests.find(request => request.id === result.id)!.required !== false)
         throw new RequiredAdapterRequestError(result);
     }
-    const output = values.run(definition.steps[index]!.decode, { ...env(input, steps, results), requests });
+    const output = values.run(step.decode, { ...env(input, steps, results), requests });
     if (output === undefined) throw new Error("read-flow step returned undefined");
     return freeze(output);
   }
   function reconstruct(input: ReadFlowInput, initialResults: readonly AdapterRequestResult[], prior: readonly unknown[]) {
     source(input.source);
-    if (prior.length >= definition.steps.length) throw new Error("too many read-flow rounds");
+    const active = invocationSteps(input);
+    if (prior.length >= active.length) throw new Error("too many read-flow rounds");
     const steps: Record<string, Value> = {}, seen = new Set<string>();
     const evidence: { stepId: string; request: AdapterRequest; result: AdapterRequestResult }[] = [];
     for (let index = 0; index <= prior.length; index++) {
-      const step = definition.steps[index]!;
+      const step = active[index]!;
       let results = initialResults;
       if (index > 0) {
         const evidence = prior[index - 1];
@@ -130,40 +146,40 @@ export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues,
         if (evidence.stepId !== step.id || !Array.isArray(evidence.results)) throw new Error("read-flow round order mismatch");
         results = evidence.results;
       }
-      const requests = requestsAt(index, input, steps, seen);
-      steps[step.id] = decodeAt(index, input, steps, requests, results);
+      const requests = requestsAt(step, input, steps, seen);
+      steps[step.id] = decodeAt(step, input, steps, requests, results);
       requests.forEach(request => {
         seen.add(request.id);
         evidence.push({ stepId: step.id, request, result: results.find(result => result.id === request.id)! });
       });
     }
-    return { steps, seen, evidence };
+    return { steps, seen, evidence, active };
   }
-  function bound(index: number, input: ReadFlowInput, steps: Record<string, Value>, seen: ReadonlySet<string>): BoundRequestProgram<ReadFlowRoundEvidence> {
+  function bound(step: (typeof definition.steps)[number], input: ReadFlowInput, steps: Record<string, Value>, seen: ReadonlySet<string>): BoundRequestProgram<ReadFlowRoundEvidence> {
     const scoped = { ...input, source: source(input.source) };
-    const requests = requestsAt(index, scoped, steps, seen);
-    const requirements = values.evaluate(definition.steps[index]!.requirements, env(scoped, steps));
+    const requests = requestsAt(step, scoped, steps, seen);
+    const requirements = values.evaluate(step.requirements, env(scoped, steps));
     if (!requirements || typeof requirements !== "object" || Array.isArray(requirements)) throw new Error("invalid read-flow requirements");
     return Object.freeze({
       requirements: freeze(requirements) as RequestRequirements, requests,
       decode(results: readonly AdapterRequestResult[]) {
-        decodeAt(index, scoped, steps, requests, results);
-        return freeze({ stepId: definition.steps[index]!.id, results: [...results] });
+        decodeAt(step, scoped, steps, requests, results);
+        return freeze({ stepId: step.id, results: [...results] });
       },
     });
   }
   const program = Object.freeze<DependentRequestProgram<ReadFlowInput, unknown>>({
-    requirements: (input: ReadFlowInput) => bound(0, input, {}, new Set()).requirements,
-    buildRequests: (input: ReadFlowInput) => bound(0, input, {}, new Set()).requests,
+    requirements: (input: ReadFlowInput) => bound(definition.steps[0]!, input, {}, new Set()).requirements,
+    buildRequests: (input: ReadFlowInput) => bound(definition.steps[0]!, input, {}, new Set()).requests,
     buildDependentProgram({ programInput, completedRound, initialResults, priorEvidence }) {
       if (!Number.isSafeInteger(completedRound) || completedRound < 0 || completedRound !== priorEvidence.length)
         throw new Error("read-flow completed round mismatch");
-      const { steps, seen } = reconstruct(programInput, initialResults, priorEvidence);
+      const { steps, seen, active } = reconstruct(programInput, initialResults, priorEvidence);
       const next = completedRound + 1;
-      return next === definition.steps.length ? null : bound(next, programInput, steps, seen);
+      return next === active.length ? null : bound(active[next]!, programInput, steps, seen);
     },
     decode({ programInput, initialResults, dependentEvidence }) {
-      if (dependentEvidence.length !== definition.steps.length - 1) throw new Error("read-flow is incomplete");
+      if (dependentEvidence.length !== invocationSteps(programInput).length - 1) throw new Error("read-flow is incomplete");
       const { steps } = reconstruct(programInput, initialResults, dependentEvidence);
       const output = values.evaluate(definition.result, env(programInput, steps));
       if (output === undefined) throw new Error("read-flow result is undefined");
@@ -171,19 +187,19 @@ export function compileDeclarativeReadFlow(raw: unknown, values: ReadFlowValues,
     },
   });
   return Object.freeze({ program,
-    start: (input: ReadFlowInput) => bound(0, input, {}, new Set()),
+    start: (input: ReadFlowInput) => bound(definition.steps[0]!, input, {}, new Set()),
     stepIds: Object.freeze(definition.steps.map(step => step.id)),
     completedEnvironment(input: ReadFlowInput, initial: readonly AdapterRequestResult[], dependent: readonly unknown[]) {
-      if (dependent.length !== definition.steps.length - 1) throw new Error("read-flow is incomplete");
+      if (dependent.length !== invocationSteps(input).length - 1) throw new Error("read-flow is incomplete");
       const { steps } = reconstruct(input, initial, dependent);
       return env(input, steps, initial);
     },
     observedResults(input: ReadFlowInput, initial: readonly AdapterRequestResult[], dependent: readonly unknown[]) {
-      if (dependent.length !== definition.steps.length - 1) throw new Error("read-flow is incomplete");
+      if (dependent.length !== invocationSteps(input).length - 1) throw new Error("read-flow is incomplete");
       return freeze(reconstruct(input, initial, dependent).evidence.map(item => item.result));
     },
     requestEvidence(input: ReadFlowInput, initial: readonly AdapterRequestResult[], dependent: readonly unknown[], stepId: string, requestId: string) {
-      if (dependent.length !== definition.steps.length - 1) throw new Error("read-flow is incomplete");
+      if (dependent.length !== invocationSteps(input).length - 1) throw new Error("read-flow is incomplete");
       const found = reconstruct(input, initial, dependent).evidence.find(item => item.stepId === stepId && item.request.id === requestId);
       if (!found) throw new Error("read-flow proof request is missing");
       return freeze({ request: found.request, result: found.result });

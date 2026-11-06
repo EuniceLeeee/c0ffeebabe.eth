@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { applyQuotedAssetBoundary } from "../execution-asset-boundary.js";
+import { inspectRuntime } from "./runtime-program-testkit.js";
 import { ethers } from "ethers";
 import { METRONOME_HGUSDC_PATH } from "../../adapters/metronome-hgusdc.js";
 import { ADDR } from "../../shared/constants/addresses.js";
@@ -12,65 +14,36 @@ import { executeAdapterWork } from "../adapter-work-intent.js";
 import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
 import { createRevmStrictSimulationTransport } from "../revm-strict-simulation-transport.js";
 import type { DaemonResponse, StrictSimulateRequest } from "../revm-sim-client.js";
-import {
-  erc4626SiloRedeemStrictFamilyPlugin,
-  type Erc4626SiloRedeemIdentity,
-} from "../venues/protocols/erc4626-silo-redeem-family-plugin.js";
+import type { Erc4626SiloRedeemIdentity } from "../venues/protocols/erc4626-silo-redeem-family/test/fixture-types.js";
 import {
   ERC4626_SILO_INTERFACE,
   ERC4626_SILO_PAYOUT_INTERFACE,
   erc4626SiloRedeemSimulation,
   validateErc4626SiloRedeemEffects,
-} from "../venues/protocols/erc4626-silo-redeem-family/shared.js";
-import { erc4626SiloRedeemExact } from "../venues/protocols/erc4626-silo-redeem-family/exact.js";
-import {
-  ERC4626_SILO_REDEEM_FAMILY_ID,
-  ERC4626_SILO_REDEEM_LINEAGE_ID,
-} from "../venues/protocols/erc4626-silo-redeem-family/manifest.js";
-import {
-  etherTokenNativeRedeemStrictFamilyPlugin,
-  type EtherTokenNativeRedeemIdentity,
-} from "../venues/protocols/ethertoken-native-redeem-family-plugin.js";
+} from "../venues/protocols/erc4626-silo-redeem-family/test/fixture-shared.js";
+import { ERC4626_SILO_REDEEM_FAMILY_ID, ERC4626_SILO_REDEEM_LINEAGE_ID } from "../venues/protocols/erc4626-silo-redeem-family/test/fixture-manifest.js";
+import type { EtherTokenNativeRedeemIdentity } from "../venues/protocols/ethertoken-native-redeem-family/types.js";
 import {
   ETHERTOKEN_NATIVE_INTERFACE,
   etherTokenWithdrawalSimulation,
   validateEtherTokenWithdrawal,
 } from "../venues/protocols/ethertoken-native-redeem-family/shared.js";
-import { etherTokenNativeRedeemExact } from "../venues/protocols/ethertoken-native-redeem-family/exact.js";
-import {
-  ETHERTOKEN_NATIVE_FAMILY_ID,
-  ETHERTOKEN_NATIVE_LINEAGE_ID,
-} from "../venues/protocols/ethertoken-native-redeem-family/manifest.js";
-import {
-  metronomeHgUsdcStrictFamilyPlugin,
-  type MetronomeHgUsdcIdentity,
-} from "../venues/protocols/metronome-hgusdc-family-plugin.js";
+import { ETHERTOKEN_NATIVE_FAMILY_ID, ETHERTOKEN_NATIVE_LINEAGE_ID } from "../venues/protocols/ethertoken-native-redeem-family/manifest.js";
+import type { MetronomeHgUsdcIdentity } from "../venues/protocols/metronome-hgusdc-family/test/fixture-types.js";
 import {
   METRONOME_HGUSDC_CURVE_INTERFACE,
   METRONOME_HGUSDC_ROUTER_INTERFACE,
   METRONOME_HGUSDC_VAULT_INTERFACE,
-} from "../venues/protocols/metronome-hgusdc-family/shared.js";
-import {
-  METRONOME_HGUSDC_FAMILY_ID,
-  METRONOME_HGUSDC_LINEAGE_ID,
-} from "../venues/protocols/metronome-hgusdc-family/manifest.js";
-import {
-  metronomeSynthStrictFamilyPlugin,
-  type MetronomeSynthIdentity,
-} from "../venues/protocols/metronome-synth-family-plugin.js";
+} from "../venues/protocols/metronome-hgusdc-family/test/fixture-shared.js";
+import { METRONOME_HGUSDC_FAMILY_ID, METRONOME_HGUSDC_LINEAGE_ID } from "../venues/protocols/metronome-hgusdc-family/test/fixture-manifest.js";
+import type { MetronomeSynthIdentity } from "../venues/protocols/metronome-synth-family/test/fixture-types.js";
 import {
   METRONOME_SYNTH_FORWARDER_INTERFACE,
   METRONOME_SYNTH_ORACLE_BINDING,
   METRONOME_SYNTH_POOL_INTERFACE,
-} from "../venues/protocols/metronome-synth-family/shared.js";
-import {
-  METRONOME_SYNTH_FAMILY_ID,
-  METRONOME_SYNTH_LINEAGE_ID,
-} from "../venues/protocols/metronome-synth-family/manifest.js";
-import {
-  selfBurnNativeStrictFamilyPlugin,
-  type SelfBurnNativeIdentity,
-} from "../venues/protocols/self-burn-native-family-plugin.js";
+} from "../venues/protocols/metronome-synth-family/test/fixture-shared.js";
+import { METRONOME_SYNTH_FAMILY_ID, METRONOME_SYNTH_LINEAGE_ID } from "../venues/protocols/metronome-synth-family/test/fixture-manifest.js";
+import type { SelfBurnNativeIdentity } from "../venues/protocols/self-burn-native-family/types.js";
 import {
   SELF_BURN_NATIVE_TOKEN_INTERFACE,
   SELF_BURN_NATIVE_PRICING_ACTOR,
@@ -78,13 +51,24 @@ import {
   selfBurnNativeSimulation,
   validateSelfBurnNativeEffects,
 } from "../venues/protocols/self-burn-native-family/shared.js";
-import { selfBurnNativeExact } from "../venues/protocols/self-burn-native-family/exact.js";
-import { selfBurnNativePricing } from "../venues/protocols/self-burn-native-family/pricing.js";
 import { assertSource, returnedResult } from "../venues/protocols/standard-family/common.js";
-import {
-  SELF_BURN_NATIVE_FAMILY_ID,
-  SELF_BURN_NATIVE_LINEAGE_ID,
-} from "../venues/protocols/self-burn-native-family/manifest.js";
+import { SELF_BURN_NATIVE_FAMILY_ID, SELF_BURN_NATIVE_LINEAGE_ID } from "../venues/protocols/self-burn-native-family/manifest.js";
+import { plugin as erc4626SiloRedeemJsonPlugin } from "../venues/production-families/erc4626-silo-redeem.production.js";
+import { plugin as etherTokenNativeRedeemJsonPlugin } from "../venues/production-families/ethertoken-native-redeem.production.js";
+import { plugin as metronomeHgUsdcJsonPlugin } from "../venues/production-families/metronome-hgusdc.production.js";
+import { plugin as metronomeSynthJsonPlugin } from "../venues/production-families/metronome-synth.production.js";
+import { plugin as selfBurnNativeJsonPlugin } from "../venues/production-families/self-burn-native.production.js";
+
+const erc4626SiloRedeemStrictFamilyPlugin = erc4626SiloRedeemJsonPlugin;
+const erc4626SiloRedeemExact = erc4626SiloRedeemJsonPlugin.exact;
+const etherTokenNativeRedeemStrictFamilyPlugin = etherTokenNativeRedeemJsonPlugin;
+const etherTokenNativeRedeemExact = etherTokenNativeRedeemJsonPlugin.exact;
+const metronomeHgUsdcStrictFamilyPlugin = metronomeHgUsdcJsonPlugin;
+const metronomeSynthStrictFamilyPlugin = metronomeSynthJsonPlugin;
+const selfBurnNativeStrictFamilyPlugin = selfBurnNativeJsonPlugin;
+const selfBurnNativeExact = selfBurnNativeJsonPlugin.exact;
+const selfBurnNativePricing = selfBurnNativeJsonPlugin.pricing;
+
 
 const source: CanonicalSource = Object.freeze({
   number: 21_000_000,
@@ -266,15 +250,8 @@ function verifyMetronomeHgUsdcDependentExact(): void {
     dependent[0].kind === "eth-call" ? dependent[0].data : "0x",
   );
   assert.equal(BigInt(previewArgs[0]), curveOut);
-  assert.deepEqual(
-    program.buildDependentProgram!({
-      programInput,
-      completedRound: 1,
-      initialResults: [initialResult],
-      priorEvidence: [],
-    }),
-    null,
-  );
+  assert.throws(() => program.buildDependentProgram!({ programInput, completedRound: 1,
+    initialResults: [initialResult], priorEvidence: [] }), /round mismatch/);
   const amountOut = 765n;
   const dependentResult = ok(
     "exact-vault-preview",
@@ -283,6 +260,8 @@ function verifyMetronomeHgUsdcDependentExact(): void {
       [amountOut],
     ),
   );
+  assert.equal(program.buildDependentProgram!({ programInput, completedRound: 1, initialResults: [initialResult],
+    priorEvidence: [dependentProgram.decode([dependentResult])] }), null);
   const decoded = program.decode({
     programInput,
     initialResults: [initialResult],
@@ -300,12 +279,32 @@ function verifyMetronomeHgUsdcDependentExact(): void {
     executor: actor,
     runtimeEvidence: [],
   });
-  assert.deepEqual(fragment.requirements, [{
-    kind: "transfer-to-pool",
-    token: ethers.getAddress(ADDR.MSUSD),
-    pool: ethers.getAddress(ADDR.CURVE_MSUSD_FRXUSD),
-    amount: 1_000n,
-  }]);
+  assert.deepEqual(fragment.requirements, [], "the transfer is included in the Family-executed program");
+  const token = new ethers.Interface(["function balanceOf(address) view returns(uint256)", "function transfer(address,uint256) returns(bool)"]);
+  const paidTo: string[] = [];
+  let spent = 0n, received = 0n;
+  inspectRuntime(String(fragment.nodes[0].params.runtimeAmountProgram), programInput.amountIn, {
+    nativeBalance: () => 0n,
+    call(call) {
+      if (call.static) {
+        assert.equal(token.decodeFunctionData("balanceOf", call.data)[0], actor);
+        const balance = call.target.toLowerCase() === route.tokenIn.toLowerCase() ? 1001n - spent : 2n + received;
+        return ethers.toBeHex(balance, 32);
+      }
+      paidTo.push(call.target.toLowerCase());
+      if (call.target.toLowerCase() === ADDR.MSUSD.toLowerCase()) {
+        const [pool, raw] = token.decodeFunctionData("transfer", call.data);
+        assert.equal(pool, ethers.getAddress(ADDR.CURVE_MSUSD_FRXUSD));
+        assert.equal(raw, 1000n); spent = raw; return ethers.toBeHex(1n, 32);
+      }
+      assert.equal(call.target.toLowerCase(), router.toLowerCase());
+      const [path, amounts, recipient] = METRONOME_HGUSDC_ROUTER_INTERFACE.decodeFunctionData("executePath", call.data);
+      assert.equal(path, METRONOME_HGUSDC_PATH); assert.deepEqual([...amounts], [spent]); assert.equal(recipient, ethers.ZeroAddress);
+      received = amountOut; return "0x";
+    },
+  });
+  assert.deepEqual(paidTo, [ADDR.MSUSD.toLowerCase(), router.toLowerCase()]);
+
 }
 
 async function verifySelfBurnNativeFeeQuote(): Promise<void> {
@@ -354,8 +353,10 @@ async function verifySelfBurnNativeFeeQuote(): Promise<void> {
     if (expected > 0n) {
       const build = { descriptor, route, amountIn, quotedAmountOut: expected, minAmountOut: expected,
         exactEvidence: quote.evidence, executor: actor, runtimeEvidence: [] };
-      assert.deepEqual(selfBurnNativeStrictFamilyPlugin.execution.buildFragment(build).nodes.map(n => [n.adapterId, n.amount]),
-        [["self-burn-native-redeem", amountIn], ["weth-deposit-value", expected]]);
+      const fragment = selfBurnNativeStrictFamilyPlugin.execution.buildFragment(build);
+      const wrapped = applyQuotedAssetBoundary({ route, executor: actor, amountIn, minimum: expected, fragment }).nodes[0];
+      assert.equal(wrapped.params.nativeOutput, true); assert.equal(wrapped.params.minAmountOut, expected);
+      assert.equal(wrapped.tokenOut, ADDR.WETH); assert.deepEqual(wrapped.children.map(n => [n.adapterId, n.amount]), [["self-burn-native-redeem", amountIn]]);
       for (const exactEvidence of [{ ...quote.evidence, amountIn: amountIn + 1n },
         { ...quote.evidence, amountOut: expected + 1n }, { ...quote.evidence, token: tokenB },
         { ...quote.evidence, executor: router }, { ...quote.evidence, bindingFingerprint: "wrong" },
@@ -720,9 +721,9 @@ async function verifyEtherTokenNativeEffects(): Promise<void> {
     const executionInput = { descriptor, route, amountIn, quotedAmountOut: amountIn,
       minAmountOut: amountIn, exactEvidence: quote.evidence, executor: actor, runtimeEvidence: [] };
     const fragment = etherTokenNativeRedeemStrictFamilyPlugin.execution.buildFragment(executionInput);
-    assert.deepEqual(fragment.nodes.map(node => [node.adapterId, node.target, node.amount]), [
-      ["ethertoken-native-redeem", tokenB, amountIn], ["weth-deposit-value", ADDR.WETH, amountIn],
-    ]);
+    const wrapped = applyQuotedAssetBoundary({ route, executor: actor, amountIn, minimum: amountIn, fragment }).nodes[0];
+    assert.equal(wrapped.params.nativeOutput, true); assert.equal(wrapped.params.minAmountOut, amountIn);
+    assert.equal(wrapped.tokenOut, ADDR.WETH); assert.deepEqual(wrapped.children.map(n => [n.adapterId, n.target, n.amount]), [["ethertoken-native-redeem", tokenB, amountIn]]);
     for (const exactEvidence of [
       { ...quote.evidence, amountIn: amountIn + 1n }, { ...quote.evidence, amountOut: amountIn + 1n },
       { ...quote.evidence, token: tokenC }, { ...quote.evidence, executor: router },
@@ -1020,10 +1021,10 @@ async function verifySiloDependentCurrentAndEffects(): Promise<void> {
       assert.throws(() => decodeQuote(previewResult, { ...payoutResult, ...patch }));
     }
     assert.throws(() => decodeQuote({ ...previewResult,
-      data: ERC4626_SILO_INTERFACE.encodeFunctionResult("previewRedeem", [0n]) }), /no output/);
+      data: ERC4626_SILO_INTERFACE.encodeFunctionResult("previewRedeem", [0n]) }), /no assets/);
     assert.throws(() => decodeQuote(previewResult, { ...payoutResult,
       data: ERC4626_SILO_PAYOUT_INTERFACE.encodeFunctionResult("previewWithdraw", [0n]) }), /no output/);
-    assert.throws(() => program.decode({ programInput: input, initialResults: [previewResult], dependentEvidence: [] }), /missing/);
+    assert.throws(() => program.decode({ programInput: input, initialResults: [previewResult], dependentEvidence: [] }), /read-flow is incomplete/);
 
     // Identity still proves the preview model against an actual redemption.
     const effects: ObservedEffects = {
@@ -1052,7 +1053,7 @@ async function verifySiloDependentCurrentAndEffects(): Promise<void> {
     assert.throws(() => decode({ ...result, completion: "reverted-as-declared" }), /did not return/);
     assert.throws(() => decode({ ...result, data: "0x" }));
     assert.throws(() => decode({ ...result, data: ERC4626_SILO_INTERFACE.encodeFunctionResult("redeem", [0n]) }), /effect invariants/);
-    assert.throws(() => program.decode({ programInput: input, initialResults: [], dependentEvidence: [] }), /missing/);
+    assert.throws(() => program.decode({ programInput: input, initialResults: [], dependentEvidence: [] }), /read-flow is incomplete/);
   }
   // Identity's simulation builder must retain the
   // supplied symbolic authority rather than freeze the probe's address into it.
@@ -1070,7 +1071,7 @@ async function verifySiloDependentCurrentAndEffects(): Promise<void> {
   const local = erc4626SiloRedeemExact.methods()[0]; assert(local.kind === "local");
   assert.equal(local.quote(zero).status, "quoted"); assert.equal(local.quote(exactInput).status, "not-applicable");
   assert.throws(() => program.buildRequests({ ...exactInput, amountIn: -1n }), /negative/);
-  assert.throws(() => program.buildRequests({ ...exactInput, route: { ...route, tokenOut: tokenC } }), /incompatible/);
+  assert.throws(() => program.buildRequests({ ...exactInput, route: { ...route, tokenOut: tokenC } }), /route binding mismatch/);
 
   // Identity's active behavior proof still uses the approved typed transport:
   // no RPC or child, and no construction-time/per-protocol caller inference.

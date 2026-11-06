@@ -4519,6 +4519,14 @@ export function reissuePreparedInstanceRouteHandles(input: {
 }): PreparedFamilyInstance {
   assertIssuedLoadedFamilyBox(input.family);
   assertSource(input.source, input.generation);
+  if (
+    input.instance.familyId !== input.family.plugin.manifest.familyId ||
+    input.instance.descriptor.familyId !== input.family.plugin.manifest.familyId ||
+    input.instance.instanceKey !== input.instance.descriptor.instanceKey ||
+    input.instance.lineageId !== input.instance.descriptor.lineageId
+  ) {
+    throw new Error("Prepared Family instance escaped its catalog FamilyBox");
+  }
   // Build one fresh object and issue every handle against that exact object.
   // Returning a spread clone after issuance would leave the WeakMap records
   // bound to a different instance and exact/execution would reject it.

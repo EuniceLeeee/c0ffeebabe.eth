@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { performance } from "node:perf_hooks";
 import { ethers } from "ethers";
-import { createUniV2Exact } from "../venues/swaps/univ2-family/exact.js";
-import { univ2Routes } from "../venues/swaps/univ2-family/routes.js";
+import { plugin } from "../venues/production-families/univ2-standard.production.js";
+import { identifyTokenTransferModel } from "../venues/token-transfer-semantics/index.js";
 import { UNIV2_PAIR_INTERFACE, UNIV2_TOKEN_INTERFACE } from "../venues/swaps/univ2-family/codec.js";
 import { UNIV2_MAX_RESERVE } from "../venues/swaps/univ2-family/reserve-capacity.js";
 import { quoteV2ExactInput } from "../solver/v2-constant-product-math.js";
@@ -14,14 +14,15 @@ import { trialView } from "../venues/local-state-models/test/trial-view.js";
 import { applyExactTrialState, emptyExactTrialState } from "../exact-trial-state.js";
 
 const addr = (n: number) => ethers.toBeHex(n, 20);
-const descriptor = { familyId: "univ2-standard", lineageId: "univ2-standard", instanceKey: addr(3),
+const descriptor = { familyId: "univ2-standard", lineageId: "univ2:factory-child", instanceKey: addr(3),
   pool: addr(3), token0: addr(1), token1: addr(2), quoteModel: { kind: "constant-product" },
   feeRule: { kind: "constant-bps", feeBps: 30n, evidence: "standard-v2-default" },
+  tokenTransfers:[identifyTokenTransferModel(addr(1),"0x6000"),identifyTokenTransferModel(addr(2),"0x6000")], runtimeRequirements:[], provenance:[],
   factoryBinding: { factory: addr(4), reversePool: addr(3) },
 } as UniV2Descriptor;
 const source = { number: 10, hash: ethers.toBeHex(10, 32), generation: 1 };
-const [forward, reverse] = univ2Routes.project({ descriptor });
-const exact = createUniV2Exact();
+const [forward, reverse] = plugin.routes!.project({ descriptor });
+const exact = plugin.exact!;
 function input(amountIn: bigint, route = forward!, retain = true): ExactQuoteInput<UniV2Descriptor, UniV2Route> {
   return { descriptor, route, amountIn, source, executor: addr(5), runtimeEvidence: [],
     ...(retain ? { trialState: trialView() } : {}) };
@@ -86,12 +87,12 @@ test("V2 unsynced donations enter both reserves, overflow and deficits fail clos
 test("ordinary reads unchanged; unsupported amount models and taxed transfers do not opt in", () => {
   assert.equal(method(input(1_000n, forward!, false)).program.buildRequests(input(1_000n, forward!, false)).length, 2);
   assert.equal(method(input(1_000n)).program.buildRequests(input(1_000n)).length, 3);
-  const poolQuoted = { ...descriptor, quoteModel: { kind: "pool-get-amount-out", probe0: 1n, probe1: 1n } } as UniV2Descriptor;
-  assert.equal(method({ ...input(1_000n), descriptor: poolQuoted }).trialState, undefined);
+  const poolQuoted = { ...descriptor, feeRule:{kind:"included-in-pool-quote",feeBps:0n,evidence:"pool-get-amount-out"}, quoteModel: { kind: "pool-get-amount-out", probe0: 1n, probe1: 1n } } as UniV2Descriptor;
+  assert.equal(method({ ...input(1_000n), descriptor: poolQuoted, route:plugin.routes!.project({descriptor:poolQuoted})[0]! }).trialState, undefined);
   const taxed = { ...descriptor, tokenTransfers: [{ kind: "verified-transfer-tax", token: addr(1), codeHash: "tax",
     taxNumerator: 100n, taxDenominator: 10_000n }] } as unknown as UniV2Descriptor;
-  assert.deepEqual(method({ ...input(1_000n), descriptor: taxed }).trialState,
-    { unsupportedReason: "univ2 local fee or token-transfer transition model is unproven" });
+  assert.deepEqual(method({ ...input(1_000n), descriptor: taxed, route:plugin.routes!.project({descriptor:taxed})[0]! }).trialState,
+    { unsupportedReason: "univ2 transfer-tax or non-local quote model has no sequential trial state" });
 });
 
 test("warm local V2 transition same-work timing (descriptive, no RPC)", () => {

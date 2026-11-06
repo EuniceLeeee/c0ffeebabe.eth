@@ -1,17 +1,30 @@
+import { plugin as eigenpieProductionPlugin } from "../venues/production-families/eigenpie.production.js";
+import { plugin as astraMultiTokenProductionPlugin } from "../venues/production-families/astra-multitoken.production.js";
 import assert from "node:assert/strict";
 import type { MutationPricingEntry, MutationSemantics, UnifiedObservation } from "../venues/adapter-family-plugin.js";
-import { astraMultiTokenPricing } from "../venues/protocols/astra-multitoken-family/pricing.js";
-import { ASTRA_MULTITOKEN_CHANGE_TOPIC } from "../venues/protocols/astra-multitoken-family/codec.js";
-import { eigenpiePricing } from "../venues/protocols/eigenpie-family/pricing.js";
-import { erc4626SiloRedeemPricing } from "../venues/protocols/erc4626-silo-redeem-family/pricing.js";
-import { etherTokenNativeRedeemPricing } from "../venues/protocols/ethertoken-native-redeem-family/pricing.js";
-import { metronomeHgUsdcPricing } from "../venues/protocols/metronome-hgusdc-family/pricing.js";
-import { metronomeSynthPricing } from "../venues/protocols/metronome-synth-family/pricing.js";
-import { selfBurnNativePricing } from "../venues/protocols/self-burn-native-family/pricing.js";
-import { ellaPricing } from "../venues/swaps/ella-exchange-family/pricing.js";
+
+import { ASTRA_MULTITOKEN_CHANGE_TOPIC } from "./fixtures/protocol-json/astra-multitoken-fixture.js";
+
+import { plugin as ellaPlugin } from "../venues/production-families/ella-exchange.production.js";
 import { curvePlainPricing } from "../venues/swaps/curve-plain-family/pricing.js";
 import { univ4FeeHookPricing } from "../venues/swaps/univ4-fee-hook-family/pricing.js";
 import { UNIV4_SWAP_TOPIC, UNIV4_INITIALIZE_TOPIC, UNIV4_MODIFY_LIQUIDITY_TOPIC } from "../venues/swaps/univ4-abi.js";
+import { plugin as erc4626SiloRedeemJsonPlugin } from "../venues/production-families/erc4626-silo-redeem.production.js";
+import { plugin as etherTokenNativeRedeemJsonPlugin } from "../venues/production-families/ethertoken-native-redeem.production.js";
+import { plugin as metronomeHgUsdcJsonPlugin } from "../venues/production-families/metronome-hgusdc.production.js";
+import { plugin as metronomeSynthJsonPlugin } from "../venues/production-families/metronome-synth.production.js";
+import { plugin as selfBurnNativeJsonPlugin } from "../venues/production-families/self-burn-native.production.js";
+
+const eigenpiePricing = eigenpieProductionPlugin.pricing;
+
+const astraMultiTokenPricing = astraMultiTokenProductionPlugin.pricing;
+
+const erc4626SiloRedeemPricing = erc4626SiloRedeemJsonPlugin.pricing;
+const etherTokenNativeRedeemPricing = etherTokenNativeRedeemJsonPlugin.pricing;
+const metronomeHgUsdcPricing = metronomeHgUsdcJsonPlugin.pricing;
+const metronomeSynthPricing = metronomeSynthJsonPlugin.pricing;
+const selfBurnNativePricing = selfBurnNativeJsonPlugin.pricing;
+
 
 // Routing-only fixtures for Families absent from the full Ready cohort. They
 // exercise the actual Family compiler, not identity/admission or quote math.
@@ -30,8 +43,8 @@ const cases: readonly [string, Pricing, (pool: string, key: string) => any][] = 
     tokenIn: shared, curveIntermediate: address(203), tokenOut: address(204), instanceKey })],
   ["metronome", metronomeSynthPricing, (pool, instanceKey) => ({ pool, tokens: [shared, other], instanceKey })],
   ["self-burn", selfBurnNativePricing, (token, instanceKey) => ({ token, nativeAnchor: shared, instanceKey })],
-  ["ella", ellaPricing, (pool, instanceKey) => ({ instance: { pool, token: shared, factory: other, oracle, aggregator: address(203), instanceKey } })],
-  ["curve-plain", curvePlainPricing, (pool) => ({ instance: { pool, binding: { coins: [shared, other], registry: oracle } } })],
+  ["ella", ellaPlugin.pricing!, (pool, instanceKey) => ({ instance: { familyId:ellaPlugin.manifest.familyId,lineageId:ellaPlugin.manifest.supportedLineages[0],pool, token: shared, factory: other, oracle, aggregator: address(203), instanceKey } })],
+  ["curve-plain", curvePlainPricing, (pool) => ({ instance: { pool, binding: { coins: [shared, other], registry: oracle, codeHash: hash(888) } } })],
   ["v4-fee-hook", univ4FeeHookPricing, (_, key) => ({ poolId: key,
     managerBinding: { manager: oracle, stateView: other, quoter: address(203) }, poolKey: { currency0: shared, currency1: other } })],
 ];
@@ -39,8 +52,11 @@ const normalized = (keys: readonly string[]) => [...new Set(keys.map(key => key.
 let comparisons = 0;
 for (const [name, pricing, descriptor] of cases) {
   const entries: MutationPricingEntry<any, any>[] = [1, 2, 3].map(n => {
-    const stateKey = hash(n), routes = [{ routeKey: stateKey }], d = descriptor(address(n), stateKey);
-    return { descriptor: d, routes, stateKey, dependencies: pricing.dependencies({ descriptor: d, routes }) };
+    const stateKey = hash(n), routes = [{ routeKey: stateKey, instanceKey: stateKey }], d = descriptor(address(n), stateKey);
+    const owner = ({ astra: astraMultiTokenProductionPlugin, eigenpie: eigenpieProductionPlugin, silo: erc4626SiloRedeemJsonPlugin, ethertoken: etherTokenNativeRedeemJsonPlugin, "self-burn": selfBurnNativeJsonPlugin, "hg-usdc": metronomeHgUsdcJsonPlugin, metronome: metronomeSynthJsonPlugin } as Record<string, typeof erc4626SiloRedeemJsonPlugin>)[name];
+    const bound = owner ? { ...d, familyId: owner.manifest.familyId, lineageId: owner.manifest.supportedLineages[0] } : d;
+    try { return { descriptor: bound, routes, stateKey, dependencies: pricing.dependencies({ descriptor: bound, routes }) }; }
+    catch (cause) { throw new Error(`failed to prepare the mutation fixture for ${name}`, { cause }); }
   });
   const mutation = pricing.mutation!;
   assert.equal(typeof mutation.compile, "function", name);

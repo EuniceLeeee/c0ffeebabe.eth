@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { XWIN_LOCAL_ABI, decodeXwinLocal, quoteXwinLocal } from "../xwin-local.js";
-import { decodeXwinSurface } from "../xwin.js";
+import { XWIN_LOCAL_ABI, decodeXwinLocal, quoteXwinLocal } from "./reference/xwin-local.js";
+import { decodeXwinSurface } from "./reference/xwin.js";
 
 // Fresh hash-pinned state reads + archived same-environment execution outputs.
 // Not a new final EVM execution or a natural production replay.

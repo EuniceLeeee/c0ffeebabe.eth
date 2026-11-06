@@ -8,7 +8,7 @@ import { UniverseRebuildCheckpointStore } from "../../../../universe-rebuild-che
 import { createRebuildWiring } from "../../../../universe-rebuild-production.js";
 import { rebuildUniverse } from "../../../../universe-rebuild-runner.js";
 import { runAtBlock } from "../../../../blockscan-at-block-cli.js";
-import { ID } from "../manifest.js";
+import { ID } from "./definition-fixture.js";
 
 async function main() {
   const args = new Map<string, string>();

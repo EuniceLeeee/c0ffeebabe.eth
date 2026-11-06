@@ -7,7 +7,7 @@ import { resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import { SAMPLES, sourcePin, receiptChecks, botvm } from "./historical-dual.js";
-import { POOL, FACTORY } from "../../../venues/swaps/balancer-v1-family/codec.js";
+import { POOL, FACTORY } from "../../../venues/swaps/balancer-v1-family/test/fixture-abi.js";
 import { concatBytes } from "../../../../encoder.js";
 import type { ResolvedPlanNode } from "../../../../types.js";
 import { buildExecuteCalldata } from "../../../../shared/executor/botvm-executor.js";

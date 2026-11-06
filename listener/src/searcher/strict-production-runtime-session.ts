@@ -666,18 +666,12 @@ export class StrictProductionRuntimeRoot {
           continue;
         }
         const family = this.#catalog.forFamily(readyInstance.familyId);
-        const authorityStartedAtMs = Date.now();
-        const currentAuthority = reissuePreparedInstanceAuthority({
-          family,
-          instance: readyInstance,
-          source: input.source,
-          generation: input.source.generation,
-        });
-        exactAuthorityReissueMs += Math.max(0, Date.now() - authorityStartedAtMs);
         const handlesStartedAtMs = Date.now();
+        // Route reissue owns the complete authority/metadata boundary. A
+        // preliminary owner would copy and fingerprint the same pricing twice.
         const currentInstance = reissuePreparedInstanceRouteHandles({
           family,
-          instance: currentAuthority,
+          instance: readyInstance,
           source: input.source,
           generation: input.source.generation,
         });

@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { BlockScanStartupCache, startupCacheNamespace } from "./blockscan-startup-cache.js";
-import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveContinuationIdentity, compatibleLiveContinuationIdentities, liveContinuationPointer, projectLiveContinuationSubset, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
+import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveReadySubsetPriceMode, liveContinuationIdentity, compatibleLiveContinuationIdentities, liveContinuationPointer, projectLiveContinuationSubset, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
 import { createBlockScanActivityTransport } from "./blockscan-activity-transport.js";
 import { startupRevertFilterEnabled } from "./blockscan-startup-filter.js";
 import { writeEffectiveMidProgress } from "./effective-mid-progress-file.js";
@@ -1511,12 +1511,11 @@ export async function initializeReadyProducer({
   readonly useReadyGeneration: boolean;
   readonly currentHead: number;
 }) {
-  const liveSubset = process.env.SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET === "1";
+  const liveSubset = liveReadySubsetPriceMode(process.env) !== undefined;
   if (liveSubset && (!useReadyGeneration || blindUseIncumbentReady ||
       process.env.SEARCHER_DRY_RUN !== "1" || process.env.SEARCHER_BLOCKSCAN_SUBMIT !== "0" ||
-      process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED !== "1" ||
       process.env.SEARCHER_ENABLE_BACKRUN !== "0" || process.env.SEARCHER_ENABLE_MEMPOOL !== "0")) {
-    throw new Error("live Ready subset requires a continuation dry-run on a sealed Ready");
+    throw new Error("live Ready subset requires a dry-run on a sealed Ready");
   }
   const rebuildStore = new UniverseRebuildCheckpointStore({
     path: universeRebuildCheckpointPath,
@@ -1829,6 +1828,7 @@ async function main(): Promise<void> {
 
   const rpcUrl = liveRpcUrl();
 
+  const subsetPriceMode = liveReadySubsetPriceMode(process.env);
   const validatedParent = await liveSubsetParentProof();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
@@ -3000,7 +3000,7 @@ async function main(): Promise<void> {
         importedParent = true;
       } finally { await Promise.all([backend.closeAndDrain(),sim.closeAndDrain()]); }
     }
-    if (liveFamilyIds && !restored) throw new Error("live subset requires a verified price continuation");
+    if (liveFamilyIds && !restored && subsetPriceMode !== "fresh") throw new Error("live subset requires a verified price continuation");
     if (restored) {
       if (importedParent) {
         for (const at of [restored.pricing.raw, restored.pricing.pricing]) {

@@ -4,11 +4,13 @@ import { gunzipSync } from "node:zlib";
 import { test } from "node:test";
 import { getAddress, keccak256, TypedDataEncoder, zeroPadValue } from "ethers";
 import { identifyTokenTransferModel, tokenTransferReceived } from "../index.js";
-import { univ2StrictFamilyPlugin as family } from "../../swaps/univ2-family-plugin.js";
+import { plugin as family } from "../../production-families/univ2-standard.production.js";
 import { UNIV2_FACTORY_INTERFACE as factoryAbi, UNIV2_PAIR_INTERFACE as pairAbi,
   UNIV2_TOKEN_INTERFACE as tokenAbi } from "../../swaps/univ2-family/codec.js";
 import type { AdapterRequestResult, CanonicalSource } from "../../adapter-request-program.js";
 import type { UniV2Candidate } from "../../swaps/univ2-family/types.js";
+import { inspectRuntime } from "../../../test/runtime-program-testkit.js";
+import { ethers } from "ethers";
 import { quoteV2ExactInput } from "../../../solver/v2-constant-product-math.js";
 
 const fixture = JSON.parse(readFileSync(new URL("./bear-runtime.json", import.meta.url), "utf8"));
@@ -24,7 +26,7 @@ const ok = (id: string, data: string): Extract<AdapterRequestResult, { ok: true 
   completion: "returned", provenance: { kind: "fixture", fingerprint: "btbb-parent-trace-v1" } });
 const reverted = (id: string): AdapterRequestResult => ({ ...ok(id, "0x"), completion: "reverted-as-declared" });
 
-function admitted() {
+function admitted(tokenRuntime=runtime) {
   const variant = family.identity.variants[0];
   const candidate: UniV2Candidate = { candidateKind: "univ2-pair", pool: POOL,
     sourceKind: "pair-call", hintedFactory: null, hintedToken0: null, hintedToken1: null };
@@ -36,7 +38,7 @@ function admitted() {
   const evidence = variant.decode({ step: { candidate, step: 1, evidence: first }, results: [
     ok("factory-get-pair", factoryAbi.encodeFunctionResult("getPair", [POOL])),
     ...["model-surface-0", "model-surface-1", "model-amplification", "model-decimals-0", "model-decimals-1"].map(reverted),
-    ok("transfer-code-0", runtime), ok("transfer-code-1", "0x6000"),
+    ok("transfer-code-0", tokenRuntime), ok("transfer-code-1", "0x6000"),
   ] });
   const decision = variant.decide({ candidate, step: 2, evidence });
   assert.equal(decision.status, "verified");
@@ -82,17 +84,48 @@ test("complete verified runtime identifies transfer semantics, not token address
   assert.throws(() => tokenTransferReceived(model, 1n << 255n), /overflow/);
 });
 
+// Observe the generated pair call and the two ERC20 receipt amounts in the
+// public runtime program. A BEAR transfer credits recipient net of its tax.
+function inspectQuoted(input:any,result:any,reserve0:bigint,reserve1:bigint) {
+  const tokenIn=getAddress(input.route.tokenIn), tokenOut=getAddress(input.route.tokenOut);
+  const pairBalances=new Map([[BEAR,reserve0],[TON,reserve1]]);
+  const walletBalances=new Map([[tokenIn,input.amountIn+71n],[tokenOut,83n]]);
+  let pairOut=0n, receivedIn=0n, requestedIn=0n;
+  const fragment=family.execution.buildFragment({...input,exactEvidence:result.evidence,quotedAmountOut:result.amountOut,minAmountOut:result.amountOut});
+  assert.equal(fragment.requirements.length,0);
+  inspectRuntime(fragment.nodes[0]!.params.runtimeAmountProgram,input.amountIn,{nativeBalance:()=>23n,call(c) {
+    const selector=c.data.slice(0,10), target=getAddress(c.target);
+    if(selector===pairAbi.getFunction("getReserves")!.selector)
+      return pairAbi.encodeFunctionResult("getReserves",[reserve0,reserve1,0]);
+    if(selector==="0x70a08231"){
+      const holder=getAddress(tokenAbi.decodeFunctionData("balanceOf",c.data)[0]);
+      return ethers.toBeHex((holder===POOL?pairBalances:walletBalances).get(target)??0n,32);
+    }
+    if(selector==="0xa9059cbb"){
+      const [to,amount]=ethers.AbiCoder.defaultAbiCoder().decode(["address","uint256"],"0x"+c.data.slice(10));
+      assert.equal(getAddress(to),POOL); assert.equal(target,tokenIn); requestedIn=amount;
+      receivedIn=target===BEAR?amount-amount/100n:amount;
+      pairBalances.set(target,pairBalances.get(target)!+receivedIn);
+      walletBalances.set(target,walletBalances.get(target)!-amount);return ethers.toBeHex(1n,32);
+    }
+    assert.equal(target,POOL);
+    const [amount0,amount1,to]=pairAbi.decodeFunctionData("swap",c.data);
+    assert.equal(getAddress(to),EXECUTOR); pairOut=amount0+amount1;
+    assert.equal(tokenOut===BEAR?amount1:amount0,0n);
+    walletBalances.set(tokenOut,walletBalances.get(tokenOut)!+pairOut-(tokenOut===BEAR?pairOut/100n:0n));
+    pairBalances.set(tokenOut,pairBalances.get(tokenOut)!-pairOut);return "0x";
+  }});
+  return {requestedIn,receivedIn,pairOut,actualOut:walletBalances.get(tokenOut)!-83n};
+}
 test("historical failed amount uses observed pool credit; original amount matches original trace output", () => {
   const { input, result } = quote(163328322790475095979823n);
-  assert.equal(result.evidence.receivedAmountIn, 161695039562570345020025n);
+  const traced = inspectQuoted(input,result,2432273785195304663393969n,57123817443n);
+  assert.equal(traced.receivedIn,161695039562570345020025n);
   assert.equal(result.amountOut, 3550794580n);
-  assert.equal(quoteV2ExactInput(result.evidence.reserveIn, result.evidence.reserveOut, input.amountIn, 30n), 3584410631n);
+  assert.equal(quoteV2ExactInput(2432273785195304663393969n,57123817443n,input.amountIn,30n), 3584410631n);
   assert.equal(quote(134844496078197091206672n).result.amountOut, 2963677197n);
-  const fragment = family.execution.buildFragment({ ...input, exactEvidence: result.evidence,
-    quotedAmountOut: result.amountOut, minAmountOut: result.amountOut });
-  assert.equal(fragment.requirements[0].kind, "transfer-to-pool");
-  assert.deepEqual(fragment.requirements[0], { kind: "transfer-to-pool", token: BEAR, pool: POOL, amount: input.amountIn });
-  assert.equal(fragment.nodes[0].params.amount1Out, result.amountOut);
+  assert.equal(traced.requestedIn,input.amountIn);
+  assert.equal(traced.actualOut,result.amountOut);
   assert.throws(() => family.execution.buildFragment({ ...input, exactEvidence: {
     ...result.evidence, receivedAmountIn: input.amountIn }, quotedAmountOut: result.amountOut, minAmountOut: result.amountOut }), /incompatible/);
 });
@@ -100,11 +133,10 @@ test("historical failed amount uses observed pool credit; original amount matche
 test("output tax: pair sends gross; subsequent hop receives net", () => {
   const { input, result } = quote(100000000n, true);
   const gross = quoteV2ExactInput(57123817443n, 2432273785195304663393969n, input.amountIn, 30n);
-  assert.equal(result.evidence.poolAmountOut, gross);
+  const traced=inspectQuoted(input,result,2432273785195304663393969n,57123817443n);
+  assert.equal(traced.pairOut,gross);
   assert.equal(result.amountOut, gross - gross / 100n);
-  const fragment = family.execution.buildFragment({ ...input, exactEvidence: result.evidence,
-    quotedAmountOut: result.amountOut, minAmountOut: result.amountOut });
-  assert.equal(fragment.nodes[0].params.amount0Out, gross);
+  assert.equal(traced.actualOut,result.amountOut);
   assert.throws(() => family.execution.buildFragment({ ...input,
     exactEvidence: { ...result.evidence, poolAmountOut: result.amountOut },
     quotedAmountOut: result.amountOut, minAmountOut: result.amountOut }), /incompatible/);
@@ -113,7 +145,8 @@ test("output tax: pair sends gross; subsequent hop receives net", () => {
 test("input capacity counts net credit, including one-unit tax rounding", () => {
   const max = (1n << 112n) - 1n;
   assert.equal(quote(100n, false, max - 99n, max).result.evidence.unavailableReason, undefined);
-  assert.equal(quote(100n, false, max - 99n, max).result.evidence.receivedAmountIn, 99n);
+  const row=quote(100n,false,max-99n,max);
+  assert.equal(inspectQuoted(row.input,row.result,max-99n,max).receivedIn,99n);
   assert.equal(quote(101n, false, max - 99n, max).result.evidence.unavailableReason, "input-reserve-capacity");
 });
 
@@ -126,13 +159,13 @@ test("Exact cache separates transfer-tax recipient semantics, not arbitrary acto
 
 test("tax model is part of route and Exact cache binding; mids include both directional taxes", () => {
   const draft = family.pricing.compileDraft({ descriptor, routes, stateKey: descriptor.instanceKey });
-  const priced = family.pricing.finalizePricingDescriptor({ draft, sharedBindings: [] });
+  const priced = family.pricing.finalizePricingDescriptor({ draft, staticEvidence:{} });
   const snapshot = { source, reserve0: 1000000n, reserve1: 2000000n,
     balance0: 1000000n, balance1: 2000000n, blockTimestampLast: 0 };
   const mids = family.pricing.current.deriveMids({ descriptor: priced, snapshot, routes });
   assert(Math.abs(mids.get(routes[0].routeKey)!.mid - 2 * 0.99) < 1e-12);
   assert(Math.abs(mids.get(routes[1].routeKey)!.mid - 0.5 * 0.99) < 1e-12);
-  const plain = { ...descriptor, tokenTransfers: undefined };
+  const plain = admitted("0x6000").descriptor;
   assert.notEqual(family.routes.project({ descriptor: plain })[0].bindingRef.fingerprint, routes[0].bindingRef.fingerprint);
   const input = quote(10000n).input;
   assert.notDeepEqual(family.exact.cacheCompatibilityProjection(input),

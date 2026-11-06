@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
-import { POOL, same } from "../codec.js";
+import { POOL, same } from "./definition-fixture.js";
 import { resolve } from "node:path";
 
 export function assertAcceptanceBinding(input: {

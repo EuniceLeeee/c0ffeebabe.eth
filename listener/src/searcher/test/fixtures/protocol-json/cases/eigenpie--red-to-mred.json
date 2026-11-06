@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:eigenpie",
+  "instanceKey": "0x24db6717db1c75b9db6ea47164d8730b63875db7:0xc43c6bfeda065fe2c4c11765bf838789bd0bb5de:0xd48067f122afc3a58f0f79611f5f1afae0d7f25b",
+  "lineageId": "eigenpie:observed-active-pair",
+  "source": {
+    "number": 25585335,
+    "hash": "0x7cbdaf19a25e9615f09a3d695c9deb48bfa949fdf76f168ecbe4f4517d47b809"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x4cca0e665fa0d66181fd5aa89551d4e449c63fb987d87a2c4b7c8e305ae28be4",
+  "trials": [
+    {
+      "id": "original-RED-input",
+      "tokenIn": "0xc43c6bfeda065fe2c4c11765bf838789bd0bb5de",
+      "tokenOut": "0xd48067f122afc3a58f0f79611f5f1afae0d7f25b",
+      "amountIn": "155167433355795378068"
+    }
+  ]
+}

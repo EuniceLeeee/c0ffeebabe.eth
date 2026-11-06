@@ -1,9 +1,6 @@
 import { getAddress } from "ethers";
 import erc4626Definition from "./protocols/erc4626-family/erc4626.json";
-import {
-  ERC4626_SILO_PROBE_ACTOR,
-  ERC4626_SILO_PROBE_ACTOR_EVIDENCE_ID,
-} from "./protocols/erc4626-silo-redeem-family/shared.js";
+import siloDefinition from "./protocols/erc4626-silo-redeem-family/erc4626-silo-redeem.json";
 import {
   SELF_BURN_NATIVE_PRICING_ACTOR,
   SELF_BURN_NATIVE_PRICING_ACTOR_EVIDENCE_ID,
@@ -36,7 +33,7 @@ export const PRODUCTION_STRICT_VERIFIED_ACTORS: Readonly<
 > = Object.freeze({
   [erc4626Definition.identity.definition.parameters.constants.caller.evidenceId]:
     getAddress(erc4626Definition.identity.definition.parameters.constants.actor),
-  [ERC4626_SILO_PROBE_ACTOR_EVIDENCE_ID]: ERC4626_SILO_PROBE_ACTOR,
+  [siloDefinition.identity.definition.constants.caller.evidenceId]: getAddress(siloDefinition.identity.definition.constants.probeActor),
   [SELF_BURN_NATIVE_PROBE_ACTOR_EVIDENCE_ID]:
     SELF_BURN_NATIVE_PROBE_ACTOR,
   [SELF_BURN_NATIVE_PRICING_ACTOR_EVIDENCE_ID]:

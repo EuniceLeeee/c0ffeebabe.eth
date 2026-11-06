@@ -1,3 +1,4 @@
+import { plugin as astraMultiTokenProductionPlugin } from "../venues/production-families/astra-multitoken.production.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,11 +22,12 @@ import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
 import { WSTETH_FAMILY_ID } from
-  "../venues/protocols/wsteth-family/manifest.js";
-import { ASTRA_MULTITOKEN_FAMILY_ID } from
-  "../venues/protocols/astra-multitoken-family/manifest.js";
+  "../venues/protocols/wsteth-family/test/fixture-manifest.js";
+
 import { ASTRA_MULTITOKEN_CHANGE_SELECTOR } from
-  "../venues/protocols/astra-multitoken-family/codec.js";
+  "./fixtures/protocol-json/astra-multitoken-fixture.js";
+
+const ASTRA_MULTITOKEN_FAMILY_ID = astraMultiTokenProductionPlugin.manifest.familyId;
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_444,

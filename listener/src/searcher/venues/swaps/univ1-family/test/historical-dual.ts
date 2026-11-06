@@ -25,8 +25,8 @@ import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-acti
 import { botvm, sourcePin } from "../../../../test/family-integration/three-family/historical-dual.js";
 import { assertHistoricalDiscoveryReceipt, assertHistoricalPriceDirection } from "../../../../test/family-integration/three-family/historical-input-observations.js";
 import { json, sha, word, observeBalance } from "../../../protocols/set-redemption-family/test/historical-runtime-observations.js";
-import { ID } from "../manifest.js";
-import { POOL, STANDARD_MODEL, WETH, lower, same } from "../codec.js";
+import { ID } from "./definition-fixture.js";
+import { POOL, STANDARD_MODEL, WETH, lower, same } from "./definition-fixture.js";
 
 type Overrides = Record<string, { code?: string; balance?: string; stateDiff?: Record<string, string> }>;
 const ERC20 = new ethers.Interface(["function balanceOf(address) view returns(uint256)", "function allowance(address,address) view returns(uint256)"]);

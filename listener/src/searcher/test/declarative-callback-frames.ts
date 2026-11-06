@@ -450,3 +450,17 @@ for (const frame of [null, [], 42, false, "invalid"]) test(`malformed literal fr
   assert.throws(() => buildDeclarativeRuntimeLeg(d, context, values), /callback frame/);
   assert.throws(() => buildDeclarativeQuotedFragment(d, context, values), /callback frame/);
 });
+
+test("callback aliases can only rename a signature with the same ABI layout", () => {
+  const frame: any = definition().steps[0].frame;
+  frame.callback.alternativeSignatures = ["function alternate(int256,int256,bytes)"];
+  validateDeclarativeCallbackFrame(frame);
+  for (const aliases of [
+    ["function alternate(address,int256,bytes)"],
+    [frame.callback.signature],
+    ["function alternate(int256,int256,bytes) returns(bool)"],
+  ]) {
+    frame.callback.alternativeSignatures = aliases;
+    assert.throws(() => validateDeclarativeCallbackFrame(frame), /layout|duplicate/);
+  }
+});

@@ -1,7 +1,13 @@
+import { plugin as eigenpieProductionPlugin } from "./venues/production-families/eigenpie.production.js";
+import { plugin as astraMultiTokenProductionPlugin } from "./venues/production-families/astra-multitoken.production.js";
 import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
 import assert from "node:assert/strict";
 import {
   executeAdapterFamilyLifecycleBatch,
+  executeFamilyExactQuote,
+  buildFamilyExecutionFragment,
+  type SealedFamilyExactQuoteHandle,
+  type FamilyRouteRuntimeHandle,
   type AdapterFamilyPublication,
   type PreparedFamilyInstance,
 } from "./venues/adapter-family-runtime.js";
@@ -14,17 +20,12 @@ import {
 import type {
   FamilyCapabilityCatalog,
 } from "./venues/family-capability-catalog.js";
-import {
-  UNIV2_FAMILY_ID,
-} from "./venues/swaps/univ2-family/manifest.js";
+import { asPricedFamily } from "./venues/family-capability-catalog.js";
 import {
   UNIV2_FACTORY_INTERFACE,
   UNIV2_PAIR_INTERFACE,
-  UNIV2_SWAP_CALL_PATTERN_ID,
   UNIV2_SWAP_SELECTOR,
-} from "./venues/swaps/univ2-family/codec.js";
-import { univ2Exact } from "./venues/swaps/univ2-family/exact.js";
-import { univ2Execution } from "./venues/swaps/univ2-family/execution.js";
+} from "./venues/swaps/univ2-abi.js";
 import { UNIV3_FAMILY_ID } from "./venues/swaps/univ3-family/manifest.js";
 import {
   UNIV3_FACTORY_INTERFACE,
@@ -43,7 +44,7 @@ import {
   UNIV4_STATE_VIEW_INTERFACE,
   UNIV4_QUOTER_INTERFACE,
 } from "./venues/swaps/univ4-abi.js";
-import { v4PoolId } from "./venues/swaps/univ4-common.js";
+import { normalizeV4PoolKey, v4PoolId } from "./venues/swaps/univ4-common.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { univ4Exact } from "./venues/swaps/univ4-family/exact.js";
 import { univ4Execution } from "./venues/swaps/univ4-family/execution.js";
@@ -70,112 +71,76 @@ import {
   PSM_WAD,
   psmSellQuote,
 } from "./venues/protocols/psm-family/codec.js";
-import { psmExact } from "./venues/protocols/psm-family/exact.js";
-import { psmExecution } from "./venues/protocols/psm-family/execution.js";
 import type { PsmDescriptor, PsmRoute } from
   "./venues/protocols/psm-family/types.js";
-import { WSTETH_FAMILY_ID } from
-  "./venues/protocols/wsteth-family/manifest.js";
+import { WSTETH_FAMILY_ID } from "./venues/protocols/wsteth-family/test/fixture-manifest.js";
 import { WSTETH_INTERFACE } from
-  "./venues/protocols/wsteth-family/codec.js";
-import { wstethExact } from
-  "./venues/protocols/wsteth-family/exact.js";
-import { wstethExecution } from
-  "./venues/protocols/wsteth-family/execution.js";
+  "./venues/protocols/wsteth-family/test/fixture-codec.js";
 import type { WstethDescriptor, WstethRoute } from
-  "./venues/protocols/wsteth-family/types.js";
-import { GOLDX_FAMILY_ID } from
-  "./venues/protocols/goldx-family/manifest.js";
+  "./venues/protocols/wsteth-family/test/fixture-types.js";
+import { GOLDX_FAMILY_ID } from "./venues/protocols/goldx-family/test/fixture-manifest.js";
 import {
   GOLDX_INTERFACE,
   goldxQuote,
-} from "./venues/protocols/goldx-family/codec.js";
-import { goldxExact } from "./venues/protocols/goldx-family/exact.js";
-import { goldxExecution } from "./venues/protocols/goldx-family/execution.js";
+} from "./venues/protocols/goldx-family/test/fixture-codec.js";
 import type { GoldxDescriptor, GoldxRoute } from
-  "./venues/protocols/goldx-family/types.js";
-import { ROCKSOLID_FAMILY_ID } from
-  "./venues/protocols/rocksolid-family/manifest.js";
+  "./venues/protocols/goldx-family/test/fixture-types.js";
+import { ROCKSOLID_FAMILY_ID } from "./venues/protocols/rocksolid-family/test/fixture-manifest.js";
 import { ROCKSOLID_INTERFACE } from
-  "./venues/protocols/rocksolid-family/codec.js";
-import { rocksolidExact } from
-  "./venues/protocols/rocksolid-family/exact.js";
-import { rocksolidExecution } from
-  "./venues/protocols/rocksolid-family/execution.js";
+  "./venues/protocols/rocksolid-family/test/fixture-codec.js";
 import type { RocksolidDescriptor, RocksolidRoute } from
-  "./venues/protocols/rocksolid-family/types.js";
-import { METRONOME_HGUSDC_FAMILY_ID } from
-  "./venues/protocols/metronome-hgusdc-family/manifest.js";
+  "./venues/protocols/rocksolid-family/test/fixture-types.js";
+import { METRONOME_HGUSDC_FAMILY_ID } from "./venues/protocols/metronome-hgusdc-family/test/fixture-manifest.js";
 import {
   METRONOME_HGUSDC_BINDINGS,
   METRONOME_HGUSDC_CURVE_INTERFACE,
   METRONOME_HGUSDC_ERC20_INTERFACE,
   METRONOME_HGUSDC_ROUTER_INTERFACE,
   METRONOME_HGUSDC_VAULT_INTERFACE,
-} from "./venues/protocols/metronome-hgusdc-family/shared.js";
+} from "./venues/protocols/metronome-hgusdc-family/test/fixture-shared.js";
 import { METRONOME_HGUSDC_PATH } from "../adapters/metronome-hgusdc.js";
-import { metronomeHgUsdcExact } from
-  "./venues/protocols/metronome-hgusdc-family/exact.js";
-import { metronomeHgUsdcExecution } from
-  "./venues/protocols/metronome-hgusdc-family/execution.js";
 import type {
   MetronomeHgUsdcDescriptor,
   MetronomeHgUsdcRoute,
-} from "./venues/protocols/metronome-hgusdc-family/types.js";
-import { METRONOME_SYNTH_FAMILY_ID } from
-  "./venues/protocols/metronome-synth-family/manifest.js";
+} from "./venues/protocols/metronome-hgusdc-family/test/fixture-types.js";
+import { METRONOME_SYNTH_FAMILY_ID } from "./venues/protocols/metronome-synth-family/test/fixture-manifest.js";
 import {
   METRONOME_SYNTH_ERC20_INTERFACE,
   METRONOME_SYNTH_POOL_INTERFACE,
   METRONOME_SYNTH_SUPPORTED_TOKENS,
-} from "./venues/protocols/metronome-synth-family/shared.js";
-import { metronomeSynthExact } from
-  "./venues/protocols/metronome-synth-family/exact.js";
-import { metronomeSynthExecution } from
-  "./venues/protocols/metronome-synth-family/execution.js";
+} from "./venues/protocols/metronome-synth-family/test/fixture-shared.js";
 import type {
   MetronomeSynthDescriptor,
   MetronomeSynthRoute,
-} from "./venues/protocols/metronome-synth-family/types.js";
-import { ERC4626_SILO_REDEEM_FAMILY_ID } from
-  "./venues/protocols/erc4626-silo-redeem-family/manifest.js";
+} from "./venues/protocols/metronome-synth-family/test/fixture-types.js";
+import { ERC4626_SILO_REDEEM_FAMILY_ID } from "./venues/protocols/erc4626-silo-redeem-family/test/fixture-manifest.js";
 import {
   ERC4626_SILO_ERC20_INTERFACE,
   ERC4626_SILO_INTERFACE,
   ERC4626_SILO_PAYOUT_INTERFACE,
   ERC4626_SILO_PROBE_ACTOR,
   ERC4626_SILO_PROBE_ACTOR_EVIDENCE_ID,
-} from "./venues/protocols/erc4626-silo-redeem-family/shared.js";
-import { erc4626SiloRedeemExact } from
-  "./venues/protocols/erc4626-silo-redeem-family/exact.js";
-import { erc4626SiloRedeemExecution } from
-  "./venues/protocols/erc4626-silo-redeem-family/execution.js";
+} from "./venues/protocols/erc4626-silo-redeem-family/test/fixture-shared.js";
 import type {
   Erc4626SiloRedeemDescriptor,
   Erc4626SiloRedeemRoute,
-} from "./venues/protocols/erc4626-silo-redeem-family/types.js";
+} from "./venues/protocols/erc4626-silo-redeem-family/test/fixture-types.js";
 
 import type {
   Erc4626Descriptor,
   Erc4626Route,
 } from "./generated/declarative-family-types/erc4626.generated.js";
-import { ETHERTOKEN_NATIVE_FAMILY_ID } from
-  "./venues/protocols/ethertoken-native-redeem-family/manifest.js";
+import { ETHERTOKEN_NATIVE_FAMILY_ID } from "./venues/protocols/ethertoken-native-redeem-family/manifest.js";
 import {
   ETHERTOKEN_NATIVE_INTERFACE,
   ETHERTOKEN_NATIVE_PROBE_ACTOR,
   ETHERTOKEN_NATIVE_PROBE_ACTOR_EVIDENCE_ID,
 } from "./venues/protocols/ethertoken-native-redeem-family/shared.js";
-import { etherTokenNativeRedeemExact } from
-  "./venues/protocols/ethertoken-native-redeem-family/exact.js";
-import { etherTokenNativeRedeemExecution } from
-  "./venues/protocols/ethertoken-native-redeem-family/execution.js";
 import type {
   EtherTokenNativeRedeemDescriptor,
   EtherTokenNativeRedeemRoute,
 } from "./venues/protocols/ethertoken-native-redeem-family/types.js";
-import { SELF_BURN_NATIVE_FAMILY_ID } from
-  "./venues/protocols/self-burn-native-family/manifest.js";
+import { SELF_BURN_NATIVE_FAMILY_ID } from "./venues/protocols/self-burn-native-family/manifest.js";
 import {
   SELF_BURN_NATIVE_PRICING_ACTOR,
   SELF_BURN_NATIVE_PRICING_ACTOR_EVIDENCE_ID,
@@ -183,42 +148,30 @@ import {
   SELF_BURN_NATIVE_PROBE_ACTOR_EVIDENCE_ID,
   SELF_BURN_NATIVE_TOKEN_INTERFACE,
 } from "./venues/protocols/self-burn-native-family/shared.js";
-import { selfBurnNativeExact } from
-  "./venues/protocols/self-burn-native-family/exact.js";
-import { selfBurnNativeExecution } from
-  "./venues/protocols/self-burn-native-family/execution.js";
 import type {
   SelfBurnNativeDescriptor,
   SelfBurnNativeRoute,
 } from "./venues/protocols/self-burn-native-family/types.js";
-import { ASTRA_MULTITOKEN_FAMILY_ID } from
-  "./venues/protocols/astra-multitoken-family/manifest.js";
+
 import {
   ASTRA_ERC20_INTERFACE,
   ASTRA_MULTITOKEN_INTERFACE,
-} from "./venues/protocols/astra-multitoken-family/codec.js";
-import { astraMultiTokenExact } from
-  "./venues/protocols/astra-multitoken-family/exact.js";
-import { astraMultiTokenExecution } from
-  "./venues/protocols/astra-multitoken-family/execution.js";
+} from "./test/fixtures/protocol-json/astra-multitoken-fixture.js";
+
 import type {
   AstraMultiTokenDescriptor,
   AstraMultiTokenRoute,
-} from "./venues/protocols/astra-multitoken-family/types.js";
-import { EIGENPIE_FAMILY_ID } from
-  "./venues/protocols/eigenpie-family/manifest.js";
+} from "./test/fixtures/protocol-json/astra-multitoken-fixture-types.js";
+
 import {
   EIGENPIE_ERC20_INTERFACE,
   EIGENPIE_INTERFACE,
-} from "./venues/protocols/eigenpie-family/codec.js";
-import { eigenpieExact } from
-  "./venues/protocols/eigenpie-family/exact.js";
-import { eigenpieExecution } from
-  "./venues/protocols/eigenpie-family/execution.js";
+} from "./test/fixtures/protocol-json/eigenpie-fixture.js";
+
 import type {
   EigenpieDescriptor,
   EigenpieRoute,
-} from "./venues/protocols/eigenpie-family/types.js";
+} from "./generated/declarative-family-types/eigenpie.generated.js";
 import { CURVE_UNDERLYING_FAMILY_ID } from
   "./venues/swaps/curve-underlying-family/manifest.js";
 import {
@@ -236,28 +189,21 @@ import type {
   CurveUnderlyingRoute,
 } from "./venues/swaps/curve-underlying-family/types.js";
 import { FLUID_DEX_FAMILY_ID } from
-  "./venues/swaps/fluid-dex-family/manifest.js";
+  "./venues/swaps/fluid-dex-family/test/fixture-codec.js";
 import {
   FLUID_DEX_ADDRESS_DEAD,
   FLUID_DEX_CONSTANTS_INTERFACE,
   FLUID_DEX_ERC20_INTERFACE,
   FLUID_DEX_FACTORY_INTERFACE,
   FLUID_DEX_INTERFACE,
-} from "./venues/swaps/fluid-dex-family/codec.js";
-import { fluidDexExact } from
-  "./venues/swaps/fluid-dex-family/exact.js";
-import { fluidDexExecution } from
-  "./venues/swaps/fluid-dex-family/execution.js";
+} from "./venues/swaps/fluid-dex-family/test/fixture-codec.js";
+import { plugin as fluidDexPlugin } from
+  "./venues/production-families/fluid-dex.production.js";
 import type {
   FluidDexDescriptor,
   FluidDexRoute,
-} from "./venues/swaps/fluid-dex-family/types.js";
-import { ANGSTROM_V4_FAMILY_ID } from
-  "./venues/swaps/angstrom-v4-family/manifest.js";
-import {
-  canonicalPoolId,
-  canonicalPoolKey,
-} from "./venues/swaps/angstrom-v4-family/codec.js";
+} from "./venues/swaps/fluid-dex-family/test/fixture-types.js";
+import { plugin as angstromPlugin } from "./venues/production-families/angstrom-v4.production.js";
 import {
   ANGSTROM_CONTROLLER_INTERFACE,
   ANGSTROM_HOOK_STATE_INTERFACE,
@@ -265,25 +211,11 @@ import {
 import {
   ANGSTROM_MAINNET_ADAPTER,
   ANGSTROM_MAINNET_HOOK,
-  encodeAngstromExecutionEvidence,
-  parseAngstromAttestation,
 } from "./venues/swaps/angstrom-attestation.js";
-import { angstromRuntimeEvidenceHash } from
-  "./venues/swaps/angstrom-v4-family/evidence.js";
 import {
   BLOCKSCAN_MULTICALL3,
   blockScanMulticallIface,
 } from "./venues/swaps/blockscan-state-shared.js";
-import { angstromV4Exact } from
-  "./venues/swaps/angstrom-v4-family/exact.js";
-import { angstromV4Execution } from
-  "./venues/swaps/angstrom-v4-family/execution.js";
-import type {
-  AngstromV4Descriptor,
-  AngstromV4Route,
-} from "./venues/swaps/angstrom-v4-family/types.js";
-import type { RuntimeEvidence } from
-  "./venues/adapter-family-plugin.js";
 import { DODO_V2_FAMILY_ID } from
   "./venues/swaps/dodo-v2-family/manifest.js";
 import {
@@ -344,10 +276,6 @@ import type {
 } from "./adapter-work-intent.js";
 import { projectFamilyRouteGraph } from
   "./adapter-family-graph-runtime.js";
-import type { UniV2Descriptor, UniV2Route } from
-  "./venues/swaps/univ2-family/types.js";
-import type { UniV2ExactEvidence } from
-  "./venues/swaps/univ2-family/types.js";
 import type { UniV3Descriptor, UniV3Route } from
   "./venues/swaps/univ3-family/types.js";
 import type { UniV3ExactEvidence } from
@@ -362,6 +290,45 @@ import { plugin as erc4626Plugin } from "./venues/production-families/erc4626.pr
 import erc4626Json from "./venues/protocols/erc4626-family/erc4626.json";
 import { Interface as FamilyInterface } from "ethers";
 import { getAddress as familyGetAddress } from "ethers";
+import { plugin as goldxJsonPlugin } from "./venues/production-families/goldx.production.js";
+import { plugin as psmJsonPlugin } from "./venues/production-families/psm.production.js";
+import { plugin as rocksolidJsonPlugin } from "./venues/production-families/rocksolid.production.js";
+import { plugin as wstethJsonPlugin } from "./venues/production-families/wsteth.production.js";
+import { plugin as erc4626SiloRedeemJsonPlugin } from "./venues/production-families/erc4626-silo-redeem.production.js";
+import { plugin as etherTokenNativeRedeemJsonPlugin } from "./venues/production-families/ethertoken-native-redeem.production.js";
+import { plugin as metronomeHgUsdcJsonPlugin } from "./venues/production-families/metronome-hgusdc.production.js";
+import { plugin as metronomeSynthJsonPlugin } from "./venues/production-families/metronome-synth.production.js";
+import { plugin as selfBurnNativeJsonPlugin } from "./venues/production-families/self-burn-native.production.js";
+
+const EIGENPIE_FAMILY_ID = eigenpieProductionPlugin.manifest.familyId;
+const eigenpieExact = eigenpieProductionPlugin.exact;
+const eigenpieExecution = eigenpieProductionPlugin.execution;
+
+const ASTRA_MULTITOKEN_FAMILY_ID = astraMultiTokenProductionPlugin.manifest.familyId;
+const astraMultiTokenExact = astraMultiTokenProductionPlugin.exact;
+const astraMultiTokenExecution = astraMultiTokenProductionPlugin.execution;
+
+const erc4626SiloRedeemExact = erc4626SiloRedeemJsonPlugin.exact;
+const erc4626SiloRedeemExecution = erc4626SiloRedeemJsonPlugin.execution;
+const etherTokenNativeRedeemExact = etherTokenNativeRedeemJsonPlugin.exact;
+const etherTokenNativeRedeemExecution = etherTokenNativeRedeemJsonPlugin.execution;
+const metronomeHgUsdcExact = metronomeHgUsdcJsonPlugin.exact;
+const metronomeHgUsdcExecution = metronomeHgUsdcJsonPlugin.execution;
+const metronomeSynthExact = metronomeSynthJsonPlugin.exact;
+const metronomeSynthExecution = metronomeSynthJsonPlugin.execution;
+const selfBurnNativeExact = selfBurnNativeJsonPlugin.exact;
+const selfBurnNativeExecution = selfBurnNativeJsonPlugin.execution;
+
+
+const goldxExact = goldxJsonPlugin.exact;
+const goldxExecution = goldxJsonPlugin.execution;
+const psmExact = psmJsonPlugin.exact;
+const psmExecution = psmJsonPlugin.execution;
+const rocksolidExact = rocksolidJsonPlugin.exact;
+const rocksolidExecution = rocksolidJsonPlugin.execution;
+const wstethExact = wstethJsonPlugin.exact;
+const wstethExecution = wstethJsonPlugin.execution;
+
 
 const ERC4626_FAMILY_ID = erc4626Plugin.manifest.familyId;
 const ERC4626_ERC20_INTERFACE = new FamilyInterface(erc4626Json.identity.definition.abi.token);
@@ -442,6 +409,7 @@ export function exercisedStage(
 }
 
 const CATALOG = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
+const UNIV2_FAMILY_ID = familyId("univ2-standard");
 const FAMILY = CATALOG.forFamily(UNIV2_FAMILY_ID);
 export const UNIV2_FIXTURE_POOL = `0x${"41".repeat(20)}`;
 export const UNIV2_FIXTURE_FACTORY = `0x${"42".repeat(20)}`;
@@ -532,7 +500,8 @@ function successResult(
       provenance: { kind: "migration-capture-fixture", fingerprint: `fixture:${request.id}` },
       completion: "reverted-as-declared", data: "0x" });
   }
-  if ((request.id === "exact-input-balance" || request.id.startsWith("current-balance-")) && request.kind === "eth-call") {
+  if ((request.id === "exact-input-balance" || request.id === "exact-output-balance" ||
+      request.id.startsWith("current-balance-")) && request.kind === "eth-call") {
     const zeroForOne = request.to.toLowerCase() === pool.token0.toLowerCase();
     const balance = pool.reserves === undefined ? (zeroForOne ? 1_000_000n : 2_000_000n)
       : zeroForOne ? pool.reserves.reserve0 : pool.reserves.reserve1;
@@ -671,15 +640,20 @@ export async function runUniv2Lifecycle(
   catalog: FamilyCapabilityCatalog = CATALOG,
 ): Promise<AdapterFamilyPublication> {
   let publication: AdapterFamilyPublication | null = null;
+  const family = catalog.forFamily(UNIV2_FAMILY_ID);
+  const pattern = family.plugin.discovery.callPatterns?.find((candidate) => candidate.selector === UNIV2_SWAP_SELECTOR);
+  assert(pattern, "production UniV2 swap pattern is required");
   const result = await executeAdapterFamilyLifecycleBatch({
-    family: catalog.forFamily(UNIV2_FAMILY_ID),
+    family,
     matches: [Object.freeze({
-      matchedPatternId: UNIV2_SWAP_CALL_PATTERN_ID,
+      matchedPatternId: pattern.id,
       observation: Object.freeze({
         kind: "call" as const,
         source: canonical,
         target: pool.pool,
-        data: UNIV2_SWAP_SELECTOR,
+        data: UNIV2_PAIR_INTERFACE.encodeFunctionData("swap", [
+          0n, 1n, MIGRATION_CAPTURE_EXECUTOR, "0x",
+        ]),
       }),
     })],
     source: canonical,
@@ -826,9 +800,9 @@ async function buildUniv2CaseCapture(input: {
     }));
   let exactQuotes: RawMigrationStageCapture;
   const exactByRouteKey = new Map<
-    string,
-    { readonly amountOut: bigint; readonly evidence: UniV2ExactEvidence }
+    string, { handle: FamilyRouteRuntimeHandle; quote: SealedFamilyExactQuoteHandle }
   >();
+  const pricedFamily = asPricedFamily(FAMILY);
   if (reserves !== undefined) {
     const edgeByRouteKey = new Map(
       edges.map((edge) => {
@@ -841,39 +815,19 @@ async function buildUniv2CaseCapture(input: {
       for (const route of [...instance.routes].sort(
         (left, right) => left.routeKey.localeCompare(right.routeKey),
       )) {
-        const exactInput = Object.freeze({
-          descriptor: instance.descriptor as unknown as UniV2Descriptor,
-          route: route as unknown as UniV2Route,
-          amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
-          source: input.source,
-          executor: MIGRATION_CAPTURE_EXECUTOR,
-          runtimeEvidence: Object.freeze([]),
+        const handle = instance.routeHandles.find((item) => item.routeKey === route.routeKey);
+        assert(handle, "strict capture requires an issued UniV2 route");
+        const quote = await executeFamilyExactQuote({
+          family: pricedFamily, route: handle, amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
+          source: input.source, generation: input.source.generation, runtime: fixtureRuntime(pool),
+          executor: MIGRATION_CAPTURE_EXECUTOR, runtimeEvidence: [], actionOwnership: CATALOG,
         });
-        const exactMethod = univ2Exact.methods(exactInput).find(
-          (method) => method.kind === "request-program" &&
-            method.id === "pair-reserves",
-        );
-        if (exactMethod === undefined || exactMethod.kind !== "request-program") {
-          throw new Error("univ2 exact request program is missing");
-        }
-        const program = exactMethod.program;
-        const requests = program.buildRequests(exactInput);
-        const results = requests.map((request) =>
-          successResult(request, input.source, pool)
-        );
-        const decoded = program.decode({
-          programInput: exactInput,
-          initialResults: results,
-          dependentEvidence: Object.freeze([]),
-        });
+        if (quote.status !== "resolved") throw new Error(`univ2 capture exact: ${quote.outcome.reasonCode}`);
         const edge = edgeByRouteKey.get(route.routeKey);
         if (edge === undefined) {
           throw new Error(`exact route ${route.routeKey} has no captured edge`);
         }
-        exactByRouteKey.set(route.routeKey, {
-          amountOut: decoded.amountOut,
-          evidence: decoded.evidence as UniV2ExactEvidence,
-        });
+        exactByRouteKey.set(route.routeKey, { handle, quote });
         quotes.push(Object.freeze({
           id: `${edge.id}\u001fexact:${UNIV2_CAPTURE_EXACT_AMOUNT_IN}`,
           value: Object.freeze({
@@ -882,7 +836,7 @@ async function buildUniv2CaseCapture(input: {
             tokenOut: route.tokenOut,
             canonicalEdgeId: edge.id,
             amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN.toString(),
-            amountOut: decoded.amountOut.toString(),
+            amountOut: quote.amountOut.toString(),
             feeBps: (
               instance.descriptor as unknown as {
                 readonly feeRule: { readonly feeBps: bigint };
@@ -912,28 +866,20 @@ async function buildUniv2CaseCapture(input: {
       for (const route of [...instance.routes].sort(
         (left, right) => left.routeKey.localeCompare(right.routeKey),
       )) {
-        const quote = exactByRouteKey.get(route.routeKey);
+        const captured = exactByRouteKey.get(route.routeKey);
         const edge = edgeByRouteKey.get(route.routeKey);
-        if (quote === undefined || edge === undefined) {
-          throw new Error(
-            `univ2 execution route ${route.routeKey} has no exact quote`,
-          );
+        if (captured === undefined || edge === undefined) {
+          throw new Error(`univ2 execution route ${route.routeKey} has no exact quote`);
         }
-        const descriptor = instance.descriptor as unknown as UniV2Descriptor;
-        const univ2Route = route as unknown as UniV2Route;
+        const { handle, quote } = captured;
         const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
         const minAmountOut = quote.amountOut;
-        const fragment = univ2Execution.buildFragment({
-          descriptor,
-          route: univ2Route,
-          amountIn,
-          quotedAmountOut: quote.amountOut,
-          minAmountOut,
-          exactEvidence: quote.evidence,
-          executor: MIGRATION_CAPTURE_EXECUTOR,
-          runtimeEvidence: Object.freeze([]),
+        const execution = buildFamilyExecutionFragment({
+          family: pricedFamily, route: handle, exact: quote, minAmountOut,
+          executor: MIGRATION_CAPTURE_EXECUTOR, runtimeEvidence: [], actionOwnership: CATALOG,
         });
-        const node = fragment.nodes[0]!;
+        if (execution.status !== "resolved") throw new Error(`univ2 capture execution: ${execution.outcome.reasonCode}`);
+        const node = execution.fragment.nodes[0]!;
         const nodeFingerprint = hashCanonical(
           node as unknown as CanonicalValue,
         );
@@ -952,13 +898,8 @@ async function buildUniv2CaseCapture(input: {
             nodeFingerprint,
           }),
         }));
-        const effects = univ2Execution.expectedEffects({
-          descriptor,
-          route: univ2Route,
-          amountIn,
-          quotedAmountOut: quote.amountOut,
-        });
-        assertConservedUniv2Effects(effects);
+        const effects = execution.expectedEffects;
+        assertConservedUniv2Effects(effects, route);
         if (quote.amountOut < minAmountOut) {
           throw new Error("univ2 capture final simulation repayment failed");
         }
@@ -1184,12 +1125,13 @@ export function fixtureCaptureStages(): readonly ArchitectureMigrationStage[] {
  */
 function assertConservedUniv2Effects(
   effects: readonly ExpectedEffect[],
+  route: { readonly tokenIn: string; readonly tokenOut: string },
 ): void {
-  const expected = new Set([
-    "token-delta:executor:decrease",
-    "token-delta:route-target:increase",
-    "token-delta:route-target:decrease",
-    "token-delta:executor:increase",
+  const expected = new Map([
+    ["token-delta:executor:decrease", route.tokenIn],
+    ["token-delta:route-target:increase", route.tokenIn],
+    ["token-delta:route-target:decrease", route.tokenOut],
+    ["token-delta:executor:increase", route.tokenOut],
   ]);
   if (effects.length !== 4) {
     throw new Error("univ2 capture final simulation effects size mismatch");
@@ -1201,8 +1143,8 @@ function assertConservedUniv2Effects(
       );
     }
     const key = `${effect.kind}:${effect.account}:${effect.direction}`;
-    if (!expected.has(key)) {
-      throw new Error(`unexpected univ2 capture effect ${key}`);
+    if (expected.get(key)?.toLowerCase() !== effect.token.toLowerCase() || !expected.delete(key)) {
+      throw new Error(`unexpected or duplicate capture effect ${key} for ${effect.token}`);
     }
   }
 }
@@ -1772,7 +1714,7 @@ async function buildUniv3CaseCapture(input: {
         amountIn,
         quotedAmountOut: quote.amountOut,
       });
-      assertConservedUniv2Effects(effects);
+      assertConservedUniv2Effects(effects, route);
       if (quote.amountOut < minAmountOut) {
         throw new Error("univ3 capture final simulation repayment failed");
       }
@@ -3373,7 +3315,7 @@ async function buildWstethCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/protocols/wsteth-family/types.js")
+      readonly evidence: import("./venues/protocols/wsteth-family/test/fixture-types.js")
         .WstethExactEvidence;
     }
   >();
@@ -3778,7 +3720,7 @@ async function buildGoldxCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/protocols/goldx-family/types.js")
+      readonly evidence: import("./venues/protocols/goldx-family/test/fixture-types.js")
         .GoldxExactEvidence;
     }
   >();
@@ -4202,7 +4144,7 @@ async function buildRocksolidCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/protocols/rocksolid-family/types.js")
+      readonly evidence: import("./venues/protocols/rocksolid-family/test/fixture-types.js")
         .RocksolidExactEvidence;
     }
   >();
@@ -4661,7 +4603,7 @@ async function buildMetronomeHgUsdcCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/protocols/metronome-hgusdc-family/types.js")
+      readonly evidence: import("./venues/protocols/metronome-hgusdc-family/test/fixture-types.js")
         .MetronomeHgUsdcExactEvidence;
     }
   >();
@@ -5136,7 +5078,7 @@ async function buildMetronomeSynthCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/protocols/metronome-synth-family/types.js")
+      readonly evidence: import("./venues/protocols/metronome-synth-family/test/fixture-types.js")
         .MetronomeSynthExactEvidence;
     }
   >();
@@ -5694,7 +5636,7 @@ async function buildErc4626SiloCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/protocols/erc4626-silo-redeem-family/types.js")
+      readonly evidence: import("./venues/protocols/erc4626-silo-redeem-family/test/fixture-types.js")
         .Erc4626SiloRedeemExactEvidence;
     }
   >();
@@ -8017,7 +7959,7 @@ async function buildAstraCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/protocols/astra-multitoken-family/types.js")
+      readonly evidence: import("./test/fixtures/protocol-json/astra-multitoken-fixture-types.js")
         .AstraMultiTokenExactEvidence;
     }
   >();
@@ -8555,7 +8497,7 @@ async function buildEigenpieCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/protocols/eigenpie-family/types.js")
+      readonly evidence: import("./generated/declarative-family-types/eigenpie.generated.js")
         .EigenpieExactEvidence;
     }
   >();
@@ -9339,8 +9281,8 @@ function fluidDexSuccessResult(
               "getDexAddress",
               [FLUID_DEX_FIXTURE_POOL],
             )
-          : request.id === "token0-decimals" ||
-              request.id === "token1-decimals"
+          : request.kind === "eth-call" && request.data === FLUID_DEX_ERC20_INTERFACE.encodeFunctionData("decimals") &&
+              [FLUID_DEX_FIXTURE_TOKEN0, FLUID_DEX_FIXTURE_TOKEN1].some(token => token.toLowerCase() === request.to.toLowerCase())
             ? FLUID_DEX_ERC20_INTERFACE.encodeFunctionResult(
                 "decimals",
                 [18],
@@ -9526,7 +9468,7 @@ async function buildFluidDexCaseCapture(input: {
         order,
       }),
     }));
-  const exactMethod = fluidDexExact.methods().find(
+  const exactMethod = fluidDexPlugin.exact.methods().find(
     (method) => method.kind === "request-program" &&
       method.id === "declared-revert-quote",
   );
@@ -9538,7 +9480,7 @@ async function buildFluidDexCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/swaps/fluid-dex-family/types.js")
+      readonly evidence: import("./venues/swaps/fluid-dex-family/test/fixture-types.js")
         .FluidDexExactEvidence;
     }
   >();
@@ -9606,7 +9548,7 @@ async function buildFluidDexCaseCapture(input: {
         );
       }
       const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
-      const fragment = fluidDexExecution.buildFragment({
+      const fragment = fluidDexPlugin.execution.buildFragment({
         descriptor: instance.descriptor as unknown as FluidDexDescriptor,
         route: route as unknown as FluidDexRoute,
         amountIn,
@@ -9635,7 +9577,7 @@ async function buildFluidDexCaseCapture(input: {
           ),
         }),
       }));
-      const effects = fluidDexExecution.expectedEffects({
+      const effects = fluidDexPlugin.execution.expectedEffects({
         descriptor: instance.descriptor as unknown as FluidDexDescriptor,
         route: route as unknown as FluidDexRoute,
         amountIn,
@@ -9768,13 +9710,13 @@ export const ANGSTROM_FIXTURE_FEE = 0;
 export const ANGSTROM_FIXTURE_TICK_SPACING = 60;
 
 function angstromFixturePoolKey() {
-  return canonicalPoolKey({
+  return normalizeV4PoolKey({
     currency0: ANGSTROM_FIXTURE_CURRENCY0,
     currency1: ANGSTROM_FIXTURE_CURRENCY1,
     fee: ANGSTROM_FIXTURE_FEE,
     tickSpacing: ANGSTROM_FIXTURE_TICK_SPACING,
     hooks: ANGSTROM_MAINNET_HOOK,
-  });
+  }, "Angstrom fixture pool");
 }
 
 function angstromSuccessResult(
@@ -9806,7 +9748,7 @@ function angstromSuccessResult(
                   "ANGSTROM",
                   [ANGSTROM_MAINNET_HOOK],
                 )
-              : request.id === "exact-angstrom-v4-quotes"
+              : request.id === "angstrom-v4-exact-quote"
                 ? (() => {
                     const quote = UNIV4_QUOTER_INTERFACE.encodeFunctionResult(
                       "quoteExactInputSingle",
@@ -9885,17 +9827,15 @@ export function angstromFixtureRuntime(): CentralAdapterRuntime {
   };
 }
 
-async function runAngstromLifecycle(
+export async function runAngstromLifecycle(
   canonical: CanonicalSource,
   poolKey: ReturnType<typeof angstromFixturePoolKey>,
   runtime: CentralAdapterRuntime = angstromFixtureRuntime(),
 ): Promise<AdapterFamilyPublication> {
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
-    ANGSTROM_V4_FAMILY_ID,
+    angstromPlugin.manifest.familyId,
   );
-  const poolId = canonicalPoolId(
-    v4PoolId(poolKey),
-  );
+  const poolId = v4PoolId(poolKey);
   let publication: AdapterFamilyPublication | null = null;
   const initializeLog = UNIV4_POOL_MANAGER_INTERFACE.encodeEventLog(
     "Initialize",
@@ -9932,43 +9872,9 @@ async function runAngstromLifecycle(
   return publication;
 }
 
-function angstromRuntimeEvidenceFor(
-  source: CanonicalSource,
-  instanceKey: string,
-): RuntimeEvidence {
-  const node = `0x${"11".repeat(20)}`;
-  const signature = `0x${"22".repeat(65)}`;
-  const unlockData = `${node}${signature.slice(2)}`;
-  const attestation = Object.freeze({
-    ...parseAngstromAttestation({
-      blockNumber: BigInt(source.number),
-      unlockData,
-    }),
-    verification: "evidence-bound" as const,
-  });
-  const payload = encodeAngstromExecutionEvidence([attestation]);
-  const payloadHash = ethers.keccak256(payload);
-  const txHash = `0x${"ab".repeat(32)}`;
-  return Object.freeze({
-    evidenceId: "fixture:angstrom-empty-block",
-    familyId: ANGSTROM_V4_FAMILY_ID,
-    instanceKey: instanceKey as RuntimeEvidence["instanceKey"],
-    kind: "angstrom-empty-block-attestation",
-    scope: "transaction" as const,
-    source,
-    txHash,
-    evidenceHash: angstromRuntimeEvidenceHash({
-      txHash,
-      source,
-      payloadHash,
-    }),
-    sealedPayloadRef: payload,
-  });
-}
-
 /**
  * Runs the angstrom-v4 official-hook lifecycle over the initialize log
- * fixture: static pool-key/hook/controller proof, tx-bound attestation
+ * fixture: static pool-key/hook/controller proof, source-unlocked
  * exact quotes and v4-style current pricing.
  */
 async function buildAngstromCaseCapture(input: {
@@ -9979,7 +9885,7 @@ async function buildAngstromCaseCapture(input: {
 }): Promise<RawFamilyMigrationCaseCapture> {
   const { publication, evidenceRefs } = input;
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forFamily(
-    ANGSTROM_V4_FAMILY_ID,
+    angstromPlugin.manifest.familyId,
   );
   const edges: RawMigrationStageCapture["items"][number][] = [];
   const prices: RawMigrationStageCapture["items"][number][] = [];
@@ -10053,8 +9959,7 @@ async function buildAngstromCaseCapture(input: {
     string,
     {
       readonly amountOut: bigint;
-      readonly evidence: import("./venues/swaps/angstrom-v4-family/types.js")
-        .AngstromV4ExactEvidence;
+      readonly evidence: Record<string, any>;
     }
   >();
   const exactQuotes: RawMigrationStageCapture["items"][number][] = [];
@@ -10065,22 +9970,20 @@ async function buildAngstromCaseCapture(input: {
     }),
   );
   for (const instance of publication.instances) {
-    const runtimeEvidence = Object.freeze([
-      angstromRuntimeEvidenceFor(input.source, instance.instanceKey),
-    ]);
+    const runtimeEvidence = [] as const;
     for (const route of [...instance.routes].sort(
       (left, right) => left.routeKey.localeCompare(right.routeKey),
     )) {
       const exactInput = Object.freeze({
-        descriptor: instance.descriptor as unknown as AngstromV4Descriptor,
-        route: route as unknown as AngstromV4Route,
+        descriptor: instance.descriptor,
+        route: route,
         amountIn: UNIV2_CAPTURE_EXACT_AMOUNT_IN,
         source: input.source,
         executor: MIGRATION_CAPTURE_EXECUTOR,
         runtimeEvidence,
       });
-      const exactMethod = angstromV4Exact.methods(exactInput).find(
-        (method) => method.kind === "request-program" && method.id === "tx-bound-quoter",
+      const exactMethod = angstromPlugin.exact!.methods(exactInput).find(
+        (method) => method.kind === "request-program" && method.id === "source-unlocked-quoter",
       );
       if (exactMethod === undefined || exactMethod.kind !== "request-program") {
         throw new Error("angstrom-v4 exact request program is missing");
@@ -10122,9 +10025,7 @@ async function buildAngstromCaseCapture(input: {
   const executionFragments: RawMigrationStageCapture["items"][number][] = [];
   const finalSimulations: RawMigrationStageCapture["items"][number][] = [];
   for (const instance of publication.instances) {
-    const runtimeEvidence = Object.freeze([
-      angstromRuntimeEvidenceFor(input.source, instance.instanceKey),
-    ]);
+    const runtimeEvidence = [] as const;
     for (const route of [...instance.routes].sort(
       (left, right) => left.routeKey.localeCompare(right.routeKey),
     )) {
@@ -10136,9 +10037,9 @@ async function buildAngstromCaseCapture(input: {
         );
       }
       const amountIn = UNIV2_CAPTURE_EXACT_AMOUNT_IN;
-      const fragment = angstromV4Execution.buildFragment({
-        descriptor: instance.descriptor as unknown as AngstromV4Descriptor,
-        route: route as unknown as AngstromV4Route,
+      const fragment = angstromPlugin.execution!.buildFragment({
+        descriptor: instance.descriptor,
+        route: route,
         amountIn,
         quotedAmountOut: quote.amountOut,
         minAmountOut: quote.amountOut,
@@ -10163,9 +10064,9 @@ async function buildAngstromCaseCapture(input: {
           ),
         }),
       }));
-      const effects = angstromV4Execution.expectedEffects({
-        descriptor: instance.descriptor as unknown as AngstromV4Descriptor,
-        route: route as unknown as AngstromV4Route,
+      const effects = angstromPlugin.execution!.expectedEffects({
+        descriptor: instance.descriptor,
+        route: route,
         amountIn,
         quotedAmountOut: quote.amountOut,
       });
@@ -10200,7 +10101,7 @@ async function buildAngstromCaseCapture(input: {
   const instances = publication.instances;
   const summary = definedFamilyPluginContractSummary(family.plugin);
   return Object.freeze({
-    familyId: ANGSTROM_V4_FAMILY_ID,
+    familyId: angstromPlugin.manifest.familyId,
     caseId: input.caseId ?? `angstrom-v4:${input.source.number}`,
     inputFingerprint: input.source.hash.slice(2).padStart(64, "0"),
     stateAnchorNumber: input.source.number,
@@ -10272,13 +10173,13 @@ export async function captureAngstromV4OnchainCase(input: {
   if (hook !== ANGSTROM_MAINNET_HOOK.toLowerCase()) {
     throw new Error("angstrom onchain controller hook mismatch");
   }
-  const poolKey = canonicalPoolKey({
+  const poolKey = normalizeV4PoolKey({
     currency0: input.currency0,
     currency1: input.currency1,
     fee: input.fee,
     tickSpacing: input.tickSpacing,
     hooks: hook,
-  });
+  }, "Angstrom on-chain pool");
   const publication = await runAngstromLifecycle(
     input.source,
     poolKey,

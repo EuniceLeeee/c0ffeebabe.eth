@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { ADDR } from "../../../../../shared/constants/addresses.js";
-import { psmIdentity } from "../identity.js";
 import { PSM_INTERFACE, psmBuyCost } from "../codec.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
 import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
 import { executeAdapterFamilyLifecycleBatch, recheckFamilyInstanceMemoBinding } from "../../../adapter-family-runtime.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { PSM_FAMILY_ID } from "../manifest.js";
+import { plugin as psmJsonPlugin } from "../../../production-families/psm.production.js";
+
+const psmIdentity = psmJsonPlugin.identity;
+
 
 const target = "0x2222222222222222222222222222222222222222", pocket = "0x3333333333333333333333333333333333333333";
 const executor = "0x4444444444444444444444444444444444444444";

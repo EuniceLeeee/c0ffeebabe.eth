@@ -7,16 +7,16 @@ import { definedFamilyPluginContractSummary } from
   "../venues/adapter-family-plugin.js";
 import { FAMILY_CAPABILITY_NAMES } from
   "../venues/family-capability-catalog.js";
-import { eigenpieStrictFamilyPlugin } from
-  "../venues/protocols/eigenpie-family-plugin.js";
-import { goldxStrictFamilyPlugin } from
-  "../venues/protocols/goldx-family-plugin.js";
-import { psmStrictFamilyPlugin } from
-  "../venues/protocols/psm-family-plugin.js";
-import { rocksolidStrictFamilyPlugin } from
-  "../venues/protocols/rocksolid-family-plugin.js";
-import { wstethStrictFamilyPlugin } from
-  "../venues/protocols/wsteth-family-plugin.js";
+import { plugin as eigenpieStrictFamilyPlugin } from
+  "../venues/production-families/eigenpie.production.js";
+import { plugin as goldxStrictFamilyPlugin } from
+  "../venues/production-families/goldx.production.js";
+import { plugin as psmStrictFamilyPlugin } from
+  "../venues/production-families/psm.production.js";
+import { plugin as rocksolidStrictFamilyPlugin } from
+  "../venues/production-families/rocksolid.production.js";
+import { plugin as wstethStrictFamilyPlugin } from
+  "../venues/production-families/wsteth.production.js";
 
 const listenerRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -82,42 +82,18 @@ for (const family of families) {
     present.map((record) => record.identity.capability).sort(),
     [...presentCapabilities].sort(),
   );
-  assert.equal(
-    new Set(present.map((record) => record.root.entrySourceFile)).size,
-    presentCapabilities.length,
-    `${familyId} must use one direct source root per semantic capability`,
-  );
-  const directRootFiles = present.map((record) =>
-    record.root.entrySourceFile!
-  );
+  const familyDirectory = `src/searcher/venues/protocols/${family.name}-family/`;
+  const definition = familyDirectory + family.name + ".json";
   for (const record of present) {
-    assert.equal(
-      record.root.entrySourceFile,
-      `src/searcher/venues/protocols/${family.name}-family/` +
-        `${record.identity.capability}.ts`,
-    );
-    assert(
-      !record.identity.semanticDependencies.some((dependency) =>
-        dependency.endsWith(`${family.name}-family-plugin.ts`)
-      ),
-      `${familyId}/${record.identity.capability} cannot hash the compatibility assembly`,
-    );
-    assert(
-      record.identity.semanticDependencies.every((dependency) => {
-        const isSemanticRoot = directRootFiles.includes(dependency) || (
-          dependency.startsWith("src/searcher/venues/") &&
-          FAMILY_CAPABILITY_NAMES.some((capability) =>
-            dependency.endsWith(`-family/${capability}.ts`)
-          )
-        );
-        // Existing capture materialization composes its declared discovery.
-        // No other sibling or cross-Family semantic dependency is allowed.
-        return !isSemanticRoot || (record.identity.capability === "capture" &&
-          dependency === `src/searcher/venues/protocols/${family.name}-family/discovery.ts`);
-      }),
-      `${familyId}/${record.identity.capability} cannot depend on a sibling or cross-Family semantic root except capture -> declared discovery`,
-    );
+    assert.equal(record.root.entrySourceFile, "src/searcher/venues/declarative-protocol.ts");
+    assert.equal(record.root.entryExport, "compileDeclarativeProtocol");
+    assert(record.root.additionalSourceFiles.includes(definition));
+    assert(record.identity.semanticDependencies.includes(definition));
+    const handwritten = record.identity.semanticDependencies.filter(path =>
+      path.startsWith(familyDirectory) && /\/(?:capture|discovery|identity|instance|routes|pricing|exact|execution)\.ts$/.test(path));
+    assert.deepEqual(handwritten, [], `${familyId}/${record.identity.capability} must consume its declaration`);
+    assert(!record.identity.semanticDependencies.some(path => path.endsWith(`${family.name}-family-plugin.ts`)));
   }
 }
 
-console.log("standard protocol direct capability roots: ok");
+console.log("standard protocol JSON capability roots: ok");

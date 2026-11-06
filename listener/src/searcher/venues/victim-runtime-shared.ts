@@ -30,6 +30,7 @@ export function buildApprovedSwapVictimOverlay(input: {
   const dealAmount = input.impact.amountIn * 2n;
   const approveTarget = ethers.getAddress(input.approveTarget);
 
+  const layout = knownTokenStorageLayout(tokenIn);
   const approveCall: OverlayPreCall = {
     from: whale,
     to: tokenIn,
@@ -37,14 +38,14 @@ export function buildApprovedSwapVictimOverlay(input: {
       approveTarget,
       dealAmount,
     ]),
-    gasLimit: input.gasLimit,
-    allowanceSlot: knownTokenStorageLayout(tokenIn)?.allowanceSlot,
+    ...(input.gasLimit === undefined ? {} : { gasLimit: input.gasLimit }),
+    ...(layout?.allowanceSlot === undefined ? {} : { allowanceSlot: layout.allowanceSlot }),
   };
   const swapCall: OverlayPreCall = {
     from: whale,
     to: ethers.getAddress(input.swapTarget),
     calldata: input.swapCalldata,
-    gasLimit: input.gasLimit,
+    ...(input.gasLimit === undefined ? {} : { gasLimit: input.gasLimit }),
   };
 
   return {
@@ -53,7 +54,7 @@ export function buildApprovedSwapVictimOverlay(input: {
       token: tokenIn,
       to: whale,
       amount: dealAmount.toString(),
-      balanceSlot: knownTokenStorageLayout(tokenIn)?.balanceSlot,
+      ...(layout?.balanceSlot === undefined ? {} : { balanceSlot: layout.balanceSlot }),
     }],
     preCalls: [approveCall, swapCall],
   };

@@ -20,6 +20,7 @@ export interface DeclarativeCallbackFrame {
   readonly call: FrameCall & { readonly dataArgument: number };
   readonly callback: {
     readonly signature: string; readonly dataArgument: number;
+    readonly alternativeSignatures?: readonly string[];
     readonly arguments: readonly FrameArgument[];
     /** Explicit parent captures: no ambient access to an enclosing register. */
     readonly captures: Readonly<Record<string, FrameValue>>;
@@ -152,6 +153,25 @@ function call(raw: unknown, names: Set<string>, staticCall: boolean, frameCall =
   raw.checks?.forEach((item: unknown) => check(item, names));
 }
 
+/** Alternate callback names retain the same ABI layout and the same authenticated
+ * caller, payload, balance and argument checks. Each selector is checked in the VM. */
+function callbackSelectors(callback: DeclarativeCallbackFrame["callback"]): bigint[] {
+  const main = bytesArgument(callback.signature, callback.dataArgument).fn;
+  const alternatives = callback.alternativeSignatures ?? [];
+  if (!Array.isArray(alternatives) || alternatives.length > 7) throw new Error("callback signature alternatives");
+  const layout = main.inputs.map(p => p.format("sighash")).join(",");
+  const selectors = [main.selector, ...alternatives.map(signature => {
+    if (typeof signature !== "string") throw new Error("invalid callback signature");
+    const alternate = bytesArgument(signature, callback.dataArgument).fn;
+    if (alternate.inputs.map(p => p.format("sighash")).join(",") !== layout ||
+        alternate.outputs.map(p => p.format("sighash")).join(",") !== main.outputs.map(p => p.format("sighash")).join(","))
+      throw new Error("callback signature alternatives must share the exact ABI layout");
+    return alternate.selector;
+  })];
+  if (new Set(selectors).size !== selectors.length) throw new Error("duplicate callback selector");
+  return selectors.map(selector => BigInt(selector));
+}
+
 /** Structural validation is registration-time and pure. ABI declarations never
  * supply caller authority, byte offsets, register numbers, or executable bytes. */
 export function validateDeclarativeCallbackFrame(raw: unknown, depth = 0): asserts raw is DeclarativeCallbackFrame {
@@ -161,8 +181,9 @@ export function validateDeclarativeCallbackFrame(raw: unknown, depth = 0): asser
   for (const capture of Object.keys(raw.call.save ?? {})) name(capture);
   const outer = bytesArgument(raw.call.signature, raw.call.dataArgument);
   if (!Array.isArray(raw.call.args) || raw.call.args.length !== outer.fn.inputs.length - 1) throw new Error("callback call args must omit payload");
-  record(raw.callback, ["signature", "dataArgument", "arguments", "captures", "steps"], ["returns"], "body");
+  record(raw.callback, ["signature", "dataArgument", "arguments", "captures", "steps"], ["returns", "alternativeSignatures"], "body");
   const cb = raw.callback, incoming = bytesArgument(cb.signature, cb.dataArgument);
+  callbackSelectors(cb as unknown as DeclarativeCallbackFrame["callback"]);
   if (incoming.fn.inputs.some((type, index) => index !== cb.dataArgument && !scalar(type))) throw new Error("callback parameters require static scalar fields");
   if (!Array.isArray(cb.arguments) || !cb.captures || typeof cb.captures !== "object" || Array.isArray(cb.captures))
     throw new Error("invalid callback imports");
@@ -284,7 +305,20 @@ export function emitDeclarativeCallbackFrame(spec: DeclarativeCallbackFrame, emi
   }
   // Selector capture is internal and cannot be supplied/overwritten by JSON.
   ops.push({ kind: "argument", name: "frameSelector", index: -1, type: "bytes4", encoding: "word" });
-  ops.push({ kind: "check", check: { left: ref("frameSelector"), operator: "eq", right: BigInt(incoming.fn.selector) } });
+  const accepted = callbackSelectors(cb);
+  if (accepted.length === 1) {
+    ops.push({ kind: "check", check: { left: ref("frameSelector"), operator: "eq", right: accepted[0]! } });
+  } else {
+    // Selectors are unique, so exactly one equality must be true.
+    let previous: FrameValue = 0n;
+    for (const [i, selector] of accepted.entries()) {
+      const match = `frameSelectorMatch${i}`, sum = `frameSelectorSum${i}`;
+      ops.push({ kind: "math", op: "eq", name: match, left: ref("frameSelector"), right: selector },
+        { kind: "math", op: "add", name: sum, left: previous, right: ref(match) });
+      previous = ref(sum);
+    }
+    ops.push({ kind: "check", check: { left: previous, operator: "eq", right: 1n } });
+  }
   for (const [name, value] of Object.entries(cb.captures)) ops.push({ kind: "seed", name, value });
   for (const arg of cb.arguments) {
     ops.push({ kind: "argument", name: arg.name, index: arg.index, type: incoming.fn.inputs[arg.index]!.type, encoding: arg.encoding });

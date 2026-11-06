@@ -1,8 +1,10 @@
+import { withRecentCallNomination } from "./declarative-recent-call-nomination.js";
 import { id, getAddress, Interface, FunctionFragment, EventFragment, MaxUint256, type ParamType } from "ethers";
 import type { CallPattern, LogPattern, DiscoverySemantics, FamilyCandidate, UnifiedObservation } from "./adapter-family-plugin.js";
+import { hashCanonical, type CanonicalScalar } from "./canonical-value.js";
 import { explicitReverseBindingUnsupported } from "./adapter-family-plugin.js";
 import { compileAddressDiscovery } from "./address-discovery.js";
-import { createAddressSurfaceNomination } from "./address-surface-nomination.js";
+import { createAddressSurfaceNomination, matchesOpaqueLabel } from "./address-surface-nomination.js";
 import { createTxEvidenceNomination } from "./tx-evidence-nomination.js";
 import { compileDeclarativeValues, validateDeclarativeValue } from "./declarative-values.js";
 import type { DeclarativeReadFlow, ReadFlowValues } from "./declarative-read-flow.js";
@@ -56,6 +58,8 @@ export interface DeclarativeMappedDiscovery {
     readonly optionalFields?: readonly string[];
     readonly nullableFields?: readonly string[];
     readonly key: readonly string[];
+    /** Stable durable keys can consist of canonical addresses plus an evidence digest. */
+    readonly durableKey?: { readonly addresses: readonly string[]; readonly evidence?: readonly string[] };
     /** Pre-partition nomination grouping; evidence candidate keys stay distinct. */
     readonly instanceKey?: readonly string[];
   };
@@ -67,6 +71,8 @@ export interface DeclarativeMappedDiscovery {
   readonly txSeedNominations?: boolean;
   /** Read-only enrichment of retained nomination data, never identity admission. */
   readonly nominationReadFlow?: DeclarativeReadFlow;
+  readonly reverseBinding?: "address-surface";
+  readonly recentCallNomination?: { readonly emitter: string; readonly topic: string; readonly when: unknown; readonly nominationKey: unknown; readonly candidateKey: unknown };
   readonly surface?: {
     readonly id: string;
     readonly fingerprint: string;
@@ -130,11 +136,11 @@ function scalar(type: FieldType, value: unknown): string | bigint | boolean | nu
 function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappedDiscovery, readValues?: ReadFlowValues): DiscoverySemantics<C> {
   validateDeclarativeValue(raw);
   const d = JSON.parse(JSON.stringify(raw)) as DeclarativeMappedDiscovery;
-  shape(d, ["version", "sources", "candidateSources", "candidate", "calls", "events", "labels", "nomination"], ["surface", "nominationReadFlow", "txSeedNominations"], "mapping");
-  shape(d.candidate, ["kind", "addressField", "fields", "key"], ["optionalFields", "nullableFields", "instanceKey"], "candidate");
+  shape(d, ["version", "sources", "candidateSources", "candidate", "calls", "events", "labels", "nomination"], ["surface", "nominationReadFlow", "txSeedNominations", "recentCallNomination", "reverseBinding"], "mapping");
+  shape(d.candidate, ["kind", "addressField", "fields", "key"], ["optionalFields", "nullableFields", "instanceKey", "durableKey"], "candidate");
   if (typeof d.candidate.kind !== "string" || !d.candidate.kind || !["tx-evidence", "address-surface"].includes(d.nomination))
     throw new Error("invalid discovery candidate or nomination kind");
-  for (const [field, types] of [["sources", ["landed-log", "observed-call", "address-surface"]],
+  for (const [field, types] of [["sources", ["factory-log", "landed-log", "observed-call", "address-surface"]],
     ["candidateSources", ["dex-token-domain", "observed-interaction", "canonical-registry"]]] as const) {
     const list = d[field];
     if (!Array.isArray(list) || new Set(list).size !== list.length || list.some(item => !(types as readonly string[]).includes(item)))
@@ -400,6 +406,32 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
       } catch { return null; }
   };
   const callPatterns = calls.map(p => p.pattern), logPatterns = events.map(p => p.pattern);
+  const durable = d.candidate.durableKey;
+  if (durable !== undefined) {
+    shape(durable, ["addresses"], ["evidence"], "durable candidate key");
+    const { addresses, evidence = [] } = durable;
+    if (!Array.isArray(addresses) || !addresses.length || !Array.isArray(evidence) ||
+        addresses.some(key => !d.candidate.key.includes(key) || d.candidate.fields[key] !== "address") ||
+        evidence.some(key => !fields.includes(key)) ||
+        new Set([...addresses, ...evidence]).size !== addresses.length + evidence.length ||
+        d.candidate.key.some(key => !addresses.includes(key) && !evidence.includes(key)))
+      throw new Error("invalid durable candidate key projection");
+  }
+  function durableCandidateKey(value: unknown): string {
+    if (!durable) return encodeKey(value, d.candidate.key);
+    const row = value as Readonly<Record<string, unknown>>;
+    const parts = durable.addresses.map(key => String(scalar("address", row[key])).toLowerCase());
+    if (durable.evidence?.length) {
+      const projection: Record<string, CanonicalScalar> = {};
+      for (const key of durable.evidence) {
+        const type = d.candidate.fields[key]!, item = row[key];
+        const v = item === null && nullable.has(key) || item === undefined && optional.has(key) ? null : scalar(type, item);
+        projection[key] = type === "address" && typeof v === "string" ? v.toLowerCase() : v;
+      }
+      parts.push(hashCanonical(projection));
+    }
+    return parts.join(":");
+  }
   function encodeKey(value: unknown, keys: readonly string[]): string {
     if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid discovery key value");
     const row = value as Readonly<Record<string, unknown>>;
@@ -411,6 +443,29 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
     // keys use structured encoding; delimiters in scalar strings cannot alias.
     return parts.length === 1 && d.candidate.fields[keys[0]!] === "address" ? String(parts[0]) : JSON.stringify(parts);
   }
+  const baseNomination = d.nomination === "tx-evidence"
+      ? createTxEvidenceNomination({ opaqueLabels: d.labels, callPatterns, logPatterns, allMatches: true,
+        acceptObservation: observation => (observation.kind === "call" ? calls : observation.kind === "log" ? events : [])
+          .some(entry => decodeCandidate({ observation, matchedPatternId: entry.pattern.id }) !== null) })
+      : createAddressSurfaceNomination({ opaqueLabels: d.labels, interfaceFingerprints: [d.surface!.fingerprint],
+        resolveOpaque: resolveOpaque ?? (async ({ nomination }) => nomination.opaque) });
+  if (d.recentCallNomination) shape(d.recentCallNomination, ["emitter","topic","when","nominationKey","candidateKey"], [], "recent call nomination");
+  if (d.reverseBinding !== undefined && (d.reverseBinding !== "address-surface" || d.nomination !== "address-surface" || !d.surface))
+    throw new Error("reverse binding requires a declared address-surface nomination");
+  const reverseLabels = new Set(d.labels.map(label => label.toLowerCase()));
+  const surfaceId = d.surface?.id;
+  const recent = d.recentCallNomination && withRecentCallNomination({
+    base: baseNomination, declaration: d.recentCallNomination, labels:d.labels, values, callPatterns,
+    decode: observation => {
+      if (observation.kind === "address-surface" && d.surface) return decodeCandidate({observation, matchedPatternId:d.surface.id});
+      if (observation.kind !== "call") return null;
+      for (const c of calls) {
+        const decoded = decodeCandidate({observation,matchedPatternId:c.pattern.id});
+        if(decoded) return decoded;
+      }
+      return null;
+    },
+  });
   return {
     evidenceChannel: "nominate", sources: d.sources as DiscoverySemantics<C>["sources"],
     ...(Array.isArray(d.candidateSources) && d.candidateSources.length === 0 ? {}
@@ -419,20 +474,33 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
     ...(d.txSeedNominations === undefined
       ? d.nomination === "tx-evidence" ? { txSeedNominations: true } : {}
       : { txSeedNominations: d.txSeedNominations }),
-    nominate: d.nomination === "tx-evidence"
-      ? createTxEvidenceNomination({ opaqueLabels: d.labels, callPatterns, logPatterns, allMatches: true,
-        acceptObservation: observation => (observation.kind === "call" ? calls : observation.kind === "log" ? events : [])
-          .some(entry => decodeCandidate({ observation, matchedPatternId: entry.pattern.id }) !== null) })
-      : createAddressSurfaceNomination({ opaqueLabels: d.labels, interfaceFingerprints: [d.surface!.fingerprint],
-        resolveOpaque: resolveOpaque ?? (async ({ nomination }) => nomination.opaque) }),
-    reverseBinding: explicitReverseBindingUnsupported("no reverse-binding registry declared (explicit unsupported)"),
+    nominate: recent ?? baseNomination,
+    reverseBinding: d.reverseBinding === "address-surface" ? {
+      kind: "implementation",
+      async reverseBinding({ nominations, source, provider }) {
+        const outcomes = [];
+        for (const nomination of nominations) {
+          if (!matchesOpaqueLabel(nomination.opaque, reverseLabels)) {
+            outcomes.push({ status: "unsupported" as const, reason: "foreign nomination label" });
+            continue;
+          }
+          const observations = await baseNomination.nominate({ nominations: [nomination], source, provider });
+          const observation = observations[0];
+          outcomes.push(observations.length === 1 && observation && surfaceId &&
+            decodeCandidate({ observation, matchedPatternId: surfaceId })
+            ? { status: "verified" as const, observation }
+            : { status: "failed" as const, reason: "source-bound surface could not be verified" });
+        }
+        return Object.freeze(outcomes);
+      },
+    } : explicitReverseBindingUnsupported("no reverse-binding registry declared (explicit unsupported)"),
     decodeCandidate,
     ...(d.candidate.instanceKey === undefined ? {} : {
       instanceNominationKey: (value: unknown) => encodeKey(value, d.candidate.instanceKey!),
     }),
     candidateKey(value) {
       if (value.candidateKind !== d.candidate.kind) throw new Error("discovery candidate kind mismatch");
-      return encodeKey(value, d.candidate.key);
+      return durableCandidateKey(value);
     },
   };
 }

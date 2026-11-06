@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:goldx",
+  "instanceKey": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
+  "lineageId": "goldx:active-unit-mint",
+  "source": {
+    "number": 25535056,
+    "hash": "0x5a1cbd6b472206d2c695f4960d177e5b78188ac277c441f4a60da71ce7ede3fa"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x149df3ec17a6044e0c66c25aa55ce044abe33bf14cedea26295e1b6d4c9fde60",
+  "trials": [
+    {
+      "id": "original-PAXG-input",
+      "tokenIn": "0x45804880de22913dafe09f4980848ece6ecbaf78",
+      "tokenOut": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
+      "amountIn": "14748788796739946"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ import {
   ERC4626_SILO_PAYOUT_INTERFACE as PAYOUT_ABI,
   ERC4626_SILO_PROBE_ACTOR,
   ERC4626_SILO_PROBE_ACTOR_EVIDENCE_ID,
-} from "../venues/protocols/erc4626-silo-redeem-family/shared.js";
+} from "../venues/protocols/erc4626-silo-redeem-family/test/fixture-shared.js";
 
 // Offline regression for the B25462190 candidate shape. The actual production
 // durable codec, fallback, catalog and attestation entry run against mocks;

@@ -7,9 +7,9 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { ethers } from "ethers";
-import { EXCHANGE_CODE_HASH, MAX_UINT, UNIT, POOL } from "../codec.js";
-import { quoteAmountAndApply } from "../state.js";
-import type { EllaState } from "../types.js";
+import { EXCHANGE_CODE_HASH, MAX_UINT, UNIT, POOL } from "./definition-fixture.js";
+import { quoteAmountAndApply } from "./definition-fixture.js";
+import type { EllaState } from "./definition-fixture.js";
 import sample from "./public-sample.json";
 
 test("Ella transitions match hash-verified deployed runtime under controlled dependencies", async () => {

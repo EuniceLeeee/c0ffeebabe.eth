@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { goldxExact } from "../exact.js";
-import { goldxInstance } from "../instance.js";
-import { goldxRoutes } from "../routes.js";
-import { GOLDX_FAMILY_ID, GOLDX_LINEAGE_ID } from "../manifest.js";
+import { GOLDX_FAMILY_ID, GOLDX_LINEAGE_ID } from "./fixture-manifest.js";
 import { emptyExactTrialState } from "../../../../exact-trial-state.js";
+import { plugin as goldxJsonPlugin } from "../../../production-families/goldx.production.js";
+
+const goldxExact = goldxJsonPlugin.exact;
+const goldxInstance = goldxJsonPlugin.instance;
+const goldxRoutes = goldxJsonPlugin.routes;
+
 
 test("GOLDx declares its unproven transition without manufacturing trial effects or a chain quote", () => {
   const method = goldxExact.methods()[1];

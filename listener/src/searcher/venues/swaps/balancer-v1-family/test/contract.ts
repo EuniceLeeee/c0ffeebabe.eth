@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { RequiredAdapterRequestError } from "../../../adapter-request-failure.js";
 import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { plugin, activation } from "../../../production-families/balancer-v1.production.js";
@@ -7,8 +8,23 @@ import { definedFamilyPluginContractSummary } from "../../../adapter-family-plug
 import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
 import { RuntimeAmountProgram } from "../../../../../adapters/runtime-amount-program.js";
 import { createBlockScanSimAmountSelector } from "../../../../simulator/blockscan-sim-amount-selector.js";
-import { BONE, FACTORY_CODE_HASH, MAX_UINT, members, POOL, POOL_CODE_HASH, TOKEN } from "../codec.js";
-import { bdiv, bmul, decodeState, guardInput, guardOutput, spotPrice, stateRequests } from "../state.js";
+import { BONE, FACTORY_CODE_HASH, MAX_UINT, POOL, POOL_CODE_HASH, TOKEN } from "./fixture-abi.js";
+import { balancerV1MathModels, div as bdiv, mul as bmul } from "../math.js";
+function calc(name: string, ...operands: bigint[]): bigint {
+  const model = balancerV1MathModels.find(row => row.id === "balancer-v1:" + name)!;
+  model.validateInput(operands);
+  const value = model.evaluate(operands);
+  model.validateOutput(value);
+  return value as bigint;
+}
+function recordedBalances(rows: ReturnType<typeof quote>["initialResults"]): bigint[] {
+  return rows.map((row, index) => {
+    assert(row.ok && row.completion === "returned");
+    assert.equal(row.id, "balance:" + index);
+    assert.equal(row.source.hash, SOURCE.hash);
+    return BigInt(row.data);
+  });
+}
 import { answer, CANDIDATE, descriptor, EXECUTOR, PINNED, PUBLIC, quote, result, SOURCE, syntheticDescriptor, word } from "./fixtures.js";
 
 test("production contract is default-off and supports every directed pair in finalized 2..8-token pools", () => {
@@ -22,7 +38,7 @@ test("production contract is default-off and supports every directed pair in fin
     const routes = plugin.routes.project({ descriptor: d }); assert.equal(routes.length, n * (n - 1));
     for (const route of routes) {
       assert.equal(plugin.routes.projectGraph({ descriptor: d, route }).executionTarget, d.pool);
-      assert(plugin.execution.buildRuntimeLeg!({ descriptor: d, route, executor: EXECUTOR, runtimeEvidence: [] }));
+      assert(plugin.execution.buildRuntimeLeg!({ descriptor: d, route, executor: EXECUTOR, runtimeEvidence: [], source: SOURCE }));
     }
   }
 });
@@ -31,12 +47,12 @@ test("exact-in and exact-out observations nominate only; canonical swap logs and
   for (const fn of ["swapExactAmountIn", "swapExactAmountOut"]) {
     const observation = { kind: "call" as const, source: SOURCE, target: d.pool,
       data: POOL.encodeFunctionData(fn, [d.tokens[0], 10n, d.tokens[1], 1n, MAX_UINT]) };
-    assert.deepEqual(plugin.discovery.decodeCandidate({ observation, matchedPatternId: `balancer-v1-${fn}` }), CANDIDATE);
+    assert.deepEqual(plugin.discovery.decodeCandidate({ observation, matchedPatternId: `balancer-v1-${fn}` }), { ...CANDIDATE, pool: ethers.getAddress(CANDIDATE.pool) });
     assert.equal(plugin.discovery.decodeCandidate({ observation: { ...observation, data: observation.data + "00" }, matchedPatternId: `balancer-v1-${fn}` }), null);
   }
   const event = POOL.encodeEventLog(POOL.getEvent("LOG_SWAP")!, [EXECUTOR, d.tokens[0], d.tokens[1], 10n, 20n]);
   const log = { kind: "log" as const, source: SOURCE, address: d.pool, ...event };
-  assert.deepEqual(plugin.discovery.decodeCandidate({ observation: log, matchedPatternId: "balancer-v1-LOG_SWAP" }), CANDIDATE);
+  assert.deepEqual(plugin.discovery.decodeCandidate({ observation: log, matchedPatternId: "balancer-v1-LOG_SWAP" }), { ...CANDIDATE, pool: ethers.getAddress(CANDIDATE.pool) });
   assert.equal(plugin.discovery.decodeCandidate({ observation: { ...log, data: log.data + "00" }, matchedPatternId: "balancer-v1-LOG_SWAP" }), null);
   assert.equal(plugin.actionAdapters[0].matchTrace(d.pool, POOL.getFunction("swapExactAmountOut")!.selector), false);
 });
@@ -56,13 +72,13 @@ test("identity requires reverse factory creation; matching code alone never admi
 });
 test("unfinalized permission is retryable; malformed members, weights and mixed source fail closed", () => {
   for (const id of ["finalized", "public"]) assert.throws(() => descriptor(r => r.id === id ? result(id, word(0n)) : answer(r)), /retryable/);
-  for (const data of ["0x", POOL.encodeFunctionResult("getFinalTokens", [[]]), POOL.encodeFunctionResult("getFinalTokens", [[PINNED.tokens[0], PINNED.tokens[0]]])]) assert.throws(() => members(data));
+  for (const data of ["0x", POOL.encodeFunctionResult("getFinalTokens", [[]]), POOL.encodeFunctionResult("getFinalTokens", [[PINNED.tokens[0], PINNED.tokens[0]]])]) assert.throws(() => descriptor(r => r.id === "tokens" ? result("tokens", data) : answer(r)));
   for (const [id, value] of [["fee", BONE], ["weight:0", 0n], ["weight:0", 50n * BONE]] as const)
     assert.throws(() => descriptor(r => r.id === id ? result(id, word(value)) : answer(r)));
   const v = plugin.identity.variants[0], step = { candidate: CANDIDATE, step: 0 }, rs = v.buildRequests(step).map(answer);
   for (const bad of [rs.slice(1), [...rs, rs[0]], rs.map((r, i) => i ? r : { ...r, source: { ...SOURCE, hash: ethers.ZeroHash } })])
     assert.throws(() => v.decode({ step, results: bad }));
-  assert.throws(() => descriptor(r => r.id === "registered" ? { id: r.id, source: SOURCE, ok: false, failure: "deadline" } : answer(r)), /unresolved/);
+  assert.throws(() => descriptor(r => r.id === "registered" ? { id: r.id, source: SOURCE, ok: false, failure: "deadline" } : answer(r)), (error: unknown) => error instanceof RequiredAdapterRequestError && error.failureCode === "deadline");
 });
 test("two-direction pinned calculator outputs remain full specified amounts, not the original pre-call receipt", () => {
   for (const c of PINNED.cases.filter((c: { amountOut: string }) => c.amountOut !== "0")) {
@@ -70,9 +86,9 @@ test("two-direction pinned calculator outputs remain full specified amounts, not
     assert.equal(q.method.chainAmountQuote, true);
     assert.equal(q.quoted.amountOut, BigInt(c.amountOut)); assert.equal(q.quoted.evidence.amountIn, BigInt(c.amountIn));
     assert.equal(q.initialResults.length, 2); assert.equal(q.round?.requests.length, 1);
-    const s = decodeState(q.input.descriptor, q.initialResults, SOURCE), d = q.input.descriptor;
-    assert.equal(spotPrice(s.balances[c.i], d.weights[c.i], s.balances[c.j], d.weights[c.j], d.swapFee), BigInt(c.spotBefore));
-    assert.equal(spotPrice(s.balances[c.i] + BigInt(c.amountIn), d.weights[c.i], s.balances[c.j] - BigInt(c.amountOut), d.weights[c.j], d.swapFee), BigInt(c.spotAfter));
+    const s = { balances: recordedBalances(q.initialResults) }, d = q.input.descriptor;
+    assert.equal(calc("spot-price", s.balances[c.i], d.weights[c.i], s.balances[c.j], d.weights[c.j], d.swapFee), BigInt(c.spotBefore));
+    assert.equal(calc("spot-price", s.balances[c.i] + BigInt(c.amountIn), d.weights[c.i], s.balances[c.j] - BigInt(c.amountOut), d.weights[c.j], d.swapFee), BigInt(c.spotAfter));
   }
   assert.notEqual(quote(8444695829171278n).quoted.amountOut, 1313743479005274328n, "N end-state is not the original call pre-state");
   const a = quote(8444695829171278n), b = quote(84446958291712780n);
@@ -80,12 +96,17 @@ test("two-direction pinned calculator outputs remain full specified amounts, not
 });
 test("zero, dust, MAX_IN_RATIO, checked half-up rounding and native ERR_MATH_APPROX boundaries", () => {
   assert.equal(quote(0n).quoted.amountOut, 0n); assert.throws(() => quote(1n), /spendable/);
-  const d = descriptor(), r = plugin.routes.project({ descriptor: d })[0], s = decodeState(d, stateRequests(d).map(answer));
-  const max = bmul(s.balances[r.i], BONE / 2n);
-  guardInput(d, r, s, max); assert.throws(() => guardInput(d, r, s, max + 1n), /MAX_IN_RATIO/);
-  assert.throws(() => guardInput(d, r, { ...s, balances: [0n, s.balances[1]] }, 1n), /empty/);
-  assert.throws(() => guardOutput(d, r, s, 10n ** 18n, s.balances[r.j]), /spendable/);
-  assert.throws(() => guardOutput(d, r, s, 10n ** 18n, s.balances[r.j] / 2n), /MATH_APPROX/);
+  const q = quote(8444695829171278n), d = q.input.descriptor, r = q.input.route;
+  const balances = recordedBalances(q.initialResults);
+  const [balanceIn, weightIn, balanceOut, weightOut] = [balances[r.i], d.weights[r.i], balances[r.j], d.weights[r.j]];
+  const max = calc("max-input", balanceIn);
+  const check = (input: bigint, out: bigint, available = balanceIn) =>
+    calc("output-guard", available, weightIn, balanceOut, weightOut, d.swapFee, input, out);
+  assert.equal(check(max, 1n), 1n);
+  assert.throws(() => check(max + 1n, 1n), /MAX_IN_RATIO/);
+  assert.throws(() => check(1n, 1n, 0n), /MAX_IN_RATIO/);
+  assert.throws(() => check(10n ** 18n, balanceOut), /spendable/);
+  assert.throws(() => check(10n ** 18n, balanceOut / 2n), /MATH_APPROX/);
   assert.equal(bmul(1n, BONE / 2n), 1n); assert.equal(bdiv(1n, 2n * BONE), 1n);
   for (const f of [() => bmul(MAX_UINT, 2n), () => bdiv(MAX_UINT, BONE), () => bdiv(1n, 0n), () => quote(-1n)]) assert.throws(f);
 });
@@ -97,12 +118,24 @@ test("Exact rejects foreign caller, route, missing/extra rounds and source misma
     assert.throws(() => q.method.program.decode({ programInput: q.input, initialResults: q.initialResults, dependentEvidence: evidence }));
   assert.throws(() => q.method.program.decode({ programInput: { ...q.input, source: { ...SOURCE, generation: 2 } }, initialResults: q.initialResults, dependentEvidence: q.dependentEvidence }));
 });
+function exerciseSwap(program: string, d: { pool: string }, route: { tokenIn: string; tokenOut: string },
+  amount: bigint, minimum: bigint, extra: bigint, received: bigint, clear = true) {
+  let swapped = false, allowance = 77n;
+  return inspectRuntime(program, amount, { nativeBalance: () => 13n, call(c) {
+    if (c.data.startsWith(TOKEN.getFunction("balanceOf")!.selector)) return word(c.target.toLowerCase() === route.tokenIn.toLowerCase() ? 100n + amount - (swapped ? amount + extra : 0n) : 62n + (swapped ? received : 0n));
+    if (c.data.startsWith(TOKEN.getFunction("approve")!.selector)) { const a = TOKEN.decodeFunctionData("approve", c.data); assert.equal(a[0].toLowerCase(), d.pool.toLowerCase()); if (clear || a[1] !== 0n) allowance = a[1]; return word(1n); }
+    if (c.data.startsWith(TOKEN.getFunction("allowance")!.selector)) return word(allowance);
+    const args = POOL.decodeFunctionData("swapExactAmountIn", c.data);
+    assert.equal(args[0].toLowerCase(), route.tokenIn.toLowerCase()); assert.equal(args[1], amount); assert.equal(args[2].toLowerCase(), route.tokenOut.toLowerCase());
+    assert.equal(args[3], minimum); assert.equal(args[4], MAX_UINT); assert.equal(allowance, amount); swapped = true; return word(received) + word(0n).slice(2);
+  } });
+}
 test("quoted fragment binds amount, executor and quote, honors minOut, and owns temporary approvals", () => {
   for (const i of [0, 1]) {
     const q = quote(BigInt(PINNED.cases.find((c: { i: number; amountIn: string }) => c.i === i && c.amountIn !== "1").amountIn), i);
     const input = { ...q.input, quotedAmountOut: q.quoted.amountOut, minAmountOut: q.quoted.amountOut, exactEvidence: q.quoted.evidence };
     const f = plugin.execution.buildFragment(input); assert.equal(f.requirements.length, 0);
-    assert.equal(f.nodes[0].params.minAmountOut, q.quoted.amountOut);
+    exerciseSwap(f.nodes[0].params.runtimeAmountProgram as string, q.input.descriptor, q.input.route, input.amountIn, q.quoted.amountOut, 0n, q.quoted.amountOut);
     assert(plugin.actionAdapters[0].encode(f.nodes[0], EXECUTOR, new Uint8Array()).length > 500);
     for (const change of [{ amountIn: input.amountIn + 1n }, { minAmountOut: 0n }, { minAmountOut: input.quotedAmountOut + 1n },
       { executor: ethers.toBeHex(1n, 20) }, { exactEvidence: { ...input.exactEvidence, binding: "foreign" } }])
@@ -116,17 +149,8 @@ test("runtime reads no trial amount or Exact; ABI patches input only and cleanup
     const input: any = { descriptor: d, route, executor: EXECUTOR, runtimeEvidence: [], source: SOURCE };
     for (const key of ["amountIn", "exactEvidence", "quotedAmountOut", "minAmountOut"]) Object.defineProperty(input, key, { get() { throw Error("read " + key); } });
     const leg = plugin.execution.buildRuntimeLeg!(input)!;
-    const run = (extra: bigint, received: bigint, clear = true) => {
-      let swapped = false, allowance = 77n;
-      return inspectRuntime(leg.program, amount, { call(c) {
-        if (c.data.startsWith(TOKEN.getFunction("balanceOf")!.selector)) return word(c.target.toLowerCase() === route.tokenIn ? 100n + amount - (swapped ? amount + extra : 0n) : 62n + (swapped ? received : 0n));
-        if (c.data.startsWith(TOKEN.getFunction("approve")!.selector)) { const a = TOKEN.decodeFunctionData("approve", c.data); assert.equal(a[0].toLowerCase(), d.pool); if (clear || a[1] !== 0n) allowance = a[1]; return word(1n); }
-        if (c.data.startsWith(TOKEN.getFunction("allowance")!.selector)) return word(allowance);
-        const args = POOL.decodeFunctionData("swapExactAmountIn", c.data);
-        assert.equal(args[0].toLowerCase(), route.tokenIn); assert.equal(args[1], amount); assert.equal(args[2].toLowerCase(), route.tokenOut);
-        assert.equal(args[3], 1n); assert.equal(args[4], MAX_UINT); assert.equal(allowance, amount); swapped = true; return word(received) + word(0n).slice(2);
-      } });
-    };
+    const run = (extra: bigint, received: bigint, clear = true) =>
+      exerciseSwap(leg.program, d, route, amount, 1n, extra, received, clear);
     const trace = run(0n, 123n);
     assert.deepEqual(trace.calls.filter(c => c.data.startsWith(TOKEN.getFunction("approve")!.selector)).map(c => TOKEN.decodeFunctionData("approve", c.data)[1]), [0n, amount, 0n]);
     assert.equal(trace.registers[5], 123n); assert.equal(trace.registers[0], amount);
@@ -135,7 +159,7 @@ test("runtime reads no trial amount or Exact; ABI patches input only and cleanup
 });
 test("raw prices share one balance round and pool-only mutation refresh includes non-swap calls", () => {
   const d = descriptor(), routes = plugin.routes.project({ descriptor: d });
-  const pd = plugin.pricing.finalizePricingDescriptor({ draft: plugin.pricing.compileDraft({ descriptor: d, routes, stateKey: d.pool }), sharedBindings: [] });
+  const pd = plugin.pricing.finalizePricingDescriptor({ draft: plugin.pricing.compileDraft({ descriptor: d, routes, stateKey: d.pool }), staticEvidence: {}, sharedBindings: [] });
   const requests = plugin.pricing.current.buildRequests({ descriptor: pd, routes, source: SOURCE }); assert.equal(requests.length, 2);
   const snapshot = plugin.pricing.current.decodeSnapshot({ descriptor: pd, initialResults: requests.map(answer), dependentEvidence: [] });
   const mids = plugin.pricing.current.deriveMids({ descriptor: pd, routes, snapshot }); assert.equal(mids.size, 2);

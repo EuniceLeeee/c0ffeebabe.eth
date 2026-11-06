@@ -15,8 +15,13 @@ export interface DeclarationValues {
   evaluate(value: Value, env: Environment): Value;
 }
 interface SharedConversionExecution {
-  readonly settlement: { readonly directOutput: boolean };
+  readonly settlement: {
+    readonly directOutput: boolean;
+    /** Deliver the authenticated callback debt using the trial's fixed input. */
+    readonly settleOutput?: { readonly version: 1; readonly steps: readonly Value[] };
+  };
   readonly protectedAddresses: Value;
+  readonly allowZeroMinimum?: true;
   readonly contextChecks?: readonly { readonly condition: Value; readonly error: string }[];
   readonly requireCanonicalSource?: boolean;
   readonly rejectRuntimeEvidence?: boolean;
@@ -26,8 +31,9 @@ interface SharedConversionExecution {
 export interface DeclarativeExecutionOptions { readonly math?: BoundRuntimeMath }
 export interface DeclarativeQuoteOutput {
   readonly version: 1;
+  readonly nativeBoundary?: true;
   readonly steps: readonly {
-    readonly id: string; readonly call?: Value; readonly static?: true;
+    readonly id: string; readonly call?: Value; readonly static?: true; readonly errorSignature?: string;
     readonly math?: { readonly model: string; readonly inputs: Value; readonly outputs: Record<string, string>; readonly checks?: readonly Check[] };
   }[];
   readonly result: { readonly runtime: string };
@@ -36,7 +42,7 @@ export interface DeclarativeQuoteOutput {
 }
 export type DeclarativeConversionExecution = SharedConversionExecution & (
   | { readonly version: 1; readonly approval?: Value; readonly call: Value; readonly steps?: never }
-  | { readonly version: 2; readonly steps: readonly Value[]; readonly deferred?: Value; readonly framedSettlement?: { readonly version: 1; readonly recipient: "executor" | "target"; readonly debtInput: boolean; readonly expectedOutput: FrameValue; readonly nativeBoundary?: true }; readonly quoteOutput?: DeclarativeQuoteOutput; readonly call?: never; readonly approval?: never }
+  | { readonly version: 2; readonly steps: readonly Value[]; readonly deferred?: Value; readonly framedSettlement?: { readonly version: 1; readonly recipient: "executor" | "target"; readonly debtInput: boolean; readonly expectedOutput: FrameValue; readonly nativeBoundary?: true; readonly frame?: Value }; readonly quoteOutput?: DeclarativeQuoteOutput; readonly call?: never; readonly approval?: never }
 );
 type RuntimeValue = bigint | number | string | boolean | { runtime: string };
 type Check = { left: RuntimeValue; operator: "eq" | "gte"; right: RuntimeValue };
@@ -48,7 +54,7 @@ type Operation =
   | CallbackFrameOperation
   | ({ kind: "math" } & ExpandedRuntimeMathOperation)
   | { kind: "callback"; spec: DeclarativeDeferredExecution; input: Parameters<typeof emitDeclarativeDeferredExecution>[2] }
-  | { kind: "call"; call: Call; static: boolean }
+  | { kind: "call"; call: Call; static: boolean; errorSignature?: string }
   | { kind: "check"; check: Check }
   | { kind: "capture"; name: string; token?: string; account?: string; supply?: boolean; native?: boolean }
   | { kind: "difference"; name: string; left: string; right: string }
@@ -90,11 +96,24 @@ function scalarWord(type: ParamType): boolean {
 
 /** A quote declaration is data for the shared read-only compiler, never an
  * arbitrary bytecode/script source. Empty module handling belongs to catalog. */
+function quoteError(signature: string) {
+  const abi = callInterface(signature);
+  const fragment = abi.fragments.length === 1 && abi.fragments[0]!.type === "error"
+    ? abi.getError(abi.fragments[0]!.format("sighash")) : undefined;
+  if (!fragment || fragment.selector === "0x4e487b71" || fragment.selector === "0x08c379a0" ||
+      fragment.inputs.length !== 1 || fragment.inputs[0]!.type !== "uint256")
+    throw new Error("rollback quote requires a declared custom error containing one uint256");
+  return fragment;
+}
+
 export function validateDeclarativeQuoteOutput(raw: unknown): asserts raw is DeclarativeQuoteOutput {
-  keys(raw, ["version", "steps", "result", "exports"], "quote output");
+  keys(raw, ["version", "steps", "result", "exports", "nativeBoundary"], "quote output");
   const definition = raw as DeclarativeQuoteOutput;
+  if (definition.nativeBoundary !== undefined && definition.nativeBoundary !== true) throw new Error("invalid quote native boundary");
   if (definition.version !== 1 || !Array.isArray(definition.steps) || !definition.steps.length || definition.steps.length > 64)
     throw new Error("declared quote output steps");
+  if (definition.nativeBoundary && !definition.steps.some(step => step.errorSignature !== undefined))
+    throw new Error("native quote boundary requires an explicit rollback quote");
   keys(definition.result, ["runtime"], "quote output result");
   if (typeof definition.result.runtime !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*$/.test(definition.result.runtime) || forbidden.has(definition.result.runtime))
     throw new Error("declared quote output result");
@@ -111,14 +130,19 @@ export function validateDeclarativeQuoteOutput(raw: unknown): asserts raw is Dec
     } else if (value && typeof value === "object") Object.values(value).forEach(refs);
   };
   for (const step of definition.steps) {
-    keys(step, ["id", "call", "static", "math"], "quote output step");
+    keys(step, ["id", "call", "static", "errorSignature", "math"], "quote output step");
     if (typeof step.id !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*$/.test(step.id) || forbidden.has(step.id) || ids.has(step.id))
       throw new Error("duplicate or invalid quote output step id");
     ids.add(step.id);
     if ((step.call !== undefined ? 1 : 0) + (step.math !== undefined ? 1 : 0) !== 1)
       throw new Error("quote output step requires exactly one call or math definition");
     if (step.call !== undefined) {
-      if (step.static !== true) throw new Error("quote output calls must be static");
+      if (step.errorSignature === undefined) {
+        if (step.static !== true) throw new Error("quote output calls must be static");
+      } else {
+        if (step.static !== undefined || typeof step.errorSignature !== "string") throw new Error("invalid rollback quote mode");
+        quoteError(step.errorSignature);
+      }
       keys(step.call, ["target", "signature", "args", "save", "checks"], "quote output call");
       if (!["target", "signature", "args"].every(key => Object.hasOwn(step.call, key))) throw new Error("declared quote output call shape");
       refs(step.call.args);
@@ -131,7 +155,7 @@ export function validateDeclarativeQuoteOutput(raw: unknown): asserts raw is Dec
       }
       refs(step.call.checks);
     } else {
-      if (step.static !== undefined) throw new Error("quote output math cannot contain call flags");
+      if (step.static !== undefined || step.errorSignature !== undefined) throw new Error("quote output math cannot contain call flags");
       keys(step.math, ["model", "inputs", "outputs", "checks"], "quote output math");
       if (!["model", "inputs", "outputs"].every(key => Object.hasOwn(step.math!, key))) throw new Error("declared quote output math shape");
       if (typeof step.math!.model !== "string" || !step.math!.outputs || typeof step.math!.outputs !== "object" || Array.isArray(step.math!.outputs))
@@ -197,7 +221,8 @@ function quoteOperations(definition: DeclarativeQuoteOutput, resolved: (value: V
       const origin = refs(call.args);
       const saved = Object.entries(call.save ?? {});
       for (const [capture] of saved) save(capture, { read: true, input: origin.input });
-      operations.push({ kind: "call", static: true, call: { ...call, args: rename(call.args), checks: undefined,
+      operations.push({ kind: "call", static: step.static === true, errorSignature: step.errorSignature,
+        call: { ...call, args: rename(call.args), checks: undefined,
         save: Object.fromEntries(saved.map(([capture, offset]) => [name(capture), offset])) } });
       checks(call.checks);
     } else {
@@ -232,6 +257,11 @@ function quoteOperations(definition: DeclarativeQuoteOutput, resolved: (value: V
 function selectExecutionSteps(definition: DeclarativeConversionExecution, input: Environment,
   values?: DeclarationValues): DeclarativeConversionExecution {
   if (definition.version !== 2) return definition;
+  // A deferred invocation may have a different terminal call from ordinary
+  // funded execution. Only select this frame when its authenticated payer exists.
+  if (input.settlement?.kind === "deferred-input" && definition.framedSettlement?.frame) {
+    definition = { ...definition, steps: [{ id: "settlementFrame", frame: definition.framedSettlement.frame }] };
+  }
   if (!Array.isArray(definition.steps) || definition.steps.length > 64)
     throw new Error("declared execution steps require a bounded list");
   if (!definition.steps.some((step: Value) => step.when !== undefined || step.op !== undefined)) return definition;
@@ -304,7 +334,8 @@ export function buildDeclarativeExecutionProgram(
   values: DeclarationValues,
   options: DeclarativeExecutionOptions = {},
 ): RuntimeAmountProgram {
-  keys(definition, ["version", "settlement", "protectedAddresses", "contextChecks", "requireCanonicalSource", "rejectRuntimeEvidence", "preflight", "approval", "call", "steps", "deferred", "framedSettlement", "quoteOutput", "effects"], "execution definition");
+  keys(definition, ["version", "settlement", "protectedAddresses", "allowZeroMinimum", "contextChecks", "requireCanonicalSource", "rejectRuntimeEvidence", "preflight", "approval", "call", "steps", "deferred", "framedSettlement", "quoteOutput", "effects"], "execution definition");
+  if (definition.allowZeroMinimum !== undefined && definition.allowZeroMinimum !== true) throw new Error("invalid declared minimum-output policy");
   if (definition.version !== 1 && definition.version !== 2) throw new Error("unsupported declared execution version");
   if (definition.version === 1 && (Object.hasOwn(definition, "steps") || Object.hasOwn(definition, "deferred") || Object.hasOwn(definition, "framedSettlement") || Object.hasOwn(definition, "quoteOutput")) || definition.version === 2 &&
       (Object.hasOwn(definition, "call") || Object.hasOwn(definition, "approval"))) throw new Error("mixed execution versions");
@@ -320,11 +351,22 @@ export function buildDeclarativeExecutionProgram(
   definition = selectExecutionSteps(definition, input, values);
   if (definition.version === 2 && (!Array.isArray(definition.steps) || !definition.steps.length && input.settlement?.kind !== "quote-output"))
     throw new Error("declared execution steps must be nonempty");
-  keys(definition.settlement, ["directOutput"], "settlement");
+  keys(definition.settlement, ["directOutput", "settleOutput"], "settlement");
   if (typeof definition.settlement.directOutput !== "boolean") throw new Error("declared settlement capability");
   const request = input.settlement;
   if (!supportsDeclarativeSettlement(definition, input)) throw new Error("unsupported declared settlement request");
   const deferred = request?.kind === "deferred-input";
+  const debtDelivery = request?.kind === "settle-output";
+  if (debtDelivery) {
+    if (definition.version !== 2 || !definition.settlement.settleOutput ||
+        typeof request.amountIn !== "bigint" || request.amountIn <= 0n || request.amountIn > MaxUint256)
+      throw new Error("invalid fixed input for debt delivery");
+    // This invocation consumes an authenticated debt in r0. Its funded input
+    // comes from the selected trial; an off-chain quote cannot set either value.
+    definition = { ...definition, steps: definition.settlement.settleOutput.steps,
+      quoteOutput: undefined, deferred: undefined, framedSettlement: undefined,
+      settlement: { directOutput: true } };
+  }
   const recipient = request?.recipient ?? input.recipient ?? input.executor;
   const minAmountOut = input.minAmountOut === undefined ? 1n : uint(input.minAmountOut);
   const context = executionContext(input);
@@ -369,7 +411,10 @@ export function buildDeclarativeExecutionProgram(
     }
     Object.values(value).forEach(collectQuoteReferences);
   }
-  const { quoteOutput: _quoteDefinition, ...activeDefinition } = definition as DeclarativeConversionExecution & { quoteOutput?: DeclarativeQuoteOutput };
+  const { quoteOutput: _quoteDefinition, ...active } = definition as DeclarativeConversionExecution & { quoteOutput?: DeclarativeQuoteOutput };
+  // Dormant settlement recipes must not add reads to a normal funded call.
+  const activeDefinition = { ...active, settlement: { directOutput: definition.settlement.directOutput },
+    ...(definition.version === 2 && definition.framedSettlement?.frame && !deferred && { framedSettlement: undefined }) };
   const hasQuoteReference = (value: Value): boolean => !!value && typeof value === "object" &&
     (Object.hasOwn(value, "quoteOutput") || Object.values(value).some(hasQuoteReference));
   if (hasQuoteReference(activeDefinition) || definition.version === 2 && definition.quoteOutput?.exports)
@@ -384,6 +429,7 @@ export function buildDeclarativeExecutionProgram(
     operations.push({ kind: "check", check: { left, operator, right } });
   // Zero debit cannot masquerade as a successful conversion, in either mode.
   check(reference("amountIn"), "gte", 1n);
+  if (debtDelivery) check(reference("settlementDebt"), "gte", 1n);
   if (neededExports.size && (definition.version !== 2 || !definition.quoteOutput))
     throw new Error("execution references an undeclared quote output module");
   const quote = definition.version === 2 && definition.quoteOutput &&
@@ -428,6 +474,8 @@ export function buildDeclarativeExecutionProgram(
     throw new Error("declared conversion must bind full debit or bounded budget and fresh receipt to the route");
   }
   if (quote && !fullInput) throw new Error("quoted direct output requires exact actual input debit");
+  if (debtDelivery && (!fullInput || multipleOutputs || native))
+    throw new Error("debt delivery requires one fully funded ERC20 input and one recipient");
   if (multipleOutputs) {
     const assets = new Set<string>();
     for (const effect of credits) {
@@ -628,20 +676,28 @@ export function buildDeclarativeExecutionProgram(
   // Deferred emitters prove gross receipt against the parent witness above;
   // their continuation may consume output, so a net delta is not that receipt.
   if (quote && !deferred) check(reference(`effect${effects.indexOf(credit[0])}Delta`), "eq", quote.result);
-  return emit(operations, definition.version);
+  if (debtDelivery) check(reference(`effect${effects.indexOf(credit[0])}Delta`), "eq", reference("settlementDebt"));
+  return emit(operations, definition.version, undefined, debtDelivery ? request.amountIn : undefined);
 }
 
-function emit(operations: readonly Operation[], version: 1 | 2, frameSeeds?: { offset: number; value: FrameValue }[]): RuntimeAmountProgram {
+function emit(operations: readonly Operation[], version: 1 | 2, frameSeeds?: { offset: number; value: FrameValue }[],
+  fixedSettlementInput?: bigint): RuntimeAmountProgram {
   const program = new RuntimeAmountProgram().constant(14, 0n).constant(15, 1n);
   const slots = new Map<string, number>([["amountIn", 0]]);
   const used = new Set<number>([0, 14, 15]);
+  if (fixedSettlementInput !== undefined) {
+    slots.set("settlementDebt", 0);
+    slots.set("amountIn", 1);
+    used.add(1);
+    program.constant(1, fixedSettlementInput);
+  }
   let nativeFrame: { boundary: ReturnType<typeof runtimeDeferredAssetBoundary>; registers: number[] } | undefined;
   function take(): number {
     for (let n = 1; n < 16; n++) if (!used.has(n)) { used.add(n); return n; }
     throw new Error("declared execution exceeds register budget");
   }
   function save(name: string): number {
-    if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(name) || name === "amountIn" || forbidden.has(name)) throw new Error("invalid runtime capture name");
+    if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(name) || name === "amountIn" || name === "settlementDebt" || forbidden.has(name)) throw new Error("invalid runtime capture name");
     const prior = slots.get(name);
     if (prior !== undefined) return prior;
     const reg = take(); slots.set(name, reg); return reg;
@@ -661,7 +717,8 @@ function emit(operations: readonly Operation[], version: 1 | 2, frameSeeds?: { o
   function call(input: Call, isStatic: boolean, extra?: {
     callback: { incomingOffset: number; outgoingOffset: number };
     patches: readonly { offset: number; reg: number }[];
-  }): void {
+  }, errorSignature?: string): void {
+    const rollback = errorSignature === undefined ? undefined : quoteError(errorSignature);
     const abi = callInterface(input.signature), fragment = abi.fragments.find(item => item.type === "function");
     if (!fragment || fragment.type !== "function") throw new Error("declared call requires one function");
     const fn = abi.getFunction(fragment.format("sighash"));
@@ -703,12 +760,18 @@ function emit(operations: readonly Operation[], version: 1 | 2, frameSeeds?: { o
     if (value) temporaries.push(value);
     program.call(getAddress(input.target), encoded?.data ?? abi.encodeFunctionData(fn, args),
       { static: isStatic, patches: [...patches, ...(extra?.patches ?? [])], ...(value ? { valueReg: value.reg } : {}),
-        ...(extra ? { callback: extra.callback } : {}) });
+        ...(extra ? { callback: extra.callback } : {}), ...(rollback && { revertBytes: 36 }) });
     temporaries.forEach(release);
+    if (rollback) {
+      const actual = take(), shift = word(224n), selector = word(BigInt(rollback.selector));
+      program.load(actual, 0).math("shr", actual, actual, shift.reg).equal(actual, selector.reg);
+      used.delete(actual); release(shift); release(selector);
+    }
+    const outputs = rollback ? rollback.inputs : fn.outputs;
     for (const [name, index] of Object.entries(input.save ?? {})) {
       if (/^(?:effect[0-9]+|stepEffect[0-9]+X[0-9]+)(?:Before|After|Delta)$/.test(name)) throw new Error("reserved effect capture name");
-      if (!Number.isSafeInteger(index) || index < 0 || index >= fn.outputs.length || !fn.outputs.every(scalarWord)) throw new Error("declared return word");
-      program.load(save(name), index * 32);
+      if (!Number.isSafeInteger(index) || index < 0 || index >= outputs.length || !outputs.every(scalarWord)) throw new Error("declared return word");
+      program.load(save(name), (rollback ? 4 : 0) + index * 32);
     }
   }
   function references(value: unknown, found = new Set<string>()): Set<string> {
@@ -777,7 +840,10 @@ function emit(operations: readonly Operation[], version: 1 | 2, frameSeeds?: { o
     } else if (operation.kind === "continuation" || operation.kind === "continuation-end") {
       if (!frameSeeds) throw new Error("continuation outside callback frame");
       emitCallbackContinuation(program, operation.spec, operation.context, { word, release, take }, operation.kind === "continuation-end");
-    } else if (operation.kind === "call") call(operation.call, operation.static);
+    } else if (operation.kind === "call") {
+      const errorSignature = "errorSignature" in operation ? operation.errorSignature : undefined;
+      call(operation.call, operation.static, undefined, errorSignature);
+    }
     else if (operation.kind === "math") {
       const left = word(operation.left), right = word(operation.right);
       program.math(operation.op, save(operation.name), left.reg, right.reg);
@@ -863,10 +929,22 @@ function validateSettlementDeclaration(definition: DeclarativeConversionExecutio
   (definition.preflight ?? []).forEach(callNames);
   if (definition.version === 1) callNames(definition.call);
   else { definition.steps.forEach(stepNames); definition.quoteOutput?.steps.forEach(stepNames); }
-  keys(definition.settlement, ["directOutput"], "settlement");
+  keys(definition.settlement, ["directOutput", "settleOutput"], "settlement");
   if (typeof definition.settlement.directOutput !== "boolean") throw new Error("declared settlement capability");
   if (definition.version === 2) for (const step of definition.steps) {
     if (literalCallbackFrame(step.frame)) validateDeclarativeCallbackFrame(step.frame);
+  }
+  const delivery = definition.settlement.settleOutput;
+  if (delivery !== undefined) {
+    keys(delivery, ["version", "steps"], "debt delivery");
+    if (definition.version !== 2 || !definition.settlement.directOutput || delivery.version !== 1 ||
+        !Array.isArray(delivery.steps) || !delivery.steps.length || delivery.steps.length > 64)
+      throw new Error("invalid declared debt delivery");
+    for (const step of delivery.steps) {
+      keys(step, ["id", "call"], "debt delivery step");
+      if (typeof step.id !== "string" || !step.call) throw new Error("debt delivery requires explicit calls");
+      stepNames(step);
+    }
   }
   if (definition.version === 2 && definition.framedSettlement === undefined) {
     const needsSettlement = (value: any): boolean => value && typeof value === "object" &&
@@ -875,13 +953,15 @@ function validateSettlementDeclaration(definition: DeclarativeConversionExecutio
       throw new Error("callback settlement operations require framedSettlement declaration");
   }
   if (definition.version === 2 && definition.framedSettlement !== undefined) {
-    keys(definition.framedSettlement, ["version", "recipient", "debtInput", "expectedOutput", "nativeBoundary"], "framed settlement");
-    const spec = definition.framedSettlement, terminal = definition.steps.at(-1);
+    keys(definition.framedSettlement, ["version", "recipient", "debtInput", "expectedOutput", "nativeBoundary", "frame"], "framed settlement");
+    const spec = definition.framedSettlement;
+    const terminal = spec.frame === undefined ? definition.steps.at(-1) : { frame: spec.frame };
+    if (spec.frame !== undefined && literalCallbackFrame(spec.frame)) validateDeclarativeCallbackFrame(spec.frame);
     if (spec.version !== 1 || !["executor", "target"].includes(spec.recipient) || typeof spec.debtInput !== "boolean" || spec.expectedOutput === undefined ||
         spec.nativeBoundary !== undefined && spec.nativeBoundary !== true ||
         definition.deferred !== undefined || !terminal?.frame || terminal.frame.callback.steps.filter((s: any) => s.continuation !== undefined).length !== 1 ||
         terminal.frame.callback.steps.some((s: any) => s.frame !== undefined) ||
-        definition.steps.slice(0, -1).some((step: Value) => step.math === undefined && (step.static !== true || step.approval || step.effects?.length)))
+        spec.frame === undefined && definition.steps.slice(0, -1).some((step: Value) => step.math === undefined && (step.static !== true || step.approval || step.effects?.length)))
       throw new Error("framed settlement requires one terminal callback with one continuation and read-only preparation");
   }
   if (definition.version === 2 && definition.deferred !== undefined)
@@ -892,19 +972,24 @@ function supportsFramedAssets(definition: DeclarativeConversionExecution, input:
   if (definition.version !== 2 || !definition.framedSettlement) return false;
   const native = executionNativeSides(input.route);
   if (!native) return true;
-  const cb = definition.steps.at(-1)?.frame?.callback;
+  const cb = (definition.framedSettlement.frame ?? definition.steps.at(-1)?.frame)?.callback;
   return definition.framedSettlement.nativeBoundary === true &&
     (!native.input || definition.framedSettlement.recipient === "executor") &&
     cb?.steps.filter((step: any) => step.nativeBoundary?.kind === (native.input ? "unwrap-payment" : "wrap-output")).length === 1;
+}
+function supportsQuoteAssets(definition: DeclarativeConversionExecution, input: Environment): boolean {
+  return !executionNativeSides(input.route) || definition.version === 2 && definition.quoteOutput?.nativeBoundary === true;
 }
 export function supportsDeclarativeSettlement(definition: DeclarativeConversionExecution, input: Environment, values?: DeclarationValues): boolean {
   definition = selectExecutionSteps(definition, input, values);
   validateSettlementDeclaration(definition);
   if (!input.settlement) return true;
+  if (input.settlement.kind === "settle-output") return definition.version === 2 &&
+    definition.settlement.settleOutput !== undefined && !executionNativeSides(input.route);
   if (input.settlement.kind === "quote-output") return definition.version === 2 && definition.quoteOutput !== undefined &&
-    !executionNativeSides(input.route);
+    supportsQuoteAssets(definition, input);
   if (input.settlement.kind === "direct-output") return definition.settlement.directOutput &&
-    (!(definition.version === 2 && definition.quoteOutput) || !executionNativeSides(input.route)) &&
+    (!(definition.version === 2 && definition.quoteOutput) || supportsQuoteAssets(definition, input)) &&
     (!executionNativeSides(input.route)?.output || getAddress(input.settlement.recipient) === getAddress(input.executor));
   if (input.settlement.kind === "deferred-input" && definition.version === 2 && definition.framedSettlement !== undefined)
     return supportsFramedAssets(definition, input) && (input.settlement.paymentInput === undefined ||
@@ -916,9 +1001,12 @@ export function supportsDeclarativeSettlement(definition: DeclarativeConversionE
 export function declarativeSettlementCapabilities(definition: DeclarativeConversionExecution, input: Environment, values?: DeclarationValues) {
   definition = selectExecutionSteps(definition, input, values);
   validateSettlementDeclaration(definition);
-  return { ...(definition.settlement.directOutput && !executionNativeSides(input.route)?.output &&
-      (!(definition.version === 2 && definition.quoteOutput) || !executionNativeSides(input.route)) ? { directOutput: true as const } : {}),
-    ...(definition.version === 2 && definition.quoteOutput !== undefined && !executionNativeSides(input.route) ? { quoteOutput: true as const } : {}),
+  return { ...(definition.version === 2 && definition.settlement.settleOutput && !executionNativeSides(input.route)
+      ? { settleOutput: true as const } : {}),
+    ...(definition.settlement.directOutput && (!executionNativeSides(input.route)?.output ||
+      definition.version === 2 && definition.quoteOutput?.nativeBoundary === true) &&
+      (!(definition.version === 2 && definition.quoteOutput) || supportsQuoteAssets(definition, input)) ? { directOutput: true as const } : {}),
+    ...(definition.version === 2 && definition.quoteOutput !== undefined && supportsQuoteAssets(definition, input) ? { quoteOutput: true as const } : {}),
     ...(definition.version === 2 && definition.framedSettlement !== undefined && supportsFramedAssets(definition, input)
       ? { deferredInput: getAddress(definition.framedSettlement.recipient === "executor" ? input.executor : input.route.target),
           ...(definition.framedSettlement.debtInput ? { deferredDebtInput: true as const } : {}) } : {}),
@@ -938,6 +1026,7 @@ export function buildDeclarativeRuntimeLeg(definition: DeclarativeConversionExec
 export function buildDeclarativeQuotedFragment(definition: DeclarativeConversionExecution, input: Environment, values: DeclarationValues,
   options: DeclarativeExecutionOptions = {}) {
   if (input.settlement?.kind === "quote-output") throw new Error("quote output is a runtime preparation, not quoted execution");
+  if (input.settlement?.kind === "settle-output") throw new Error("debt delivery requires runtime execution");
   if (uint(input.amountIn) === 0n) throw new Error("declared quoted input must be positive");
   const program = buildDeclarativeExecutionProgram(definition, input, values, options);
   return { requirements: [], nodes: [{ adapterId: input.route.adapterId, target: input.route.target,
@@ -958,7 +1047,8 @@ export function createDeclarativeProgramAction(
     id: descriptor.adapterId, isWrapper: false, field2Offset: null,
     matchTrace: (target, selector) => traces.some(item => item.selector === selector.toLowerCase() &&
       (item.target === undefined || item.target === target.toLowerCase())),
-    encode(node, _executor, inner) {
+    encode(node, executor, inner) {
+      runtimeExecutor(executor, node.target, node.tokenIn, node.tokenOut);
       if (node.adapterId !== descriptor.adapterId || Object.keys(node.params).length !== 1) throw new Error("declared quoted node adapter mismatch");
       const script = encodeRuntimeAmountNode(node, inner);
       if (script === null) throw new Error("declared quoted node has no program");

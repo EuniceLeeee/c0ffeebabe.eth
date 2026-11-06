@@ -10,7 +10,7 @@ import { createRebuildWiring } from "../../../../universe-rebuild-production.js"
 import { rebuildUniverse } from "../../../../universe-rebuild-runner.js";
 import { runAtBlock } from "../../../../blockscan-at-block-cli.js";
 import { resolveStrictReadyRuntime } from "../../../../strict-ready-runtime.js";
-import { ERC4626_SILO_REDEEM_FAMILY_ID } from "../manifest.js";
+import { ERC4626_SILO_REDEEM_FAMILY_ID } from "./fixture-manifest.js";
 const WITHDRAW_TOPIC = ethers.id("Withdraw(address,address,address,uint256,uint256)");
 
 async function main() {

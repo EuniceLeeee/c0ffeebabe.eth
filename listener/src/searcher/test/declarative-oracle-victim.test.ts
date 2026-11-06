@@ -5,10 +5,13 @@ import { compileDeclarativeOracleVictim, validateDeclarativeOracleVictim } from 
 import { compileDeclarativeValues } from "../venues/declarative-values.js";
 import { hashCanonical } from "../venues/canonical-value.js";
 import { readProtocolModules } from "../venues/declarative-protocol-modules.js";
-import { metronomeSynthOracleVictim } from "../venues/protocols/metronome-synth-family/victim.js";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { matchOracleVictimEffect, type StrictOracleVictimDescriptor } from "../detector/victim-effect.js";
 import { deriveEdgeTaxonomy } from "../strategy-taxonomy.js";
+import { plugin as metronomeSynthJsonPlugin } from "../venues/production-families/metronome-synth.production.js";
+
+const metronomeSynthOracleVictim = metronomeSynthJsonPlugin.protocol.oracleVictim;
+
 
 const op = (op: string, ...args: any[]) => ({ op, args });
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));

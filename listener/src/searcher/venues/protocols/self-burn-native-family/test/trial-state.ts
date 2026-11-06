@@ -4,13 +4,16 @@ import { test } from "node:test";
 import { ethers } from "ethers";
 import { applyExactTrialState, emptyExactTrialState } from "../../../../exact-trial-state.js";
 import { nativeBalanceState, storageState, tokenSupplyState } from "../../../local-state-models/resources.js";
-import { selfBurnNativeInstance } from "../instance.js";
-import { selfBurnNativeRoutes } from "../routes.js";
-import { selfBurnNativeExact } from "../exact.js";
 import { SELF_BURN_SELF_OFFSETS, verifySelfBurnImplementation, verifySelfBurnProxy } from "../local-model.js";
 import { SELF_BURN_NATIVE_FAMILY_ID, SELF_BURN_NATIVE_LINEAGE_ID } from "../manifest.js";
 import { decodeSelfBurnTrial, quoteSelfBurnTrial, selfBurnTrialDependentRequests, selfBurnTrialRequests } from "../trial-state.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
+import { plugin as selfBurnNativeJsonPlugin } from "../../../production-families/self-burn-native.production.js";
+
+const selfBurnNativeInstance = selfBurnNativeJsonPlugin.instance;
+const selfBurnNativeRoutes = selfBurnNativeJsonPlugin.routes;
+const selfBurnNativeExact = selfBurnNativeJsonPlugin.exact;
+
 
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/runtime.json", import.meta.url), "utf8"));
 const token = "0x2222222222222222222222222222222222222222", executor = "0x1111111111111111111111111111111111111111";

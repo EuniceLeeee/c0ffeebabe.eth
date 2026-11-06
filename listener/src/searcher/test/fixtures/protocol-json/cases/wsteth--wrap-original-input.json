@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "familyId": "protocol:wsteth",
+  "instanceKey": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+  "lineageId": "wsteth:steth-active-binding",
+  "source": {
+    "number": 26319753,
+    "hash": "0xefd3117c72b6614caf178c31685c4aa3ea8d1ce2b554762b605f30789eefc263"
+  },
+  "executor": "0x9C7F3400109F04e8044989BBb7D483dc4587053a",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "trials": [
+    {
+      "id": "0-wrap-original-input",
+      "tokenIn": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+      "tokenOut": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+      "amountIn": "603000000000000000000"
+    }
+  ],
+  "transactionHash": "0xb5bbf0a6a6fa0e29e77943fd3b51fd507145c0df4ab0597ed4eee1a244a24421"
+}

@@ -1,0 +1,3871 @@
+{
+  "id": "pool-owned-amount",
+  "lineageId": "univ2:factory-child",
+  "identityKind": "factory-child",
+  "inputs": [],
+  "abi": {
+    "pair": [
+      "function factory() view returns(address)",
+      "function token0() view returns(address)",
+      "function token1() view returns(address)",
+      "function getReserves() view returns(uint112,uint112,uint32)",
+      "function swap(uint256,uint256,address,bytes)",
+      "event Swap(address indexed sender,uint256 amount0In,uint256 amount1In,uint256 amount0Out,uint256 amount1Out,address indexed to)",
+      "event Sync(uint112 reserve0,uint112 reserve1)"
+    ],
+    "factory": [
+      "function getPair(address,address) view returns(address)",
+      "event PairCreated(address indexed token0,address indexed token1,address pair,uint256)"
+    ],
+    "token": [
+      "function balanceOf(address account) view returns(uint256)",
+      "function decimals() view returns(uint8)",
+      "function transfer(address to,uint256 amount) returns(bool)",
+      "function approve(address spender,uint256 amount) returns(bool)",
+      "function allowance(address owner,address spender) view returns(uint256)"
+    ],
+    "quote": [
+      "function getAmountOut(address tokenIn,uint256 amountIn) view returns(uint256)",
+      "function getA() view returns(uint256)"
+    ],
+    "router": [
+      "function swapExactTokensForTokens(uint256,uint256,address[],address,uint256) returns(uint256[])"
+    ]
+  },
+  "constants": {
+    "zero": "0x0000000000000000000000000000000000000000",
+    "maxReserve": "5192296858534827628530496329220095",
+    "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "bips": "10000",
+    "pancakeFactory": "0x1097053fd2ea711dad45caccc45eff7548fcb362",
+    "bearRuntimeTemplateHash": "0xfc654b0b765d1f2031061e105e4d055a1462bd7ad3431a6adce20397ee41cfe6",
+    "syncLogTopic": "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1",
+    "swapRouter": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+    "victimWhale": "0x000000000000000000000000000000000000dEaD"
+  },
+  "expressions": {},
+  "programs": {},
+  "match": {
+    "op": "eq",
+    "args": [
+      "$descriptor.quoteModel.kind",
+      "pool-get-amount-out"
+    ]
+  },
+  "context": {},
+  "boundState": {
+    "pool": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "pool"
+      ]
+    },
+    "token0": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "token0"
+      ]
+    },
+    "token1": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "token1"
+      ]
+    },
+    "feeRule": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "feeRule"
+      ]
+    },
+    "quoteModel": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "quoteModel"
+      ]
+    },
+    "tokenTransfers": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "tokenTransfers"
+      ]
+    },
+    "factoryBinding": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "factoryBinding"
+      ]
+    }
+  },
+  "pricing": {
+    "refreshPolicy": "on-touch",
+    "requirements": {
+      "transports": [
+        "eth-call"
+      ]
+    },
+    "dependencies": [
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      },
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "token0"
+        ]
+      },
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "token1"
+        ]
+      }
+    ],
+    "mutationAddresses": [
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      }
+    ],
+    "classifyUnavailable": {
+      "op": "map",
+      "args": [
+        {
+          "op": "filter",
+          "args": [
+            "$routes",
+            "route",
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$snapshot.reserve0",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$snapshot.reserve1",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                "$route.direction",
+                                "zero-for-one"
+                              ]
+                            },
+                            "$snapshot.quoted0",
+                            "$snapshot.quoted1"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "route",
+        [
+          "$route.routeKey",
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$snapshot.reserve0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$snapshot.reserve1",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "univ2 zero reserve at current source",
+              "univ2 pool-owned mid quote unavailable at current source"
+            ]
+          }
+        ]
+      ]
+    }
+  },
+  "exact": {
+    "methodId": "pair-reserves",
+    "requirements": {
+      "transports": [
+        "eth-call"
+      ]
+    },
+    "protectedAddresses": {
+      "op": "concat",
+      "args": [
+        [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token0"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token1"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "factoryBinding"
+                ]
+              },
+              "factory"
+            ]
+          }
+        ]
+      ]
+    },
+    "checks": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gte",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "univ2 exact amountIn must be uint256"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$executor",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            }
+          ]
+        },
+        "error": "univ2 exact executor cannot be zero"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.quoteModel.kind",
+            "pool-get-amount-out"
+          ]
+        },
+        "error": "univ2 pool-quote model mismatch"
+      }
+    ],
+    "evidence": {
+      "op": "merge",
+      "args": [
+        {
+          "kind": "univ2-pool-quote",
+          "quoteModel": "pool-get-amount-out",
+          "source": "$source",
+          "pool": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenOut"
+            ]
+          },
+          "amountIn": "$amountIn",
+          "amountOut": "$amountOut",
+          "feeBps": {
+            "op": "get",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "feeRule"
+                ]
+              },
+              "feeBps"
+            ]
+          },
+          "direction": {
+            "op": "get",
+            "args": [
+              "$route",
+              "direction"
+            ]
+          },
+          "bindingFingerprint": {
+            "op": "get",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "bindingRef"
+                ]
+              },
+              "fingerprint"
+            ]
+          },
+          "executor": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$executor"
+                ]
+              }
+            ]
+          },
+          "poolAmountOut": "$quoteResult.poolAmountOut",
+          "receivedAmountIn": "$quoteResult.receivedAmountIn",
+          "maxAmountIn": "$quoteResult.maxAmountIn",
+          "reserveIn": "$quoteResult.reserveIn",
+          "reserveOut": "$quoteResult.reserveOut",
+          "inputBalance": "$quoteResult.inputBalance"
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$amountOut",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "unavailableReason": {
+                "op": "coalesce",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$quoteResult",
+                      "reason"
+                    ]
+                  },
+                  "univ2-unavailable-amount"
+                ]
+              }
+            },
+            {}
+          ]
+        }
+      ]
+    },
+    "zeroEvidence": {
+      "kind": "univ2-pool-quote",
+      "quoteModel": "pool-get-amount-out",
+      "source": "$source",
+      "pool": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      },
+      "tokenIn": {
+        "op": "get",
+        "args": [
+          "$route",
+          "tokenIn"
+        ]
+      },
+      "tokenOut": {
+        "op": "get",
+        "args": [
+          "$route",
+          "tokenOut"
+        ]
+      },
+      "amountIn": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "amountOut": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "reserveIn": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "reserveOut": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "feeBps": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "feeRule"
+            ]
+          },
+          "feeBps"
+        ]
+      },
+      "direction": {
+        "op": "get",
+        "args": [
+          "$route",
+          "direction"
+        ]
+      },
+      "bindingFingerprint": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "bindingRef"
+            ]
+          },
+          "fingerprint"
+        ]
+      }
+    },
+    "amountOut": {
+      "op": "get",
+      "args": [
+        "$quoteResult",
+        "amountOut"
+      ]
+    },
+    "retainReadEvidence": true
+  },
+  "readPrograms": {},
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": false
+    },
+    "protectedAddresses": {
+      "op": "concat",
+      "args": [
+        [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token0"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token1"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "factoryBinding"
+                ]
+              },
+              "factory"
+            ]
+          }
+        ]
+      ]
+    },
+    "requireCanonicalSource": true,
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            "$descriptor.quoteModel.kind",
+            "pool-get-amount-out"
+          ]
+        },
+        "error": "unexpected pair quote model for execution"
+      },
+      {
+        "condition": {
+          "op": "defined",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "tokenTransfers"
+              ]
+            }
+          ]
+        },
+        "error": "univ2 execution requires transfer-tax facts"
+      },
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            "$descriptor.feeRule.kind",
+            "included-in-pool-quote"
+          ]
+        },
+        "error": "univ2 execution fee rule differs from quote model"
+      }
+    ],
+    "steps": [
+      {
+        "id": "pairCallback",
+        "frame": {
+          "call": {
+            "target": "$descriptor.pool",
+            "signature": "function swap(uint256,uint256,address,bytes)",
+            "args": [
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "zero-for-one"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "quoteOutput": "poolAmountOut"
+                  }
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "zero-for-one"
+                    ]
+                  },
+                  {
+                    "quoteOutput": "poolAmountOut"
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "$executor"
+            ],
+            "dataArgument": 3
+          },
+          "callback": {
+            "signature": "function uniswapV2Call(address,uint256,uint256,bytes)",
+            "dataArgument": 3,
+            "arguments": [
+              {
+                "index": 0,
+                "name": "pairCaller",
+                "encoding": "word",
+                "equals": "$executor"
+              },
+              {
+                "index": 1,
+                "name": "amountZero",
+                "encoding": "word",
+                "equals": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.direction",
+                        "zero-for-one"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    {
+                      "runtime": "grossOutput"
+                    }
+                  ]
+                }
+              },
+              {
+                "index": 2,
+                "name": "amountOne",
+                "encoding": "word",
+                "equals": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.direction",
+                        "zero-for-one"
+                      ]
+                    },
+                    {
+                      "runtime": "grossOutput"
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "captures": {
+              "grossOutput": {
+                "quoteOutput": "poolAmountOut"
+              },
+              "netReceipt": {
+                "quoteOutput": "amountOut"
+              }
+            },
+            "steps": [
+              {
+                "id": "continuePayment",
+                "continuation": {
+                  "debt": {
+                    "runtime": "amountIn"
+                  },
+                  "output": {
+                    "runtime": "netReceipt"
+                  }
+                }
+              },
+              {
+                "id": "payInCallback",
+                "call": {
+                  "target": "$route.tokenIn",
+                  "signature": "function transfer(address,uint256) returns(bool)",
+                  "args": [
+                    "$descriptor.pool",
+                    {
+                      "runtime": "amountIn"
+                    }
+                  ]
+                },
+                "when": "$fundedSettlement"
+              }
+            ],
+            "alternativeSignatures": [
+              "function nomiswapCall(address,uint256,uint256,bytes)"
+            ]
+          }
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "$recipient"
+      },
+      {
+        "kind": "unchanged-native"
+      }
+    ],
+    "framedSettlement": {
+      "version": 1,
+      "recipient": "target",
+      "debtInput": true,
+      "expectedOutput": {
+        "quoteOutput": "amountOut"
+      }
+    }
+  },
+  "version": 1,
+  "identity": {
+    "applies": false,
+    "select": [
+      {
+        "return": "done"
+      }
+    ],
+    "stages": {
+      "done": {
+        "requirements": {
+          "transports": []
+        },
+        "requests": [],
+        "decode": [
+          {
+            "return": null
+          }
+        ]
+      }
+    },
+    "decide": [
+      {
+        "return": {
+          "status": "invalid-program",
+          "reasonCode": "shared-proof-is-owned-by-factory-child"
+        }
+      }
+    ]
+  },
+  "modules": {
+    "trialState": {},
+    "liveStateProjection": {
+      "version": 1,
+      "result": null
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-reserves",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "pool"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pair",
+                  "getReserves",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-balance-0",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token0"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-balance-1",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token1"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-quote-0",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "quote",
+                  "getAmountOut",
+                  [
+                    "$descriptor.token0",
+                    {
+                      "op": "model",
+                      "args": [
+                        "netTransfer",
+                        {
+                          "amount": "$descriptor.quoteModel.probe0",
+                          "numerator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          0
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              0
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "0"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          0
+                                        ]
+                                      },
+                                      "taxNumerator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "0"
+                                ]
+                              }
+                            ]
+                          },
+                          "denominator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          0
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              0
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "1"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          0
+                                        ]
+                                      },
+                                      "taxDenominator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-or-revert-data"
+            },
+            {
+              "id": "current-quote-1",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "quote",
+                  "getAmountOut",
+                  [
+                    "$descriptor.token1",
+                    {
+                      "op": "model",
+                      "args": [
+                        "netTransfer",
+                        {
+                          "amount": "$descriptor.quoteModel.probe1",
+                          "numerator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          1
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              1
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "0"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          1
+                                        ]
+                                      },
+                                      "taxNumerator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "0"
+                                ]
+                              }
+                            ]
+                          },
+                          "denominator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          1
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              1
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "1"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          1
+                                        ]
+                                      },
+                                      "taxDenominator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-or-revert-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "reserves",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pair",
+                  "getReserves",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-reserves"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "balance0",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-balance-0"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "balance1",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-balance-1"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "source": "$source",
+                "reserve0": {
+                  "op": "at",
+                  "args": [
+                    "$reserves",
+                    0
+                  ]
+                },
+                "reserve1": {
+                  "op": "at",
+                  "args": [
+                    "$reserves",
+                    1
+                  ]
+                },
+                "blockTimestampLast": {
+                  "op": "number",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$reserves",
+                        2
+                      ]
+                    }
+                  ]
+                },
+                "balance0": "$balance0",
+                "balance1": "$balance1",
+                "quoted0": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "result",
+                                  "args": [
+                                    "current-quote-0"
+                                  ]
+                                },
+                                "completion"
+                              ]
+                            },
+                            "reverted-as-declared"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "result",
+                                  "args": [
+                                    "current-quote-0"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            "0x"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "result",
+                              "args": [
+                                "current-quote-0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "quoted1": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "result",
+                                  "args": [
+                                    "current-quote-1"
+                                  ]
+                                },
+                                "completion"
+                              ]
+                            },
+                            "reverted-as-declared"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "result",
+                                  "args": [
+                                    "current-quote-1"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            "0x"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "result",
+                              "args": [
+                                "current-quote-1"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.state"
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [],
+      "rows": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$snapshot.reserve0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$snapshot.reserve1",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              "$route.direction",
+                              "zero-for-one"
+                            ]
+                          },
+                          "$snapshot.quoted0",
+                          "$snapshot.quoted1"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          {
+            "routeKey": "$route.routeKey",
+            "feeBps": {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            "depth": {
+              "op": "min",
+              "args": [
+                "$snapshot.reserve0",
+                "$snapshot.reserve1"
+              ]
+            },
+            "reserveA": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "zero-for-one"
+                  ]
+                },
+                "$snapshot.reserve0",
+                "$snapshot.reserve1"
+              ]
+            },
+            "reserveB": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "zero-for-one"
+                  ]
+                },
+                "$snapshot.reserve1",
+                "$snapshot.reserve0"
+              ]
+            },
+            "numerator": {
+              "op": "model",
+              "args": [
+                "netTransfer",
+                {
+                  "amount": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$route.direction",
+                          "zero-for-one"
+                        ]
+                      },
+                      "$snapshot.quoted0",
+                      "$snapshot.quoted1"
+                    ]
+                  },
+                  "numerator": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$descriptor.tokenTransfers",
+                                  {
+                                    "op": "if",
+                                    "args": [
+                                      {
+                                        "op": "eq",
+                                        "args": [
+                                          "$route.direction",
+                                          "zero-for-one"
+                                        ]
+                                      },
+                                      1,
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "kind"
+                            ]
+                          },
+                          "verified-transfer-tax"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$descriptor.tokenTransfers",
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "eq",
+                                    "args": [
+                                      "$route.direction",
+                                      "zero-for-one"
+                                    ]
+                                  },
+                                  1,
+                                  0
+                                ]
+                              }
+                            ]
+                          },
+                          "taxNumerator"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  "denominator": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$descriptor.tokenTransfers",
+                                  {
+                                    "op": "if",
+                                    "args": [
+                                      {
+                                        "op": "eq",
+                                        "args": [
+                                          "$route.direction",
+                                          "zero-for-one"
+                                        ]
+                                      },
+                                      1,
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "kind"
+                            ]
+                          },
+                          "verified-transfer-tax"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$descriptor.tokenTransfers",
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "eq",
+                                    "args": [
+                                      "$route.direction",
+                                      "zero-for-one"
+                                    ]
+                                  },
+                                  1,
+                                  0
+                                ]
+                              }
+                            ]
+                          },
+                          "taxDenominator"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "denominator": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "zero-for-one"
+                  ]
+                },
+                "$descriptor.quoteModel.probe0",
+                "$descriptor.quoteModel.probe1"
+              ]
+            },
+            "balanceHeadroomIn": {
+              "op": "sub",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "5192296858534827628530496329220095"
+                  ]
+                },
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "5192296858534827628530496329220095"
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$route.direction",
+                            "zero-for-one"
+                          ]
+                        },
+                        "$snapshot.balance0",
+                        "$snapshot.balance1"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "kind": "v2"
+          }
+        ]
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "exact-reserves",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "pool"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pair",
+                  "getReserves",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "exact-input-balance",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenIn"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "exact-pool-quote",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "quote",
+                  "getAmountOut",
+                  [
+                    "$route.tokenIn",
+                    {
+                      "op": "model",
+                      "args": [
+                        "netTransfer",
+                        {
+                          "amount": "$amountIn",
+                          "numerator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          {
+                                            "op": "if",
+                                            "args": [
+                                              {
+                                                "op": "eq",
+                                                "args": [
+                                                  "$route.direction",
+                                                  "zero-for-one"
+                                                ]
+                                              },
+                                              0,
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              {
+                                                "op": "if",
+                                                "args": [
+                                                  {
+                                                    "op": "eq",
+                                                    "args": [
+                                                      "$route.direction",
+                                                      "zero-for-one"
+                                                    ]
+                                                  },
+                                                  0,
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "0"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          {
+                                            "op": "if",
+                                            "args": [
+                                              {
+                                                "op": "eq",
+                                                "args": [
+                                                  "$route.direction",
+                                                  "zero-for-one"
+                                                ]
+                                              },
+                                              0,
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "taxNumerator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "0"
+                                ]
+                              }
+                            ]
+                          },
+                          "denominator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          {
+                                            "op": "if",
+                                            "args": [
+                                              {
+                                                "op": "eq",
+                                                "args": [
+                                                  "$route.direction",
+                                                  "zero-for-one"
+                                                ]
+                                              },
+                                              0,
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              {
+                                                "op": "if",
+                                                "args": [
+                                                  {
+                                                    "op": "eq",
+                                                    "args": [
+                                                      "$route.direction",
+                                                      "zero-for-one"
+                                                    ]
+                                                  },
+                                                  0,
+                                                  1
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "1"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          {
+                                            "op": "if",
+                                            "args": [
+                                              {
+                                                "op": "eq",
+                                                "args": [
+                                                  "$route.direction",
+                                                  "zero-for-one"
+                                                ]
+                                              },
+                                              0,
+                                              1
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "taxDenominator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-or-revert-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "reserves",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pair",
+                  "getReserves",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "exact-reserves"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "inputBalance",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "exact-input-balance"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "received",
+              "value": {
+                "op": "model",
+                "args": [
+                  "netTransfer",
+                  {
+                    "amount": "$amountIn",
+                    "numerator": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$descriptor.tokenTransfers",
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            "$route.direction",
+                                            "zero-for-one"
+                                          ]
+                                        },
+                                        0,
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "kind"
+                              ]
+                            },
+                            "verified-transfer-tax"
+                          ]
+                        },
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$descriptor.pool",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        "$descriptor.tokenTransfers",
+                                        {
+                                          "op": "if",
+                                          "args": [
+                                            {
+                                              "op": "eq",
+                                              "args": [
+                                                "$route.direction",
+                                                "zero-for-one"
+                                              ]
+                                            },
+                                            0,
+                                            1
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "token"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$descriptor.tokenTransfers",
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            "$route.direction",
+                                            "zero-for-one"
+                                          ]
+                                        },
+                                        0,
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "taxNumerator"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    "denominator": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$descriptor.tokenTransfers",
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            "$route.direction",
+                                            "zero-for-one"
+                                          ]
+                                        },
+                                        0,
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "kind"
+                              ]
+                            },
+                            "verified-transfer-tax"
+                          ]
+                        },
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$descriptor.pool",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        "$descriptor.tokenTransfers",
+                                        {
+                                          "op": "if",
+                                          "args": [
+                                            {
+                                              "op": "eq",
+                                              "args": [
+                                                "$route.direction",
+                                                "zero-for-one"
+                                              ]
+                                            },
+                                            0,
+                                            1
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "token"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "1"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$descriptor.tokenTransfers",
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            "$route.direction",
+                                            "zero-for-one"
+                                          ]
+                                        },
+                                        0,
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "taxDenominator"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "1"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "let": "limit",
+              "value": {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "5192296858534827628530496329220095"
+                    ]
+                  },
+                  {
+                    "op": "min",
+                    "args": [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "5192296858534827628530496329220095"
+                        ]
+                      },
+                      "$inputBalance"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "rawQuote",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "or",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "result",
+                                "args": [
+                                  "exact-pool-quote"
+                                ]
+                              },
+                              "completion"
+                            ]
+                          },
+                          "reverted-as-declared"
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "result",
+                                "args": [
+                                  "exact-pool-quote"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          "0x"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "result",
+                            "args": [
+                              "exact-pool-quote"
+                            ]
+                          },
+                          "data"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "capped",
+              "value": {
+                "op": "gt",
+                "args": [
+                  "$received",
+                  "$limit"
+                ]
+              }
+            },
+            {
+              "return": {
+                "source": "$source",
+                "reserve0": {
+                  "op": "at",
+                  "args": [
+                    "$reserves",
+                    0
+                  ]
+                },
+                "reserve1": {
+                  "op": "at",
+                  "args": [
+                    "$reserves",
+                    1
+                  ]
+                },
+                "blockTimestampLast": {
+                  "op": "number",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$reserves",
+                        2
+                      ]
+                    }
+                  ]
+                },
+                "inputBalance": "$inputBalance",
+                "receivedAmountIn": "$received",
+                "maxAmountIn": "$limit",
+                "poolAmountOut": {
+                  "op": "if",
+                  "args": [
+                    "$capped",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    "$rawQuote"
+                  ]
+                },
+                "amountOut": {
+                  "op": "model",
+                  "args": [
+                    "netTransfer",
+                    {
+                      "amount": {
+                        "op": "if",
+                        "args": [
+                          "$capped",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          },
+                          "$rawQuote"
+                        ]
+                      },
+                      "numerator": {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$descriptor.tokenTransfers",
+                                      {
+                                        "op": "if",
+                                        "args": [
+                                          {
+                                            "op": "eq",
+                                            "args": [
+                                              "$route.direction",
+                                              "zero-for-one"
+                                            ]
+                                          },
+                                          1,
+                                          0
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "kind"
+                                ]
+                              },
+                              "verified-transfer-tax"
+                            ]
+                          },
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "sameAddress",
+                                "args": [
+                                  "$executor",
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          {
+                                            "op": "if",
+                                            "args": [
+                                              {
+                                                "op": "eq",
+                                                "args": [
+                                                  "$route.direction",
+                                                  "zero-for-one"
+                                                ]
+                                              },
+                                              1,
+                                              0
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "token"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "0"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$descriptor.tokenTransfers",
+                                      {
+                                        "op": "if",
+                                        "args": [
+                                          {
+                                            "op": "eq",
+                                            "args": [
+                                              "$route.direction",
+                                              "zero-for-one"
+                                            ]
+                                          },
+                                          1,
+                                          0
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "taxNumerator"
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      "denominator": {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$descriptor.tokenTransfers",
+                                      {
+                                        "op": "if",
+                                        "args": [
+                                          {
+                                            "op": "eq",
+                                            "args": [
+                                              "$route.direction",
+                                              "zero-for-one"
+                                            ]
+                                          },
+                                          1,
+                                          0
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "kind"
+                                ]
+                              },
+                              "verified-transfer-tax"
+                            ]
+                          },
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "sameAddress",
+                                "args": [
+                                  "$executor",
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          {
+                                            "op": "if",
+                                            "args": [
+                                              {
+                                                "op": "eq",
+                                                "args": [
+                                                  "$route.direction",
+                                                  "zero-for-one"
+                                                ]
+                                              },
+                                              1,
+                                              0
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "token"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$descriptor.tokenTransfers",
+                                      {
+                                        "op": "if",
+                                        "args": [
+                                          {
+                                            "op": "eq",
+                                            "args": [
+                                              "$route.direction",
+                                              "zero-for-one"
+                                            ]
+                                          },
+                                          1,
+                                          0
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "taxDenominator"
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "1"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "reserveIn": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.direction",
+                        "zero-for-one"
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$reserves",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$reserves",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                "reserveOut": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.direction",
+                        "zero-for-one"
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$reserves",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$reserves",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "reason": {
+                  "op": "if",
+                  "args": [
+                    "$capped",
+                    "input-reserve-capacity",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$rawQuote",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        "pool-quote-unavailable",
+                        null
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.state",
+      "chainQuote": {
+        "version": 2,
+        "step": "state",
+        "requestId": "exact-pool-quote",
+        "signature": "function getAmountOut(address,uint256) view returns(uint256)",
+        "amountPath": [
+          1
+        ],
+        "outputPath": [
+          0
+        ],
+        "requestBinding": {
+          "target": "$descriptor.pool",
+          "caller": {
+            "kind": "none"
+          }
+        },
+        "inputBinding": {
+          "value": {
+            "op": "model",
+            "args": [
+              "netTransfer",
+              {
+                "amount": "$quote.amountIn",
+                "numerator": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$descriptor.tokenTransfers",
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        "$route.direction",
+                                        "zero-for-one"
+                                      ]
+                                    },
+                                    0,
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "kind"
+                          ]
+                        },
+                        "verified-transfer-tax"
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$descriptor.pool",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$descriptor.tokenTransfers",
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            "$route.direction",
+                                            "zero-for-one"
+                                          ]
+                                        },
+                                        0,
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "token"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$descriptor.tokenTransfers",
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        "$route.direction",
+                                        "zero-for-one"
+                                      ]
+                                    },
+                                    0,
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "taxNumerator"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                "denominator": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$descriptor.tokenTransfers",
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        "$route.direction",
+                                        "zero-for-one"
+                                      ]
+                                    },
+                                    0,
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "kind"
+                          ]
+                        },
+                        "verified-transfer-tax"
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$descriptor.pool",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$descriptor.tokenTransfers",
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            "$route.direction",
+                                            "zero-for-one"
+                                          ]
+                                        },
+                                        0,
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "token"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "1"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$descriptor.tokenTransfers",
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        "$route.direction",
+                                        "zero-for-one"
+                                      ]
+                                    },
+                                    0,
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "taxDenominator"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "checks": [
+            {
+              "op": "eq",
+              "args": [
+                "$route.tokenIn",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.direction",
+                        "zero-for-one"
+                      ]
+                    },
+                    "$descriptor.token0",
+                    "$descriptor.token1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "receiptBinding": {
+          "inputAssetPath": [
+            0
+          ],
+          "feeNumerator": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.tokenTransfers",
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "zero-for-one"
+                                ]
+                              },
+                              1,
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      "kind"
+                    ]
+                  },
+                  "verified-transfer-tax"
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$descriptor.tokenTransfers",
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "eq",
+                                    "args": [
+                                      "$route.direction",
+                                      "zero-for-one"
+                                    ]
+                                  },
+                                  1,
+                                  0
+                                ]
+                              }
+                            ]
+                          },
+                          "token"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.tokenTransfers",
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "zero-for-one"
+                                ]
+                              },
+                              1,
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      "taxNumerator"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "feeDenominator": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.tokenTransfers",
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "zero-for-one"
+                                ]
+                              },
+                              1,
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      "kind"
+                    ]
+                  },
+                  "verified-transfer-tax"
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$descriptor.tokenTransfers",
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "eq",
+                                    "args": [
+                                      "$route.direction",
+                                      "zero-for-one"
+                                    ]
+                                  },
+                                  1,
+                                  0
+                                ]
+                              }
+                            ]
+                          },
+                          "token"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.tokenTransfers",
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "zero-for-one"
+                                ]
+                              },
+                              1,
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      "taxDenominator"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          "maximumInput": "$steps.state.maxAmountIn",
+          "unavailableOnRevertOrEmpty": true
+        }
+      }
+    },
+    "quoteOutput": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "netInput",
+          "math": {
+            "model": "netTransfer",
+            "inputs": {
+              "amount": {
+                "runtime": "amountIn"
+              },
+              "numerator": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$descriptor.tokenTransfers",
+                                  {
+                                    "op": "if",
+                                    "args": [
+                                      {
+                                        "op": "eq",
+                                        "args": [
+                                          "$route.direction",
+                                          "zero-for-one"
+                                        ]
+                                      },
+                                      0,
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "kind"
+                            ]
+                          },
+                          "verified-transfer-tax"
+                        ]
+                      },
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$route.tokenIn",
+                              "$descriptor.pool"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.tokenTransfers",
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "zero-for-one"
+                                ]
+                              },
+                              0,
+                              1
+                            ]
+                          }
+                        ]
+                      },
+                      "taxNumerator"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "denominator": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$descriptor.tokenTransfers",
+                                  {
+                                    "op": "if",
+                                    "args": [
+                                      {
+                                        "op": "eq",
+                                        "args": [
+                                          "$route.direction",
+                                          "zero-for-one"
+                                        ]
+                                      },
+                                      0,
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              "kind"
+                            ]
+                          },
+                          "verified-transfer-tax"
+                        ]
+                      },
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$route.tokenIn",
+                              "$descriptor.pool"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.tokenTransfers",
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "zero-for-one"
+                                ]
+                              },
+                              0,
+                              1
+                            ]
+                          }
+                        ]
+                      },
+                      "taxDenominator"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "net": "receivedInput"
+            }
+          }
+        },
+        {
+          "id": "ownedQuote",
+          "call": {
+            "target": "$descriptor.pool",
+            "signature": "function getAmountOut(address,uint256) view returns(uint256)",
+            "args": [
+              "$route.tokenIn",
+              {
+                "runtime": "receivedInput"
+              }
+            ],
+            "save": {
+              "poolAmountOut": 0
+            }
+          },
+          "static": true
+        },
+        {
+          "id": "netOutput",
+          "math": {
+            "model": "netTransfer",
+            "inputs": {
+              "amount": {
+                "runtime": "poolAmountOut"
+              },
+              "numerator": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$descriptor.tokenTransfers",
+                                  {
+                                    "op": "if",
+                                    "args": [
+                                      {
+                                        "op": "eq",
+                                        "args": [
+                                          "$route.direction",
+                                          "zero-for-one"
+                                        ]
+                                      },
+                                      1,
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "kind"
+                            ]
+                          },
+                          "verified-transfer-tax"
+                        ]
+                      },
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$route.tokenOut",
+                              "$recipient"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.tokenTransfers",
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "zero-for-one"
+                                ]
+                              },
+                              1,
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      "taxNumerator"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "denominator": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$descriptor.tokenTransfers",
+                                  {
+                                    "op": "if",
+                                    "args": [
+                                      {
+                                        "op": "eq",
+                                        "args": [
+                                          "$route.direction",
+                                          "zero-for-one"
+                                        ]
+                                      },
+                                      1,
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "kind"
+                            ]
+                          },
+                          "verified-transfer-tax"
+                        ]
+                      },
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$route.tokenOut",
+                              "$recipient"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.tokenTransfers",
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$route.direction",
+                                  "zero-for-one"
+                                ]
+                              },
+                              1,
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      "taxDenominator"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "net": "amountOut"
+            }
+          }
+        }
+      ],
+      "exports": {
+        "poolAmountOut": {
+          "runtime": "poolAmountOut"
+        },
+        "amountOut": {
+          "runtime": "amountOut"
+        }
+      },
+      "result": {
+        "runtime": "amountOut"
+      }
+    }
+  }
+}

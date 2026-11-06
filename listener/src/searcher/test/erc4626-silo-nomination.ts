@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { nominateErc4626SiloRedeem } from
-  "../venues/protocols/erc4626-silo-redeem-family/nomination.js";
+  "../venues/protocols/erc4626-silo-redeem-family/test/fixture-nomination.js";
 import type {
   CaptureNominationProvider,
   UnifiedObservation,
@@ -9,7 +9,7 @@ import type {
 import type { CanonicalSource } from
   "../venues/adapter-request-program.js";
 import { ERC4626_SILO_INTERFACE } from
-  "../venues/protocols/erc4626-silo-redeem-family/shared.js";
+  "../venues/protocols/erc4626-silo-redeem-family/test/fixture-shared.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_750_000,

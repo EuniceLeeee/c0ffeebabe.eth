@@ -44,11 +44,11 @@ import {
   type GeneratedCapabilityIdentity,
 } from "../venues/family-capability-catalog.js";
 import { WSTETH_FAMILY_ID } from
-  "../venues/protocols/wsteth-family/manifest.js";
+  "../venues/protocols/wsteth-family/test/fixture-manifest.js";
 import { WSTETH_INTERFACE } from
-  "../venues/protocols/wsteth-family/codec.js";
-import { wstethStrictFamilyPlugin } from
-  "../venues/protocols/wsteth-family-plugin.js";
+  "../venues/protocols/wsteth-family/test/fixture-codec.js";
+import { plugin as wstethStrictFamilyPlugin } from
+  "../venues/production-families/wsteth.production.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 10,

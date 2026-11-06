@@ -13,8 +13,8 @@ import { StrictProductionRuntimeRoot, type StrictProductionRuntimeSession } from
 import { blockScanEdgeKey, createVerifiedGraphView } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { UNIV2_PAIR_INTERFACE, UNIV2_TOKEN_INTERFACE } from "../../../swaps/univ2-family/codec.js";
-import { FLUID_DEX_INTERFACE } from "../codec.js";
-import { FLUID_DEX_FAMILY_ID } from "../manifest.js";
+import { FLUID_DEX_INTERFACE } from "./fixture-codec.js";
+import { FLUID_DEX_FAMILY_ID } from "./fixture-codec.js";
 
 // Offline transport fixtures exercise the unchanged production lifecycle,
 // Family, Exact, coordinator and publication. No RPC, EVM or pricing formula claim.

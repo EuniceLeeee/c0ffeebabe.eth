@@ -1,7 +1,7 @@
 // Observations only: no pricing model or admission decisions.
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
-import { XWIN_ABI } from "../xwin.js";
+import { XWIN_ABI } from "./reference/xwin.js";
 
 const ERC20 = new ethers.Interface([
   "event Transfer(address indexed from,address indexed to,uint256 value)",

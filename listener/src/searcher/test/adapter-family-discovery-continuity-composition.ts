@@ -1,3 +1,4 @@
+import { plugin as astraMultiTokenProductionPlugin } from "../venues/production-families/astra-multitoken.production.js";
 import assert from "node:assert/strict";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -56,11 +57,10 @@ import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
 import { WSTETH_FAMILY_ID } from
-  "../venues/protocols/wsteth-family/manifest.js";
+  "../venues/protocols/wsteth-family/test/fixture-manifest.js";
 import { UNIV2_FAMILY_ID } from
-  "../venues/swaps/univ2-family/manifest.js";
-import { ASTRA_MULTITOKEN_FAMILY_ID } from
-  "../venues/protocols/astra-multitoken-family/manifest.js";
+  "../venues/swaps/univ2-family/test/fixture-manifest.js";
+
 import {
   UNIV2_FACTORY_INTERFACE,
   UNIV2_PAIR_CREATED_TOPIC,
@@ -73,6 +73,8 @@ import {
   UNIV2_FIXTURE_TOKEN0,
   UNIV2_FIXTURE_TOKEN1,
 } from "../architecture-migration-fixture-replay.js";
+
+const ASTRA_MULTITOKEN_FAMILY_ID = astraMultiTokenProductionPlugin.manifest.familyId;
 
 type AddressSurfaceObservation = Extract<
   UnifiedObservation,
@@ -160,7 +162,7 @@ function mixedCatalog(): FamilyCapabilityCatalog {
     {
       plugin: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
         .forStrictFamily(ASTRA_MULTITOKEN_FAMILY_ID).plugin,
-      sourceFile: "astra-multitoken-family-plugin.ts",
+      sourceFile: "astra-multitoken.production.ts",
     },
   ]);
 }

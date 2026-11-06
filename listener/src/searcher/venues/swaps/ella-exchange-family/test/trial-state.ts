@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MAX_UINT, UNIT } from "../codec.js";
-import { quoteAmountAndApply } from "../state.js";
-import type { EllaState } from "../types.js";
+import { MAX_UINT, UNIT } from "./definition-fixture.js";
+import { quoteAmountAndApply } from "./definition-fixture.js";
+import type { EllaState } from "./definition-fixture.js";
 
 const pool = "0x1000000000000000000000000000000000000001";
 const executor = "0x1000000000000000000000000000000000000002";

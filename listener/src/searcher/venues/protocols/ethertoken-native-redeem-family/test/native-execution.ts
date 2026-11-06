@@ -5,14 +5,17 @@ import { RuntimeAmountProgram } from "../../../../../adapters/runtime-amount-pro
 import { encodeCall } from "../../../../../encoder.js";
 import { applyQuotedAssetBoundary, applyRuntimeAssetBoundary, executionAssetBoundaryAdapter } from "../../../../execution-asset-boundary.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
-import { etherTokenNativeRedeemFamilyOwnedAction as action } from "../action.js";
-import { etherTokenNativeRedeemExecution as execution } from "../execution.js";
-import { etherTokenNativeRedeemExact as exact } from "../exact.js";
-import { etherTokenNativeRedeemInstance as instance } from "../instance.js";
-import { etherTokenNativeRedeemRoutes as routes } from "../routes.js";
 import { ETHERTOKEN_NATIVE_FAMILY_ID, ETHERTOKEN_NATIVE_LINEAGE_ID } from "../manifest.js";
 import { ETHERTOKEN_NATIVE_INTERFACE as abi, ETHERTOKEN_NATIVE_PROBE_ACTOR as actor,
   ETHERTOKEN_NATIVE_PROBE_ACTOR_EVIDENCE_ID, etherTokenWithdrawalSimulation, validateEtherTokenWithdrawal } from "../shared.js";
+import { plugin as etherTokenNativeRedeemJsonPlugin } from "../../../production-families/ethertoken-native-redeem.production.js";
+
+const action = etherTokenNativeRedeemJsonPlugin.actionAdapters.find(action => action.id === "ethertoken-native-redeem")!;
+const execution = etherTokenNativeRedeemJsonPlugin.execution;
+const exact = etherTokenNativeRedeemJsonPlugin.exact;
+const instance = etherTokenNativeRedeemJsonPlugin.instance;
+const routes = etherTokenNativeRedeemJsonPlugin.routes;
+
 
 // Synthetic contract inputs only: no new admission, chain execution or historical proof.
 const token = "0x2222222222222222222222222222222222222222", executor = "0x1111111111111111111111111111111111111111";

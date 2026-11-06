@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "familyId": "protocol:metronome-synth",
+  "instanceKey": "0x3364f53cb866762aef66deef2a6b1a17c1f17f46",
+  "lineageId": "metronome-synth:active-membership",
+  "source": {
+    "number": 25515277,
+    "hash": "0x62df172938e48b7bd6ca7aecfd812fd15168caea049289a72d45d4c7bfb60580"
+  },
+  "executor": "0x1000000000000000000000000000000000000002",
+  "owner": "0x1000000000000000000000000000000000000001",
+  "transactionHash": "0x4d1e4e5103cb8e754847e085fcd8de7d2fb18f6fbe1fdfd84e0c74b5cae0e0e4",
+  "trials": [
+    {
+      "id": "original-msETH-to-msBTC",
+      "tokenIn": "0x64351fc9810adad17a690e4e1717df5e7e085160",
+      "tokenOut": "0x8b4f8ad3801b4015dea6da1d36f063cbf4e231c7",
+      "amountIn": "68190059945110642892"
+    },
+    {
+      "id": "original-msBTC-to-msUSD",
+      "tokenIn": "0x8b4f8ad3801b4015dea6da1d36f063cbf4e231c7",
+      "tokenOut": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+      "amountIn": "1929728504258755512"
+    }
+  ]
+}

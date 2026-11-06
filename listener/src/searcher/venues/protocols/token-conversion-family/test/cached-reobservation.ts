@@ -5,8 +5,8 @@ import { test } from "node:test";
 import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
 import { attestPoolIdentitiesStrict } from "../../../../strict-identity-attestation.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
-import { XWIN_ABI } from "../xwin.js";
-import { proveBearRuntime, proveLocalAssetRuntime } from "../variants.js";
+import { XWIN_ABI } from "./reference/xwin.js";
+import { proveBearRuntime, proveLocalAssetRuntime } from "./reference/variants.js";
 
 test("real BTB closure stays closed: CHAINID is not its only nonlocal instruction", () => {
   const slotRoot = process.env.TOKEN_CONVERSION_SLOT_EVIDENCE;

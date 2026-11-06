@@ -1,29 +1,12 @@
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/protocols/erc4626-silo-redeem-family/erc4626-silo-redeem.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
 import { defineProtocolFamily } from "../adapter-family-plugin.js";
-import { erc4626SiloRedeemCapture } from "../protocols/erc4626-silo-redeem-family/capture.js";
-import { erc4626SiloRedeemFamilyOwnedAction } from "../protocols/erc4626-silo-redeem-family/action.js";
-import { erc4626SiloRedeemDiscovery } from "../protocols/erc4626-silo-redeem-family/discovery.js";
-import { erc4626SiloRedeemExact } from "../protocols/erc4626-silo-redeem-family/exact.js";
-import { erc4626SiloRedeemExecution } from "../protocols/erc4626-silo-redeem-family/execution.js";
-import { erc4626SiloRedeemIdentity } from "../protocols/erc4626-silo-redeem-family/identity.js";
-import { erc4626SiloRedeemInstance } from "../protocols/erc4626-silo-redeem-family/instance.js";
-import { erc4626SiloRedeemFamilyManifest } from "../protocols/erc4626-silo-redeem-family/manifest.js";
-import { erc4626SiloRedeemPricing } from "../protocols/erc4626-silo-redeem-family/pricing.js";
-import { erc4626SiloRedeemProtocol } from "../protocols/erc4626-silo-redeem-family/protocol.js";
-import { erc4626SiloRedeemRoutes } from "../protocols/erc4626-silo-redeem-family/routes.js";
+import { compileDeclarativeProtocol } from "../declarative-protocol.js";
+import type { FamilyTypes } from "../../generated/declarative-family-types/erc4626-silo-redeem.generated.js";
+import definition from "../protocols/erc4626-silo-redeem-family/erc4626-silo-redeem.json";
 
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED" });
+export const activation = defineFamilyActivation({"enabled":true,"envKey":"SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED"});
 
-export const plugin = defineProtocolFamily({
-  manifest: erc4626SiloRedeemFamilyManifest,
-  capture: erc4626SiloRedeemCapture,
-  discovery: erc4626SiloRedeemDiscovery,
-  identity: erc4626SiloRedeemIdentity,
-  instance: erc4626SiloRedeemInstance,
-  routes: erc4626SiloRedeemRoutes,
-  pricing: erc4626SiloRedeemPricing,
-  exact: erc4626SiloRedeemExact,
-  execution: erc4626SiloRedeemExecution,
-  protocol: erc4626SiloRedeemProtocol,
-  actionAdapters: [erc4626SiloRedeemFamilyOwnedAction],
-});
+export const plugin = defineProtocolFamily(compileDeclarativeProtocol<FamilyTypes>(definition, []));

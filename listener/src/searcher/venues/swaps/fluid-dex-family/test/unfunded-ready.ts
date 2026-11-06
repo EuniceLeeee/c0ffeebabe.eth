@@ -14,7 +14,7 @@ import { createRebuildWiring } from
   "../../../../universe-rebuild-production.js";
 import { rebuildUniverse } from
   "../../../../universe-rebuild-runner.js";
-import { FLUID_DEX_FAMILY_ID as FAMILY } from "../manifest.js";
+import { FLUID_DEX_FAMILY_ID as FAMILY } from "./fixture-codec.js";
 
 /** Called only after the production checkpoint reader authenticates the file. */
 export function readyReuseScope(prior: StartupCheckpointEnvelope | null, block: number, hash: string) {

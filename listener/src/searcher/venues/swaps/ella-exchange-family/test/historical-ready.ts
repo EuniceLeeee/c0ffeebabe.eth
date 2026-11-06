@@ -10,8 +10,8 @@ import { createRebuildWiring } from "../../../../universe-rebuild-production.js"
 import { rebuildUniverse } from "../../../../universe-rebuild-runner.js";
 import { runAtBlock } from "../../../../blockscan-at-block-cli.js";
 import { resolveStrictReadyRuntime } from "../../../../strict-ready-runtime.js";
-import { ELLA_ID } from "../manifest.js";
-import { POOL } from "../codec.js";
+import { ELLA_ID } from "./definition-fixture.js";
+import { POOL } from "./definition-fixture.js";
 import sample from "./public-sample.json";
 
 async function main() {

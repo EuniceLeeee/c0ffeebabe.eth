@@ -11,8 +11,8 @@ import { createVerifiedGraphView } from "../../../blockscan-state-capability.js"
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { executeAdapterFamilyLifecycleBatch } from "../../../adapter-family-runtime.js";
 import type { CanonicalSource } from "../../../adapter-request-program.js";
-import { ELLA_ID } from "../manifest.js";
-import { BALANCE, FEES, MULTICALL, ORACLE, POOL, TOKEN, assertSource } from "../codec.js";
+import { ELLA_ID } from "./definition-fixture.js";
+import { BALANCE, FEES, MULTICALL, ORACLE, POOL, TOKEN, assertSource } from "./definition-fixture.js";
 
 // Synthetic transitions through real production lifecycle/session/coordinator/
 // effective/Exact. This is a wiring regression, not additional historical proof.

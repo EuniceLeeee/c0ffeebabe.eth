@@ -30,9 +30,9 @@ import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
 import { WSTETH_FAMILY_ID } from
-  "../venues/protocols/wsteth-family/manifest.js";
+  "../venues/protocols/wsteth-family/test/fixture-manifest.js";
 import { WSTETH_INTERFACE } from
-  "../venues/protocols/wsteth-family/codec.js";
+  "../venues/protocols/wsteth-family/test/fixture-codec.js";
 import {
   PRODUCTION_STRICT_VERIFIED_ACTORS,
 } from "../venues/production-verified-actors.js";

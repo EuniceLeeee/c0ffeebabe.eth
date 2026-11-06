@@ -4,7 +4,7 @@ import { Interface, ZeroAddress, getBytes, hexlify, type ParamType } from "ether
  * capture allocation deliberately does not use this public-input validator. */
 export function assertPublicRuntimeCaptureName(name: unknown): asserts name is string {
   if (typeof name !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*$/.test(name) || name.startsWith("frame") ||
-      ["__proto__", "constructor", "prototype", "amountIn"].includes(name))
+      ["__proto__", "constructor", "prototype", "amountIn", "settlementDebt"].includes(name))
     throw new Error("reserved or invalid public runtime capture name");
 }
 

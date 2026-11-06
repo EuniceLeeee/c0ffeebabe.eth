@@ -1,0 +1,2268 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:token-migration"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_TOKEN_MIGRATION_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:token-migration",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "token-migration"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "convert"
+      }
+    ],
+    "supportedLineages": [
+      "token-migration:mantle-solc-0.8.13-v1"
+    ],
+    "poolAdapterIds": [
+      "token-migration"
+    ],
+    "edgeAdapterIds": [
+      "token-migration"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "landed-log"
+      ],
+      "candidateSources": [
+        "observed-interaction"
+      ],
+      "candidate": {
+        "kind": "token-migration",
+        "addressField": "target",
+        "fields": {
+          "target": "address"
+        },
+        "key": [
+          "target"
+        ]
+      },
+      "calls": [
+        {
+          "id": "token-migration-migrateBIT",
+          "signature": "function migrateBIT(uint256)",
+          "fields": {
+            "target": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "migrator",
+                        "migrateBIT",
+                        "$args"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    0
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "token-migration-migrateAllBIT",
+          "signature": "function migrateAllBIT()",
+          "fields": {
+            "target": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.data"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "migrator",
+                        "migrateAllBIT",
+                        "$args"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "token-migration-migrated",
+          "signature": "event TokensMigrated(address indexed to,uint256 amountOfBitSwapped,uint256 amountOfMntReceived)",
+          "fields": {
+            "target": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$observation.topics"
+                  ]
+                },
+                2
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$observation.topics",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "0x6bf6e72b271b0d10bd73278c99673805eb396142e2fc4313396dff1ccae06269"
+              ]
+            },
+            {
+              "op": "matches",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$observation.topics",
+                    1
+                  ]
+                },
+                "^0x0{24}[0-9a-fA-F]{40}$"
+              ]
+            },
+            {
+              "op": "matches",
+              "args": [
+                "$observation.data",
+                "^0x[0-9a-fA-F]{128}$"
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "labels": [
+        "token-migration",
+        "protocol:token-migration"
+      ],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "migrator": [
+          "function BIT_TOKEN_ADDRESS() view returns(address)",
+          "function MNT_TOKEN_ADDRESS() view returns(address)",
+          "function TOKEN_CONVERSION_NUMERATOR() view returns(uint256)",
+          "function TOKEN_CONVERSION_DENOMINATOR() view returns(uint256)"
+        ],
+        "erc20": [
+          "function decimals() view returns(uint8)"
+        ]
+      },
+      "constants": {
+        "immutableMask": [
+          [
+            342,
+            32
+          ],
+          [
+            1116,
+            32
+          ],
+          [
+            1437,
+            32
+          ],
+          [
+            1613,
+            32
+          ],
+          [
+            2560,
+            32
+          ],
+          [
+            574,
+            32
+          ],
+          [
+            1175,
+            32
+          ],
+          [
+            1674,
+            32
+          ],
+          [
+            2613,
+            32
+          ],
+          [
+            423,
+            32
+          ],
+          [
+            2307,
+            32
+          ],
+          [
+            813,
+            32
+          ],
+          [
+            2271,
+            32
+          ]
+        ],
+        "immutableChecks": [
+          {
+            "offset": 342,
+            "kind": "tokenIn"
+          },
+          {
+            "offset": 1116,
+            "kind": "tokenIn"
+          },
+          {
+            "offset": 1437,
+            "kind": "tokenIn"
+          },
+          {
+            "offset": 1613,
+            "kind": "tokenIn"
+          },
+          {
+            "offset": 2560,
+            "kind": "tokenIn"
+          },
+          {
+            "offset": 574,
+            "kind": "tokenOut"
+          },
+          {
+            "offset": 1175,
+            "kind": "tokenOut"
+          },
+          {
+            "offset": 1674,
+            "kind": "tokenOut"
+          },
+          {
+            "offset": 2613,
+            "kind": "tokenOut"
+          },
+          {
+            "offset": 423,
+            "kind": "numerator"
+          },
+          {
+            "offset": 2307,
+            "kind": "numerator"
+          },
+          {
+            "offset": 813,
+            "kind": "denominator"
+          },
+          {
+            "offset": 2271,
+            "kind": "denominator"
+          }
+        ],
+        "normalizedRuntimeHash": "0x9a1b19d064a32ecbaa78d7cc01738d864d8cacd06c320a675a6e921abd557d50"
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "runtime",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "tokens"
+          }
+        ],
+        "stages": {
+          "runtime": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
+              },
+              {
+                "id": "BIT_TOKEN_ADDRESS",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "migrator",
+                    "BIT_TOKEN_ADDRESS",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "MNT_TOKEN_ADDRESS",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "migrator",
+                    "MNT_TOKEN_ADDRESS",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "TOKEN_CONVERSION_NUMERATOR",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "migrator",
+                    "TOKEN_CONVERSION_NUMERATOR",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "TOKEN_CONVERSION_DENOMINATOR",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "migrator",
+                    "TOKEN_CONVERSION_DENOMINATOR",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "code",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    "$code"
+                  ]
+                }
+              },
+              {
+                "let": "tokenIn",
+                "value": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "BIT_TOKEN_ADDRESS"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "tokenOut",
+                "value": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "MNT_TOKEN_ADDRESS"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "numerator",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "TOKEN_CONVERSION_NUMERATOR"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "denominator",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "TOKEN_CONVERSION_DENOMINATOR"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "valid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$tokenIn",
+                        "$tokenOut"
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$numerator",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$denominator",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "matches",
+                      "args": [
+                        "$code",
+                        "^0x[0-9a-fA-F]{6554}$"
+                      ]
+                    },
+                    {
+                      "op": "every",
+                      "args": [
+                        "$constants.immutableChecks",
+                        "check",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "bytes",
+                                  "args": [
+                                    "$code",
+                                    {
+                                      "op": "sub",
+                                      "args": [
+                                        "$check.offset",
+                                        1
+                                      ]
+                                    },
+                                    1
+                                  ]
+                                },
+                                "0x7f"
+                              ]
+                            },
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    "$check.kind",
+                                    "tokenIn"
+                                  ]
+                                },
+                                {
+                                  "op": "sameAddress",
+                                  "args": [
+                                    {
+                                      "op": "addressWord",
+                                      "args": [
+                                        {
+                                          "op": "bytes",
+                                          "args": [
+                                            "$code",
+                                            "$check.offset",
+                                            32
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "$tokenIn"
+                                  ]
+                                },
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        "$check.kind",
+                                        "tokenOut"
+                                      ]
+                                    },
+                                    {
+                                      "op": "sameAddress",
+                                      "args": [
+                                        {
+                                          "op": "addressWord",
+                                          "args": [
+                                            {
+                                              "op": "bytes",
+                                              "args": [
+                                                "$code",
+                                                "$check.offset",
+                                                32
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "$tokenOut"
+                                      ]
+                                    },
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            "$check.kind",
+                                            "numerator"
+                                          ]
+                                        },
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "word",
+                                              "args": [
+                                                {
+                                                  "op": "bytes",
+                                                  "args": [
+                                                    "$code",
+                                                    "$check.offset",
+                                                    32
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            "$numerator"
+                                          ]
+                                        },
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "word",
+                                              "args": [
+                                                {
+                                                  "op": "bytes",
+                                                  "args": [
+                                                    "$code",
+                                                    "$check.offset",
+                                                    32
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            "$denominator"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "maskHash",
+                          "args": [
+                            "$code",
+                            "$constants.immutableMask"
+                          ]
+                        },
+                        "$constants.normalizedRuntimeHash"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "runtime",
+                  "tokenIn": "$tokenIn",
+                  "tokenOut": "$tokenOut",
+                  "numerator": "$numerator",
+                  "denominator": "$denominator",
+                  "source": "$source",
+                  "codeHash": "$codeHash",
+                  "valid": "$valid"
+                }
+              }
+            ]
+          },
+          "tokens": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "input-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.tokenIn"
+                  ]
+                }
+              },
+              {
+                "id": "output-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.tokenOut"
+                  ]
+                }
+              },
+              {
+                "id": "input-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.tokenIn"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "erc20",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "output-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.tokenOut"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "erc20",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                }
+              },
+              {
+                "let": "inputCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "input-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "outputCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "output-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "inDecimals",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "input-decimals"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "outDecimals",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "output-decimals"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$inDecimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "77"
+                      ]
+                    }
+                  ]
+                },
+                "error": "migration decimals exceed uint256 scale"
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$outDecimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "77"
+                      ]
+                    }
+                  ]
+                },
+                "error": "migration decimals exceed uint256 scale"
+              },
+              {
+                "let": "oneToken",
+                "value": {
+                  "op": "pow",
+                  "args": [
+                    10,
+                    "$inDecimals"
+                  ]
+                }
+              },
+              {
+                "let": "valid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    "$evidence.valid",
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$inputCode",
+                        "0x"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$outputCode",
+                        "0x"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "tokens",
+                      "oneToken": "$oneToken",
+                      "valid": "$valid"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "unsupported-migration-runtime-or-token",
+              "evidenceRequestIds": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$evidence.phase",
+                      "runtime"
+                    ]
+                  },
+                  [
+                    "code",
+                    "BIT_TOKEN_ADDRESS",
+                    "MNT_TOKEN_ADDRESS",
+                    "TOKEN_CONVERSION_NUMERATOR",
+                    "TOKEN_CONVERSION_DENOMINATOR"
+                  ],
+                  [
+                    "input-code",
+                    "output-code"
+                  ]
+                ]
+              }
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.valid"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    "$evidence.phase",
+                    "tokens"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$evidence.oneToken"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "mantle-runtime-immutable-binding",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.target"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        "$evidence"
+                      ]
+                    }
+                  }
+                ],
+                "tokenIn": "$evidence.tokenIn",
+                "tokenOut": "$evidence.tokenOut",
+                "numerator": "$evidence.numerator",
+                "denominator": "$evidence.denominator",
+                "oneToken": "$evidence.oneToken",
+                "codeHash": "$evidence.codeHash"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "target": "$identity.subject",
+      "tokenIn": "$identity.tokenIn",
+      "tokenOut": "$identity.tokenOut",
+      "numerator": "$identity.numerator",
+      "denominator": "$identity.denominator",
+      "oneToken": "$identity.oneToken",
+      "codeHash": "$identity.codeHash"
+    },
+    "bindingProjection": {
+      "op": "expression",
+      "args": [
+        "bindingProjection",
+        {}
+      ]
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "migrate",
+        "enabled": true,
+        "tokenIn": "$descriptor.tokenIn",
+        "tokenOut": "$descriptor.tokenOut",
+        "adapterId": "token-migration",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "convert"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "route": {
+            "op": "at",
+            "args": [
+              "$routes",
+              0
+            ]
+          },
+          "routes": "$routes"
+        }
+      ]
+    },
+    "compatibility": {
+      "op": "expression",
+      "args": [
+        "bindingProjection",
+        {}
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [
+        "$draft.target",
+        "$draft.tokenIn",
+        "$draft.tokenOut"
+      ],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": "$draft",
+    "sampleAmount": {
+      "op": "expression",
+      "args": [
+        "sampleAmount",
+        {}
+      ]
+    },
+    "exactCompatibility": {
+      "op": "merge",
+      "args": [
+        {
+          "op": "expression",
+          "args": [
+            "bindingProjection",
+            {}
+          ]
+        },
+        {
+          "bindingFingerprint": "$route.bindingRef.fingerprint",
+          "executor": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$executor"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "mantle-immutable-runtime",
+    "lineageId": "token-migration:mantle-solc-0.8.13-v1",
+    "abi": {
+      "migrator": [
+        "function BIT_TOKEN_ADDRESS() view returns(address)",
+        "function MNT_TOKEN_ADDRESS() view returns(address)",
+        "function TOKEN_CONVERSION_NUMERATOR() view returns(uint256)",
+        "function TOKEN_CONVERSION_DENOMINATOR() view returns(uint256)",
+        "function halted() view returns(bool)",
+        "function migrateBIT(uint256 amount)",
+        "function migrateAllBIT()",
+        "function tokenMigrationAmountToReceive(uint256 amount) view returns(uint256)",
+        "event TokensMigrated(address indexed to,uint256 amountOfBitSwapped,uint256 amountOfMntReceived)"
+      ],
+      "erc20": [
+        "function decimals() view returns(uint8)",
+        "function balanceOf(address) view returns(uint256)",
+        "function approve(address,uint256) returns(bool)"
+      ]
+    },
+    "constants": {
+      "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+    },
+    "expressions": {
+      "bindingProjection": {
+        "target": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.target"
+              ]
+            }
+          ]
+        },
+        "tokenIn": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.tokenIn"
+              ]
+            }
+          ]
+        },
+        "tokenOut": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.tokenOut"
+              ]
+            }
+          ]
+        },
+        "numerator": "$descriptor.numerator",
+        "denominator": "$descriptor.denominator",
+        "codeHash": "$descriptor.codeHash",
+        "semantics": "mantle-migrate-exact-amount-v1"
+      },
+      "sampleAmount": {
+        "op": "min",
+        "args": [
+          "$descriptor.oneToken",
+          {
+            "op": "div",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  "$constants.maxUint256"
+                ]
+              },
+              "$descriptor.numerator"
+            ]
+          }
+        ]
+      }
+    },
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.target",
+        "$descriptor.tokenIn",
+        "$descriptor.tokenOut"
+      ],
+      "mutationAddresses": [
+        "$descriptor.target",
+        "$descriptor.tokenIn",
+        "$descriptor.tokenOut"
+      ],
+      "classifyUnavailable": {
+        "op": "if",
+        "args": [
+          "$snapshot.halted",
+          [
+            [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$routes",
+                      0
+                    ]
+                  },
+                  "routeKey"
+                ]
+              },
+              "migration-halted"
+            ]
+          ],
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$snapshot.quotes",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$routes",
+                                  0
+                                ]
+                              },
+                              "routeKey"
+                            ]
+                          }
+                        ]
+                      },
+                      "amountOut"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              [
+                [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$routes",
+                          0
+                        ]
+                      },
+                      "routeKey"
+                    ]
+                  },
+                  "migration-zero-output"
+                ]
+              ],
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$snapshot.quotes",
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$routes",
+                                      0
+                                    ]
+                                  },
+                                  "routeKey"
+                                ]
+                              }
+                            ]
+                          },
+                          "amountOut"
+                        ]
+                      },
+                      "$snapshot.inventory"
+                    ]
+                  },
+                  [
+                    [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$routes",
+                              0
+                            ]
+                          },
+                          "routeKey"
+                        ]
+                      },
+                      "migration-insufficient-inventory"
+                    ]
+                  ],
+                  []
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "mantle-chain-amount",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "gt",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "migration requires positive input"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "$constants.maxUint256"
+                ]
+              }
+            ]
+          },
+          "error": "migration uint256 arithmetic bounds"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              {
+                "op": "mul",
+                "args": [
+                  "$amountIn",
+                  "$descriptor.numerator"
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "$constants.maxUint256"
+                ]
+              }
+            ]
+          },
+          "error": "migration uint256 arithmetic bounds"
+        }
+      ],
+      "outputChecks": [
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "halted"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "migration halted"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountOut",
+              {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "inventory"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "migration insufficient output inventory"
+        }
+      ],
+      "evidence": {
+        "kind": "mantle-migration-amount-quote",
+        "source": "$source",
+        "executor": "$executor",
+        "bindingFingerprint": "$route.bindingRef.fingerprint",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.target"
+      ],
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.target",
+        "mode": "exact-clear"
+      },
+      "call": {
+        "target": "$descriptor.target",
+        "signature": "function migrateBIT(uint256)",
+        "args": [
+          {
+            "runtime": "amountIn"
+          }
+        ]
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "minimum": 1
+        }
+      ]
+    },
+    "modules": {
+      "pricingFlow": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "quote",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "halted",
+                "kind": "eth-call",
+                "to": "$descriptor.target",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "migrator",
+                    "halted",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "inventory",
+                "kind": "eth-call",
+                "to": "$descriptor.tokenOut",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "erc20",
+                    "balanceOf",
+                    [
+                      "$descriptor.target"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "amount-quote",
+                "kind": "eth-call",
+                "to": "$descriptor.target",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "migrator",
+                    "tokenMigrationAmountToReceive",
+                    [
+                      {
+                        "op": "expression",
+                        "args": [
+                          "sampleAmount",
+                          {}
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "haltedWord",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "halted"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$haltedWord",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1"
+                      ]
+                    }
+                  ]
+                },
+                "error": "migration invalid boolean"
+              },
+              {
+                "let": "halted",
+                "value": {
+                  "op": "eq",
+                  "args": [
+                    "$haltedWord",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "inventory",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "inventory"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "amountOut",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "amount-quote"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "expected",
+                "value": {
+                  "op": "div",
+                  "args": [
+                    {
+                      "op": "mul",
+                      "args": [
+                        {
+                          "op": "expression",
+                          "args": [
+                            "sampleAmount",
+                            {}
+                          ]
+                        },
+                        "$descriptor.numerator"
+                      ]
+                    },
+                    "$descriptor.denominator"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$amountOut",
+                    "$expected"
+                  ]
+                },
+                "error": "migration chain quote disagrees with bound runtime"
+              },
+              {
+                "return": {
+                  "halted": "$halted",
+                  "inventory": "$inventory",
+                  "amountOut": "$amountOut"
+                }
+              }
+            ]
+          }
+        ],
+        "result": {
+          "source": "$source",
+          "halted": "$steps.quote.halted",
+          "inventory": "$steps.quote.inventory",
+          "quotes": {
+            "op": "objectFromEntries",
+            "args": [
+              [
+                [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$routes",
+                          0
+                        ]
+                      },
+                      "routeKey"
+                    ]
+                  },
+                  {
+                    "amountIn": {
+                      "op": "expression",
+                      "args": [
+                        "sampleAmount",
+                        {}
+                      ]
+                    },
+                    "amountOut": "$steps.quote.amountOut"
+                  }
+                ]
+              ]
+            ]
+          }
+        }
+      },
+      "quoteFlow": {
+        "version": 1,
+        "sourceKind": "view",
+        "steps": [
+          {
+            "id": "quote",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "halted",
+                "kind": "eth-call",
+                "to": "$descriptor.target",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "migrator",
+                    "halted",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "inventory",
+                "kind": "eth-call",
+                "to": "$descriptor.tokenOut",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "erc20",
+                    "balanceOf",
+                    [
+                      "$descriptor.target"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "amount-quote",
+                "kind": "eth-call",
+                "to": "$descriptor.target",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "migrator",
+                    "tokenMigrationAmountToReceive",
+                    [
+                      "$amountIn"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "haltedWord",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "halted"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$haltedWord",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1"
+                      ]
+                    }
+                  ]
+                },
+                "error": "migration invalid boolean"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$haltedWord",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                "error": "migration halted"
+              },
+              {
+                "let": "inventory",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "inventory"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "amountOut",
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "amount-quote"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "expected",
+                "value": {
+                  "op": "div",
+                  "args": [
+                    {
+                      "op": "mul",
+                      "args": [
+                        "$amountIn",
+                        "$descriptor.numerator"
+                      ]
+                    },
+                    "$descriptor.denominator"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$amountOut",
+                    "$expected"
+                  ]
+                },
+                "error": "migration chain quote disagrees with bound runtime"
+              },
+              {
+                "assert": {
+                  "op": "gt",
+                  "args": [
+                    "$amountOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                "error": "migration zero output is not searchable"
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$amountOut",
+                    "$inventory"
+                  ]
+                },
+                "error": "migration insufficient output inventory"
+              },
+              {
+                "return": "$amountOut"
+              }
+            ]
+          }
+        ],
+        "result": "$steps.quote",
+        "chainQuote": {
+          "step": "quote",
+          "requestId": "amount-quote",
+          "signature": "function tokenMigrationAmountToReceive(uint256) view returns(uint256)",
+          "amountPath": [
+            0
+          ],
+          "outputPath": [
+            0
+          ]
+        }
+      }
+    }
+  },
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "token-migration",
+        "lineage": "custom-protocol:token-migration",
+        "edgeKind": "protocol",
+        "action": "convert",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function migrateBIT(uint256)"
+        }
+      ]
+    }
+  ],
+  "variantFiles": []
+}

@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { ethers } from "ethers";
 import { plugin } from "../../../production-families/uniswap-v1.production.js";
 import { declareRequestProgram, type AdapterRequest, type AdapterRequestResult } from "../../../adapter-request-program.js";
-import { IMPLEMENTATION } from "../codec.js";
-import type { Candidate, Identity } from "../types.js";
+import { IMPLEMENTATION } from "./definition-fixture.js";
+import type { VerifiedIdentity } from "../../../adapter-family-plugin.js";
 export const SOURCE = { number: 26029476, hash: "0x74997e992f9feddb1b373da2eb41e7cd3abe189c537b4fc79e7d15896c092c35", generation: 1 };
 export const POOL_ADDRESS = "0x1000000000000000000000000000000000000001";
 export const TOKEN_ADDRESS = "0x1000000000000000000000000000000000000002";
@@ -20,7 +20,7 @@ const implementationCode = (address: string): string => {
 };
 export const STANDARD_IMPLEMENTATION = "0x2157a7894439191e520825fe9399ab8655e0f708";
 export const word = (n: bigint | string) => ethers.toBeHex(n, 32);
-export const CANDIDATE: Candidate = { candidateKind: "univ1-exchange", pool: POOL_ADDRESS };
+export const CANDIDATE = { candidateKind: "univ1-exchange", pool: POOL_ADDRESS };
 export function result(id: string, data: string, source = SOURCE): AdapterRequestResult {
   return { id, data, source, ok: true, completion: "returned", provenance: { kind: "synthetic-univ1-contract", fingerprint: "fixture" } };
 }
@@ -41,11 +41,11 @@ export function standardAnswer(r: AdapterRequest): AdapterRequestResult {
 export function descriptor(reply = answer, candidate = CANDIDATE) {
   const variant = plugin.identity.variants[0];
   let evidence: unknown;
-  let verified: Identity | undefined;
+  let verified: VerifiedIdentity | undefined;
   for (let step = 0; step < 5; step++) {
     const input = { candidate, evidence, step };
     const decision = variant.decide(input);
-    if (decision.status === "verified") { verified = decision.identity as Identity; break; }
+    if (decision.status === "verified") { verified = decision.identity; break; }
     assert.equal(decision.status, "continue", JSON.stringify(decision));
     // Use the same declaration validator as strict; unused transports are invalid.
     const declared = declareRequestProgram({ requirements: variant.requirements,

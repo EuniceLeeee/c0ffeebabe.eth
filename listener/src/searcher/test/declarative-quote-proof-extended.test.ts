@@ -147,3 +147,34 @@ test("conditional ordered chain verifies intermediate custom-error output before
   assert.throws(() => verifyDeclarativeQuoteChain({ ...input, proof: chain, observation, amountIn: 8n }), /amount mismatch/);
   assert.throws(() => verifyDeclarativeQuoteChain({ ...input, proof: chain, observation, amountOut: 14n }), /amount mismatch/);
 });
+
+test("view binds nominal input, capacity, token, gross quote and checked net receipt", () => {
+  const signature = "function quote(address,uint256) view returns(uint256)";
+  const view = new Interface([signature]);
+  const receiptBinding = { inputAssetPath: [0], feeNumerator: op("uint", "1"), feeDenominator: op("uint", "100"),
+    maximumInput: "$steps.state.headroom", unavailableOnRevertOrEmpty: true };
+  const spec: DeclarativeQuoteProof = { ...proof, signature, amountPath: [1], receiptBinding };
+  const request: AdapterRequest = { id: "query", kind: "eth-call", to: target,
+    data: view.encodeFunctionData("quote", [tokenIn, 7]), completion: "return-or-revert-data" };
+  const base = { ...input, proof: spec, request, result: { ...result, data: view.encodeFunctionResult("quote", [200n]) },
+    amountOut: 198n, environment: { target, steps: { state: { headroom: 7n } } } };
+  verifyDeclarativeQuoteProof(base);
+  assert.throws(() => verifyDeclarativeQuoteProof({ ...base, amountOut: 200n }), /amount mismatch/);
+  assert.throws(() => verifyDeclarativeQuoteProof({ ...base, amountOut: 0n }), /amount mismatch/);
+  assert.throws(() => verifyDeclarativeQuoteProof({ ...base, request: { ...request,
+    data: view.encodeFunctionData("quote", [tokenOut, 7n]) } }), /asset/);
+  const capped = { ...base, environment: { target, steps: { state: { headroom: 6n } } }, amountOut: 0n };
+  verifyDeclarativeQuoteProof(capped);
+  assert.throws(() => verifyDeclarativeQuoteProof({ ...capped, amountOut: 198n }), /amount mismatch/);
+  verifyDeclarativeQuoteProof({ ...base, amountOut: 0n, result: { ...result, data: view.encodeFunctionResult("quote", [0n]) } });
+  for (const settled of [{ ...result, data: "0x" }, { ...result, data: "0xabcd", completion: "reverted-as-declared" as const }]) {
+    verifyDeclarativeQuoteProof({ ...base, result: settled, amountOut: 0n });
+    assert.throws(() => verifyDeclarativeQuoteProof({ ...base, result: settled }), /amount mismatch/);
+    assert.throws(() => verifyDeclarativeQuoteProof({ ...base, result: { ...settled, source: { ...source, number: 101 } }, amountOut: 0n }));
+    assert.throws(() => verifyDeclarativeQuoteProof({ ...base, result: settled,
+      request: { ...request, data: view.encodeFunctionData("quote", [tokenIn, 6n]) }, amountOut: 0n }), /amount mismatch/);
+  }
+  assert.throws(() => verifyDeclarativeQuoteProof({ ...base, result: { id: "query", source, ok: false, failure: "rpc" }, amountOut: 0n }));
+  assert.throws(() => verifyDeclarativeQuoteProof({ ...base, proof: { ...spec, receiptBinding: { ...receiptBinding, maximumInput: 0 } } }), /source-bound/);
+  assert.throws(() => verifyDeclarativeQuoteProof({ ...base, proof: { ...spec, receiptBinding: { ...receiptBinding, feeDenominator: op("uint", "0") } } }), /deduction/);
+});

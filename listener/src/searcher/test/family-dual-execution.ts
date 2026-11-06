@@ -14,7 +14,7 @@ import { applyRuntimeAssetBoundary, mapRuntimeAssetSettlementRequest } from "../
 import { PSM_INTERFACE, PSM_WAD, psmBuyQuote, psmBuyCost } from "../venues/protocols/psm-family/codec.js";
 import { MODES, EXECUTION, executionFunction, pullsInput } from "../venues/swaps/curve-plain-family/codec.js";
 import { ROUTER, PERMIT2, PERMIT2_ABI, ROUTER_ABI } from "../venues/swaps/balancer-v3-family/codec.js";
-import { METRONOME_HGUSDC_ROUTER_INTERFACE } from "../venues/protocols/metronome-hgusdc-family/shared.js";
+import { METRONOME_HGUSDC_ROUTER_INTERFACE } from "../venues/protocols/metronome-hgusdc-family/test/fixture-shared.js";
 import { METRONOME_HGUSDC_PATH } from "../../adapters/metronome-hgusdc.js";
 import { ANGSTROM_ADAPTER_SWAP_ABI } from "../venues/swaps/angstrom-attestation.js";
 import { descriptor as ekuboFixture } from "../venues/swaps/ekubo-family/test/fixtures.js";

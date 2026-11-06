@@ -1,5 +1,6 @@
 import { ExactAmountRejectedError } from "../venues/adapter-amount-rejection.js";
 import assert from "node:assert/strict";
+import { RequiredAdapterRequestError } from "../venues/adapter-request-failure.js";
 import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { familyRouteCanonicalEdgeId } from "../adapter-family-graph-runtime.js";
@@ -11,9 +12,8 @@ import type {
 } from "../venues/adapter-request-program.js";
 import { hashCanonical } from "../venues/canonical-value.js";
 import { instanceKey } from "../venues/adapter-family-identifiers.js";
-import { univ4StrictFamilyPlugin } from "../venues/swaps/univ4-family-plugin.js";
+import { plugin as univ4StrictFamilyPlugin } from "../venues/production-families/univ4.production.js";
 import {
-  UNIV4_INITIALIZE_PATTERN_ID,
   UNIV4_SWAP_CALL_PATTERN_ID,
 } from "../venues/swaps/univ4-family/codec.js";
 import {
@@ -58,7 +58,8 @@ const initializeObservation: UnifiedObservation = Object.freeze({
 });
 const initializeCandidate = univ4StrictFamilyPlugin.discovery.decodeCandidate({
   observation: initializeObservation,
-  matchedPatternId: UNIV4_INITIALIZE_PATTERN_ID,
+  matchedPatternId: univ4StrictFamilyPlugin.discovery.logPatterns!.find((pattern) =>
+    pattern.topic.toLowerCase() === initialize.topics[0]!.toLowerCase())!.id,
 });
 assert(initializeCandidate !== null);
 assert.equal(initializeCandidate.poolId, POOL_ID);
@@ -104,7 +105,7 @@ assert.deepEqual(
     candidate: {
       ...initializeCandidate,
       poolId: v4PoolId({ ...KEY, hooks: EXECUTOR }),
-      poolKey: { ...KEY, hooks: EXECUTOR },
+      hooks: EXECUTOR,
     },
     step: 0,
   }),
@@ -200,19 +201,20 @@ const pricingDraft = univ4StrictFamilyPlugin.pricing.compileDraft({
 const pricingDescriptor =
   univ4StrictFamilyPlugin.pricing.finalizePricingDescriptor({
     draft: pricingDraft,
+    staticEvidence: univ4StrictFamilyPlugin.pricing.staticEvidence!.decode({ draft: pricingDraft, results: [] }),
     sharedBindings: [],
   });
 const currentInput = { descriptor: pricingDescriptor, routes, source: SOURCE };
 const coreResults = [
   success(
-    "current-slot0",
+    "core-slot0",
     UNIV4_STATE_VIEW_INTERFACE.encodeFunctionResult(
       "getSlot0",
       [Q96, 0, 0, KEY.fee],
     ),
   ),
   success(
-    "current-liquidity",
+    "core-liquidity",
     UNIV4_STATE_VIEW_INTERFACE.encodeFunctionResult(
       "getLiquidity",
       [LIQUIDITY],
@@ -245,7 +247,7 @@ const dependentResults = dependentProgram.requests.map((request) => {
       ),
     );
   });
-const snapshot = univ4StrictFamilyPlugin.pricing.current.decodeSnapshot({
+const snapshot = decodeIssuedSnapshot({
   descriptor: pricingDescriptor,
   initialResults: coreResults,
   dependentEvidence: [dependentProgram.decode(dependentResults)],
@@ -260,15 +262,15 @@ assert.equal(
   2,
 );
 assert.throws(
-  () => univ4StrictFamilyPlugin.pricing.current.decodeSnapshot({
+  () => decodeIssuedSnapshot({
     descriptor: pricingDescriptor,
     initialResults: [
-      { id: "current-slot0", ok: false, source: SOURCE, failure: "rpc" },
+      { id: "core-slot0", ok: false, source: SOURCE, failure: "rpc" },
       coreResults[1],
     ],
     dependentEvidence: [],
   }),
-  /unresolved: rpc/,
+  (error: unknown) => error instanceof RequiredAdapterRequestError && error.failureCode === "rpc",
 );
 
 const amountIn = 1_000_000n;
@@ -339,13 +341,13 @@ for (const balance of [0n, 899_999n]) {
 }
 assert.throws(() => exactRequestMethod.program.decode({
   programInput: exactInput, initialResults: [quoteResult], dependentEvidence: [],
-}), /output-balance.*missing/);
+}), /read-flow result ids do not match requests/);
 for (const data of ["0x", "0x01", `0x${"00".repeat(64)}`]) {
   assert.throws(() => decodeWithBalance(success(balanceRequest.id, data)), /invalid uint256/);
 }
 assert.throws(() => decodeWithBalance({
   id: balanceRequest.id, ok: false, source: SOURCE, failure: "rpc",
-}), /unresolved: rpc/);
+}), (error: unknown) => error instanceof RequiredAdapterRequestError && error.failureCode === "rpc");
 for (const source of [
   { ...SOURCE, number: SOURCE.number + 1 },
   { ...SOURCE, hash: `0x${"cd".repeat(32)}` },
@@ -498,4 +500,20 @@ function success(
     completion: "returned" as const,
     data,
   });
+}
+
+
+/** The production read-flow records an empty optional precision round. */
+function decodeIssuedSnapshot(input: Parameters<typeof univ4StrictFamilyPlugin.pricing.current.decodeSnapshot>[0]) {
+  const pricing = univ4StrictFamilyPlugin.pricing.current;
+  const prior = [...input.dependentEvidence];
+  for (let completedRound = prior.length; completedRound <= 16; completedRound++) {
+    const round = pricing.buildDependentProgram!({
+      current: currentInput, initialResults: input.initialResults, completedRound, priorEvidence: prior,
+    });
+    if (!round) return pricing.decodeSnapshot({ ...input, dependentEvidence: prior });
+    assert.equal(round.requests.length, 0, "only empty precision rounds may be completed without fixtures");
+    prior.push(round.decode([]));
+  }
+  throw new Error("fixture exceeded the production read-flow round limit");
 }

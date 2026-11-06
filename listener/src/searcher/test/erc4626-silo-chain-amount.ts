@@ -12,11 +12,11 @@ import { runStrictFamilyLifecycle } from "../strict-family-lifecycle-runner.js";
 import { StrictProductionRuntimeRoot } from "../strict-production-runtime-session.js";
 import type { CanonicalSource } from "../venues/adapter-request-program.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../venues/production-family-composition.js";
-import { ERC4626_SILO_REDEEM_FAMILY_ID as FAMILY } from "../venues/protocols/erc4626-silo-redeem-family/manifest.js";
+import { ERC4626_SILO_REDEEM_FAMILY_ID as FAMILY } from "../venues/protocols/erc4626-silo-redeem-family/test/fixture-manifest.js";
 import {
   ERC4626_SILO_INTERFACE as VAULT_ABI,
   ERC4626_SILO_PAYOUT_INTERFACE as PAYOUT_ABI,
-} from "../venues/protocols/erc4626-silo-redeem-family/shared.js";
+} from "../venues/protocols/erc4626-silo-redeem-family/test/fixture-shared.js";
 
 // Offline integration through the production issueExact entry, not chain evidence.
 const SOURCE: CanonicalSource = { number: 25_800_100, hash: `0x${"31".repeat(32)}`, generation: 3 };

@@ -41,9 +41,9 @@ import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
 import { WSTETH_FAMILY_ID } from
-  "../venues/protocols/wsteth-family/manifest.js";
+  "../venues/protocols/wsteth-family/test/fixture-manifest.js";
 import { UNIV2_FAMILY_ID } from
-  "../venues/swaps/univ2-family/manifest.js";
+  "../venues/swaps/univ2-family/test/fixture-manifest.js";
 import {
   UNIV2_FACTORY_INTERFACE,
   UNIV2_PAIR_CREATED_TOPIC,

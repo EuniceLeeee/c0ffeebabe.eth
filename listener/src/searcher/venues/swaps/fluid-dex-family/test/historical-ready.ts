@@ -127,8 +127,8 @@ async function main() {
     const { runAtBlock, parseAtBlockJson } = await import("../../../../blockscan-at-block-cli.js");
     const { resolveStrictReadyRuntime } = await import("../../../../strict-ready-runtime.js");
     const { RevmSimClient } = await import("../../../../revm-sim-client.js");
-    const { FLUID_DEX_FAMILY_ID } = await import("../manifest.js");
-    const { FLUID_DEX_SWAP_TOPIC } = await import("../codec.js");
+    const { FLUID_DEX_FAMILY_ID } = await import("./fixture-codec.js");
+    const { FLUID_DEX_SWAP_TOPIC } = await import("./fixture-codec.js");
     const request = new ethers.FetchRequest(rpcUrl); request.timeout = 30_000;
     provider = new ethers.JsonRpcProvider(request, 1, { staticNetwork: true, batchMaxCount: 1 });
     const read = async (name: string, method: string, params: unknown[]) => {

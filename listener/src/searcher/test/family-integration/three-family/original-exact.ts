@@ -7,7 +7,7 @@ import {fileURLToPath} from "node:url";
 import {spawn} from "node:child_process";
 import {ethers} from "ethers";
 import {SAMPLES,sourcePin} from "./historical-dual.js";
-import {POOL,FACTORY} from "../../../venues/swaps/balancer-v1-family/codec.js";
+import {POOL,FACTORY} from "../../../venues/swaps/balancer-v1-family/test/fixture-abi.js";
 import {runtimeProgramScript} from "../../../../adapters/runtime-amount-program.js";
 import {concatBytes} from "../../../../encoder.js";
 import type {ResolvedPlanNode} from "../../../../types.js";

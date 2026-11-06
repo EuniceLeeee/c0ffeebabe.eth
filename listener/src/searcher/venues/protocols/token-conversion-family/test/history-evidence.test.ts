@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ethers } from "ethers";
-import { XWIN_ABI } from "../xwin.js";
+import { XWIN_ABI } from "./reference/xwin.js";
 import { originalXwinLeg } from "./history-evidence.js";
 const actor = "0x1000000000000000000000000000000000000001";
 const target = "0x1000000000000000000000000000000000000002";

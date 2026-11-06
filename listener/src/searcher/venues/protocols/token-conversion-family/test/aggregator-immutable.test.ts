@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { ethers } from "ethers";
-import { assertXwinChainlinkAggregatorRuntime } from "../xwin-dependency-runtime.js";
+import { assertXwinChainlinkAggregatorRuntime } from "./reference/xwin-dependency-runtime.js";
 
 const evidence = process.env.XWIN_AGGREGATOR_IMMUTABLE_EVIDENCE;
 test("OCR2 maxAnswer compatibility authenticates actual N code and exact immutable/compiler/source bindings", { skip: !evidence }, () => {

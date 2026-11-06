@@ -3,11 +3,23 @@ import { ADDR } from "../../shared/constants/addresses.js";
 import { executeAdapterWork } from "../adapter-work-intent.js";
 import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
 import type { AdapterRequestResult, CanonicalSource } from "../venues/adapter-request-program.js";
-import { goldxExact, goldxExecution, goldxFamilyManifest, goldxInstance, goldxRoutes } from "../venues/protocols/goldx-family-plugin.js";
-import { GOLDX_INTERFACE, goldxQuote } from "../venues/protocols/goldx-family/codec.js";
-import { psmExact, psmExecution, psmFamilyManifest, psmInstance, psmRoutes } from "../venues/protocols/psm-family-plugin.js";
+import { GOLDX_INTERFACE, goldxQuote } from "../venues/protocols/goldx-family/test/fixture-codec.js";
 import { PSM_INTERFACE, psmSellQuote } from "../venues/protocols/psm-family/codec.js";
 import { MAX_UINT256 } from "../venues/protocols/standard-family/common.js";
+import { plugin as goldxJsonPlugin } from "../venues/production-families/goldx.production.js";
+import { plugin as psmJsonPlugin } from "../venues/production-families/psm.production.js";
+
+const goldxExact = goldxJsonPlugin.exact;
+const goldxExecution = goldxJsonPlugin.execution;
+const goldxFamilyManifest = goldxJsonPlugin.manifest;
+const goldxInstance = goldxJsonPlugin.instance;
+const goldxRoutes = goldxJsonPlugin.routes;
+const psmExact = psmJsonPlugin.exact;
+const psmExecution = psmJsonPlugin.execution;
+const psmFamilyManifest = psmJsonPlugin.manifest;
+const psmInstance = psmJsonPlugin.instance;
+const psmRoutes = psmJsonPlugin.routes;
+
 
 // Recorded actual pre-change simulation outputs at the same pinned source.
 // Golden amounts are observed token deltas, not regenerated test expectations.
@@ -34,7 +46,9 @@ for (const f of fixtures) {
   assert(method.kind==="request-program");
   assert(!("chainAmountQuote" in method), "parameter reads do not return amountOut");
   const program = method.program as any;
-  const id = "exact-" + f.getter;
+  const [parameterRead] = program.buildRequests({ descriptor: f.descriptor, route: f.route, amountIn: 1n, source, executor, runtimeEvidence: [] });
+  assert.equal(parameterRead.data, f.abi.encodeFunctionData(f.getter));
+  const id = parameterRead.id;
   const result = (data = f.abi.encodeFunctionResult(f.getter,[f.parameter])) => ({
     id, ok:true as const, source, provenance:{kind:"test",fingerprint:id}, completion:"returned" as const, data,
   });
@@ -66,13 +80,13 @@ for (const f of fixtures) {
   const input={descriptor:f.descriptor,route:f.route,amountIn:f.points[0][0],source,executor,runtimeEvidence:[]};
   const decode=(results:readonly AdapterRequestResult[], patch={})=>program.decode({
     programInput:{...input,...patch},initialResults:results,dependentEvidence:[]});
-  for (const results of [[],[result(),result()],[{...result(),id:"other"}]]) assert.throws(()=>decode(results),/missing|ambiguous/);
+  for (const results of [[],[result(),result()],[{...result(),id:"other"}]]) assert.throws(()=>decode(results),f.getter === "unit" ? /read-flow result ids do not match requests/ : /missing|ambiguous/);
   for (const patch of [{data:"0x"},{data:"0x01"},{completion:"reverted-as-declared" as const},
     {source:{...source,number:source.number+1}},{source:{...source,hash:"0x"+"12".repeat(32)}},{source:{...source,generation:0}}]) {
     assert.throws(()=>decode([{...result(),...patch}]));
   }
-  for(const failure of ["rpc","deadline","aborted"] as const) assert.throws(()=>decode([{id,ok:false,source,failure}]),/unresolved/);
-  assert.throws(()=>decode([result()],{amountIn:-1n}),/range/);
+  for(const failure of ["rpc","deadline","aborted"] as const) assert.throws(()=>decode([{id,ok:false,source,failure}]),f.getter === "unit" ? /required adapter request.*failed/ : /unresolved/);
+  assert.throws(()=>decode([result()],{amountIn:-1n}),f.getter === "unit" ? /uint256/ : /range/);
   assert.throws(()=>program.buildRequests({...input,amountIn:MAX_UINT256+1n}),/uint256/);
   const zero={...input,amountIn:0n};
   assert.deepEqual(program.requirements(zero),{transports:[]});

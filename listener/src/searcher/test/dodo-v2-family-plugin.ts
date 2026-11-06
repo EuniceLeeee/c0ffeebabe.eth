@@ -202,17 +202,15 @@ assert.equal(pricingDescriptor.quoteOneToken, 100n);
 const currentInput = { descriptor: pricingDescriptor, routes, source: SOURCE };
 assert.deepEqual(
   dodoV2StrictFamilyPlugin.pricing.current.requirements(currentInput),
-  { transports: ["eth-call"], caller: "verified-actor" },
+  { transports: ["eth-call"] },
 );
 const currentRequests =
   dodoV2StrictFamilyPlugin.pricing.current.buildRequests(currentInput);
 assert.equal(currentRequests.length, 5);
 const feeRequest = currentRequests.find((request) => request.id === "current-actor-fee");
 assert(feeRequest?.kind === "eth-call");
-assert.deepEqual(feeRequest.caller, {
-  kind: "verified-actor",
-  evidenceId: DODO_V2_QUOTE_ACTOR_EVIDENCE_ID,
-});
+assert.equal(feeRequest.caller, undefined, "fee ownership is bound by the query ABI");
+assert.equal(DODO_V2_POOL_INTERFACE.decodeFunctionData("getUserFeeRate", feeRequest.data)[0], DODO_V2_QUOTE_ACTOR);
 const currentResults = await adapterResults(currentRequests, backend);
 const dependentProgram =
   dodoV2StrictFamilyPlugin.pricing.current.buildDependentProgram!({
@@ -891,10 +889,7 @@ async function runIdentityDecision(
 ): Promise<ReturnType<typeof identityVariant.decide>> {
   const initial = { candidate: candidateInput, evidence: undefined, step: 0 };
   assert.deepEqual(identityVariant.decide(initial), { status: "continue" });
-  assert.deepEqual(identityVariant.requirements(initial), {
-    transports: ["eth-call"],
-    caller: "verified-actor",
-  });
+  assert.deepEqual(identityVariant.requirements(initial), { transports: ["eth-call"] });
   const behaviorRequests = identityVariant.buildRequests(initial);
   assert.equal(behaviorRequests.length, 4);
   const behaviorEvidence = identityVariant.decode({

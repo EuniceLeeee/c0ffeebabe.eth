@@ -15,8 +15,8 @@ import { blockScanEdgeKey, createVerifiedGraphView } from "../../../blockscan-st
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { UNIV2_PAIR_INTERFACE, UNIV2_TOKEN_INTERFACE } from "../../../swaps/univ2-family/codec.js";
 
-import { ERC4626_SILO_REDEEM_FAMILY_ID } from "../../erc4626-silo-redeem-family/manifest.js";
-import { ERC4626_SILO_INTERFACE, ERC4626_SILO_PAYOUT_INTERFACE } from "../../erc4626-silo-redeem-family/shared.js";
+import { ERC4626_SILO_REDEEM_FAMILY_ID } from "../../erc4626-silo-redeem-family/test/fixture-manifest.js";
+import { ERC4626_SILO_INTERFACE, ERC4626_SILO_PAYOUT_INTERFACE } from "../../erc4626-silo-redeem-family/test/fixture-shared.js";
 import erc4626Json from "../erc4626.json";
 import { Interface as FamilyInterface } from "ethers";
 import { getAddress as familyGetAddress } from "ethers";

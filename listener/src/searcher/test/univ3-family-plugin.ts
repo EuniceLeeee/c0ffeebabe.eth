@@ -1,6 +1,5 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import { univ3Adapter } from "../../adapters/univ3.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
@@ -16,7 +15,6 @@ import type {
   CanonicalSource,
 } from "../venues/adapter-request-program.js";
 import { hashCanonical } from "../venues/canonical-value.js";
-import { generateCapabilityClosure } from "../venues/capability-content-hash.js";
 import {
   PANCAKE_V3_FACTORY,
   PANCAKE_V3_QUOTER_V2,
@@ -40,7 +38,8 @@ import {
   UNIV3_STATE_READER_INTERFACE,
   UNIV3_STATE_WORD_RADIUS,
 } from "../venues/swaps/univ3-family/state-reader.js";
-import { univ3StrictFamilyPlugin } from "../venues/swaps/univ3-family-plugin.js";
+import { plugin as univ3StrictFamilyPlugin } from "../venues/production-families/univ3-standard.production.js";
+import { RequiredAdapterRequestError } from "../venues/adapter-request-failure.js";
 import {
   UNIV3_POOL_CREATED_PATTERN_ID,
   UNIV3_SWAP_LOG_PATTERN_ID,
@@ -104,7 +103,7 @@ assert.equal(candidate.hintedFactory, FACTORY);
 assert.equal(candidate.hintedToken0, TOKEN0);
 assert.equal(candidate.hintedToken1, TOKEN1);
 assert.equal(candidate.hintedFee, FEE);
-assert.equal(candidate.hintedTickSpacing, TICK_SPACING);
+assert.equal(BigInt(candidate.hintedTickSpacing), BigInt(TICK_SPACING));
 assert.equal(
   univ3StrictFamilyPlugin.discovery.candidateKey(candidate),
   POOL.toLowerCase(),
@@ -159,7 +158,7 @@ assert.throws(
       failure: "rpc",
     }],
   }),
-  /unresolved: rpc/,
+  isRpcFailure,
   "identity transport failure remains unresolved rather than negative proof",
 );
 
@@ -285,6 +284,7 @@ const pricingDraft = univ3StrictFamilyPlugin.pricing.compileDraft({
 const pricingDescriptor =
   univ3StrictFamilyPlugin.pricing.finalizePricingDescriptor({
     draft: pricingDraft,
+  staticEvidence: univ3StrictFamilyPlugin.pricing.staticEvidence.decode({ draft: pricingDraft, results: [] }),
     sharedBindings: [],
   });
 const currentInput = { descriptor: pricingDescriptor, routes, source: SOURCE };
@@ -311,7 +311,7 @@ const currentResults = [
   success("current-slot0", slot0Data),
   success("current-liquidity", liquidityData),
 ];
-const snapshot = univ3StrictFamilyPlugin.pricing.current.decodeSnapshot({
+const snapshot = decodeIssuedSnapshot({
   descriptor: pricingDescriptor,
   initialResults: currentResults,
   dependentEvidence: [],
@@ -409,7 +409,7 @@ const dependentResults = dependentRequests.map((request, index) =>
       )
     : declaredRevert(request.id)
 );
-const tinySnapshot = univ3StrictFamilyPlugin.pricing.current.decodeSnapshot({
+const tinySnapshot = decodeIssuedSnapshot({
   descriptor: pricingDescriptor,
   initialResults: tinyCore,
   dependentEvidence: [dependentProgram.decode(dependentResults)],
@@ -433,7 +433,7 @@ assert.equal(
   "inner quoter revert is a route-local behavior-unavailable witness",
 );
 assert.throws(
-  () => univ3StrictFamilyPlugin.pricing.current.decodeSnapshot({
+  () => decodeIssuedSnapshot({
     descriptor: pricingDescriptor,
     initialResults: tinyCore,
     dependentEvidence: [dependentProgram.decode([{
@@ -445,10 +445,10 @@ assert.throws(
       dependentResults[1],
     ])],
   }),
-  /unresolved: rpc/,
+  isRpcFailure,
   "dependent RPC failure remains unresolved and never becomes unavailable",
 );
-const zeroSnapshot = univ3StrictFamilyPlugin.pricing.current.decodeSnapshot({
+const zeroSnapshot = decodeIssuedSnapshot({
   descriptor: pricingDescriptor,
   initialResults: [
     success("current-slot0", tinySlot0Data),
@@ -469,7 +469,7 @@ assert.equal(
   "successful zero-liquidity evidence makes both directions unavailable",
 );
 assert.throws(
-  () => univ3StrictFamilyPlugin.pricing.current.decodeSnapshot({
+  () => decodeIssuedSnapshot({
     descriptor: pricingDescriptor,
     initialResults: [{
       id: "current-slot0",
@@ -479,7 +479,7 @@ assert.throws(
     }, success("current-liquidity", liquidityData)],
     dependentEvidence: [],
   }),
-  /unresolved: rpc/,
+  isRpcFailure,
   "core RPC failure stays unresolved",
 );
 
@@ -634,6 +634,7 @@ const localProgram = localMethod.program;
   const gatedInput = { ...exactInput, descriptor: { ...descriptor,
     swapAccess: { ...noSwapAccess, kind: "is-swapper" as const } } };
   const initialResults = [success("local-pool-state", encodeStateReaderFixture(stateReaderFixture()))];
+  gatedInput.route = univ3StrictFamilyPlugin.routes.project({ descriptor: gatedInput.descriptor })[0];
   const access = uniV3SwapAccessRequest(gatedInput)!;
   assert.equal(access.caller, undefined, "pure getter is eligible for state-only caching");
   assert.deepEqual([...UNIV3_SWAPPER_INTERFACE.decodeFunctionData("isSwapper", access.data)], [EXECUTOR]);
@@ -665,10 +666,13 @@ const localProgram = localMethod.program;
   assert.throws(() => decode(denied), /not an allowed swapper/);
   for (const bad of [success(access.id, "0x"), success(access.id, ethers.toBeHex(2, 32)),
     declaredRevert(access.id), { id: access.id, ok: false as const, source: SOURCE, failure: "rpc" as const }]) {
-    assert.throws(() => decode(bad), /swap access/);
+    assert.throws(() => decode(bad), (error: unknown) =>
+        error instanceof RequiredAdapterRequestError
+          ? !bad.ok && error.failureCode === "rpc"
+          : error instanceof Error && /swap access/.test(error.message));
   }
   assert.throws(() => localProgram.decode({ programInput: gatedInput, initialResults,
-    dependentEvidence: [] }), /missing.*swap access/);
+    dependentEvidence: [] }), /read-flow is incomplete/);
   assert.throws(() => localProgram.buildDependentProgram!({ programInput: gatedInput, initialResults,
     completedRound: 1, priorEvidence: [round.decode([denied])] }), /not an allowed swapper/);
   assert.throws(() => exactRequestMethod.program.decode({ programInput: gatedInput,
@@ -677,9 +681,10 @@ const localProgram = localMethod.program;
   const { swapAccess: _removed, ...legacyDescriptor } = descriptor;
   assert.throws(() => localProgram.decode({ programInput: { ...exactInput,
     descriptor: legacyDescriptor as typeof descriptor }, initialResults, dependentEvidence: [] }),
-    /unsupported swap access/, "old Ready descriptors require selective revalidation");
+    /requires swap access evidence/, "old Ready descriptors require selective revalidation");
 
   const unknownGated = { ...unknownExactInput, descriptor: { ...unknownDescriptor, swapAccess: gatedInput.descriptor.swapAccess } };
+  unknownGated.route = univ3StrictFamilyPlugin.routes.project({ descriptor: unknownGated.descriptor })[0];
   const core = [success("local-slot0", tinySlot0Data), success("local-liquidity", liquidityData)];
   const permissionRound = localProgram.buildDependentProgram!({ programInput: unknownGated,
     initialResults: core, completedRound: 0, priorEvidence: [] });
@@ -737,15 +742,20 @@ for (const descriptorToUse of [descriptor, pancakeDescriptor]) {
     assert(quote.amountOut > 0n);
     assert.equal(quote.evidence.kind, "univ3-local-ticks");
     assert.equal(quote.evidence.amountIn, programInput.amountIn);
-    assert.equal(quote.evidence.initializedTicksCrossed, 1);
-    assert.notEqual(quote.evidence.sqrtPriceX96After, Q96, "evidence uses returned post-swap state, not the starting price");
+    const post = quote.stateChanges?.[0]?.value;
+    assert(post);
+    const crossed = [...post.ticks.keys()].filter(tick => route.direction === "zero-for-one"
+      ? tick <= 0 && tick > post.tick
+      : tick > 0 && tick <= post.tick);
+    assert.equal(crossed.length, 1);
+    assert.notEqual(quote.stateChanges[0].value.sqrtPriceX96, Q96, "evidence uses returned post-swap state, not the starting price");
     const words = Array.from({ length: 49 }, (_, i) => i - 24);
     const state = { sqrtPriceX96: Q96, tick: 0, liquidity: 1_000_000_000_000n, fee: FEE,
       tickSpacing: TICK_SPACING, ticks: new Map([[-1024, 1000n], [1024, -1000n]]),
       tickBitmap: new Map(words.map(w => [w, w === -4 || w === 4 ? 1n : 0n])) };
     const expected = v3SwapToState(state, route.direction === "zero-for-one", programInput.amountIn);
     assert.equal(quote.amountOut, expected.amountOut);
-    assert.equal(quote.evidence.sqrtPriceX96After, expected.state.sqrtPriceX96);
+    assert.equal(quote.stateChanges[0].value.sqrtPriceX96, expected.state.sqrtPriceX96);
     assert.throws(() => v3SwapToState({ ...state, tickBitmap: new Map([[-1, 0n], [0, 0n], [1, 0n]]) },
       route.direction === "zero-for-one", programInput.amountIn), V3MissingBitmapWordError,
       "same amount exceeds the previous three-word window");
@@ -765,15 +775,13 @@ for (const descriptorToUse of [descriptor, pancakeDescriptor]) {
       { ...SOURCE, hash: `0x${"cd".repeat(32)}` }]) {
       assert.throws(() => decode(initialResults.map(r => ({ ...r, source }))), /foreign source/);
     }
-    assert.throws(() => decode([]), /missing|incomplete/);
+    assert.throws(() => decode([]), /read-flow result ids do not match requests|read-flow is incomplete/);
     const failedResults: readonly AdapterRequestResult[] = [{ id: request.id, ok: false, failure: "rpc", source: SOURCE }];
-    assert.throws(() => decode(failedResults), /unresolved/);
-    assert.equal(localProgram.buildDependentProgram?.({ programInput, initialResults: failedResults,
-      completedRound: 0, priorEvidence: [] }) ?? null, null, "aggregate failure cannot trigger an automatic TickLens fallback");
+    assert.throws(() => decode(failedResults), isRpcFailure);
+    assert.throws(()=>localProgram.buildDependentProgram({programInput, initialResults:failedResults, completedRound:0, priorEvidence:[]}), Error, "aggregate failure cannot trigger an automatic TickLens fallback");
     const revertedResults = [declaredRevert(request.id)];
     assert.throws(() => decode(revertedResults));
-    assert.equal(localProgram.buildDependentProgram?.({ programInput, initialResults: revertedResults,
-      completedRound: 0, priorEvidence: [] }) ?? null, null, "helper revert cannot silently switch the read method");
+    assert.throws(()=>localProgram.buildDependentProgram({programInput, initialResults:revertedResults, completedRound:0, priorEvidence:[]}), Error, "helper revert cannot silently switch the read method");
     assert.deepEqual(localProgram.buildRequests(programInput), requests, "failure never mutates the selected read method");
     assert.throws(() => decode([success(request.id, "0x")]));
     assert.throws(() => decode([success(request.id, encodeStateReaderFixture({ ...rawState, pool: FORGED_POOL }, reader.iface))]),
@@ -787,7 +795,7 @@ for (const route of univ3StrictFamilyPlugin.routes.project({ descriptor: unknown
   const method = univ3StrictFamilyPlugin.exact.methods(programInput)[1];
   assert.equal(method.kind, "request-program");
   if (method.kind !== "request-program") throw new Error("missing unknown-factory local program");
-  assert.equal(method.id, "local-ticks-49");
+  assert.equal(method.id, "local-state-49");
   assert.equal(method.stateOnlyReads, true);
   assert.equal(method.chainAmountQuote, undefined);
   const program = method.program;
@@ -833,15 +841,15 @@ for (const route of univ3StrictFamilyPlugin.routes.project({ descriptor: unknown
     assert.equal(quote.evidence.amountIn, amountIn);
     const expected = v3SwapToState(state, route.direction === "zero-for-one", amountIn);
     assert.equal(quote.amountOut, expected.amountOut);
-    assert.equal(quote.evidence.sqrtPriceX96After, expected.state.sqrtPriceX96);
+    assert.equal(quote.stateChanges[0].value.sqrtPriceX96, expected.state.sqrtPriceX96);
     const fragment = univ3StrictFamilyPlugin.execution.buildFragment({ ...programInput, amountIn,
       quotedAmountOut: quote.amountOut, minAmountOut: quote.amountOut, exactEvidence: quote.evidence });
     assert.equal(fragment.nodes[0].amount, amountIn);
   }
-  assert.throws(() => decode(tickResults.slice(1)), /incomplete|missing/);
-  assert.throws(() => decode([...tickResults.slice(1), tickResults[1]]), /duplicate/);
+  assert.throws(() => decode(tickResults.slice(1)), /read-flow result ids do not match requests/);
+  assert.throws(() => decode([...tickResults.slice(1), tickResults[1]]), /read-flow result ids do not match requests/);
   assert.throws(() => decode(tickResults.map((result, i) => i === 0
-    ? { id: result.id, ok: false, failure: "rpc" as const, source: SOURCE } : result)), /unresolved/);
+    ? { id: result.id, ok: false, failure: "rpc" as const, source: SOURCE } : result)), isRpcFailure);
   assert.throws(() => decode(tickResults.map((result, i) => i === 0
     ? { ...result, source: { ...SOURCE, generation: SOURCE.generation + 1 } } : result)), /foreign source/);
   assert.equal(decode(tickResults, 100_000_000_000_000n).amountOut, 0n, "unknown-factory window bounds stay fail-closed");
@@ -859,7 +867,12 @@ for (const route of routes) {
   const quote = localProgram.decode({ programInput, initialResults: makeResults(true), dependentEvidence: [] });
   assert.equal(quote.amountOut, 99_840_130n, "swap crosses the empty region before consuming input");
   assert.equal(quote.evidence.kind, "univ3-local-ticks");
-  assert.equal(quote.evidence.initializedTicksCrossed, 1);
+  const post = quote.stateChanges?.[0]?.value;
+    assert(post);
+    const crossed = [...post.ticks.keys()].filter(tick => route.direction === "zero-for-one"
+      ? tick <= 0 && tick > post.tick
+      : tick > 0 && tick <= post.tick);
+    assert.equal(crossed.length, 1);
   assert.equal(localProgram.decode({ programInput, initialResults: makeResults(false),
     dependentEvidence: [] }).amountOut, 0n,
     "no funded ticks in the known window stays unavailable");
@@ -978,20 +991,26 @@ assert.equal(
   "unknown factory cannot borrow the canonical router for victim replay",
 );
 
+const activeExact = localProgram.decode({
+  programInput: exactInput,
+  initialResults: [success("local-pool-state", encodeStateReaderFixture(stateReaderFixture()))],
+  dependentEvidence: [],
+});
+assert(activeExact.amountOut > 0n);
 const strictFragment = univ3StrictFamilyPlugin.execution.buildFragment({
   descriptor,
   route: routes[0],
   amountIn: AMOUNT_IN,
-  quotedAmountOut: strictExact.amountOut,
-  minAmountOut: strictExact.amountOut,
-  exactEvidence: strictExact.evidence,
+  quotedAmountOut: activeExact.amountOut,
+  minAmountOut: activeExact.amountOut,
+  exactEvidence: activeExact.evidence,
   executor: EXECUTOR,
   runtimeEvidence: [],
 });
 const legacyFragment = await univ3StandardAdapter.buildPlanFragment({
   edge: legacyEdges[0],
   amountIn: AMOUNT_IN,
-  amountOut: strictExact.amountOut,
+  amountOut: activeExact.amountOut,
   executor: EXECUTOR,
   state: {} as StateBackend,
 });
@@ -1001,19 +1020,27 @@ assert.deepEqual(strictFragment.requirements, legacyFragment.requirements);
 assert.deepEqual(strictFragment.nodes.map(node => ({ ...node, params: {}, children: [] })),
   legacyFragment.nodes.map(node => ({ ...node, params: {}, children: [] })));
 const runtimeLeg = univ3StrictFamilyPlugin.execution.buildRuntimeLeg?.({
-  descriptor, route: routes[0], executor: EXECUTOR, runtimeEvidence: [],
+  descriptor, route: routes[0], executor: EXECUTOR, source: SOURCE, runtimeEvidence: [],
 });
 assert(runtimeLeg);
-assert.equal(strictFragment.nodes[0].params.runtimeAmountProgram, runtimeLeg.program);
+const unitMinimum = univ3StrictFamilyPlugin.execution.buildFragment({
+  ...exactInput,
+  minAmountOut: 1n,
+  quotedAmountOut: activeExact.amountOut,
+  exactEvidence: activeExact.evidence,
+});
+assert.equal(unitMinimum.nodes[0].params.runtimeAmountProgram, runtimeLeg.program);
+assert.notEqual(strictFragment.nodes[0].params.runtimeAmountProgram, runtimeLeg.program,
+  "the quoted minimum retains its stricter output check");
 assert.equal(strictFragment.nodes[0].children.length, 0);
 assert.throws(
   () => univ3StrictFamilyPlugin.execution.buildFragment({
     descriptor,
     route: routes[0],
     amountIn: AMOUNT_IN,
-    quotedAmountOut: strictExact.amountOut + 1n,
-    minAmountOut: strictExact.amountOut,
-    exactEvidence: strictExact.evidence,
+    quotedAmountOut: activeExact.amountOut + 1n,
+    minAmountOut: activeExact.amountOut,
+    exactEvidence: activeExact.evidence,
     executor: EXECUTOR,
     runtimeEvidence: [],
   }),
@@ -1032,15 +1059,19 @@ assert.deepEqual(
   "strict ownership uses the existing UniV3 action encoder exactly",
 );
 const legacyInner = new Uint8Array([1, 2, 3]);
-assert.deepEqual(
-  univ3StrictFamilyPlugin.actionAdapters[0].encode(legacyFragment.nodes[0], EXECUTOR, legacyInner),
-  univ3Adapter.encode(legacyFragment.nodes[0], EXECUTOR, legacyInner),
-  "legacy captured callback scripts retain their encoder",
-);
+const captured = legacyFragment.nodes[0];
+const encodedLegacy = ethers.hexlify(univ3Adapter.encode(captured, EXECUTOR, legacyInner));
+const expectedLegacyCall = UNIV3_POOL_INTERFACE.encodeFunctionData("swap", [
+  EXECUTOR, captured.params.zeroForOne, captured.params.amountSpecified,
+  captured.params.sqrtPriceLimit, legacyInner,
+]);
+assert(encodedLegacy.includes(expectedLegacyCall.slice(2)), "the explicit legacy encoder retains original callback bytes");
+assert.throws(() => univ3StrictFamilyPlugin.actionAdapters[0].encode(captured, EXECUTOR, legacyInner),
+  /declared quoted node adapter mismatch/, "JSON actions accept only sealed, current-format fragment nodes");
 
 const swapLog = UNIV3_POOL_INTERFACE.encodeEventLog(
   UNIV3_POOL_INTERFACE.getEvent("Swap")!,
-  [SENDER, EXECUTOR, AMOUNT_IN, -strictExact.amountOut, Q96, LIQUIDITY, 0],
+  [SENDER, EXECUTOR, AMOUNT_IN, -activeExact.amountOut, Q96, LIQUIDITY, 0],
 );
 const swapObservation: UnifiedObservation = Object.freeze({
   kind: "log",
@@ -1195,69 +1226,22 @@ const legacyOverlay = await univ3StandardAdapter.victimModel.runtime
   });
 assert.deepEqual(strictOverlay, legacyOverlay, "strict victim overlay matches legacy");
 
-const listenerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const capabilityDirectory = resolve(
-  listenerRoot,
-  "src/searcher/venues/swaps/univ3-family",
-);
-const manifestRoot = resolve(capabilityDirectory, "manifest.ts");
-const capabilityRoots = {
-  discovery: resolve(capabilityDirectory, "discovery.ts"),
-  identity: resolve(capabilityDirectory, "identity.ts"),
-  instance: resolve(capabilityDirectory, "instance.ts"),
-  routes: resolve(capabilityDirectory, "routes.ts"),
-  pricing: resolve(capabilityDirectory, "pricing.ts"),
-  exact: resolve(capabilityDirectory, "exact.ts"),
-  execution: resolve(capabilityDirectory, "execution.ts"),
-  victim: resolve(capabilityDirectory, "swap.ts"),
-} as const;
-assert.equal(new Set(Object.values(capabilityRoots)).size, 8);
-const generatedCapabilities = await Promise.all(
-  Object.entries(capabilityRoots).map(async ([capability, entryFile]) =>
-    generateCapabilityClosure({
-      familyId: univ3StrictFamilyPlugin.manifest.familyId,
-      capability: capability as keyof typeof capabilityRoots,
-      rootDirectory: listenerRoot,
-      entryFile,
-      additionalEntryFiles: [
-        manifestRoot,
-        ...(capability === "execution"
-          ? [resolve(capabilityDirectory, "action.ts")]
-          : []),
-      ],
-      provenanceCommit: null,
-    })
-  ),
-);
-assert.equal(
-  new Set(generatedCapabilities.map((entry) => entry.entryLogicalId)).size,
-  8,
-  "each strict UniV3 capability exposes a distinct content-hash root",
-);
-for (const closure of generatedCapabilities) {
-  assert(
-    closure.identity.semanticDependencies.every((dependency) =>
-      !dependency.endsWith("swaps/univ3-standard.ts")
-    ),
-    `${closure.identity.capability} must not hash the legacy whole Family`,
-  );
+const artifact = JSON.parse(readFileSync(new URL("../generated/family-capability-shadow.generated.json", import.meta.url), "utf8"));
+const names = ["manifest", "discovery", "identity", "instance", "routes", "pricing", "exact", "execution", "victim"];
+const capabilities = artifact.exact.filter((row) =>
+  row.identity.familyId === univ3StrictFamilyPlugin.manifest.familyId && names.includes(row.identity.capability));
+const selected = capabilities.filter((row) => row.identity.capability !== "manifest");
+assert.equal(new Set(selected.map((row) => row.identity.capability)).size, 8);
+assert.equal(new Set(selected.map((row) => row.identity.contentHash)).size, 8);
+for (const row of selected) {
+  const dependencies = row.identity.semanticDependencies;
+  assert(dependencies.some((file) => file.endsWith("univ3-family/univ3.json")));
+  assert(!dependencies.some((file) => file.endsWith("swaps/univ3-standard.ts")));
 }
-assert(
-  generatedCapabilities.find((entry) =>
-    entry.identity.capability === "victim"
-  )!.identity.semanticDependencies.some((dependency) =>
-    dependency.endsWith("solver/v3-math.ts")
-  ),
-  "victim capability hash includes the shared bit-exact V3 math",
-);
-assert(
-  generatedCapabilities.find((entry) =>
-    entry.identity.capability === "execution"
-  )!.identity.semanticDependencies.some((dependency) =>
-    dependency.endsWith("adapters/univ3.ts")
-  ),
-  "execution capability hash includes the owned UniV3 ActionAdapter",
-);
+assert(selected.find((row) => row.identity.capability === "victim").identity.semanticDependencies.some((file) =>
+  file.endsWith("solver/v3-math.ts")), "victim hash binds the V3 math");
+assert(selected.find((row) => row.identity.capability === "execution").identity.semanticDependencies.some((file) =>
+  file.endsWith("declarative-execution.ts")), "execution hash binds the active JSON encoder");
 
 console.log(
   "univ3-family-plugin PASS " +
@@ -1475,4 +1459,22 @@ function patternTopics(patternIds: readonly string[]): string[] {
     if (pattern === undefined) throw new Error(`missing UniV3 log pattern ${id}`);
     return pattern.topic.toLowerCase();
   }).sort();
+}
+
+function isRpcFailure(error: unknown): boolean {
+  return error instanceof RequiredAdapterRequestError && error.failureCode === "rpc";
+}
+
+function decodeIssuedSnapshot(input: Parameters<typeof univ3StrictFamilyPlugin.pricing.current.decodeSnapshot>[0]) {
+  const pricing = univ3StrictFamilyPlugin.pricing.current;
+  const prior = [...input.dependentEvidence];
+  for (let completedRound = prior.length; completedRound <= 16; completedRound++) {
+    const round = pricing.buildDependentProgram!({
+      current: currentInput, initialResults: input.initialResults, completedRound, priorEvidence: prior,
+    });
+    if (!round) return pricing.decodeSnapshot({ ...input, dependentEvidence: prior });
+    assert.equal(round.requests.length, 0, "only empty precision rounds may be completed without fixtures");
+    prior.push(round.decode([]));
+  }
+  throw new Error("fixture exceeded the production read-flow round limit");
 }

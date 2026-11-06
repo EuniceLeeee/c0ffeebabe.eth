@@ -1,8 +1,8 @@
+import { RequiredAdapterRequestError } from "../venues/adapter-request-failure.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
+import { inspectRuntime } from "./runtime-program-testkit.js";
 import { bytesToHex } from "../../encoder.js";
 import { astraMultiTokenChangeActionAdapter } from "../../adapters/astra-multitoken.js";
 import type { StateBackend } from "../../shared/state/state-backend.js";
@@ -29,7 +29,7 @@ import type {
   StateRead,
   StateReadResult,
 } from "../venues/blockscan-state-capability.js";
-import { generateCapabilityClosure } from "../venues/capability-content-hash.js";
+import catalogSource from "../generated/family-capability-shadow.generated.json";
 import {
   capabilityManifestHash,
   FAMILY_CAPABILITY_NAMES,
@@ -37,21 +37,21 @@ import {
   type GeneratedCapabilityIdentity,
   type LoadedFamilyPlugin,
 } from "../venues/family-capability-catalog.js";
-import { astraMultiTokenStrictFamilyPlugin } from "../venues/protocols/astra-multitoken-family-plugin.js";
+import { plugin as astraMultiTokenStrictFamilyPlugin } from "../venues/production-families/astra-multitoken.production.js";
 import {
   ASTRA_MULTITOKEN_CHANGE_CALL_PATTERN_ID,
   ASTRA_MULTITOKEN_CHANGE_LOG_PATTERN_ID,
-} from "../venues/protocols/astra-multitoken-family/discovery.js";
+} from "./fixtures/protocol-json/astra-multitoken-fixture.js";
 import type {
   AstraMultiTokenCandidate,
   AstraMultiTokenIdentity,
   AstraMultiTokenIdentityEvidence,
-} from "../venues/protocols/astra-multitoken-family/types.js";
+} from "./fixtures/protocol-json/astra-multitoken-fixture-types.js";
 import {
   ASTRA_ERC20_INTERFACE,
   ASTRA_MULTITOKEN_CHANGE_SELECTOR,
   ASTRA_MULTITOKEN_INTERFACE,
-} from "../venues/protocols/astra-multitoken-family/codec.js";
+} from "./fixtures/protocol-json/astra-multitoken-fixture.js";
 import {
   astraMultiTokenAdapter,
 } from "../venues/protocols/astra-multitoken.js";
@@ -220,7 +220,7 @@ async function main(): Promise<void> {
   });
   assert.throws(
     () => variant.decode({ step: surfaceStep, results: failedSurfaceResults }),
-    /unresolved: rpc/,
+    (error: unknown) => error instanceof RequiredAdapterRequestError && error.failureCode === "rpc",
     "RPC failure remains unresolved and cannot become a behavior rejection",
   );
 
@@ -279,7 +279,7 @@ async function main(): Promise<void> {
       stateKey: routes[0].routeKey,
       routes,
     }),
-    /requires one route/,
+    /requires one behavior-proven state group/,
     "pricing compilation cannot regain a whole-Family route array",
   );
   const selected = routes[0];
@@ -408,7 +408,7 @@ async function main(): Promise<void> {
       ...exactInput,
       route: { ...selected, tokenOut: FOREIGN },
     }),
-    /not registry-bound/,
+    /route binding mismatch/,
   );
   assert.throws(
     () => exactRequestMethod.program.buildRequests({
@@ -418,7 +418,7 @@ async function main(): Promise<void> {
         taxonomy: { slotKind: "swap" },
       } as never,
     }),
-    /not registry-bound/,
+    /route binding mismatch/,
     "a forged Domain taxonomy cannot borrow an Astra route binding",
   );
   assert.throws(
@@ -432,7 +432,7 @@ async function main(): Promise<void> {
         },
       },
     }),
-    /not registry-bound/,
+    /route binding mismatch/,
     "a stale route fingerprint cannot survive an immutable binding change",
   );
 
@@ -454,7 +454,11 @@ async function main(): Promise<void> {
     executor: ACTOR,
     state: backend as unknown as StateBackend,
   });
-  assert.deepEqual(strictFragment, legacyFragment);
+  assert.equal(strictFragment.nodes.length, 1);
+  assert.equal(strictFragment.nodes[0].target, legacyFragment.nodes[0].target);
+  assert.equal(strictFragment.nodes[0].tokenIn, legacyFragment.nodes[0].tokenIn);
+  assert.equal(strictFragment.nodes[0].tokenOut, legacyFragment.nodes[0].tokenOut);
+  assert.equal(strictFragment.nodes[0].amount, legacyFragment.nodes[0].amount);
   assert.throws(
     () => astraMultiTokenStrictFamilyPlugin.execution.buildFragment({
       descriptor,
@@ -475,24 +479,43 @@ async function main(): Promise<void> {
   assert.equal(summary.domain, "protocol");
   assert.deepEqual(summary.ownedActionAdapterIds, ["astra-multitoken-change"]);
   assert.deepEqual(summary.requiredInfraActionAdapterIds, ["erc20-approve"]);
-  const strictEncoded = astraMultiTokenStrictFamilyPlugin.actionAdapters[0]
-    .encode(strictFragment.nodes[0], ACTOR, new Uint8Array());
-  const legacyEncoded = astraMultiTokenChangeActionAdapter.encode(
-    strictFragment.nodes[0],
-    ACTOR,
-    new Uint8Array(),
-  );
-  assert.deepEqual(strictEncoded, legacyEncoded);
-  const encodedCalldata = bytesToHex(strictEncoded.slice(24));
-  assert.equal(encodedCalldata.slice(0, 10), ASTRA_MULTITOKEN_CHANGE_SELECTOR);
-  const encodedArgs = ASTRA_MULTITOKEN_INTERFACE.decodeFunctionData(
-    "change",
-    encodedCalldata,
-  );
-  assert.equal(ethers.getAddress(String(encodedArgs[0])), TOKEN_A);
-  assert.equal(ethers.getAddress(String(encodedArgs[1])), TOKEN_B);
-  assert.equal(BigInt(encodedArgs[2]), amountIn);
-  assert.equal(BigInt(encodedArgs[3]), strictExact.amountOut);
+  const node = strictFragment.nodes[0];
+  const program = node.params.runtimeAmountProgram as string;
+  const wire = astraMultiTokenStrictFamilyPlugin.actionAdapters[0].encode(node, ACTOR, new Uint8Array());
+  assert.equal(wire[0], 0x0e);
+  assert.equal(BigInt(bytesToHex(wire.slice(1, 33))), amountIn);
+  assert.equal(Number(BigInt(bytesToHex(wire.slice(33, 36)))), wire.length - 36);
+  assert.equal(bytesToHex(wire.slice(36)), program);
+  const legacyEncoded = astraMultiTokenChangeActionAdapter.encode(legacyFragment.nodes[0], ACTOR, new Uint8Array());
+  const expectedData = bytesToHex(legacyEncoded.slice(24));
+  const erc20 = new ethers.Interface([
+    "function balanceOf(address) view returns(uint256)", "function approve(address,uint256) returns(bool)",
+    "function allowance(address,address) view returns(uint256)",
+  ]);
+  let spent = 0n, received = 0n, allowance = 0n, swaps = 0;
+  inspectRuntime(program, amountIn, { nativeBalance: () => 19n, call(call) {
+    if (ethers.getAddress(call.target) === TARGET) {
+      assert.equal(call.data, expectedData);
+      assert.equal(call.data.slice(0, 10), ASTRA_MULTITOKEN_CHANGE_SELECTOR);
+      const args = ASTRA_MULTITOKEN_INTERFACE.decodeFunctionData("change", call.data);
+      assert.equal(ethers.getAddress(args[0]), TOKEN_A);
+      assert.equal(ethers.getAddress(args[1]), TOKEN_B);
+      assert.equal(args[2], amountIn); assert.equal(args[3], strictExact.amountOut);
+      assert.equal(allowance, amountIn);
+      swaps++; spent += amountIn; received += strictExact.amountOut;
+      return ASTRA_MULTITOKEN_INTERFACE.encodeFunctionResult("change", [strictExact.amountOut]);
+    }
+    const fn = erc20.parseTransaction({ data: call.data }); assert(fn);
+    if (fn.name === "approve") {
+      assert.equal(ethers.getAddress(call.target), TOKEN_A); assert.equal(ethers.getAddress(fn.args[0]), TARGET);
+      allowance = fn.args[1]; return erc20.encodeFunctionResult("approve", [true]);
+    }
+    if (fn.name === "allowance") return erc20.encodeFunctionResult("allowance", [allowance]);
+    assert.equal(fn.name, "balanceOf"); assert.equal(ethers.getAddress(fn.args[0]), ACTOR);
+    const balance = ethers.getAddress(call.target) === TOKEN_A ? amountIn + 17n - spent : 11n + received;
+    return erc20.encodeFunctionResult("balanceOf", [balance]);
+  }});
+  assert.equal(swaps, 1); assert.equal(spent, amountIn); assert.equal(received, strictExact.amountOut); assert.equal(allowance, 0n);
 
   await assertLifecycleFailureIsolation(backend);
   await assertCapabilityRoots();
@@ -567,41 +590,18 @@ async function assertLifecycleFailureIsolation(
 }
 
 async function assertCapabilityRoots(): Promise<void> {
-  const listenerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-  const familyDirectory = resolve(
-    listenerRoot,
-    "src/searcher/venues/protocols/astra-multitoken-family",
-  );
-  const manifestRoot = resolve(familyDirectory, "manifest.ts");
-  const capabilityRoots = {
-    discovery: resolve(familyDirectory, "discovery.ts"),
-    identity: resolve(familyDirectory, "identity.ts"),
-    instance: resolve(familyDirectory, "instance.ts"),
-    routes: resolve(familyDirectory, "routes.ts"),
-    pricing: resolve(familyDirectory, "pricing.ts"),
-    exact: resolve(familyDirectory, "exact.ts"),
-    execution: resolve(familyDirectory, "execution.ts"),
-  } as const;
-  assert.equal(new Set(Object.values(capabilityRoots)).size, 7);
-  assert(!Object.values(capabilityRoots).includes(
-    resolve(familyDirectory, "protocol.ts") as never,
-  ));
-  const generated = await Promise.all(Object.entries(capabilityRoots).map(
-    async ([capability, entryFile]) => generateCapabilityClosure({
-      familyId: astraMultiTokenStrictFamilyPlugin.manifest.familyId,
-      capability: capability as keyof typeof capabilityRoots,
-      rootDirectory: listenerRoot,
-      entryFile,
-      additionalEntryFiles: [
-        manifestRoot,
-        ...(capability === "execution"
-          ? [resolve(familyDirectory, "action.ts")]
-          : []),
-      ],
-      provenanceCommit: null,
-    }),
-  ));
-  assert.equal(new Set(generated.map((entry) => entry.entryLogicalId)).size, 7);
+  const familyId = astraMultiTokenStrictFamilyPlugin.manifest.familyId;
+  const capabilities = ["discovery", "identity", "instance", "routes", "pricing", "exact", "execution"];
+  const definition = "src/searcher/venues/protocols/astra-multitoken-family/astra-multitoken.json";
+  const generated = catalogSource.exact.filter(row => row.identity.familyId === familyId &&
+    capabilities.includes(row.identity.capability));
+  assert.deepEqual(generated.map(row => row.identity.capability).sort(), capabilities.sort());
+  for (const row of generated) {
+    assert.equal(row.root.entryExport, "compileDeclarativeProtocol");
+    assert.equal(row.root.entrySourceFile, "src/searcher/venues/declarative-protocol.ts");
+    assert(row.root.additionalSourceFiles.includes(definition));
+    assert(row.identity.semanticDependencies.includes(definition));
+  }
   for (const closure of generated) {
     assert(
       closure.identity.semanticDependencies.every((dependency) =>
@@ -620,7 +620,7 @@ async function assertCapabilityRoots(): Promise<void> {
     (entry) => entry.identity.capability === "execution",
   )!;
   assert(execution.identity.semanticDependencies.some((dependency) =>
-    dependency.endsWith("adapters/astra-multitoken.ts")
+    dependency.endsWith("venues/declarative-execution.ts")
   ));
 }
 
@@ -639,7 +639,7 @@ function loadFamily(plugin: AnyDefinedFamilyPlugin): LoadedFamilyPlugin {
   );
   const catalog = new FamilyCapabilityCatalog({
     modules: [{
-      sourceFile: "astra-multitoken-family-plugin.ts",
+      sourceFile: "astra-multitoken.production.ts",
       definitionBoundaryHash:
         definedFamilyPluginContractSummary(plugin).definitionBoundaryHash,
       plugin,

@@ -29,7 +29,7 @@ import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-acti
 import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
 import { assertPriceInput, productionAmount, splicedMissingProductionAmount, constructionGuard, assertExecutorCode, assertOriginAccountCode, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integration/three-family/historical-input-observations.js";
-import { ERC4626_SILO_REDEEM_FAMILY_ID as FAMILY_ID } from "../manifest.js";
+import { ERC4626_SILO_REDEEM_FAMILY_ID as FAMILY_ID } from "./fixture-manifest.js";
 
 export const SAMPLE_ANCHORS = {
   junior: { number: 26130609, hash: "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc",

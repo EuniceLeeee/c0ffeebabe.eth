@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_UINT } from "../variants.js";
-import { accrueXwinFundFee, xwinAllocationAmount, xwinMintShares, xwinRedeemBalance, xwinRedeemRatio, xwinSwapInput, xwinTokenValue, xwinWithdrawAfterFee } from "../xwin-math.js";
+import { MAX_UINT } from "./reference/variants.js";
+import { accrueXwinFundFee, xwinAllocationAmount, xwinMintShares, xwinRedeemBalance, xwinRedeemRatio, xwinSwapInput, xwinTokenValue, xwinWithdrawAfterFee } from "./reference/xwin-math.js";
 const WAD = 10n ** 18n;
 test("xWin manager dilution preserves per-block floor and block-number accrual", () => {
   const s = { supply: WAD, pendingMFee: 1n, managerFee: 200n, blocksPerDay: 7200n, lastManagerFeeCollection: 100n };

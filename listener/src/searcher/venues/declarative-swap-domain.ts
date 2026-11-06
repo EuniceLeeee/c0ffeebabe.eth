@@ -29,7 +29,10 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
       if (spec.receiptMode !== "unresolved") throw new Error("opaque topic must remain unresolved");
     } else {
       record(spec, ["id", "pool", "payload", "match", "impact", "classification"],
-        ["valid", "signature", "packed", "relatedEvents", "receiptMode", "mutationReason"]);
+        ["valid", "signature", "packed", "relatedEvents", "poolBinding", "requireReadyBinding", "receiptMode", "mutationReason"]);
+      if (spec.requireReadyBinding !== undefined && spec.requireReadyBinding !== true)
+        throw new Error("required Ready receipt binding must be explicitly true");
+      if (spec.poolBinding !== undefined) record(spec.poolBinding, ["emitter", "id"], ["when"]);
       if (spec.receiptMode !== undefined && spec.receiptMode !== "mutation-only") throw new Error("invalid receipt mode");
       if (spec.receiptMode === "mutation-only" && (typeof spec.mutationReason !== "string" || !spec.mutationReason.trim()))
         throw new Error("mutation-only observation requires a reason");
@@ -105,7 +108,12 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
   if (local) record(raw.localApply, ["result"]);
   if (overlay) record(raw.overlay, ["result"]);
   const materialization = raw.poolMaterialization && Object.keys(raw.poolMaterialization).length > 0;
-  if (materialization) record(raw.poolMaterialization, ["result"]);
+  if (materialization) {
+    record(raw.poolMaterialization, ["result"], ["patternIds"]);
+    if (raw.poolMaterialization.patternIds !== undefined && (!Array.isArray(raw.poolMaterialization.patternIds) ||
+        !raw.poolMaterialization.patternIds.length || new Set(raw.poolMaterialization.patternIds).size !== raw.poolMaterialization.patternIds.length ||
+        raw.poolMaterialization.patternIds.some((id: unknown) => typeof id !== "string" || !id.trim()))) throw new Error("invalid materialization pattern ids");
+  }
   if (replay) record(raw.replay, ["bind", "applyLocal", "buildOverlay"], ["exactPostState"]);
   return {
     landedEvents: { patternIds: ids, classify({ observation }) {
@@ -216,18 +224,43 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
           if (found.spec.receiptMode === "mutation-only") return { logIndex: trigger.logIndex, mutationOnlyReason: found.spec.mutationReason };
           if (found.spec.classification === "mutation") return { logIndex: trigger.logIndex, mutationOnlyReason: "declared state mutation" };
           const candidates = ctx.edgesByTarget.get(found.pool) ?? ctx.graph;
-          const edges = candidates.filter(edge => ctx.graph.includes(edge) && manifest.edgeAdapterIds.includes(edge.adapterId) &&
-            values.evaluate(found.spec.match, { ...found.env, payload: found.payload, pool: found.pool, edge,
-              descriptor: ctx.resolveBinding?.(edge)?.descriptor }) === true);
+          const edges = candidates.filter(edge => {
+            if (!manifest.edgeAdapterIds.includes(edge.adapterId) || (candidates !== ctx.graph && !ctx.graph.includes(edge))) return false;
+            if (found.pool.length === 66 && edge.poolId !== undefined && edge.poolId.toLowerCase() !== found.pool) return false;
+            const binding = ctx.resolveBinding?.(edge);
+            if (found.spec.requireReadyBinding) {
+              const id = found.pool.length === 66 ? edge.poolId ?? edge.instanceKey : edge.target;
+              if (id?.toLowerCase() !== found.pool.toLowerCase()) return false;
+              if (!binding || binding.familyId !== manifest.familyId || binding.descriptor.familyId !== manifest.familyId ||
+                  binding.descriptor.instanceKey !== edge.instanceKey)
+                throw new Error("missing or foreign Ready receipt binding");
+            }
+            return values.evaluate(found.spec.match, { ...found.env, payload: found.payload, pool: found.pool, edge,
+              descriptor: binding?.descriptor }) === true;
+          });
           if (!edges.length) return { logIndex: trigger.logIndex, mutationOnlyReason: "direction absent from admitted graph" };
           if (edges.length !== 1) throw new Error("ambiguous Swap event route binding");
           const edge = edges[0];
           const environment = { ...found.env, payload: found.payload, pool: found.pool, edge,
             sourceGeneration: ctx.sourceGeneration, descriptor: ctx.resolveBinding?.(edge)?.descriptor, ...related(found, trigger.logIndex) };
+          let singletonEmitter: string | undefined;
+          const poolBinding = found.spec.poolBinding;
+          const bindPool = poolBinding?.when === undefined ? poolBinding !== undefined : values.evaluate(poolBinding.when, environment);
+          if (typeof bindPool !== "boolean") throw new Error("singleton receipt binding condition must return a boolean");
+          if (bindPool) {
+            const bound = ctx.resolveBinding?.(edge);
+            if (!bound || bound.familyId !== manifest.familyId || bound.descriptor.instanceKey !== edge.instanceKey || found.pool.length !== 66)
+              throw new Error("missing singleton receipt binding");
+            const id = values.evaluate(found.spec.poolBinding.id, environment);
+            const emitter = values.evaluate(found.spec.poolBinding.emitter, environment);
+            if (typeof id !== "string" || id.toLowerCase() !== found.pool || typeof emitter !== "string" ||
+                !same(emitter, ctx.logs[trigger.logIndex]!.address)) throw new Error("singleton receipt binding mismatch");
+            singletonEmitter = emitter;
+          }
           const impact = values.evaluate(found.spec.impact, { ...environment, ...await enrich(environment, trigger.logIndex) }) as PoolImpact;
           if (!impact || !same(impact.tokenIn, edge.tokenIn) || !same(impact.tokenOut, edge.tokenOut) ||
-              impact.matchedAdapterId !== edge.adapterId || !same(impact.pool, edge.target) ||
-              (found.pool.length === 66 ? impact.poolId?.toLowerCase() !== found.pool || edge.instanceKey?.toLowerCase() !== found.pool : !same(impact.pool, found.pool)) ||
+              impact.matchedAdapterId !== edge.adapterId || !same(impact.pool, singletonEmitter ?? edge.target) ||
+              (found.pool.length === 66 ? impact.poolId?.toLowerCase() !== found.pool || (!singletonEmitter && (edge.poolId ?? edge.instanceKey)?.toLowerCase() !== found.pool) : !same(impact.pool, found.pool)) ||
               typeof impact.amountIn !== "bigint" || impact.amountIn <= 0n ||
               (impact.amountOut !== undefined && (typeof impact.amountOut !== "bigint" || impact.amountOut <= 0n)))
             throw new Error("Swap impact violates admitted route binding");
@@ -238,7 +271,7 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
     victimSupport: raw.victimSupport,
     ...(local ? { localApply: { apply: (input: any) => values.evaluate(raw.localApply.result, input) } } : {}),
     ...(overlay ? { overlay: { build: (input: any) => values.evaluate(raw.overlay.result, input) } } : {}),
-    ...(materialization ? { poolMaterialization: { patternIds: ids, candidateBinding: (input: any) => values.evaluate(raw.poolMaterialization.result, input) } } : {}),
+    ...(materialization ? { poolMaterialization: { patternIds: raw.poolMaterialization.patternIds ?? ids, candidateBinding: (input: any) => values.evaluate(raw.poolMaterialization.result, input) } } : {}),
     ...(replay ? { replay: {
       bind(input: any) {
         const key = values.evaluate(raw.replay.bind, input);

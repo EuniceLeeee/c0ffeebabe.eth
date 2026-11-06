@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { id } from "ethers";
-import { assertXwinChainlinkAggregatorRuntime, assertXwinChainlinkFeedRuntime, assertXwinFiatImplementationRuntime, assertXwinRouterRuntime, assertXwinTokenRuntime, proveXwinDependencyProxy, XWIN_FIAT_ADMIN_SLOT, XWIN_FIAT_IMPLEMENTATION_SLOT } from "../xwin-dependency-runtime.js";
+import { assertXwinChainlinkAggregatorRuntime, assertXwinChainlinkFeedRuntime, assertXwinFiatImplementationRuntime, assertXwinRouterRuntime, assertXwinTokenRuntime, proveXwinDependencyProxy, XWIN_FIAT_ADMIN_SLOT, XWIN_FIAT_IMPLEMENTATION_SLOT } from "./reference/xwin-dependency-runtime.js";
 
 const cacheFile = process.env.XWIN_DEPENDENCY_RUNTIME_EVIDENCE;
 const N_HASH = "0x7d657e10588fe0327698837441079dc5568813e20a53057ae806a28ab210dead";

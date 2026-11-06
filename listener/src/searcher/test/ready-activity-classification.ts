@@ -13,7 +13,7 @@ import {
   ARCHIVE_ACTIVITY_CONCURRENCY, candidatesFromCall, candidatesFromLog, createRebuildWiring,
   type RebuildCallObservation, type RebuildScanObservation,
 } from "../universe-rebuild-production.js";
-import { WSTETH_INTERFACE } from "../venues/protocols/wsteth-family/codec.js";
+import { WSTETH_INTERFACE } from "../venues/protocols/wsteth-family/test/fixture-codec.js";
 import { PSM_INTERFACE } from "../venues/protocols/psm-family/codec.js";
 
 const fromBlock = 25_750_000;

@@ -5,16 +5,19 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { ethers } from "ethers";
 import { runtimeProgramScript } from "../../../../../adapters/runtime-amount-program.js";
-import { erc4626SiloRedeemInstance } from "../instance.js";
-import { erc4626SiloRedeemRoutes } from "../routes.js";
-import { erc4626SiloRedeemExecution } from "../execution.js";
 import { siloEvmDependencySource } from "./recipient-evm-source.js";
 import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
+import { plugin as erc4626SiloRedeemJsonPlugin } from "../../../production-families/erc4626-silo-redeem.production.js";
+
+const erc4626SiloRedeemInstance = erc4626SiloRedeemJsonPlugin.instance;
+const erc4626SiloRedeemRoutes = erc4626SiloRedeemJsonPlugin.routes;
+const erc4626SiloRedeemExecution = erc4626SiloRedeemJsonPlugin.execution;
+
 
 const addr = (i: number) => ethers.getAddress(ethers.toBeHex(i, 20));
 const actor = addr(107), receiver = addr(91), programs: Record<string, string> = {};
 const source = { number: 26130609, hash: "0x" + "11".repeat(32), generation: 3 };
-const d = erc4626SiloRedeemInstance.compileDraft({ vault: addr(101), payoutToken: addr(102), underlyingAsset: addr(103), provenance: [] } as any);
+const d = erc4626SiloRedeemInstance.compileDraft({ familyId: erc4626SiloRedeemJsonPlugin.manifest.familyId, lineageId: erc4626SiloRedeemJsonPlugin.manifest.supportedLineages[0], vault: addr(101), payoutToken: addr(102), underlyingAsset: addr(103), provenance: [] } as any);
 const route = erc4626SiloRedeemRoutes.project({ descriptor: d })[0]!;
 for (const [suffix, recipient] of [["default", null], ["self", actor], ["external", receiver]] as const) {
   const request = recipient ? { kind: "direct-output" as const, recipient } : undefined;

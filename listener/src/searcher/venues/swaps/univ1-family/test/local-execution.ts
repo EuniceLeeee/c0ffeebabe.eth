@@ -8,7 +8,7 @@ import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { plugin } from "../../../production-families/uniswap-v1.production.js";
 import { concatBytes, encodeCall } from "../../../../../encoder.js";
-import { MAX_UINT, MULTICALL, WETH } from "../codec.js";
+import { MAX_UINT, MULTICALL, WETH } from "./definition-fixture.js";
 import { descriptor, result } from "./fixtures.js";
 
 const root = fileURLToPath(new URL("../../../../../../../", import.meta.url));

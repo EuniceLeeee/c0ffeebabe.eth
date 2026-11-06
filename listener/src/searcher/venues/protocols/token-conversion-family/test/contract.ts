@@ -1,19 +1,19 @@
+import { plugin as conversionPlugin } from "../../../production-families/token-conversion.production.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAddress, keccak256, TypedDataEncoder, zeroPadValue, hexlify } from "ethers";
-import { ABI, MAX_UINT, proveBearRuntime, proveLocalAssetRuntime, bearTransferReceipt } from "../variants.js";
-import { FAMILY } from "../manifest.js";
-import { discovery } from "../discovery.js";
-import { identity } from "../identity.js";
-import { exactProgram } from "../exact.js";
-import { bearCapacity, quoteBear } from "../bear-local.js";
-import { provePlainConversionAssetRuntime } from "../asset-runtime.js";
-import { conversionSimulation, decodeConversionReceipt } from "../simulation.js";
-import { mintAction, redeemAction } from "../action.js";
-import type { Direction } from "../types.js";
-import type { ConversionDescriptor, ConversionRoute } from "../types.js";
+import { ABI, MAX_UINT, proveBearRuntime, proveLocalAssetRuntime, bearTransferReceipt } from "./reference/variants.js";
+import { FAMILY } from "./reference/manifest.js";
+import { identity } from "./reference/identity.js";
+import { exactProgram } from "./reference/exact.js";
+import { bearCapacity, quoteBear } from "./reference/bear-local.js";
+import { provePlainConversionAssetRuntime } from "./reference/asset-runtime.js";
+import { conversionSimulation, decodeConversionReceipt } from "./reference/simulation.js";
+import { checkIssuedConversion } from "./encoded-action.js";
+import type { Direction } from "./reference/types.js";
+import type { ConversionDescriptor, ConversionRoute } from "./reference/types.js";
 import type { AdapterRequestResult, CanonicalSource, ObservedEffects } from "../../../adapter-request-program.js";
 import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
 import { runStrictFamilyLifecycle } from "../../../../strict-family-lifecycle-runner.js";
@@ -24,6 +24,9 @@ import { buildEffectiveMids, DEFAULT_EFFECTIVE_WETH_INPUT } from "../../../../bl
 import { blockScanEdgeKey } from "../../../blockscan-state-capability.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { refreshFixture } from "./refresh-fixture.js";
+
+const { discovery } = conversionPlugin;
+
 
 // Raw evidence stays outside Git. Required input: the supplied read-only cache.
 const cache = process.env.TOKEN_CONVERSION_EVIDENCE;
@@ -194,8 +197,14 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
   const publication = await runStrictFamilyLifecycle({ catalog, familyId: FAMILY, source: SOURCE, runtime: runtime(SOURCE),
     observations: [{ kind: "call", source: SOURCE, target: TARGET, data: ABI.encodeFunctionData("mint", [123n]) }] });
   assert.equal(publication.instances.length, 1);
-  await assert.rejects(runStrictFamilyLifecycle({ catalog, familyId: FAMILY, source: SOURCE, runtime: runtime(SOURCE, 10n ** 24n, "0x6000fa"),
-    observations: [{ kind: "call", source: SOURCE, target: TARGET, data: ABI.encodeFunctionData("mint", [123n]) }] }), /conversion_asset_dependency_closure_unproven/);
+  const changedCode = "0x6000fa";
+  assert.throws(() => provePlainConversionAssetRuntime(changedCode, ASSET), /asset dependency closure unproven/);
+  const changed = await runStrictFamilyLifecycle({ catalog, familyId: FAMILY, source: SOURCE,
+    runtime: runtime(SOURCE, 10n ** 24n, changedCode), observations: [{ kind: "call", source: SOURCE, target: TARGET,
+      data: ABI.encodeFunctionData("mint", [123n]) }] });
+  assert.equal(changed.instances.length, 1, "production binds the observed asset codeHash and ownership behavior");
+  assert.equal(changed.instances[0].descriptor.assetCodeHash, keccak256(changedCode));
+  assert.notEqual(changed.instances[0].routes[0].bindingRef.fingerprint, publication.instances[0].routes[0].bindingRef.fingerprint);
   const family = catalog.forFamily(FAMILY);
   const graph = buildFamilyRouteGraphView({ routes: publication.instances.flatMap(instance => instance.routes.map((route,index) => ({
     family, descriptor: instance.descriptor, route, handle: instance.routeHandles[index],
@@ -294,11 +303,12 @@ test("production lifecycle, Graph, raw pricing, Exact and execution use the Fami
   await assert.rejects(session.issueExact({ edge, amountIn: amount + 1n, executor: EXECUTOR, runtimeEvidence: [] }));
   const failed = await root.createSession({ source: next, runtime: runtime(next), fundingAssets: [], kind: "pricing", touchedPools: touched });
   for (const e of failed.edges) assert.notEqual(failed.currentPricingForEdge(e)?.status, "priced", "failed refresh must not publish stale pricing");
-  const node = { adapterId: "token-conversion-mint", target: TARGET, tokenIn: ASSET, tokenOut: TARGET, amount,
-    params: { variant: "btb-bear-v1" }, children: [] };
-  const bytes = hexlify(mintAction.encode(node, EXECUTOR, new Uint8Array()));
-  assert(bytes.includes(ABI.encodeFunctionData("mint", [amount]).slice(2)));
-  assert.equal((bytes.match(/095ea7b3/g) ?? []).length, 3);
+  assert.equal(built.status, "resolved");
+  if (built.status !== "resolved") throw new Error("production returned no conversion fragment");
+  const node = built.fragment.nodes[0]!;
+  const mintAction = conversionPlugin.actionAdapters.find(a => a.id === "token-conversion-mint")!;
+  const redeemAction = conversionPlugin.actionAdapters.find(a => a.id === "token-conversion-redeem")!;
+  checkIssuedConversion(node, EXECUTOR, amount, ABI.encodeFunctionData("mint", [amount]), true);
   assert.throws(() => mintAction.encode({ ...node, params: { variant: "xwin-allocations" } }, EXECUTOR, new Uint8Array()));
   assert.throws(() => mintAction.encode(node, EXECUTOR, new Uint8Array([1])));
   assert.throws(() => redeemAction.encode(node, EXECUTOR, new Uint8Array()));

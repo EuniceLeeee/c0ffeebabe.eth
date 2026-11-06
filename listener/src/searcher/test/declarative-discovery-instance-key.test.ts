@@ -1,9 +1,13 @@
+import { plugin as astraMultiTokenProductionPlugin } from "../venues/production-families/astra-multitoken.production.js";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { hashCanonical } from "../venues/canonical-value.js";
 import { Interface, MaxUint256, getAddress, toBeHex } from "ethers";
 import { compileDeclarativeDiscovery, type DeclarativeMappedDiscovery } from "../venues/declarative-discovery.js";
-import { astraMultiTokenDiscovery } from "../venues/protocols/astra-multitoken-family/discovery.js";
+
 import { hashFamilyCandidateKey, rebuildFamilyCandidateKey, rebuildFamilyInstanceDedupeKey } from "../universe-rebuild-production.js";
+
+const astraMultiTokenDiscovery = astraMultiTokenProductionPlugin.discovery;
 
 const source = { number: 101, hash: toBeHex(101, 32), generation: 1 };
 const target = getAddress("0x" + "ab".repeat(20)), other = getAddress("0x" + "cd".repeat(20));
@@ -72,4 +76,18 @@ test("instance key values reuse address and uint validation and unambiguous comp
   assert.equal(d.instanceNominationKey!({ target, amount: "7" }), d.instanceNominationKey!({ target: target.toLowerCase(), amount: 7n }));
   for (const value of [null, [], {}, { target: "bad", amount: 7n }, { target, amount: -1n }, { target, amount: MaxUint256 + 1n }, { target, amount: 7 }])
     assert.throws(() => d.instanceNominationKey!(value));
+});
+
+test("optional durable address and evidence encoding preserves old verified evidence identities", () => {
+  const raw = definition();
+  const make = (durableKey: { addresses: string[]; evidence?: string[] }) =>
+    compileDeclarativeDiscovery({ ...raw, candidate: { ...raw.candidate, durableKey } });
+  const d = make({ addresses: ["target"], evidence: ["actor", "amount"] });
+  const row = decoded(d);
+  const expected = target.toLowerCase() + ":" + hashCanonical({ actor: actor.toLowerCase(), amount: 7n });
+  assert.equal(d.candidateKey(row), expected);
+  assert.notEqual(d.candidateKey(decoded(d, target, 8n)), expected);
+  assert.notEqual(d.candidateKey(decoded(d, other)), expected);
+  assert.throws(() => make({ addresses: ["target"], evidence: ["actor"] }), /durable candidate key/);
+  assert.throws(() => make({ addresses: ["target", "amount"], evidence: ["actor"] }), /durable candidate key/);
 });

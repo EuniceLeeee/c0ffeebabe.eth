@@ -1,3 +1,4 @@
+import { validateSignedBlockEvidence } from "./declarative-runtime-evidence.js";
 import { validateDeclarativeValue } from "./declarative-values.js";
 import { validateInstanceEvidence, validateExecutionProjection } from "./declarative-instance-evidence.js";
 import { validateDeclarativePricingProjection } from "./declarative-pricing-projection.js";
@@ -12,7 +13,7 @@ import { validateDeclarativeOracleVictim } from "./declarative-oracle-victim.js"
 import { validateDeclarativeQuoteOutput } from "./declarative-execution.js";
 import type { createDeclarativeMathRegistry } from "./declarative-math.js";
 
-export const ROOT_ONLY_FAMILY_MODULES = Object.freeze(["oracleVictim", "instanceEvidence", "executionProjection"] as const);
+export const ROOT_ONLY_FAMILY_MODULES = Object.freeze(["oracleVictim", "instanceEvidence", "executionProjection", "signedBlockEvidence"] as const);
 
 export interface DeclarativeQuoteFlow extends ModuleBlock {
   readonly sourceKind: "view" | "effect-simulation" | "local-math";
@@ -45,11 +46,15 @@ export function familyModuleCatalog(math: ReturnType<typeof createDeclarativeMat
       dependencies: block => ["pricingFlow", ...(usesModel(block) ? ["math"] : [])],
     } } },
     { key: "quoteOutput", versions: { 1: {
-      required: ["steps", "result"], optional: ["exports"], validate: validateDeclarativeQuoteOutput, compile: block => block,
+      required: ["steps", "result"], optional: ["exports", "nativeBoundary"], validate: validateDeclarativeQuoteOutput, compile: block => block,
       dependencies: block => [
         ...(usesModel(block) ? ["math"] : []),
         ...((block.steps as { math?: unknown }[]).some(step => step.math) ? ["executionMath"] : []),
       ],
+    } } },
+    { key: "signedBlockEvidence", versions: { 1: {
+      required: ["kind", "observedId", "pendingId", "intakeTargets", "call", "proof", "authority"],
+      validate: validateSignedBlockEvidence, compile: block => block,
     } } },
     { key: "oracleVictim", versions: { 1: {
       required: ["callPatterns", "runtimeDetection", "resultChecks"], optional: ["canonicalIntakeTargets"],
@@ -104,7 +109,7 @@ export function readFamilyModules(root: unknown = {}, variant: unknown = {}, mat
   // cannot be hidden by a child. Empty child blocks are explicit undefinition.
   const base = catalog.read(root), child = catalog.read(variant);
   if (ROOT_ONLY_FAMILY_MODULES.some(key => Object.hasOwn(variant as object, key)))
-    throw new Error("oracleVictim/instanceEvidence/executionProjection is a root-only module; variants cannot override it");
+    throw new Error("root-only modules cannot be declared on a variant; variants cannot override it");
   const result = catalog.read({ ...base.blocks, ...Object.fromEntries(Object.keys(variant as object).map(key => [key, child.blocks[key]])) });
   if (Object.keys(result.blocks.trialState!).length && Object.keys(result.blocks.quoteFlow!).length && result.blocks.quoteFlow!.sourceKind !== "local-math")
     throw new Error("trial state requires a local-math quote flow");

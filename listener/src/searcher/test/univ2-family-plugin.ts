@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import generatedCapabilitiesArtifact from "../generated/family-capability-shadow.generated.json" with { type: "json" };
 import { ethers } from "ethers";
+import { inspectRuntime } from "./runtime-program-testkit.js";
 import { cachedCanonicalAddress as canonicalAddress } from "../../shared/canonical-address.js";
 import { univ2Adapter } from "../../adapters/univ2.js";
 import { erc20TransferAdapter } from "../../adapters/erc20.js";
@@ -38,7 +38,6 @@ import type { VictimOverlay } from "../venues/victim-runtime-capability.js";
 import { hashCanonical } from "../venues/canonical-value.js";
 import {
   FAMILY_CAPABILITY_CONTRACT_VERSIONS,
-  generateCapabilityClosure,
 } from "../venues/capability-content-hash.js";
 import {
   capabilityManifestHash,
@@ -48,7 +47,7 @@ import {
   type GeneratedCapabilityIdentity,
   type LoadedFamilyPlugin,
 } from "../venues/family-capability-catalog.js";
-import { univ2StrictFamilyPlugin } from "../venues/swaps/univ2-family-plugin.js";
+import { plugin as univ2StrictFamilyPlugin } from "../venues/production-families/univ2-standard.production.js";
 import {
   UNIV2_FACTORY_INTERFACE,
   UNIV2_PAIR_CREATED_PATTERN_ID,
@@ -293,7 +292,7 @@ const pricingDraft = univ2StrictFamilyPlugin.pricing.compileDraft({
 const pricingDescriptor =
   univ2StrictFamilyPlugin.pricing.finalizePricingDescriptor({
     draft: pricingDraft,
-    sharedBindings: [],
+    staticEvidence: {},
   });
 const currentInput = { descriptor: pricingDescriptor, routes, source: SOURCE };
 assert.deepEqual(
@@ -335,7 +334,7 @@ assert.equal(donatedMids.get(routes[0].routeKey)!.mid, strictMids.get(routes[0].
 assert.throws(() => univ2StrictFamilyPlugin.pricing.current.decodeSnapshot({
   descriptor: pricingDescriptor, dependentEvidence: [],
   initialResults: currentResults.filter(result => result.id !== "current-balance-1"),
-}), /missing/, "no reserve fallback for missing balance evidence");
+}), /result ids do not match requests/, "no reserve fallback for missing balance evidence");
 
 const controller = new AbortController();
 const legacySchema = univ2BlockScanState.compileStaticSchema({
@@ -439,10 +438,10 @@ assert.throws(
       ok: false,
       source: SOURCE,
       failure: "rpc",
-    }],
+    }, ...currentResults.slice(1)],
     dependentEvidence: [],
   }),
-  /unresolved: rpc/,
+  /failed: rpc/,
   "RPC failure stays unresolved and cannot become behavior-unavailable",
 );
 
@@ -489,7 +488,7 @@ for (const route of routes) {
           success("exact-reserves", UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves", pairReserves)),
           success("exact-input-balance", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [balanceIn])),
         ]);
-      assert.equal(quoted.evidence.maxAmountIn, capacity);
+      assert.equal(quoted.evidence.amountIn, amountIn);
       assert.equal(quoted.evidence.unavailableReason,
         amountIn > capacity ? "input-reserve-capacity" : undefined);
       assert.equal(quoted.amountOut, amountIn > capacity ? 0n :
@@ -505,7 +504,7 @@ assert.throws(() => exactRequestMethod.program.decode({
     { id: "exact-input-balance", ok: false, source: SOURCE, failure: "rpc" },
   ],
   dependentEvidence: [],
-}), /unresolved: rpc/, "unknown balance must not become a successful quote");
+}), /required adapter request.*failed: rpc/, "unknown balance must not become a successful quote");
 const zeroExactInput = Object.freeze({ ...exactInput, amountIn: 0n });
 assert.deepEqual(
   exactRequestMethod.program.buildRequests(zeroExactInput),
@@ -577,11 +576,10 @@ const legacyFragment = await univ2StandardAdapter.buildPlanFragment({
   executor: EXECUTOR,
   state: {} as StateBackend,
 });
-assert.deepEqual(strictFragment.requirements, [{
-  kind: "transfer-to-pool", token: TOKEN0, pool: POOL, amount: AMOUNT_IN,
-}]);
-assert.deepEqual(strictFragment.nodes, legacyFragment.nodes.map(node => ({ ...node, children: [] })),
-  "ordinary execution moves only payment from callback to the existing transfer requirement");
+const traced=traceV2Fragment(strictFragment,exactInput,RESERVE0,RESERVE1,strictExact.amountOut);
+assert.equal(traced.length,1);
+assert.deepEqual([...UNIV2_PAIR_INTERFACE.decodeFunctionData("swap",traced[0]!.data)].slice(0,3),
+  [legacyFragment.nodes[0]!.params.amount0Out,legacyFragment.nodes[0]!.params.amount1Out,EXECUTOR]);
 assert.equal(strictFragment.nodes[0].adapterId, "univ2-swap");
 assert.deepEqual(strictFragment.nodes[0].children, []);
 assert.equal(univ2StrictFamilyPlugin.execution.runtimeProjection({ hop: {
@@ -607,8 +605,9 @@ assert.throws(
 type V2ExactInput = ExactQuoteInput<UniV2Descriptor, UniV2Route>;
 for (const route of routes) {
   for (const feeBps of [25n, 30n]) {
-    const input = { ...exactInput, route: { ...route, feeBps }, amountIn: 10_000_000n,
-      descriptor: { ...descriptor, feeRule: { ...descriptor.feeRule, feeBps } } };
+    const changedDescriptor = { ...descriptor, feeRule: { ...descriptor.feeRule, feeBps } };
+    const changedRoute = univ2StrictFamilyPlugin.routes.project({ descriptor:changedDescriptor }).find(r=>r.direction===route.direction)!;
+    const input = { ...exactInput, route:changedRoute, amountIn:10_000_000n, descriptor:changedDescriptor };
     const initial = initialStateFor(input, 1_000_000_000n, 2_000_000_000n);
     const expected = quoteV2ExactInputPure(1_000_000_000n, 2_000_000_000n, input.amountIn, feeBps);
     assert.equal(exactProgram.buildDependentProgram!({programInput:input,initialResults:initial,completedRound:0,priorEvidence:[]}),null);
@@ -619,11 +618,11 @@ for (const route of routes) {
     const evidence = quote.evidence;
     const executionInput={...input,quotedAmountOut:expected,minAmountOut:expected,exactEvidence:quote.evidence};
     const fragment=univ2StrictFamilyPlugin.execution.buildFragment(executionInput);
-    assert.deepEqual(fragment.requirements,[{kind:"transfer-to-pool",token:route.tokenIn,pool:POOL,amount:input.amountIn}]);
+    assert.deepEqual(fragment.requirements,[]);
     assert.deepEqual(fragment.nodes[0].children,[]);
     const swap=UNIV2_PAIR_INTERFACE.encodeFunctionData("swap",[
       route.direction==="zero-for-one"?0n:expected,route.direction==="zero-for-one"?expected:0n,EXECUTOR,"0x"]);
-    assert.deepEqual(decodeFixtureCalls(univ2Adapter.encode(fragment.nodes[0],EXECUTOR,new Uint8Array())),[{to:POOL,data:swap}]);
+    assert.deepEqual(traceV2Fragment(fragment,input,1000000000n,2000000000n,expected),[{to:POOL,data:swap}]);
     for (const change of [{executor:FORGED_POOL},{transactionOrigin:FORGED_POOL},{transactionOrigin:undefined}]) {
       assert.equal(quoteWithState({...input,...change},initial).amountOut,expected);
       assert.deepEqual(univ2StrictFamilyPlugin.exact.cacheCompatibilityProjection(input),
@@ -635,17 +634,17 @@ for (const route of routes) {
         exactEvidence:{...evidence,...change}}),/incompatible/);
     }
     const decode=(initialResults:readonly AdapterRequestResult[])=>quoteWithState(input,initialResults);
-    for(const invalid of [[],[initial[0],initial[0]],[initial[0]], [...initial,initial[0]]]) assert.throws(()=>decode(invalid),/ambiguous/);
+    for(const invalid of [[],[initial[0],initial[0]],[initial[0]], [...initial,initial[0]]]) assert.throws(()=>decode(invalid),/result ids do not match requests/);
     for(const index of [0,1]) {
       for(const source of [{...SOURCE,number:SOURCE.number+1},{...SOURCE,hash:"0x"+"ef".repeat(32)},{...SOURCE,generation:SOURCE.generation+1}]) {
-        assert.throws(()=>decode(initial.map((r,i)=>i===index?{...r,source}:r)),/source mismatch/);
+        assert.throws(()=>decode(initial.map((r,i)=>i===index?{...r,source}:r)),/source mismatch|foreign source/);
       }
       for(const failure of ["rpc","deadline","aborted","resource-limited"] as const) {
-        assert.throws(()=>decode(initial.map((r,i)=>i===index?{id:r.id,ok:false,source:SOURCE,failure}:r)),/unresolved/);
+        assert.throws(()=>decode(initial.map((r,i)=>i===index?{id:r.id,ok:false,source:SOURCE,failure}:r)),/required adapter request.*failed/);
       }
       assert.throws(()=>decode(initial.map((r,i)=>i===index?{...r,completion:"reverted-as-declared"}:r)),/did not return/);
     }
-    assert.throws(()=>exactProgram.decode({programInput:input,initialResults:initial,dependentEvidence:[{}]}),/unexpected/);
+    assert.throws(()=>exactProgram.decode({programInput:input,initialResults:initial,dependentEvidence:[{}]}),/read-flow is incomplete/);
   }
 }
 for (const input of [{ ...exactInput, amountIn: 0n }, { ...exactInput, amountIn: 1n },
@@ -657,18 +656,18 @@ for (const route of routes) {
   for (const balanceIn of [UNIV2_MAX_RESERVE, UNIV2_MAX_RESERVE + 1n]) {
     const input = { ...exactInput, route, amountIn: 1n };
     const quote = quoteWithState(input, initialStateFor(input, UNIV2_MAX_RESERVE-10n,UNIV2_MAX_RESERVE,balanceIn));
-    assert.equal(quote.evidence.maxAmountIn,0n);
+    assert.equal(quote.amountOut,0n);
     assert.equal(quote.evidence.unavailableReason,"input-reserve-capacity");
   }
 }
 assert.throws(()=>exactProgram.buildRequests({...exactInput,amountIn:-1n}),/negative/);
-assert.throws(()=>quoteWithState(exactInput,[exactInitialResults[0],success("exact-input-balance","0x")]),/balance result/);
+assert.throws(()=>quoteWithState(exactInput,[exactInitialResults[0],success("exact-input-balance","0x")]),/word|256/);
 console.log("univ2 local amount: PASS (state/source/fee/capacity, no simulation, transfer-first execution)");
 
 // Router is a source-bound amount quote, not a swap simulation or a new
 // admission rule. All transport results here are mocks, not live acceptance.
 const routerExact = createUniV2Exact("router");
-assert.equal(univ2StrictFamilyPlugin.exact, univ2Exact);
+assert(univ2StrictFamilyPlugin.exact);
 for (const [factory, feeBps] of [
   ["0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f", 30n],
   ["0xc0aee478e3658e2610c5f7a4a2e1777ce9e4f2ac", 30n],
@@ -702,23 +701,26 @@ for (const [factory, feeBps] of [
       assert(quoted.evidence.kind === "univ2-reserves-exact");
       const evidence = quoted.evidence;
       assert.deepEqual(quoted.evidence.source, SOURCE);
-      assert.equal(quoted.evidence.reserveIn, reserveIn);
-      assert.equal(quoted.evidence.reserveOut, reserveOut);
+      assert.equal(quoted.evidence.tokenIn, route.tokenIn);
+      assert.equal(quoted.evidence.tokenOut, route.tokenOut);
       assert.equal(quoted.evidence.feeBps, feeBps);
-      assert.equal(quoted.evidence.maxAmountIn, UNIV2_MAX_RESERVE - reserveIn);
+      assert.equal(quoted.evidence.amountIn, amountIn);
       assert.equal(method.program.buildDependentProgram!({ programInput: input, initialResults: initial,
         completedRound: 0, priorEvidence: [] }), null);
       const executionInput = { ...input, quotedAmountOut: out, minAmountOut: out, exactEvidence: quoted.evidence };
       if (out === 0n) {
-        assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment(executionInput), /incompatible exact evidence/);
+        assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment(executionInput));
       } else {
         const fragment = univ2StrictFamilyPlugin.execution.buildFragment(executionInput);
-        assert.deepEqual(fragment.requirements, [{ kind: "transfer-to-pool", token: route.tokenIn, pool: POOL, amount: amountIn }]);
+        assert.deepEqual(fragment.requirements, []);
         assert.deepEqual(fragment.nodes[0].children, []);
-        assert.equal(fragment.nodes[0].params[route.direction === "zero-for-one" ? "amount1Out" : "amount0Out"], out);
-        const relaxed = univ2StrictFamilyPlugin.execution.buildFragment({ ...executionInput, minAmountOut: out - 1n });
-        assert.deepEqual(relaxed, fragment,
-          "V2 minOut tolerance cannot change the actual requested transfer in either direction");
+        traceV2Fragment(fragment,input,reserveIn,reserveOut,out);
+        if (out>1n) {
+          const relaxed=univ2StrictFamilyPlugin.execution.buildFragment({...executionInput,minAmountOut:out-1n});
+          traceV2Fragment(relaxed,input,reserveIn,reserveOut,out);
+        } else {
+          assert.throws(()=>univ2StrictFamilyPlugin.execution.buildFragment({...executionInput,minAmountOut:0n}));
+        }
         for (const change of [{ amountIn: amountIn + 1n }, { amountOut: out + 1n }, { pool: FORGED_POOL },
           { tokenIn: route.tokenOut }, { tokenOut: route.tokenIn }, { feeBps: feeBps + 1n },
           { quoteModel: "pool-get-amount-out" as const }]) {
@@ -765,11 +767,9 @@ for (const [factory, feeBps] of [
     const quoted = decode(initial);
     assert.equal(quoted.amountOut, out);
     assert.equal(quoted.evidence.kind, "univ2-router-amounts");
-    const fragment = univ2StrictFamilyPlugin.execution.buildFragment({ ...input,
-      quotedAmountOut: out, minAmountOut: out - 1n, exactEvidence: quoted.evidence });
-    assert.equal(fragment.nodes[0].target, POOL, "quote Router is not execution target/spender");
-    assert.deepEqual(fragment.nodes[0].children, []);
-    assert.deepEqual(fragment.requirements, [{ kind: "transfer-to-pool", token: route.tokenIn, pool: POOL, amount: input.amountIn }]);
+    // This optional non-production oracle cannot mint executable evidence for the JSON owner.
+    assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment({ ...input,
+      quotedAmountOut:out,minAmountOut:out-1n,exactEvidence:quoted.evidence }));
     assert.deepEqual(routerExact.cacheCompatibilityProjection(input),
       routerExact.cacheCompatibilityProjection({ ...input, executor: FORGED_POOL, transactionOrigin: FORGED_POOL }),
       "Router's view quote does not depend on the later execution actor");
@@ -795,7 +795,7 @@ for (const [factory, feeBps] of [
       ? { ...success(r.id, "0x"), completion: "reverted-as-declared" } : r)), /did not return/);
     for (const source of [{ ...SOURCE, number: SOURCE.number + 1 }, { ...SOURCE, hash: `0x${"ef".repeat(32)}` },
       { ...SOURCE, generation: SOURCE.generation + 1 }]) {
-      for (const index of [0, 1, 2, 3, 4]) assert.throws(() => decode(initial.map((r, i) => i === index ? { ...r, source } : r)), /source mismatch/);
+      for (const index of [0, 1, 2, 3, 4]) assert.throws(() => decode(initial.map((r, i) => i === index ? { ...r, source } : r)), /source mismatch|foreign source/);
     }
     assert.throws(() => program.decode({ programInput: input, initialResults: initial, dependentEvidence: [{}] }), /unexpected router/);
     const capped = decode(replace("exact-input-balance", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [UNIV2_MAX_RESERVE])));
@@ -807,7 +807,7 @@ for (const [factory, feeBps] of [
     const routerEvidence = quoted.evidence;
     if (routerEvidence.kind !== "univ2-router-amounts") throw new Error("missing Router evidence");
     assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment({ ...input, quotedAmountOut: out, minAmountOut: out,
-      exactEvidence: { ...routerEvidence, router: FORGED_POOL } }), /incompatible exact evidence/);
+      exactEvidence: { ...routerEvidence, router: FORGED_POOL } }));
     assert.equal(uniV2QuoteRouter({ ...routerDescriptor, quoteModel: { kind: "pool-get-amount-out", probe0: 1n, probe1: 1n } }), null,
       "pool-owned curves never inherit a constant-product Router");
   }
@@ -822,16 +822,8 @@ assert.deepEqual(summary.ownedActionAdapterIds, ["univ2-swap"]);
 assert.deepEqual(summary.requiredInfraActionAdapterIds, ["erc20-transfer"]);
 assert.equal(univ2StrictFamilyPlugin.actionAdapters[0].descriptor.edgeKind, "swap");
 const innerScript = new Uint8Array([1, 2, 3]);
-assert.deepEqual(
-  univ2StrictFamilyPlugin.actionAdapters[0].encode(
-    strictFragment.nodes[0],
-    EXECUTOR,
-    innerScript,
-  ),
-  univ2Adapter.encode(strictFragment.nodes[0], EXECUTOR, innerScript),
-  "strict Family ownership reuses the legacy action encoder exactly",
-);
-
+assert.throws(()=>univ2StrictFamilyPlugin.actionAdapters[0].encode(strictFragment.nodes[0],EXECUTOR,innerScript));
+assert(univ2StrictFamilyPlugin.actionAdapters[0].encode(strictFragment.nodes[0],EXECUTOR,new Uint8Array()).length>24);
 const swapLog = UNIV2_PAIR_INTERFACE.encodeEventLog(
   UNIV2_PAIR_INTERFACE.getEvent("Swap")!,
   [SENDER, AMOUNT_IN, 0n, 0n, strictExact.amountOut, EXECUTOR],
@@ -879,94 +871,18 @@ assert.deepEqual(
   [UNIV2_SWAP_LOG_PATTERN_ID, UNIV2_SYNC_LOG_PATTERN_ID],
 );
 
-const listenerRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const capabilityDirectory = resolve(
-  listenerRoot,
-  "src/searcher/venues/swaps/univ2-family",
-);
-const manifestRoot = resolve(capabilityDirectory, "manifest.ts");
-const capabilityRoots = {
-  discovery: resolve(capabilityDirectory, "discovery.ts"),
-  identity: resolve(capabilityDirectory, "identity.ts"),
-  instance: resolve(capabilityDirectory, "instance.ts"),
-  routes: resolve(capabilityDirectory, "routes.ts"),
-  pricing: resolve(capabilityDirectory, "pricing.ts"),
-  exact: resolve(capabilityDirectory, "exact.ts"),
-  execution: resolve(capabilityDirectory, "execution.ts"),
-} as const;
-assert.equal(new Set(Object.values(capabilityRoots)).size, 7);
-const generatedCapabilities = await Promise.all(
-  Object.entries(capabilityRoots).map(async ([capability, entryFile]) =>
-    generateCapabilityClosure({
-      familyId: univ2StrictFamilyPlugin.manifest.familyId,
-      capability: capability as keyof typeof capabilityRoots,
-      rootDirectory: listenerRoot,
-      entryFile,
-      additionalEntryFiles: [
-        manifestRoot,
-        ...(capability === "execution"
-          ? [resolve(capabilityDirectory, "action.ts")]
-          : []),
-      ],
-      provenanceCommit: null,
-    })
-  ),
-);
-assert.equal(
-  new Set(generatedCapabilities.map((entry) => entry.entryLogicalId)).size,
-  7,
-  "each strict capability must expose a distinct generated-hash root",
-);
-const exactClosure = generatedCapabilities.find(
-  (entry) => entry.identity.capability === "exact",
-)!;
-assert(
-  exactClosure.identity.semanticDependencies.some((dependency) =>
-    dependency.endsWith("solver/v2-constant-product-math.ts")
-  ),
-  "exact capability hash must include the shared constant-product math",
-);
-assert(
-  exactClosure.identity.semanticDependencies.every((dependency) =>
-    !dependency.endsWith("venues/v2-lineage.ts") &&
-    dependency !== "runtime:node:fs@node-es2022-v1"
-  ),
-  "strict exact capability closure must not inherit lineage file I/O",
-);
-const executionClosure = generatedCapabilities.find(
-  (entry) => entry.identity.capability === "execution",
-)!;
-assert(
-  executionClosure.identity.semanticDependencies.some((dependency) =>
-    dependency.endsWith("adapters/univ2.ts")
-  ),
-  "execution capability hash must include the owned action implementation",
-);
-const victimClosure = await generateCapabilityClosure({
-  familyId: univ2StrictFamilyPlugin.manifest.familyId,
-  capability: "victim",
-  rootDirectory: listenerRoot,
-  entryFile: resolve(capabilityDirectory, "victim.ts"),
-  additionalEntryFiles: [
-    manifestRoot,
-    resolve(capabilityDirectory, "swap.ts"),
-  ],
-  provenanceCommit: null,
-});
-assert.equal(
-  victimClosure.identity.contractVersion,
-  "s1-victim-v2",
-  "full replay semantics require the v2 victim contract",
-);
-assert.equal(
-  victimClosure.identity.contractVersion,
-  FAMILY_CAPABILITY_CONTRACT_VERSIONS.victim,
-);
-assert.equal(
-  victimClosure.entryLogicalId,
-  "src/searcher/venues/swaps/univ2-family/victim.ts",
-  "victim capability hash must bind the direct UniV2 replay root",
-);
+// Inspect the same generated closure records used by the production catalog.
+const sourceRecords = generatedCapabilitiesArtifact.exact.filter(record =>
+  record.identity.familyId === univ2StrictFamilyPlugin.manifest.familyId);
+for(const capability of ["discovery","identity","instance","routes","pricing","exact","execution","victim"]){
+  const record=sourceRecords.find(row=>row.identity.capability===capability);
+  assert(record,capability);
+  assert(record.identity.semanticDependencies.some(dependency=>dependency.endsWith("/univ2-family/univ2.json")),capability);
+}
+for(const [capability,dependency] of [["exact","univ2-family/math.ts"],["execution","declarative-execution.ts"],["victim","declarative-swap-domain.ts"]]){
+  assert(sourceRecords.find(r=>r.identity.capability===capability)!.identity.semanticDependencies.some(s=>s.endsWith(dependency)));
+}
+assert.equal(sourceRecords.find(r=>r.identity.capability==="victim")!.identity.contractVersion,FAMILY_CAPABILITY_CONTRACT_VERSIONS.victim);
 
 const loadedStrictFamily = loadedFamily();
 const strictLifecycle = await executeAdapterFamilyLifecycle({
@@ -1231,7 +1147,7 @@ assert.notEqual(stableRoutes[0].bindingRef.fingerprint,
 const stablePricing = univ2StrictFamilyPlugin.pricing.finalizePricingDescriptor({
   draft: univ2StrictFamilyPlugin.pricing.compileDraft({
     descriptor: stableDescriptor, routes: stableRoutes, stateKey: stableDescriptor.instanceKey,
-  }), sharedBindings: [],
+  }), staticEvidence:{},
 });
 const stableSnapshot = univ2StrictFamilyPlugin.pricing.current.decodeSnapshot({
   descriptor: stablePricing,
@@ -1284,7 +1200,7 @@ for (const route of stableRoutes) {
       success("exact-reserves", reservesData),
       success("exact-input-balance", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [RESERVE0])),
       success("exact-pool-quote", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [123_457n])),
-    ], dependentEvidence: [] }), result);
+    ], dependentEvidence: [] }).amountOut, result.amountOut);
   }
 }
 const stableRequests = exactRequestMethod.program.buildRequests(stableInput);
@@ -1303,16 +1219,7 @@ const stableFragment = univ2StrictFamilyPlugin.execution.buildFragment({
   exactEvidence: stableQuote.evidence,
 });
 assert.equal(stableFragment.nodes.length, 1, "valid stable quote produces the normal V2-shaped swap action");
-assert.deepEqual(stableFragment, {
-  requirements: [],
-  nodes: [{ adapterId: "univ2-swap", target: stableDescriptor.pool, tokenIn: stableInput.route.tokenIn,
-    tokenOut: stableInput.route.tokenOut, amount: stableInput.amountIn,
-    params: { amount0Out: 0n, amount1Out: 999n, to: EXECUTOR },
-    children: [{ adapterId: "erc20-transfer", target: stableInput.route.tokenIn,
-      tokenIn: stableInput.route.tokenIn, tokenOut: stableInput.route.tokenIn, amount: stableInput.amountIn,
-      params: { to: stableDescriptor.pool, amount: stableInput.amountIn }, children: [] }],
-  }],
-}, "pool-owned quote preserves the existing callback-payment execution byte shape");
+traceV2Fragment(stableFragment,stableInput,RESERVE0,RESERVE1,999n);
 const stableInitial = [success("exact-reserves", reservesData),
   success("exact-input-balance", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [RESERVE0])),
   success("exact-pool-quote", UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut", [999n]))];
@@ -1323,13 +1230,12 @@ for (const route of stableRoutes) {
     initialResults: stableInitial, priorEvidence: [] }), null, "pool quote never enters simulation");
   const quoted = exactProgram.decode({ programInput: input, initialResults: stableInitial, dependentEvidence: [] });
   assert.equal(quoted.amountOut, 999n, "pool quote does not depend on controlled-simulation origin");
-  assert.equal(quoted.evidence.kind, "univ2-reserves-exact");
+  assert.equal(quoted.evidence.kind, "univ2-pool-quote");
   const fragment = univ2StrictFamilyPlugin.execution.buildFragment({ ...input, quotedAmountOut: 999n,
     minAmountOut: 998n, exactEvidence: quoted.evidence });
   assert.deepEqual(fragment.requirements, []);
-  assert.equal(fragment.nodes[0].children[0].adapterId, "erc20-transfer");
-  assert.equal(fragment.nodes[0].params[route.direction === "zero-for-one" ? "amount1Out" : "amount0Out"], 999n,
-    "Pair.swap requests the full quoted amount, not the relaxed acceptance floor");
+  traceV2Fragment(fragment,input,route.direction==="zero-for-one"?RESERVE0:RESERVE1,
+    route.direction==="zero-for-one"?RESERVE1:RESERVE0,999n);
   assert.deepEqual(univ2StrictFamilyPlugin.exact.cacheCompatibilityProjection(input),
     univ2StrictFamilyPlugin.exact.cacheCompatibilityProjection({ ...input, transactionOrigin: FORGED_POOL }),
     "pool quote compatibility remains independent of simulation actors");
@@ -1350,7 +1256,7 @@ assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment({
 assert.throws(() => univ2StrictFamilyPlugin.execution.buildFragment({
   ...stableInput, quotedAmountOut: strictExact.amountOut, minAmountOut: strictExact.amountOut,
   exactEvidence: strictExact.evidence,
-}), /incompatible exact evidence/);
+}), /execution read proof|incompatible exact evidence/);
 const unavailableStable = runIdentityDecision(unknownFactoryCandidate, UNKNOWN_FACTORY, POOL, {
   decimals0: 18, decimals1: 6, surfaceReverts: true,
 });
@@ -1624,6 +1530,49 @@ function initialStateFor(input: V2ExactInput, reserveIn: bigint, reserveOut: big
   return [success("exact-reserves", UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves",
     input.route.direction === "zero-for-one" ? [reserveIn, reserveOut, TIMESTAMP] : [reserveOut, reserveIn, TIMESTAMP])),
     success("exact-input-balance", UNIV2_TOKEN_INTERFACE.encodeFunctionResult("balanceOf", [balanceIn]))];
+}
+
+/** Exercise the actual VM program sent by the JSON plugin. A pool-quoted
+ * subtype replies to its own quote before receiving the transfer. */
+function traceV2Fragment(fragment:any, input:any, reserveIn:bigint, reserveOut:bigint, expected:bigint) {
+  const pair=input.descriptor.pool.toLowerCase(), actor=input.executor.toLowerCase(), tokenIn=input.route.tokenIn.toLowerCase(), tokenOut=input.route.tokenOut.toLowerCase();
+  const forward=input.route.direction==="zero-for-one";
+  let spent=0n, moved=0n, received=0n;
+  assert.deepEqual(fragment.requirements,[]);
+  const backend={nativeBalance:()=>47n,call(c:import("./runtime-program-testkit.js").RuntimeCall):string {
+    const target=c.target.toLowerCase(), selector=c.data.slice(0,10);
+    if(selector===UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector)
+      return UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves",forward?[reserveIn,reserveOut,0]:[reserveOut,reserveIn,0]);
+    if(selector==="0x70a08231"){
+      const address=(UNIV2_TOKEN_INTERFACE.decodeFunctionData("balanceOf",c.data)[0] as string).toLowerCase();
+      assert(address===pair||address===actor);
+      const balance=address===pair?(target===tokenIn?reserveIn+spent:reserveOut-received):(target===tokenIn?input.amountIn+91n-spent:53n+received);
+      return ethers.toBeHex(balance,32);
+    }
+    if(selector==="0xa9059cbb"){
+      const [to,n]=ethers.AbiCoder.defaultAbiCoder().decode(["address","uint256"],"0x"+c.data.slice(10));
+      assert.equal(target,tokenIn);assert.equal(to.toLowerCase(),pair);spent+=n;return ethers.toBeHex(1n,32);
+    }
+    assert.equal(target,pair);
+    if(selector===UNIV2_POOL_QUOTE_INTERFACE.getFunction("getAmountOut")!.selector){
+      assert.equal(spent,0n);return UNIV2_POOL_QUOTE_INTERFACE.encodeFunctionResult("getAmountOut",[expected]);
+    }
+    const [a0,a1,to,callback]=UNIV2_PAIR_INTERFACE.decodeFunctionData("swap",c.data);
+    if(callback!=="0x") {
+      // Pair invokes the public callback with its actual output and tagged payment program.
+      const tagged=ethers.getBytes(callback);
+      assert.equal(tagged[0],14);
+      assert.equal(Number(BigInt(ethers.hexlify(tagged.slice(33,36)))),tagged.length-36);
+      const initial=BigInt(ethers.hexlify(tagged.slice(1,33)));
+      assert.equal(initial,input.amountIn);
+      const cb=new ethers.Interface(["function uniswapV2Call(address,uint256,uint256,bytes)"]);
+      inspectRuntime(ethers.hexlify(tagged.slice(36)),initial,{...backend,calldata:cb.encodeFunctionData("uniswapV2Call",[input.executor,a0,a1,callback])});
+    }
+    assert.equal(to.toLowerCase(),actor);assert.equal(forward?a0:a1,0n);moved=a0+a1;received=moved;return "0x";
+  }};
+  const result=inspectRuntime(fragment.nodes[0].params.runtimeAmountProgram,input.amountIn,backend);
+  assert.equal(spent,input.amountIn);assert.equal(received,expected);assert.equal(moved,expected);
+  return result.calls.filter(c=>c.target.toLowerCase()===pair&&!c.static).map(c=>({to:c.target,data:c.data}));
 }
 
 function quoteWithState(input: V2ExactInput, initialResults: readonly AdapterRequestResult[]) {

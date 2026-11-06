@@ -20,9 +20,9 @@ import type { CanonicalSource } from "../../../adapter-request-program.js";
 import { isPricedFamily } from "../../../family-capability-catalog.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from
   "../../../production-family-composition.js";
-import { BALANCE, FEES, MULTICALL, ORACLE, POOL, TOKEN } from "../codec.js";
-import { ELLA_ID } from "../manifest.js";
-import type { EllaDescriptor } from "../types.js";
+import { BALANCE, FEES, MULTICALL, ORACLE, POOL, TOKEN } from "./definition-fixture.js";
+import { ELLA_ID } from "./definition-fixture.js";
+import type { EllaDescriptor } from "./definition-fixture.js";
 
 // Local integration: production discovery decoder -> probe/seal -> memo reuse ->
 // rehydrate/aggregate/Graph -> dependency root. The code/storage/balances come

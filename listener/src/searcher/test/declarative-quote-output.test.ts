@@ -212,3 +212,18 @@ test("direct quote conservation does not permit budget debit or private quote ca
   const clobber = structuredClone(base); clobber.steps[0]!.call.save = { quoteLocalreceived: 0 };
   assert.throws(() => buildDeclarativeRuntimeLeg(clobber, input, values, { math }), /reserved runtime capture/);
 });
+
+test("rollback quote schema permits only an authenticated custom uint256 error without payment or callbacks", () => {
+  const good = { version: 1, nativeBoundary: true, steps: [{ id: "quote", errorSignature: "error Quoted(uint256)",
+    call: { target: actor, signature: "function sample(uint256)", args: [ref("amountIn")], save: { out: 0 } } }],
+    result: ref("out") };
+  validateDeclarativeQuoteOutput(good);
+  for (const signature of ["error Panic(uint256)", "error Error(string)", "error Quoted(uint64)", "error Quoted(uint256[])",
+    "error Quoted(bytes)", "function Quoted(uint256)"]) {
+    assert.throws(() => validateDeclarativeQuoteOutput({ ...good, steps: [{ ...good.steps[0], errorSignature: signature }] }));
+  }
+  assert.throws(() => validateDeclarativeQuoteOutput({ ...good, steps: [{ ...good.steps[0], static: true }] }));
+  for (const extra of [{ value: ref("amountIn") }, { callback: {} }]) {
+    assert.throws(() => validateDeclarativeQuoteOutput({ ...good, steps: [{ ...good.steps[0], call: { ...good.steps[0].call, ...extra } }] }));
+  }
+});

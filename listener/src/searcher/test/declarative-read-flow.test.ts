@@ -187,3 +187,28 @@ test("building and decoding a flow does not freeze or mutate caller-owned arrays
   assert.equal(Object.isFrozen(requests), false); assert.equal(Object.isFrozen(requests[0]), false);
   assert.equal(Object.isFrozen(output), false); assert.equal(Object.isFrozen(decoded), true);
 });
+
+test("invocation selects only required dependency rounds, preserving order and refusing evidence for skipped rounds", () => {
+  const step = (id: string, when?: string) => ({ id, ...(when ? {when} : {}),
+    requirements: { transports: ["eth-call"] }, requests: [request(id, "$target")], result: field(id) });
+  const doc = { version: 1 as const, steps: [step("base"), step("access", "$needsAccess"), step("ticks", "$needsTicks")],
+    result: expression("if", "$needsTicks", "$steps.ticks", expression("if", "$needsAccess", "$steps.access", "$steps.base")) };
+  const {program} = compileDeclarativeReadFlow(doc, values);
+  for (const needsAccess of [false,true]) for (const needsTicks of [false,true]) {
+    const invocation = {...input, needsAccess, needsTicks};
+    const expected = [...(needsAccess ? ["access"] : []), ...(needsTicks ? ["ticks"] : [])];
+    const first = [result("base", "0x01")], prior: unknown[] = [];
+    assert.deepEqual(program.buildRequests(invocation).map(r => r.id), ["base"]);
+    for (const id of expected) {
+      const round = program.buildDependentProgram!({programInput: invocation, completedRound: prior.length, initialResults: first, priorEvidence: prior})!;
+      assert.deepEqual(round.requests.map(r => r.id), [id]);
+      prior.push(round.decode([result(id, id === "access" ? "0x02" : "0x03")]));
+    }
+    assert.equal(program.buildDependentProgram!({programInput: invocation, completedRound: prior.length, initialResults: first, priorEvidence: prior}), null);
+    assert.equal(program.decode({programInput: invocation, initialResults: first, dependentEvidence: prior}), needsTicks ? "0x03" : needsAccess ? "0x02" : "0x01");
+    assert.throws(() => program.decode({programInput: invocation, initialResults: first, dependentEvidence: [...prior, {stepId: "alien", results: []}]}));
+  }
+  assert.throws(() => compileDeclarativeReadFlow({...doc, steps: [step("base","$needsAccess")]},values), /initial.*unconditional/);
+  assert.throws(() => compileDeclarativeReadFlow({...doc, steps: [step("base"),step("access","$steps.base")]},values), /read-flow reference/);
+  assert.throws(() => program.decode({programInput: {...input,needsAccess:"yes",needsTicks:false},initialResults:[result("base","0x01")],dependentEvidence:[]}), /condition must be boolean/);
+});

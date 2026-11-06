@@ -21,7 +21,7 @@ import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
 import { WSTETH_FAMILY_ID } from
-  "../venues/protocols/wsteth-family/manifest.js";
+  "../venues/protocols/wsteth-family/test/fixture-manifest.js";
 
 const SOURCE: CanonicalSource = Object.freeze({
   number: 25_700_444,

@@ -3,7 +3,7 @@ import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "../venues/production-family-composition.js";
 import { METRONOME_HGUSDC_FAMILY_ID } from
-  "../venues/protocols/metronome-hgusdc-family/manifest.js";
+  "../venues/protocols/metronome-hgusdc-family/test/fixture-manifest.js";
 import { METRONOME_HGUSDC_PATH } from
   "../../adapters/metronome-hgusdc.js";
 import {
@@ -12,7 +12,7 @@ import {
   METRONOME_HGUSDC_ERC20_INTERFACE,
   METRONOME_HGUSDC_ROUTER_INTERFACE,
   METRONOME_HGUSDC_VAULT_INTERFACE,
-} from "../venues/protocols/metronome-hgusdc-family/shared.js";
+} from "../venues/protocols/metronome-hgusdc-family/test/fixture-shared.js";
 import { executeAdapterFamilyLifecycleBatch } from
   "../venues/adapter-family-runtime.js";
 import { createBoundedRequestExecutor } from

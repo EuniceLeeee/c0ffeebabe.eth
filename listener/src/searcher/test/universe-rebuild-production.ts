@@ -51,7 +51,7 @@ import { RevmSimClient, RevmFatalError, type RevmFatalReason } from "../revm-sim
 import { ETHERTOKEN_NATIVE_INTERFACE, ETHERTOKEN_NATIVE_PROBE_ACTOR } from
   "../venues/protocols/ethertoken-native-redeem-family/shared.js";
 import { WSTETH_INTERFACE } from
-  "../venues/protocols/wsteth-family/codec.js";
+  "../venues/protocols/wsteth-family/test/fixture-codec.js";
 import { PSM_INTERFACE } from
   "../venues/protocols/psm-family/codec.js";
 

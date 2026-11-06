@@ -1,3 +1,4 @@
+import { RequiredAdapterRequestError } from "../venues/adapter-request-failure.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
@@ -7,8 +8,8 @@ import { RevmFatalError, type DaemonResponse, type StrictSimulateRequest } from 
 import { createStrictCentralAdapterRuntime, type StrictSimulationTransport } from "../strict-central-adapter-runtime.js";
 import type { AdapterRequestResult, CanonicalSource } from "../venues/adapter-request-program.js";
 import { plugin } from "../venues/production-families/eigenpie.production.js";
-import { EIGENPIE_INTERFACE } from "../venues/protocols/eigenpie-family/codec.js";
-import type { EigenpieCandidate, EigenpieQuoteEvidence } from "../venues/protocols/eigenpie-family/types.js";
+import { EIGENPIE_INTERFACE } from "./fixtures/protocol-json/eigenpie-fixture.js";
+import type { EigenpieCandidate, EigenpieQuoteEvidence } from "../generated/declarative-family-types/eigenpie.generated.js";
 
 // Offline declaration/transport regressions, not historical execution evidence.
 // Addresses/amounts reproduce the failed nominee; code, effects and authority
@@ -271,7 +272,7 @@ test("no-proof, runtime-code and mixed-source guards remain closed", async () =>
   assert.throws(() => variant.decode({ step, results: [{ ...receipt, data: "0x" }, simulation] }), /no runtime code/);
   assert.throws(() => variant.decode({ step, results: [receipt, {
     id: "identity-active-deposit", ok: false, source: SOURCE, failure: "resource-limited",
-  }] }), /unresolved/);
+  }] }), (error: unknown) => error instanceof RequiredAdapterRequestError && error.failureCode === "resource-limited");
   assert.throws(() => variant.decide({ candidate: CANDIDATE, evidence: decode(value), step: 0 }), /before active behavior proof/);
 });
 

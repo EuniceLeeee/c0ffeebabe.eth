@@ -8,11 +8,11 @@ import { applyRuntimeAssetBoundary, applyQuotedAssetBoundary, executionAssetBoun
 import { RUNTIME_ERC20, RUNTIME_WRAP } from "../../../runtime-execution.js";
 import { createIdentityAssetMetadataPlan } from "../../../../identity-asset-metadata.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
-import { fluidDexStrictFamilyPlugin as family } from "../../fluid-dex-family-plugin.js";
-import { fluidDexFamilyOwnedAction } from "../action.js";
-import { FLUID_DEX_ADDRESS_DEAD, FLUID_DEX_INTERFACE, FLUID_DEX_NATIVE_TOKEN, fluidDexAsset } from "../codec.js";
-import { FLUID_DEX_FACTORY_LINEAGE_ID, FLUID_DEX_FAMILY_ID } from "../manifest.js";
-import type { FluidDexDescriptor, FluidDexExactEvidence, FluidDexIdentity, FluidDexRoute } from "../types.js";
+import { plugin as family } from "../../../production-families/fluid-dex.production.js";
+const fluidDexFamilyOwnedAction = family.actionAdapters[0]!;
+import { FLUID_DEX_ADDRESS_DEAD, FLUID_DEX_INTERFACE, FLUID_DEX_NATIVE_TOKEN, fluidDexAsset } from "./fixture-codec.js";
+import { FLUID_DEX_FACTORY_LINEAGE_ID, FLUID_DEX_FAMILY_ID } from "./fixture-codec.js";
+import type { FluidDexDescriptor, FluidDexExactEvidence, FluidDexIdentity, FluidDexRoute } from "./fixture-types.js";
 
 const pool = ethers.getAddress("0x1111111111111111111111111111111111111111");
 const actor = ethers.getAddress("0x2222222222222222222222222222222222222222");
@@ -77,8 +77,23 @@ for (const [name, raw0, raw1] of [
         if (fragment) { assert.equal(fragment.nodes.length, 1); assert.deepEqual(fragment.requirements, []); }
         const program = fragment ? scriptProgram(fluidDexFamilyOwnedAction.encode(fragment.nodes[0], actor, new Uint8Array()), amount)
           : runtime(d, r).program;
-        const trace = inspectRuntime(program, amount, { call: c => c.target === pool ? word(31n) : word(1n),
-          nativeBalance() { throw new Error("Family must not own the native boundary"); } });
+        const stock = amount + 100n;
+        let paid = false;
+        const trace = inspectRuntime(program, amount, {
+          call(c) {
+            if (same(c.target, pool)) { paid = true; return word(31n); }
+            if (c.data.startsWith(RUNTIME_ERC20.getFunction("balanceOf")!.selector)) {
+              const [owner] = RUNTIME_ERC20.decodeFunctionData("balanceOf", c.data);
+              assert(same(owner, actor));
+              return word(stock + (!paid ? 0n : same(c.target, r.tokenIn) ? -amount : 31n));
+            }
+            assert(c.data.startsWith(RUNTIME_ERC20.getFunction("approve")!.selector), "no wrap/transfer in raw Family call");
+            return word(1n);
+          },
+          nativeBalance() {
+            return stock + (!paid ? 0n : nativeIn ? -amount : r.executionAssets!.output === "native" ? 31n : 0n);
+          },
+        });
         assert.deepEqual(trace.allowances, [], "no standing maximum approval instruction");
         const swaps = trace.calls.filter(c => c.target === pool);
         assert.equal(swaps.length, 1);
@@ -87,7 +102,7 @@ for (const [name, raw0, raw1] of [
         assert.equal(args[2], isQuoted ? 17n : 1n); assert.equal(args[3], actor);
         assert.equal(swap.value, nativeIn ? amount : 0n);
         assert.deepEqual(swap.patches, [{ offset: 36, reg: 0 }]);
-        const approvals = trace.calls.filter(c => c.target !== pool);
+        const approvals = trace.calls.filter(c => c.data.startsWith(RUNTIME_ERC20.getFunction("approve")!.selector));
         assert.equal(approvals.length, nativeIn ? 0 : 3);
         assert.deepEqual(approvals.map(c => {
           assert.equal(c.target, ethers.getAddress(r.tokenIn)); assert.equal(c.value, 0n);
@@ -110,31 +125,32 @@ test("native route/mapping and quoted encoder parameter negative cases", () => {
     assert.throws(() => runtime(d, forged), /binding mismatch/);
     assert.throws(() => quoted(d, forged, 100n), /binding mismatch/);
   }
+  assert.equal(quoted(d, r, 100n, 0n).nodes.length, 1, "explicit zero minimum retains positive quote and actual credit checks");
   const node = quoted(d, r, 100n).nodes[0];
   for (const patch of [{ swap0to1: 1 }, { nativeInput: undefined }, { nativeOutput: true },
     { amountOutMin: -1n }, { amountOutMin: ethers.MaxUint256 + 1n }, { amountOutMin: 17 }]) {
-    assert.throws(() => fluidDexFamilyOwnedAction.encode({ ...node, params: { ...node.params, ...patch } }, actor, new Uint8Array()), /parameters/);
+    assert.throws(() => fluidDexFamilyOwnedAction.encode({ ...node, params: { ...node.params, ...patch } }, actor, new Uint8Array()), /parameters|node adapter mismatch/);
   }
   for (const amount of [0n, -1n, ethers.MaxUint256 + 1n]) {
     assert.throws(() => fluidDexFamilyOwnedAction.encode({ ...node, amount }, actor, new Uint8Array()), /shape/);
-    assert.throws(() => quoted(d, r, amount), /incompatible exact evidence/);
+    assert.throws(() => quoted(d, r, amount), /evidence|quoted|uint|positive/);
   }
   for (const executor of [ethers.ZeroAddress, pool, r.tokenIn, r.tokenOut]) {
     assert.throws(() => fluidDexFamilyOwnedAction.encode(node, executor, new Uint8Array()), /invalid executor/);
   }
   assert.throws(() => fluidDexFamilyOwnedAction.encode(node, actor, new Uint8Array([1])), /shape/);
-  assert.throws(() => quoted(d, r, 100n, 20n), /incompatible exact evidence/);
+  assert.throws(() => quoted(d, r, 100n, 20n), /evidence|quoted|uint|positive/);
 });
 
 type Failure = "overspend" | "no-output" | "native-loss";
-function centralBoundaryCase(nativeIn: boolean, isQuoted: boolean, failure?: Failure) {
+function centralBoundaryCase(nativeIn: boolean, isQuoted: boolean, failure?: Failure, minimum = 17n) {
   const d = fixture(FLUID_DEX_NATIVE_TOKEN, token);
   const r = family.routes.project({ descriptor: d }).find(r => (r.executionAssets!.input === "native") === nativeIn)!;
   const amount = 100n, receipt = failure === "no-output" ? 0n : 31n, stock = 777n;
   let program: string;
   if (isQuoted) {
-    const raw = quoted(d, r, amount);
-    const bounded = applyQuotedAssetBoundary({ route: r, executor: actor, amountIn: amount, minimum: 17n, fragment: raw });
+    const raw = quoted(d, r, amount, minimum);
+    const bounded = applyQuotedAssetBoundary({ route: r, executor: actor, amountIn: amount, minimum, fragment: raw });
     assert.equal(bounded.nodes[0].adapterId, "execution-asset-boundary");
     program = scriptProgram(executionAssetBoundaryAdapter.encode(bounded.nodes[0], actor,
       fluidDexFamilyOwnedAction.encode(raw.nodes[0], actor, new Uint8Array())), amount);
@@ -185,11 +201,17 @@ function centralBoundaryCase(nativeIn: boolean, isQuoted: boolean, failure?: Fai
 test("both native directions and execution interfaces use the central measured boundary", () => {
   for (const nativeIn of [true, false]) for (const isQuoted of [true, false]) centralBoundaryCase(nativeIn, isQuoted);
 });
+test("a quoted zero minimum still requires a positive actual credit in both native directions", () => {
+  for (const nativeIn of [true, false]) {
+    centralBoundaryCase(nativeIn, true, undefined, 0n);
+    assert.throws(() => centralBoundaryCase(nativeIn, true, "no-output", 0n), /checked uint256|runtime amount mismatch/);
+  }
+});
 test("old ETH/WETH/token inventory cannot subsidize a native leg or stand in for receipt", () => {
   for (const isQuoted of [true, false]) {
-    assert.throws(() => centralBoundaryCase(false, isQuoted, "overspend"), /checked uint256/);
+    assert.throws(() => centralBoundaryCase(false, isQuoted, "overspend"), /checked uint256|runtime amount mismatch/);
     for (const nativeIn of [true, false]) for (const failure of ["no-output", "native-loss"] as const) {
-      assert.throws(() => centralBoundaryCase(nativeIn, isQuoted, failure), /checked uint256/);
+      assert.throws(() => centralBoundaryCase(nativeIn, isQuoted, failure), /checked uint256|runtime amount mismatch/);
     }
   }
 });
@@ -200,7 +222,7 @@ const debtABI = new ethers.Interface(["function borrow(uint256,bytes)", "functio
 const receiver = ethers.getAddress("0x5555555555555555555555555555555555555555");
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 type DirectFault = "zero-debit" | "under-debit" | "over-debit" | "zero-output" | "short-output" | "extra-output" |
-  "wrong-recipient" | "old-output" | "receiver-input" | "native-loss" | "short-wrap" | "short-transfer";
+  "wrong-return" | "wrong-recipient" | "old-output" | "receiver-input" | "native-loss" | "short-wrap" | "short-transfer";
 function rawSettlement(d: FluidDexDescriptor, r: FluidDexRoute, settlement?: RuntimeSettlementRequest) {
   const input = { descriptor: d, route: r, executor: actor, source, runtimeEvidence: [], ...(settlement ? { settlement } : {}) };
   for (const key of ["amountIn", "quotedAmountOut", "exactEvidence", "exact", "quote"]) Object.defineProperty(input, key, {
@@ -263,7 +285,7 @@ function directCase(d: FluidDexDescriptor, r: FluidDexRoute, recipient: string, 
       if (fault === "old-output") add(r.tokenOut, actor, -1n);
       if (fault === "receiver-input") add(r.tokenIn, receiver, -1n);
       if (fault === "native-loss") native--;
-      return word(expected);
+      return word(fault === "wrong-return" ? expected + 1n : expected);
     }
     assert(same(c.target, ADDR.WETH));
     if (c.data.startsWith(RUNTIME_ERC20.getFunction("transfer")!.selector)) {
@@ -286,28 +308,18 @@ function directCase(d: FluidDexDescriptor, r: FluidDexRoute, recipient: string, 
 
 for (const [name, t0, t1] of [["native0", FLUID_DEX_NATIVE_TOKEN, token], ["native1", token, FLUID_DEX_NATIVE_TOKEN],
   ["WETH ERC20", ADDR.WETH, token], ["ERC20", token, other]] as const) {
-  test(`${name}: explicit direct debit/receipt and quote declarations preserve default bytes`, () => {
+  test(`${name}: explicit direct debit/receipt and quote declarations enforce observed amounts`, () => {
     const d = fixture(t0, t1);
     for (const r of family.routes.project({ descriptor: d })) {
       const leg = rawSettlement(d, r); assert(leg); assert.deepEqual(leg.settlement, { quoteOutput: true, directOutput: true });
-      const old = new RuntimeAmountProgram();
-      if (r.executionAssets!.input !== "native") {
-        old.call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("approve", [pool, 0n]))
-          .call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("approve", [pool, 0n]), { patches: [{ offset: 36, reg: 0 }] });
-      }
-      old.call(pool, FLUID_DEX_INTERFACE.encodeFunctionData("swapIn", [r.swap0To1, 0n, 1n, actor]), {
-        patches: [{ offset: 36, reg: 0 }], ...(r.executionAssets!.input === "native" ? { valueReg: 0 } : {}),
-      });
-      if (r.executionAssets!.input !== "native") old.call(r.tokenIn, RUNTIME_ERC20.encodeFunctionData("approve", [pool, 0n]));
-      assert.equal(leg.program, ethers.hexlify(old.bytes()));
       assert.equal(rawSettlement(d, r, { kind: "deferred-input", paymentAmount: 1n, paymentProgram: "0x" }), null);
       for (const recipient of [actor, receiver]) for (const amount of [1n, 100n, 1234567890123456789n]) directCase(d, r, recipient, amount);
       for (const kind of ["quote-output", "direct-output"] as const) for (const recipient of
         [ethers.ZeroAddress, FLUID_DEX_ADDRESS_DEAD, pool, r.tokenIn, r.tokenOut, "invalid"]) {
-        assert.throws(() => rawSettlement(d, r, { kind, recipient }));
+        assert.throws(() => { if (!rawSettlement(d, r, { kind, recipient })) throw new Error("unsupported recipient"); });
       }
       for (const recipient of [actor, receiver]) {
-        for (const fault of ["zero-debit", "under-debit", "over-debit", "zero-output", "short-output", "extra-output", "wrong-recipient", "native-loss"] as const)
+        for (const fault of ["zero-debit", "under-debit", "over-debit", "zero-output", "short-output", "extra-output", "wrong-return", "wrong-recipient", "native-loss"] as const)
           assert.throws(() => directCase(d, r, recipient, 100n, fault), fault);
         if (!same(recipient, actor)) for (const fault of ["old-output", "receiver-input"] as const)
           assert.throws(() => directCase(d, r, recipient, 100n, fault), fault);
@@ -355,11 +367,12 @@ test("production sim selector composes Fluid declared-revert/native direct witho
     const edges = [{ adapterId: "fluid-dex-swap", target: pool, tokenIn: r.tokenIn, tokenOut: r.tokenOut },
       { adapterId: "fixture-deferred", target: receiver, tokenIn: r.tokenOut, tokenOut: r.tokenIn }];
     const selector = createBlockScanSimAmountSelector({ source, executor: actor, async simulate(plan) {
+      if (plan.root.adapterId === "fixture-funded") return { success: false, netProfit: 0n, grossProfit: 0n, gasUsed: 1n, profitToken: r.tokenIn, calldata: "0x" };
       simulations++; assert.equal(plan.root.adapterId, "runtime-amount-flow"); assert(plan.root.params.settlementProgram);
       directCase(d, r, receiver, plan.flashAmount, undefined, plan.root.params.settlementProgram as string);
       return { success: true, netProfit: 1n, grossProfit: 1n, gasUsed: 1n, profitToken: r.tokenIn, calldata: "0x" };
     } });
-    const session: any = { source, blocksPrefixInversion: () => false, fundingActionIds: () => [],
+    const session: any = { source, blocksPrefixInversion: () => false, fundingActionIds: () => ["fixture-funded"], buildFundingRoot: () => ({ adapterId: "fixture-funded" }),
       buildRuntimeAmountLeg({ edge, settlement }: any) {
         if (edge === edges[0]) {
           const mapped = mapRuntimeAssetSettlementRequest({ route: r, executor: actor, request: settlement });

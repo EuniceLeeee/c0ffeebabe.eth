@@ -30,9 +30,9 @@ import { PRODUCTION_INFRA_ACTION_ADAPTERS } from "../../../production-infra-acti
 import { sourcePin } from "../../../../test/family-integration/kyber-yb-compound/historical-dual.js";
 import { assertPriceInput, productionAmount, constructionGuard, assertExecutorCode, assertOriginAccountCode, json, sha, same } from "../../../../test/family-integration/kyber-yb-compound/evidence.js";
 import { assertHistoricalDiscoveryReceipt } from "../../../../test/family-integration/three-family/historical-input-observations.js";
-import { FLUID_DEX_FAMILY_ID as FAMILY } from "../manifest.js";
-import { FLUID_DEX_CONSTANTS_INTERFACE, FLUID_DEX_FACTORY_INTERFACE, sameAddress } from "../codec.js";
-import type { FluidDexDescriptor as Descriptor, FluidDexRoute as Route } from "../types.js";
+import { FLUID_DEX_FAMILY_ID as FAMILY } from "./fixture-codec.js";
+import { FLUID_DEX_CONSTANTS_INTERFACE, FLUID_DEX_FACTORY_INTERFACE, sameAddress } from "./fixture-codec.js";
+import type { FluidDexDescriptor as Descriptor, FluidDexRoute as Route } from "./fixture-types.js";
 const POOL = new ethers.Interface(["event Swap(bool swap0to1,uint256 amountIn,uint256 amountOut,address to)"]);
 const ERC20 = new ethers.Interface(["function allowance(address,address) view returns(uint256)",
   "event Transfer(address indexed from,address indexed to,uint256 value)"]);

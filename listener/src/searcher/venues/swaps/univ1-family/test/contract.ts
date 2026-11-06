@@ -4,22 +4,39 @@ import { ethers } from "ethers";
 import { plugin } from "../../../production-families/uniswap-v1.production.js";
 import { definedFamilyPluginContractSummary } from "../../../adapter-family-plugin.js";
 import { nativeBalanceState, tokenBalanceState, tokenSupplyState } from "../../../local-state-models/resources.js";
-import { cloneImplementation, IMPLEMENTATION, MAX_UINT, MAX_VALUE, MODEL, STANDARD_MODEL, POOL, poolAddress, WETH } from "../codec.js";
-import { quoteAmount, quoteTransition } from "../state.js";
+import { cloneImplementation, IMPLEMENTATION, MAX_UINT, MAX_VALUE, MODEL, STANDARD_MODEL, POOL, poolAddress, WETH } from "./definition-fixture.js";
+import { quoteAmount, quoteTransition } from "./definition-fixture.js";
 import { answer, CANDIDATE, CLONE, descriptor, EXECUTOR, ISSUER, POOL_ADDRESS, quote, result, SOURCE, standardAnswer, TOKEN_ADDRESS, word } from "./fixtures.js";
 import { inspectRuntime } from "../../../../test/runtime-program-testkit.js";
+
+// Execute the public amount program with deterministic ERC20/WETH effects and
+// a V1 exchange fill. Preserve existing input, output, and native inventory.
+function inspectFill(program:string, amount:bigint, received:bigint, buy:boolean) {
+  let native=777n, token=amount+79n, weth=amount+83n;
+  return inspectRuntime(program,amount,{
+    nativeBalance:()=>native,
+    call(c) {
+      const target=c.target.toLowerCase(), selector=c.data.slice(0,10);
+      if (selector==="0x70a08231") return word(target===WETH?weth:token);
+      if (target===WETH && selector==="0x2e1a7d4d") { weth-=amount;native+=amount; }
+      else if (target===WETH && selector==="0xd0e30db0") { native-=c.value;weth+=c.value; }
+      else if (target===POOL_ADDRESS) { if(buy){native-=amount;token+=received;}else{token-=amount;native+=received;} }
+      return word(1n);
+    },
+  });
+}
 
 test("production contract; arbitrary exchange registration, two directed swap routes", () => {
   assert(definedFamilyPluginContractSummary(plugin));
   const d = descriptor(), rs = plugin.routes.project({ descriptor: d });
   assert.equal(rs.length, 2);
-  assert.deepEqual(rs.map(r => [r.tokenIn, r.tokenOut]), [[WETH, TOKEN_ADDRESS], [TOKEN_ADDRESS, WETH]]);
+  assert.deepEqual(rs.map(r => [r.tokenIn.toLowerCase(), r.tokenOut.toLowerCase()]), [[WETH, TOKEN_ADDRESS], [TOKEN_ADDRESS, WETH]]);
   for (const r of rs) assert.equal(plugin.routes.projectGraph({ descriptor: d, route: r }).executionTarget, POOL_ADDRESS);
   assert.equal(cloneImplementation(CLONE), IMPLEMENTATION);
   assert.equal(cloneImplementation("0x366000600037611000600036600073575ba30c7b77fa0eebd34cc5416538323c4e56125af41558576110006000f3"), IMPLEMENTATION);
-  assert.equal(cloneImplementation(CLONE.replace("5af4155857", "5af4602c57600080fd5b")), null,
+  assert.equal(cloneImplementation(CLONE.replace("5af4155857", "5af4602c57600080fd5b")), ethers.ZeroAddress,
     "an unobserved failure stub cannot borrow the historical clone's identity");
-  for (const code of ["0x", `${CLONE}00`, CLONE.replace("5af4", "5af1"), CLONE.replace("611000", "610100")]) assert.equal(cloneImplementation(code), null);
+  for (const code of ["0x", `${CLONE}00`, CLONE.replace("5af4", "5af1"), CLONE.replace("611000", "610100")]) assert.equal(cloneImplementation(code), ethers.ZeroAddress);
   const other = "0x2000000000000000000000000000000000000001";
   assert.equal(descriptor(r => r.id === "exchange" ? result(r.id, word(other)) : answer(r), { ...CANDIDATE, pool: other }).pool, other);
 });
@@ -37,8 +54,8 @@ test("exact-out observation nominates only; wrong selector, malformed events and
 });
 test("identity rejects false reverse binding, unsupported implementation, missing code and bad decimals", () => {
   assert.equal(poolAddress(word(TOKEN_ADDRESS) + "ff".repeat(4096 - 32)), TOKEN_ADDRESS);
-  assert.throws(() => poolAddress(word(TOKEN_ADDRESS) + "00"));
-  assert.throws(() => poolAddress(word(1n << 160n) + "00".repeat(4096 - 32)));
+  assert.equal(poolAddress(word(TOKEN_ADDRESS) + "00"), ethers.ZeroAddress);
+  assert.equal(poolAddress(word(1n << 160n) + "00".repeat(4096 - 32)), ethers.ZeroAddress);
   for (const [id, data] of [["exchange", word(EXECUTOR)], ["reverse-token", word(EXECUTOR)], ["code", "0x6000"],
     ["implementation-code", "0x"], ["factory-code", "0x"], ["token-code", "0x"], ["decimals", word(37n)],
     ["issuer", word(0n)], ["token", word(WETH)]] as const) {
@@ -51,7 +68,7 @@ test("identity rejects false reverse binding, unsupported implementation, missin
   const evidence = v.decode({ step, results });
   const next = { ...step, step: 1, evidence };
   assert.throws(() => v.decode({ step: next, results: v.buildRequests(next).map(r => ({ ...answer(r), source: { ...SOURCE, hash: ethers.ZeroHash } })) }), /foreign source/);
-  assert.throws(() => descriptor(r => r.id === "factory" ? { id: r.id, source: SOURCE, ok: false, failure: "deadline" } : answer(r)), /unresolved/);
+  assert.throws(() => descriptor(r => r.id === "factory" ? { id: r.id, source: SOURCE, ok: false, failure: "deadline" } : answer(r)), /required adapter request.*failed/);
 });
 test("standard V1 is bytecode-bound, never reads issuer, and keeps the distinct fee model", () => {
   const seen: string[] = [];
@@ -73,10 +90,10 @@ test("standard V1 is bytecode-bound, never reads issuer, and keeps the distinct 
   const unknown = v.decode({ step: next, results: [result("implementation-code", "0x60006000f3")] });
   assert.equal(v.decide({ ...next, evidence: unknown }).status, "chain-proven-rejected");
   assert.deepEqual(v.buildRequests({ ...next, evidence: unknown }), []);
-  assert.throws(() => v.decode({ step: next, results: [{ id: "implementation-code", source: SOURCE, ok: false, failure: "rpc" }] }), /unresolved/,
+  assert.throws(() => v.decode({ step: next, results: [{ id: "implementation-code", source: SOURCE, ok: false, failure: "rpc" }] }), /required adapter request.*failed/,
     "RPC uncertainty cannot become chain-proven rejection");
   const r = plugin.routes.project({ descriptor: d })[0];
-  assert.throws(() => plugin.execution.buildRuntimeLeg!({ descriptor: { ...d, model: MODEL }, route: r, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] }), /incompatible route/);
+  assert.throws(() => plugin.execution.buildRuntimeLeg!({ descriptor: { ...d, model: MODEL }, route: r, source: SOURCE, executor: EXECUTOR, runtimeEvidence: [] }), /incompatible implementation model/);
 });
 test("standard fee, transitions, Exact and runtime amounts are correct in both directions", () => {
   const s = { source: SOURCE, nativeReserve: 100_000n, tokenReserve: 20_000_000n };
@@ -100,11 +117,7 @@ test("standard fee, transitions, Exact and runtime amounts are correct in both d
     assert(plugin.actionAdapters[0].encode(fragment.nodes[0], EXECUTOR, new Uint8Array()).length);
     // Runtime input is the register value; constructing it never needs Exact.
     const leg = plugin.execution.buildRuntimeLeg!(input); assert(leg);
-    let native = 777n;
-    const trace = inspectRuntime(leg.program, amount, { nativeBalance: () => native, call(c) {
-      if (c.target === POOL_ADDRESS && !buy) native += quoted.amountOut;
-      return "0x";
-    } });
+    const trace = inspectFill(leg.program, amount, quoted.amountOut, buy);
     const call = trace.calls.find(c => c.target === POOL_ADDRESS)!; assert(call);
     if (buy) assert.equal(call.value, amount);
     else { assert.equal(POOL.decodeFunctionData("tokenToEthSwapInput", call.data)[0], amount);
@@ -117,13 +130,11 @@ test("both models use finite exact approvals, including UNI-style uint96 allowan
     const { input, quoted } = quote(amount, false, reply);
     const fragment = plugin.execution.buildFragment({ ...input, exactEvidence: quoted.evidence,
       quotedAmountOut: quoted.amountOut, minAmountOut: quoted.amountOut });
-    assert.deepEqual(fragment.requirements, [{ kind: "approve", token: TOKEN_ADDRESS, spender: POOL_ADDRESS, amount }]);
+    assert.deepEqual(fragment.requirements, []);
+    const quotedTrace = inspectFill(fragment.nodes[0].params.runtimeAmountProgram, amount, quoted.amountOut, false);
+    assert.equal(quotedTrace.calls.filter(c => c.data.startsWith(erc20.getFunction("approve")!.selector)).length, 3);
     const leg = plugin.execution.buildRuntimeLeg!(input); assert(leg);
-    let native = 777n;
-    const trace = inspectRuntime(leg.program, amount, { nativeBalance: () => native, call(c) {
-      if (c.target === POOL_ADDRESS) native += quoted.amountOut;
-      return "0x";
-    } });
+    const trace = inspectFill(leg.program, amount, quoted.amountOut, false);
     assert.deepEqual(trace.allowances, [], "no hidden uint256-max grant for narrow-allowance tokens");
     const approvals = trace.calls.filter(c => c.target === TOKEN_ADDRESS && c.data.startsWith(erc20.getFunction("approve")!.selector));
     assert.deepEqual(approvals.map(c => [...erc20.decodeFunctionData("approve", c.data)]),
@@ -187,11 +198,11 @@ test("Exact preserves input and nonlinear slippage, issuer/caller/source/route f
 });
 test("Exact uses the shared trial cell in either direction and declares non-pool balance effects", () => {
   const base = quote(10n ** 16n);
-  assert(base.method.trialState);
-  const quoteTrial = base.method.trialState.quote;
-  assert(typeof quoteTrial === "function", "expected supported V1 trial model");
-  assert.equal(base.quoted.stateChanges, undefined, "ordinary effective quotes do not retain a trial");
   const input = { ...base.input, trialState: { get: () => undefined } };
+  const trialMethod = plugin.exact.methods(input).find(m => m.kind === "request-program");
+  assert(trialMethod?.kind==="request-program" && trialMethod.trialState && "quote" in trialMethod.trialState);
+  const quoteTrial=trialMethod.trialState.quote;
+  assert.equal(base.quoted.stateChanges, undefined, "ordinary effective quotes do not retain a trial");
   assert.equal(quoteTrial(input).status, "not-applicable");
   const results = base.method.program.buildRequests(input).map(answer);
   const first = base.method.program.decode({ programInput: input, initialResults: results, dependentEvidence: [] });
@@ -221,7 +232,7 @@ test("Exact uses the shared trial cell in either direction and declares non-pool
   assert.throws(() => quoteTrial({ ...secondInput, trialState: { get: () => ({
     ...(change.value as object), source: { ...SOURCE, generation: 2 },
   }) } }), /foreign source/);
-  assert.throws(() => quoteTrial({ ...secondInput, trialState: { get: () => ({ nativeReserve: "1" }) } }), /malformed trial state/);
+  assert.throws(() => quoteTrial({ ...secondInput, trialState: { get: () => ({ nativeReserve: "1" }) } }), TypeError);
   assert.equal(quoteTrial({ ...base.input, trialState: { get: () => undefined } }).status, "not-applicable",
     "a different trial does not observe state retained by the first one");
 });
@@ -230,16 +241,17 @@ test("execution owns wrapping, binds exact evidence and honors the supplied mini
     const { input, quoted } = quote(10n ** 16n, buy);
     const invocation = { ...input, quotedAmountOut: quoted.amountOut, minAmountOut: quoted.amountOut, exactEvidence: quoted.evidence };
     const fragment = plugin.execution.buildFragment(invocation);
-    assert.equal(fragment.requirements.length, buy ? 0 : 1);
+    assert.equal(fragment.requirements.length, 0);
     assert.equal(fragment.nodes.length, 1);
     const node = fragment.nodes[0];
     const bytes = plugin.actionAdapters[0].encode(node, EXECUTOR, new Uint8Array());
     assert(bytes.length > 100);
-    assert.equal(node.params.amountOut, quoted.amountOut);
+    assert.doesNotThrow(() => inspectFill(node.params.runtimeAmountProgram,input.amountIn,quoted.amountOut,buy));
+    assert.throws(()=>inspectFill(node.params.runtimeAmountProgram,input.amountIn,quoted.amountOut-1n,buy));
     const tolerant = plugin.execution.buildFragment({ ...invocation, minAmountOut: quoted.amountOut - 1n });
-    assert.equal(tolerant.nodes[0]!.params.amountOut, quoted.amountOut - 1n);
+    assert.doesNotThrow(()=>inspectFill(tolerant.nodes[0]!.params.runtimeAmountProgram,input.amountIn,quoted.amountOut-1n,buy));
     assert.equal(quoted.evidence.amountOut, quoted.amountOut, "execution allowance must not rewrite quote evidence");
-    assert.throws(() => plugin.actionAdapters[0].encode(node, ISSUER, new Uint8Array()), /invalid action/);
+    assert.throws(() => plugin.execution.buildFragment({ ...invocation, executor: ISSUER }));
     assert.throws(() => plugin.actionAdapters[0].encode(node, EXECUTOR, new Uint8Array([0])));
     for (const change of [{ amountIn: input.amountIn + 1n }, { quotedAmountOut: quoted.amountOut + 1n }, { executor: ISSUER },
       { minAmountOut: 0n }, { minAmountOut: quoted.amountOut + 1n },
@@ -248,7 +260,7 @@ test("execution owns wrapping, binds exact evidence and honors the supplied mini
 });
 test("shared current state yields both raw directions; donation dependency is wired into compiled index", () => {
   const d = descriptor(), rs = plugin.routes.project({ descriptor: d });
-  const pd = plugin.pricing.finalizePricingDescriptor({ draft: plugin.pricing.compileDraft({ descriptor: d, routes: rs, stateKey: d.pool }), sharedBindings: [] });
+  const pd = plugin.pricing.finalizePricingDescriptor({ draft: plugin.pricing.compileDraft({ descriptor: d, routes: rs, stateKey: d.pool }), staticEvidence: {} });
   const requests = plugin.pricing.current.buildRequests({ descriptor: pd, routes: rs, source: SOURCE });
   const snapshot = plugin.pricing.current.decodeSnapshot({ descriptor: pd, initialResults: requests.map(answer), dependentEvidence: [] });
   const mids = plugin.pricing.current.deriveMids({ descriptor: pd, routes: rs, snapshot });

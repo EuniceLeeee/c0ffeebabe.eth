@@ -8,8 +8,8 @@ function checked(value: bigint): bigint {
 }
 // Source-exact BNum half-up arithmetic. Amount-out remains the pool's
 // calcOutGivenIn view; this module only evaluates marginal prices and guards.
-const mul = (a: bigint, b: bigint) => checked(checked(checked(a) * checked(b)) + BONE / 2n) / BONE;
-function div(a: bigint, b: bigint): bigint {
+export const mul = (a: bigint, b: bigint) => checked(checked(checked(a) * checked(b)) + BONE / 2n) / BONE;
+export function div(a: bigint, b: bigint): bigint {
   checked(a); checked(b);
   if (b === 0n) throw new Error("balancer-v1 division by zero");
   return checked(checked(a * BONE) + b / 2n) / b;

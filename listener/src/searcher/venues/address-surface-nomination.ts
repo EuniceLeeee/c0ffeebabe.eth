@@ -77,7 +77,7 @@ export function createAddressSurfaceNomination(input: {
   };
 }
 
-function matchesOpaqueLabel(
+export function matchesOpaqueLabel(
   opaque: unknown,
   labels: ReadonlySet<string>,
 ): boolean {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
-import { POOL } from "../codec.js";
+import { POOL } from "./definition-fixture.js";
 import { assertAcceptanceBinding, assertInventoryRejection, requireProductionReference } from "./historical-evidence.js";
 
 const pool = "0x1000000000000000000000000000000000000004";

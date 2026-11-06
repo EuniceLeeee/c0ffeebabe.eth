@@ -1,0 +1,4976 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:angstrom-v4"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:angstrom-v4",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "angstrom-v4-swap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "angstrom-v4:official-hook-poolkey"
+    ],
+    "poolAdapterIds": [
+      "angstrom-v4"
+    ],
+    "edgeAdapterIds": [
+      "angstrom-v4-swap"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "angstrom-v4-pool-key",
+        "addressField": "adapter",
+        "fields": {
+          "adapter": "address",
+          "manager": "address",
+          "poolId": "bytes32",
+          "currency0": "address",
+          "currency1": "address",
+          "fee": "number",
+          "tickSpacing": "number",
+          "hooks": "address",
+          "sourceKind": "string"
+        },
+        "key": [
+          "adapter",
+          "manager",
+          "poolId"
+        ]
+      },
+      "calls": [
+        {
+          "id": "angstrom-v4-adapter-swap-call",
+          "signature": "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,bool zeroForOne,uint128 amountSpecified,uint128 minAmountOut,(uint64 blockNumber,bytes unlockData)[] attestations,address recipient,uint256 deadline) returns (uint256 amountOut)",
+          "fields": {
+            "adapter": {
+              "from": "target"
+            },
+            "manager": {
+              "from": "literal",
+              "value": "0x000000000004444c5dc75cb358380d2e3de08a90"
+            },
+            "poolId": {
+              "from": "expression",
+              "value": {
+                "op": "codeHash",
+                "args": [
+                  {
+                    "op": "abiEncode",
+                    "args": [
+                      [
+                        "address",
+                        "address",
+                        "uint24",
+                        "int24",
+                        "address"
+                      ],
+                      [
+                        "$args.0.0",
+                        "$args.0.1",
+                        "$args.0.2",
+                        "$args.0.3",
+                        "$args.0.4"
+                      ]
+                    ]
+                  }
+                ]
+              }
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "adapter-swap-call"
+            },
+            "currency0": {
+              "from": "argument",
+              "index": 0,
+              "path": [
+                0
+              ]
+            },
+            "currency1": {
+              "from": "argument",
+              "index": 0,
+              "path": [
+                1
+              ]
+            },
+            "fee": {
+              "from": "expression",
+              "value": {
+                "op": "number",
+                "args": [
+                  "$args.0.2"
+                ]
+              }
+            },
+            "tickSpacing": {
+              "from": "expression",
+              "value": {
+                "op": "number",
+                "args": [
+                  "$args.0.3"
+                ]
+              }
+            },
+            "hooks": {
+              "from": "argument",
+              "index": 0,
+              "path": [
+                4
+              ]
+            }
+          },
+          "predicates": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.hooks",
+                    "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.manager",
+                    "0x000000000004444c5dc75cb358380d2e3de08a90"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.adapter",
+                    "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+                  ]
+                },
+                {
+                  "op": "gt",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$candidate.currency0"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$candidate.currency0"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$candidate.currency1"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$candidate.poolId"
+                      ]
+                    },
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        {
+                          "op": "abiEncode",
+                          "args": [
+                            [
+                              "address",
+                              "address",
+                              "uint24",
+                              "int24",
+                              "address"
+                            ],
+                            [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "currency0"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "currency1"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "fee"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "tickSpacing"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "hooks"
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "angstrom-v4-pool-initialize",
+          "signature": "event Initialize(bytes32 indexed id,address indexed currency0,address indexed currency1,uint24 fee,int24 tickSpacing,address hooks,uint160 sqrtPriceX96,int24 tick)",
+          "fields": {
+            "adapter": {
+              "from": "literal",
+              "value": "0xb535aEB27335B91e1B5bcCbd64888bA7574eFBF8"
+            },
+            "manager": {
+              "from": "emitter"
+            },
+            "poolId": {
+              "from": "argument",
+              "index": 0
+            },
+            "currency0": {
+              "from": "argument",
+              "index": 1
+            },
+            "currency1": {
+              "from": "argument",
+              "index": 2
+            },
+            "fee": {
+              "from": "expression",
+              "value": {
+                "op": "number",
+                "args": [
+                  "$args.3"
+                ]
+              }
+            },
+            "tickSpacing": {
+              "from": "expression",
+              "value": {
+                "op": "number",
+                "args": [
+                  "$args.4"
+                ]
+              }
+            },
+            "hooks": {
+              "from": "argument",
+              "index": 5
+            },
+            "sourceKind": {
+              "from": "literal",
+              "value": "initialize-log"
+            }
+          },
+          "predicates": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.hooks",
+                    "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.manager",
+                    "0x000000000004444c5dc75cb358380d2e3de08a90"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.adapter",
+                    "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+                  ]
+                },
+                {
+                  "op": "gt",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$candidate.currency0"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$candidate.currency0"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "$candidate.currency1"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$candidate.poolId"
+                      ]
+                    },
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        {
+                          "op": "abiEncode",
+                          "args": [
+                            [
+                              "address",
+                              "address",
+                              "uint24",
+                              "int24",
+                              "address"
+                            ],
+                            [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "currency0"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "currency1"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "fee"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "tickSpacing"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "hooks"
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "angstrom-v4-manager-swap-log",
+          "signature": "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+          "nominationOnly": true,
+          "fields": {}
+        }
+      ],
+      "labels": [
+        "angstrom-v4",
+        "custom-swap:angstrom-v4"
+      ],
+      "nomination": "address-surface",
+      "txSeedNominations": true,
+      "surface": {
+        "id": "angstrom-retained-poolkey",
+        "fingerprint": "angstrom-poolkey",
+        "fields": {
+          "adapter": {
+            "from": "literal",
+            "value": "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+          },
+          "manager": {
+            "from": "literal",
+            "value": "0x000000000004444c5dc75cb358380d2e3de08a90"
+          },
+          "poolId": {
+            "from": "opaque",
+            "path": "poolId"
+          },
+          "sourceKind": {
+            "from": "literal",
+            "value": "retained-pool-key"
+          },
+          "currency0": {
+            "from": "expression",
+            "value": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$observation.opaque.poolKey"
+                      ]
+                    },
+                    "$observation.opaque.poolKey.currency0",
+                    "$observation.opaque.currency0"
+                  ]
+                }
+              ]
+            }
+          },
+          "currency1": {
+            "from": "expression",
+            "value": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$observation.opaque.poolKey"
+                      ]
+                    },
+                    "$observation.opaque.poolKey.currency1",
+                    "$observation.opaque.currency1"
+                  ]
+                }
+              ]
+            }
+          },
+          "fee": {
+            "from": "expression",
+            "value": {
+              "op": "number",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$observation.opaque.poolKey"
+                      ]
+                    },
+                    "$observation.opaque.poolKey.fee",
+                    "$observation.opaque.fee"
+                  ]
+                }
+              ]
+            }
+          },
+          "tickSpacing": {
+            "from": "expression",
+            "value": {
+              "op": "number",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$observation.opaque.poolKey"
+                      ]
+                    },
+                    "$observation.opaque.poolKey.tickSpacing",
+                    "$observation.opaque.tickSpacing"
+                  ]
+                }
+              ]
+            }
+          },
+          "hooks": {
+            "from": "expression",
+            "value": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$observation.opaque.poolKey"
+                      ]
+                    },
+                    "$observation.opaque.poolKey.hooks",
+                    "$observation.opaque.hooks"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "predicates": [
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$observation.address",
+                  "0x000000000004444c5dc75cb358380d2e3de08a90"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$observation.address",
+                  "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$candidate.hooks",
+                  "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$candidate.manager",
+                  "0x000000000004444c5dc75cb358380d2e3de08a90"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$candidate.adapter",
+                  "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+                ]
+              },
+              {
+                "op": "gt",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "$candidate.currency0"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lt",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "$candidate.currency0"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "$candidate.currency1"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$candidate.poolId"
+                    ]
+                  },
+                  {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "abiEncode",
+                        "args": [
+                          [
+                            "address",
+                            "address",
+                            "uint24",
+                            "int24",
+                            "address"
+                          ],
+                          [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "currency0"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "currency1"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "fee"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "tickSpacing"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "hooks"
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "recentCallNomination": {
+        "emitter": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "topic": "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$nomination.opaque.poolKey"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$nomination.opaque.currency0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "nominationKey": {
+          "op": "coalesce",
+          "args": [
+            "$nomination.opaque.poolId",
+            "$nomination.opaque.id"
+          ]
+        },
+        "candidateKey": "$candidate.poolId"
+      }
+    }
+  },
+  "identity": {
+    "key": "$identity.subject",
+    "definition": {
+      "version": 1,
+      "inputs": [],
+      "expressions": {},
+      "programs": {},
+      "identity": {
+        "applies": {
+          "op": "eq",
+          "args": [
+            "$candidate.candidateKind",
+            "angstrom-v4-pool-key"
+          ]
+        },
+        "select": [
+          {
+            "return": "static",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "reverse",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "pool-hook-static"
+              ]
+            }
+          },
+          {
+            "return": "done"
+          }
+        ],
+        "stages": {
+          "static": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "manager-code",
+                "kind": "get-code",
+                "address": "0x000000000004444c5dc75cb358380d2e3de08a90"
+              },
+              {
+                "id": "adapter-code",
+                "kind": "get-code",
+                "address": "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+              },
+              {
+                "id": "hook-code",
+                "kind": "get-code",
+                "address": "0x0000000aa232009084bd71a5797d089aa4edfad4"
+              },
+              {
+                "id": "identity-slot0",
+                "to": "0x7ffe42c4a5deea5b0fec41c94c136cf115597227",
+                "kind": "eth-call",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "stateView",
+                    "getSlot0",
+                    [
+                      "$candidate.poolId"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-liquidity",
+                "to": "0x7ffe42c4a5deea5b0fec41c94c136cf115597227",
+                "kind": "eth-call",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "stateView",
+                    "getLiquidity",
+                    [
+                      "$candidate.poolId"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "hook-controller-slot",
+                "to": "0x0000000aa232009084bd71a5797d089aa4edfad4",
+                "kind": "eth-call",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "hook",
+                    "extsload",
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "pool-hook-static",
+                  "controller": {
+                    "op": "address",
+                    "args": [
+                      {
+                        "op": "bytes",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "hook-controller-slot"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          12,
+                          20
+                        ]
+                      }
+                    ]
+                  },
+                  "sqrtPriceX96": {
+                    "op": "decode",
+                    "args": [
+                      "stateView",
+                      "getSlot0",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "identity-slot0"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "liquidity": {
+                    "op": "decode",
+                    "args": [
+                      "stateView",
+                      "getLiquidity",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "identity-liquidity"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  "managerCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "manager-code"
+                        ]
+                      }
+                    ]
+                  },
+                  "hookCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "hook-code"
+                        ]
+                      }
+                    ]
+                  },
+                  "adapterCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "adapter-code"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "reverse": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "controller-canonical-hook",
+                "to": "$evidence.controller",
+                "kind": "eth-call",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "controller",
+                    "ANGSTROM",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "controller-reverse",
+                      "canonicalHook": {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "decode",
+                            "args": [
+                              "controller",
+                              "ANGSTROM",
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "returned",
+                                    "args": [
+                                      "controller-canonical-hook"
+                                    ]
+                                  },
+                                  "data"
+                                ]
+                              },
+                              0
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "done": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "foreign_pool_manager",
+              "evidenceRequestIds": []
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.manager",
+                    "0x000000000004444c5dc75cb358380d2e3de08a90"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "foreign_angstrom_adapter",
+              "evidenceRequestIds": []
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.adapter",
+                    "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "foreign_hook_fail_closed",
+              "evidenceRequestIds": []
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.hooks",
+                    "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "poolkey_reverse_binding_failed",
+              "evidenceRequestIds": []
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$candidate.poolId"
+                      ]
+                    },
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        {
+                          "op": "abiEncode",
+                          "args": [
+                            [
+                              "address",
+                              "address",
+                              "uint24",
+                              "int24",
+                              "address"
+                            ],
+                            [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "currency0"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "currency1"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "fee"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "tickSpacing"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$candidate",
+                                  "hooks"
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "hook_controller_missing",
+              "evidenceRequestIds": [
+                "hook-controller-slot"
+              ]
+            },
+            "when": {
+              "op": "sameAddress",
+              "args": [
+                "$evidence.controller",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "pool-hook-static"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "controller_reverse_binding_failed",
+              "evidenceRequestIds": [
+                "controller-canonical-hook"
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.canonicalHook",
+                    "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "pool_not_initialized",
+              "evidenceRequestIds": [
+                "identity-slot0"
+              ]
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.sqrtPriceX96",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "custom-swap:angstrom-v4",
+                "lineageId": "angstrom-v4:official-hook-poolkey",
+                "subject": {
+                  "op": "join",
+                  "args": [
+                    [
+                      {
+                        "op": "lower",
+                        "args": [
+                          "0x000000000004444c5dc75cb358380d2e3de08a90"
+                        ]
+                      },
+                      {
+                        "op": "lower",
+                        "args": [
+                          "$candidate.poolId"
+                        ]
+                      }
+                    ],
+                    "\u001f"
+                  ]
+                },
+                "facts": {
+                  "poolId": {
+                    "op": "lower",
+                    "args": [
+                      "$candidate.poolId"
+                    ]
+                  },
+                  "poolKey": {
+                    "currency0": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "currency0"
+                          ]
+                        }
+                      ]
+                    },
+                    "currency1": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "currency1"
+                          ]
+                        }
+                      ]
+                    },
+                    "fee": {
+                      "op": "number",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "fee"
+                          ]
+                        }
+                      ]
+                    },
+                    "tickSpacing": {
+                      "op": "number",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "tickSpacing"
+                          ]
+                        }
+                      ]
+                    },
+                    "hooks": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "hooks"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "immutableBinding": {
+                    "manager": {
+                      "op": "address",
+                      "args": [
+                        "0x000000000004444c5dc75cb358380d2e3de08a90"
+                      ]
+                    },
+                    "adapter": {
+                      "op": "address",
+                      "args": [
+                        "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+                      ]
+                    },
+                    "hook": {
+                      "op": "address",
+                      "args": [
+                        "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                      ]
+                    },
+                    "quoter": {
+                      "op": "address",
+                      "args": [
+                        "0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203"
+                      ]
+                    },
+                    "stateView": {
+                      "op": "address",
+                      "args": [
+                        "0x7ffe42c4a5deea5b0fec41c94c136cf115597227"
+                      ]
+                    },
+                    "controller": "$evidence.controller",
+                    "managerCodeHash": "$evidence.managerCodeHash",
+                    "hookCodeHash": "$evidence.hookCodeHash",
+                    "adapterCodeHash": "$evidence.adapterCodeHash"
+                  }
+                },
+                "provenance": [
+                  {
+                    "kind": "official-hook-controller-reverse-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "manager": {
+                            "op": "address",
+                            "args": [
+                              "0x000000000004444c5dc75cb358380d2e3de08a90"
+                            ]
+                          },
+                          "adapter": {
+                            "op": "address",
+                            "args": [
+                              "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+                            ]
+                          },
+                          "hook": {
+                            "op": "address",
+                            "args": [
+                              "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                            ]
+                          },
+                          "controller": "$evidence.controller",
+                          "managerCodeHash": "$evidence.managerCodeHash",
+                          "hookCodeHash": "$evidence.hookCodeHash",
+                          "adapterCodeHash": "$evidence.adapterCodeHash",
+                          "poolId": {
+                            "op": "lower",
+                            "args": [
+                              "$candidate.poolId"
+                            ]
+                          },
+                          "poolKey": {
+                            "currency0": {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$candidate",
+                                    "currency0"
+                                  ]
+                                }
+                              ]
+                            },
+                            "currency1": {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$candidate",
+                                    "currency1"
+                                  ]
+                                }
+                              ]
+                            },
+                            "fee": {
+                              "op": "number",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$candidate",
+                                    "fee"
+                                  ]
+                                }
+                              ]
+                            },
+                            "tickSpacing": {
+                              "op": "number",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$candidate",
+                                    "tickSpacing"
+                                  ]
+                                }
+                              ]
+                            },
+                            "hooks": {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$candidate",
+                                    "hooks"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "canonicalHook": "$evidence.canonicalHook",
+                          "sqrtPriceX96": "$evidence.sqrtPriceX96",
+                          "liquidity": "$evidence.liquidity"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": "$identity.subject",
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$identity.facts",
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": "$identity.subject",
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            },
+            {
+              "kind": "extension-policy",
+              "mode": "quote-and-final-sim",
+              "extensionBinding": "$identity.facts.immutableBinding.hook"
+            }
+          ]
+        }
+      ]
+    },
+    "bindingProjection": {
+      "poolId": "$descriptor.poolId",
+      "poolKey": "$descriptor.poolKey",
+      "immutableBinding": "$descriptor.immutableBinding"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.immutableBinding.adapter",
+    "bindingKey": "$descriptor.poolId",
+    "directions": [
+      {
+        "id": "zero-for-one",
+        "enabled": true,
+        "tokenIn": "$descriptor.poolKey.currency0",
+        "tokenOut": "$descriptor.poolKey.currency1",
+        "adapterId": "angstrom-v4-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "poolKey": "$descriptor.poolKey",
+          "poolId": "$descriptor.poolId",
+          "manager": "$descriptor.immutableBinding.manager"
+        }
+      },
+      {
+        "id": "one-for-zero",
+        "enabled": true,
+        "tokenIn": "$descriptor.poolKey.currency1",
+        "tokenOut": "$descriptor.poolKey.currency0",
+        "adapterId": "angstrom-v4-swap",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "poolKey": "$descriptor.poolKey",
+          "poolId": "$descriptor.poolId",
+          "manager": "$descriptor.immutableBinding.manager"
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.familyId",
+          {
+            "op": "lower",
+            "args": [
+              "$descriptor.immutableBinding.manager"
+            ]
+          },
+          "$descriptor.poolId",
+          {
+            "op": "lower",
+            "args": [
+              "$route.tokenIn"
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              "$route.tokenOut"
+            ]
+          }
+        ],
+        "\u001f"
+      ]
+    },
+    "graphVenue": {
+      "kind": "manager-pool-id",
+      "manager": {
+        "op": "lower",
+        "args": [
+          "$descriptor.immutableBinding.manager"
+        ]
+      },
+      "poolId": "$descriptor.poolId"
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes",
+          "graphToken0": "$descriptor.poolKey.currency0",
+          "graphToken1": "$descriptor.poolKey.currency1",
+          "managerBinding": "$descriptor.immutableBinding"
+        }
+      ]
+    },
+    "finalize": "$draft",
+    "bindingProjection": {
+      "poolId": "$descriptor.poolId",
+      "poolKey": "$descriptor.poolKey",
+      "immutableBinding": "$descriptor.immutableBinding"
+    },
+    "compatibility": {
+      "op": "merge",
+      "args": [
+        {
+          "poolId": "$descriptor.poolId",
+          "poolKey": "$descriptor.poolKey",
+          "immutableBinding": "$descriptor.immutableBinding"
+        },
+        {
+          "directions": {
+            "op": "map",
+            "args": [
+              "$routes",
+              "route",
+              [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$route.tokenIn"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$route.tokenOut"
+                  ]
+                }
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    "exactCompatibility": {
+      "op": "merge",
+      "args": [
+        {
+          "poolId": "$descriptor.poolId",
+          "poolKey": "$descriptor.poolKey",
+          "immutableBinding": "$descriptor.immutableBinding"
+        },
+        {
+          "routeKey": "$route.routeKey",
+          "source": "$source",
+          "executor": {
+            "op": "lower",
+            "args": [
+              "$executor"
+            ]
+          },
+          "runtimeEvidence": "$runtimeEvidence"
+        }
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1"
+      ]
+    },
+    "mutationKinds": [
+      "log"
+    ],
+    "stateKey": "$route.poolId"
+  },
+  "standard": {
+    "id": "official-hook-poolkey-active-proof",
+    "lineageId": "angstrom-v4:official-hook-poolkey",
+    "identityKind": "singleton-subinstance",
+    "abi": {
+      "stateView": [
+        "function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96,int24 tick,uint24 protocolFee,uint24 lpFee)",
+        "function getLiquidity(bytes32 poolId) view returns (uint128 liquidity)"
+      ],
+      "quoter": [
+        "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)"
+      ],
+      "balance": [
+        "function balanceOf(address account) view returns (uint256)",
+        "function getEthBalance(address account) view returns (uint256)"
+      ],
+      "positionManager": [
+        "function poolKeys(bytes25 poolId) view returns (address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks)",
+        "function encodePoolKey(address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) pure returns (bytes32)"
+      ],
+      "manager": [
+        "function unlock(bytes data) returns (bytes)",
+        "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) params,bytes hookData) returns (int256 swapDelta)",
+        "function take(address currency,address recipient,uint256 amount)",
+        "function sync(address currency)",
+        "function settle() payable returns (uint256)"
+      ],
+      "hook": [
+        "function extsload(uint256 slot) view returns(uint256 value)"
+      ],
+      "controller": [
+        "function ANGSTROM() view returns(address)"
+      ],
+      "multicall": [
+        "function aggregate3((address target,bool allowFailure,bytes callData)[] calls) payable returns ((bool success,bytes returnData)[] returnData)"
+      ],
+      "adapter": [
+        "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,bool zeroForOne,uint128 amountSpecified,uint128 minAmountOut,(uint64 blockNumber,bytes unlockData)[] attestations,address recipient,uint256 deadline) returns (uint256 amountOut)"
+      ],
+      "initializeData": [
+        "function initialized() returns(uint24 fee,int24 tickSpacing,address hooks,uint160 sqrtPriceX96,int24 tick)"
+      ]
+    },
+    "constants": {},
+    "expressions": {},
+    "context": {},
+    "boundState": {
+      "poolId": "$descriptor.poolId",
+      "poolKey": "$descriptor.poolKey",
+      "immutableBinding": "$descriptor.immutableBinding"
+    },
+    "match": {
+      "op": "and",
+      "args": [
+        {
+          "op": "eq",
+          "args": [
+            "$descriptor.familyId",
+            "custom-swap:angstrom-v4"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            "$descriptor.lineageId",
+            "angstrom-v4:official-hook-poolkey"
+          ]
+        }
+      ]
+    },
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "0x7ffe42c4a5deea5b0fec41c94c136cf115597227",
+        "0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203",
+        "0x0000000aa232009084bd71a5797d089aa4edfad4",
+        "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+        "$descriptor.immutableBinding.controller",
+        "$descriptor.poolKey.currency0",
+        "$descriptor.poolKey.currency1"
+      ],
+      "mutationAddresses": [
+        "0x000000000004444c5dc75cb358380d2e3de08a90"
+      ],
+      "mutationPredicate": {
+        "op": "and",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$observation.kind",
+              "log"
+            ]
+          },
+          {
+            "op": "sameAddress",
+            "args": [
+              "$observation.address",
+              "0x000000000004444c5dc75cb358380d2e3de08a90"
+            ]
+          },
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  "$observation.topics.0"
+                ]
+              },
+              "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f"
+            ]
+          },
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  "$observation.topics.1"
+                ]
+              },
+              "$descriptor.poolId"
+            ]
+          }
+        ]
+      },
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "defined",
+                "args": [
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "defined",
+                        "args": [
+                          "$snapshot.inactiveReason"
+                        ]
+                      },
+                      "$snapshot.inactiveReason",
+                      {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "defined",
+                            "args": [
+                              {
+                                "op": "model",
+                                "args": [
+                                  "precisionAmount",
+                                  {
+                                    "sqrtPriceX96": "$snapshot.sqrtPriceX96",
+                                    "liquidity": "$snapshot.liquidity",
+                                    "maxAmountIn": {
+                                      "op": "uint",
+                                      "args": [
+                                        "340282366920938463463374607431768211455"
+                                      ]
+                                    },
+                                    "token0": "$descriptor.poolKey.currency0",
+                                    "token1": "$descriptor.poolKey.currency1",
+                                    "direction": "$route.direction",
+                                    "manager": "$descriptor.immutableBinding.manager",
+                                    "tokenIn": "$route.tokenIn",
+                                    "tokenOut": "$route.tokenOut"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "join",
+                            "args": [
+                              [
+                                "angstrom-v4 direction",
+                                "$route.tokenIn",
+                                "requires tx-bound precision"
+                              ],
+                              " "
+                            ]
+                          },
+                          null
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          [
+            "$route.routeKey",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$snapshot.inactiveReason"
+                  ]
+                },
+                "$snapshot.inactiveReason",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "model",
+                          "args": [
+                            "precisionAmount",
+                            {
+                              "sqrtPriceX96": "$snapshot.sqrtPriceX96",
+                              "liquidity": "$snapshot.liquidity",
+                              "maxAmountIn": {
+                                "op": "uint",
+                                "args": [
+                                  "340282366920938463463374607431768211455"
+                                ]
+                              },
+                              "token0": "$descriptor.poolKey.currency0",
+                              "token1": "$descriptor.poolKey.currency1",
+                              "direction": "$route.direction",
+                              "manager": "$descriptor.immutableBinding.manager",
+                              "tokenIn": "$route.tokenIn",
+                              "tokenOut": "$route.tokenOut"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "join",
+                      "args": [
+                        [
+                          "angstrom-v4 direction",
+                          "$route.tokenIn",
+                          "requires tx-bound precision"
+                        ],
+                        " "
+                      ]
+                    },
+                    null
+                  ]
+                }
+              ]
+            }
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "source-unlocked-quoter",
+      "authenticatedMethodId": "tx-bound-quoter",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "evidence": {
+        "op": "if",
+        "args": [
+          {
+            "op": "defined",
+            "args": [
+              "$authenticatedEvidence"
+            ]
+          },
+          {
+            "source": "$source",
+            "poolId": "$descriptor.poolId",
+            "poolKeyFingerprint": {
+              "op": "hash",
+              "args": [
+                "$descriptor.poolKey"
+              ]
+            },
+            "quoter": "$descriptor.immutableBinding.quoter",
+            "tokenIn": "$route.tokenIn",
+            "tokenOut": "$route.tokenOut",
+            "amountIn": "$amountIn",
+            "amountOut": "$amountOut",
+            "kind": "angstrom-v4-tx-bound-quoter",
+            "txHash": "$authenticatedEvidence.txHash",
+            "runtimeEvidenceHash": "$authenticatedEvidence.evidenceHash",
+            "payloadHash": "$authenticatedEvidence.payloadHash",
+            "attestationEvidenceHashes": "$authenticatedEvidence.ids"
+          },
+          {
+            "source": "$source",
+            "poolId": "$descriptor.poolId",
+            "poolKeyFingerprint": {
+              "op": "hash",
+              "args": [
+                "$descriptor.poolKey"
+              ]
+            },
+            "quoter": "$descriptor.immutableBinding.quoter",
+            "tokenIn": "$route.tokenIn",
+            "tokenOut": "$route.tokenOut",
+            "amountIn": "$amountIn",
+            "amountOut": "$amountOut",
+            "kind": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$amountIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                "angstrom-v4-unsigned-local-zero",
+                "angstrom-v4-source-unlocked-quoter"
+              ]
+            },
+            "bindingFingerprint": {
+              "op": "hash",
+              "args": [
+                {
+                  "poolId": "$descriptor.poolId",
+                  "poolKey": "$descriptor.poolKey",
+                  "immutableBinding": "$descriptor.immutableBinding"
+                }
+              ]
+            },
+            "executor": "$executor"
+          }
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "gte",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lte",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "340282366920938463463374607431768211455"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "input exceeds uint128"
+        }
+      ],
+      "amountOut": "$quoteResult.amount",
+      "protectedAddresses": [],
+      "outputChecks": [
+        {
+          "assert": {
+            "op": "or",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$authenticatedEvidence"
+                ]
+              },
+              {
+                "op": "lte",
+                "args": [
+                  "$amountOut",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "340282366920938463463374607431768211455"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "source-unlocked quote output exceeds uint128"
+        }
+      ]
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": false
+      },
+      "requireCanonicalSource": true,
+      "protectedAddresses": [
+        "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "and",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$descriptor.familyId",
+                  "custom-swap:angstrom-v4"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$route.target",
+                  "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$descriptor.immutableBinding.hook",
+                  "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                ]
+              }
+            ]
+          },
+          "error": "invalid signed swap binding"
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$executor"
+        }
+      ],
+      "steps": [
+        {
+          "id": "swap",
+          "approval": {
+            "mode": "ensure",
+            "token": "$route.tokenIn",
+            "spender": "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+          },
+          "call": {
+            "target": "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+            "signature": "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,bool zeroForOne,uint128 amountSpecified,uint128 minAmountOut,(uint64 blockNumber,bytes unlockData)[] attestations,address recipient,uint256 deadline) returns (uint256 amountOut)",
+            "args": [
+              "$descriptor.poolKey",
+              {
+                "op": "eq",
+                "args": [
+                  "$route.direction",
+                  "zero-for-one"
+                ]
+              },
+              {
+                "runtime": "amountIn"
+              },
+              "$minAmountOut",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "defined",
+                    "args": [
+                      "$authenticatedEvidence"
+                    ]
+                  },
+                  "$authenticatedEvidence.items",
+                  [
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "$source.number"
+                        ]
+                      },
+                      "0x"
+                    ]
+                  ]
+                ]
+              },
+              "$executor",
+              {
+                "op": "uint",
+                "args": [
+                  "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "programs": {
+      "replayBind": [
+        {
+          "let": "matches",
+          "value": {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$impact",
+                          "pool"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$descriptor",
+                              "immutableBinding"
+                            ]
+                          },
+                          "manager"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "tokenIn"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          "$impact",
+                          "tokenIn"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "tokenOut"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          "$impact",
+                          "tokenOut"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "return": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$matches"
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$matches",
+                      0
+                    ]
+                  },
+                  "routeKey"
+                ]
+              },
+              null
+            ]
+          }
+        }
+      ],
+      "replayApplyLocal": [
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$route.instanceKey",
+                  "$descriptor.instanceKey"
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  "$route.poolId",
+                  "$descriptor.poolId"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$route.manager",
+                  "$descriptor.immutableBinding.manager"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$impact.pool",
+                  "$descriptor.immutableBinding.manager"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$impact.tokenIn",
+                  "$route.tokenIn"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$impact.tokenOut",
+                  "$route.tokenOut"
+                ]
+              }
+            ]
+          },
+          "error": "Angstrom victim impact does not match the admitted route"
+        },
+        {
+          "return": null
+        }
+      ],
+      "replayExactPostState": [
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$route.instanceKey",
+                  "$descriptor.instanceKey"
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  "$route.poolId",
+                  "$descriptor.poolId"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$route.manager",
+                  "$descriptor.immutableBinding.manager"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$impact.pool",
+                  "$descriptor.immutableBinding.manager"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$impact.tokenIn",
+                  "$route.tokenIn"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$impact.tokenOut",
+                  "$route.tokenOut"
+                ]
+              }
+            ]
+          },
+          "error": "Angstrom victim impact does not match the admitted route"
+        },
+        {
+          "return": {
+            "op": "model",
+            "args": [
+              "victimPost",
+              {
+                "descriptor": {
+                  "poolId": "$descriptor.poolId",
+                  "managerBinding": {
+                    "manager": "$descriptor.immutableBinding.manager"
+                  }
+                },
+                "impact": "$impact",
+                "source": "$source"
+              }
+            ]
+          }
+        }
+      ],
+      "replayOverlay": [
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$route.instanceKey",
+                  "$descriptor.instanceKey"
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  "$route.poolId",
+                  "$descriptor.poolId"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$route.manager",
+                  "$descriptor.immutableBinding.manager"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$impact.pool",
+                  "$descriptor.immutableBinding.manager"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$impact.tokenIn",
+                  "$route.tokenIn"
+                ]
+              },
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$impact.tokenOut",
+                  "$route.tokenOut"
+                ]
+              }
+            ]
+          },
+          "error": "Angstrom victim impact does not match the admitted route"
+        },
+        {
+          "return": null
+        }
+      ],
+      "initializeBinding": [
+        {
+          "return": null,
+          "when": {
+            "op": "not",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$observation.kind",
+                      "log"
+                    ]
+                  },
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$observation.address",
+                      "0x000000000004444c5dc75cb358380d2e3de08a90"
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "lower",
+                        "args": [
+                          "$observation.topics.0"
+                        ]
+                      },
+                      "0xdd466e674ea557f56295e2d0218a125ea4b4f0f6f3307b95f85e6110838d6438"
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "length",
+                        "args": [
+                          "$observation.topics"
+                        ]
+                      },
+                      4
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "attempt": [
+            {
+              "let": "tuple",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "initializeData",
+                  "initialized",
+                  "$observation.data"
+                ]
+              }
+            },
+            {
+              "let": "decoded",
+              "value": {
+                "currency0": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$observation.topics.2",
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                },
+                "currency1": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$observation.topics.3",
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                },
+                "fee": {
+                  "op": "number",
+                  "args": [
+                    "$tuple.0"
+                  ]
+                },
+                "tickSpacing": {
+                  "op": "number",
+                  "args": [
+                    "$tuple.1"
+                  ]
+                },
+                "hooks": {
+                  "op": "address",
+                  "args": [
+                    "$tuple.2"
+                  ]
+                }
+              }
+            },
+            {
+              "return": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$decoded.hooks",
+                          "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                        ]
+                      },
+                      {
+                        "op": "gt",
+                        "args": [
+                          {
+                            "op": "uint",
+                            "args": [
+                              "$decoded.currency0"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "lt",
+                        "args": [
+                          {
+                            "op": "uint",
+                            "args": [
+                              "$decoded.currency0"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "$decoded.currency1"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "lower",
+                            "args": [
+                              "$observation.topics.1"
+                            ]
+                          },
+                          {
+                            "op": "codeHash",
+                            "args": [
+                              {
+                                "op": "abiEncode",
+                                "args": [
+                                  [
+                                    "address",
+                                    "address",
+                                    "uint24",
+                                    "int24",
+                                    "address"
+                                  ],
+                                  [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$decoded",
+                                        "currency0"
+                                      ]
+                                    },
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$decoded",
+                                        "currency1"
+                                      ]
+                                    },
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$decoded",
+                                        "fee"
+                                      ]
+                                    },
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$decoded",
+                                        "tickSpacing"
+                                      ]
+                                    },
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$decoded",
+                                        "hooks"
+                                      ]
+                                    }
+                                  ]
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "adapter": {
+                      "op": "address",
+                      "args": [
+                        "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+                      ]
+                    },
+                    "manager": {
+                      "op": "address",
+                      "args": [
+                        "0x000000000004444c5dc75cb358380d2e3de08a90"
+                      ]
+                    },
+                    "poolId": {
+                      "op": "lower",
+                      "args": [
+                        "$observation.topics.1"
+                      ]
+                    },
+                    "poolKey": "$decoded"
+                  },
+                  null
+                ]
+              }
+            }
+          ],
+          "catch": [
+            {
+              "return": null
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "angstrom-v4-swap",
+        "lineage": "angstrom-v4",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,bool zeroForOne,uint128 amountSpecified,uint128 minAmountOut,(uint64 blockNumber,bytes unlockData)[] attestations,address recipient,uint256 deadline) returns (uint256 amountOut)",
+          "target": "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+        }
+      ]
+    }
+  ],
+  "modules": {
+    "signedBlockEvidence": {
+      "version": 1,
+      "kind": "angstrom-empty-block-attestation",
+      "observedId": "observation:angstrom-empty-block",
+      "pendingId": "pending:angstrom-current-head",
+      "intakeTargets": [
+        "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+        "0x0000000aa232009084bd71a5797d089aa4edfad4",
+        "0x000000000004444c5dc75cb358380d2e3de08a90"
+      ],
+      "call": {
+        "target": "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+        "signature": "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,bool zeroForOne,uint128 amountSpecified,uint128 minAmountOut,(uint64 blockNumber,bytes unlockData)[] attestations,address recipient,uint256 deadline) returns (uint256 amountOut)",
+        "where": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$args.0.4",
+                "0x0000000aa232009084bd71a5797d089aa4edfad4"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$args.0.0",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "$args.0.0"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "$args.0.1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "pendingWhere": {
+          "op": "sameAddress",
+          "args": [
+            "$args.0.4",
+            "0x0000000aa232009084bd71a5797d089aa4edfad4"
+          ]
+        },
+        "items": "$args.4",
+        "instance": {
+          "op": "join",
+          "args": [
+            [
+              "0x000000000004444c5dc75cb358380d2e3de08a90",
+              {
+                "op": "codeHash",
+                "args": [
+                  {
+                    "op": "abiEncode",
+                    "args": [
+                      [
+                        "address",
+                        "address",
+                        "uint24",
+                        "int24",
+                        "address"
+                      ],
+                      [
+                        "$args.0.0",
+                        "$args.0.1",
+                        "$args.0.2",
+                        "$args.0.3",
+                        "$args.0.4"
+                      ]
+                    ]
+                  }
+                ]
+              }
+            ],
+            "\u001f"
+          ]
+        }
+      },
+      "proof": {
+        "domain": {
+          "name": "Angstrom",
+          "version": "v1",
+          "chainId": 1,
+          "verifyingContract": "0x0000000aa232009084bd71a5797d089aa4edfad4"
+        },
+        "types": {
+          "AttestAngstromBlockEmpty": [
+            {
+              "name": "block_number",
+              "type": "uint64"
+            }
+          ]
+        },
+        "message": {
+          "block_number": "$item.0"
+        },
+        "block": "$item.0",
+        "payload": "$item.1",
+        "signer": {
+          "op": "address",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$item.1",
+                0,
+                20
+              ]
+            }
+          ]
+        },
+        "signature": {
+          "op": "bytes",
+          "args": [
+            "$item.1",
+            20,
+            16777216
+          ]
+        },
+        "tupleType": "tuple(uint64 blockNumber,bytes unlockData)[]"
+      },
+      "authority": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "controller",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "controller",
+                "to": "0x0000000aa232009084bd71a5797d089aa4edfad4",
+                "kind": "eth-call",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "hook",
+                    "extsload",
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "matches",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "controller"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        "^0x[0-9a-fA-F]{64}$"
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "bytes",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "controller"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    12,
+                                    20
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "hook has no controller"
+              },
+              {
+                "return": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "controller"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "reverse",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "reverse",
+                "to": "$steps.controller",
+                "kind": "eth-call",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "controller",
+                    "ANGSTROM",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "controller",
+                        "ANGSTROM",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "reverse"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                  ]
+                },
+                "error": "controller does not govern this hook"
+              },
+              {
+                "return": {
+                  "op": "decode",
+                  "args": [
+                    "controller",
+                    "ANGSTROM",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "reverse"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "members",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "members",
+                "to": "0xca11bde05977b3631167028862be2a173976ca11",
+                "kind": "eth-call",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "multicall",
+                    "aggregate3",
+                    [
+                      {
+                        "op": "map",
+                        "args": [
+                          "$nomination.opaque.signers",
+                          "signer",
+                          [
+                            "0x0000000aa232009084bd71a5797d089aa4edfad4",
+                            true,
+                            {
+                              "op": "encode",
+                              "args": [
+                                "hook",
+                                "extsload",
+                                [
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      {
+                                        "op": "codeHash",
+                                        "args": [
+                                          {
+                                            "op": "abiEncode",
+                                            "args": [
+                                              [
+                                                "address",
+                                                "uint256"
+                                              ],
+                                              [
+                                                "$signer",
+                                                {
+                                                  "op": "uint",
+                                                  "args": [
+                                                    "1"
+                                                  ]
+                                                }
+                                              ]
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "multicall",
+                            "aggregate3",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "members"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$nomination.opaque.signers"
+                      ]
+                    }
+                  ]
+                },
+                "error": "wrong authority result count"
+              },
+              {
+                "return": {
+                  "op": "filter",
+                  "args": [
+                    "$nomination.opaque.signers",
+                    "signer",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                {
+                                  "op": "decode",
+                                  "args": [
+                                    "multicall",
+                                    "aggregate3",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "members"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                "$index"
+                              ]
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "op": "matches",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    {
+                                      "op": "decode",
+                                      "args": [
+                                        "multicall",
+                                        "aggregate3",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "members"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    "$index"
+                                  ]
+                                },
+                                1
+                              ]
+                            },
+                            "^0x[0-9a-fA-F]{64}$"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "word",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        {
+                                          "op": "decode",
+                                          "args": [
+                                            "multicall",
+                                            "aggregate3",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "members"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        "$index"
+                                      ]
+                                    },
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "1"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "result": {
+          "allowed": "$steps.members"
+        }
+      }
+    },
+    "math": {
+      "version": 1,
+      "entries": {
+        "pricing": {
+          "model": "univ4:pricing",
+          "version": 1
+        },
+        "precisionAmount": {
+          "model": "univ4:precision-amount",
+          "version": 1
+        },
+        "victimPost": {
+          "model": "univ4:victim-exact-post",
+          "version": 1
+        }
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "core",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-slot0",
+              "to": "0x7ffe42c4a5deea5b0fec41c94c136cf115597227",
+              "kind": "eth-call",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "stateView",
+                  "getSlot0",
+                  [
+                    "$descriptor.poolId"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-liquidity",
+              "to": "0x7ffe42c4a5deea5b0fec41c94c136cf115597227",
+              "kind": "eth-call",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "stateView",
+                  "getLiquidity",
+                  [
+                    "$descriptor.poolId"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "source": {
+              "op": "source",
+              "args": [
+                "$results"
+              ]
+            },
+            "sqrtPriceX96": {
+              "op": "decode",
+              "args": [
+                "stateView",
+                "getSlot0",
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "current-slot0"
+                      ]
+                    },
+                    "data"
+                  ]
+                },
+                0
+              ]
+            },
+            "tick": {
+              "op": "number",
+              "args": [
+                {
+                  "op": "decode",
+                  "args": [
+                    "stateView",
+                    "getSlot0",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "current-slot0"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            },
+            "protocolFee": {
+              "op": "decode",
+              "args": [
+                "stateView",
+                "getSlot0",
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "current-slot0"
+                      ]
+                    },
+                    "data"
+                  ]
+                },
+                2
+              ]
+            },
+            "lpFee": {
+              "op": "decode",
+              "args": [
+                "stateView",
+                "getSlot0",
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "current-slot0"
+                      ]
+                    },
+                    "data"
+                  ]
+                },
+                3
+              ]
+            },
+            "liquidity": {
+              "op": "decode",
+              "args": [
+                "stateView",
+                "getLiquidity",
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "current-liquidity"
+                      ]
+                    },
+                    "data"
+                  ]
+                },
+                0
+              ]
+            },
+            "inactiveReason": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "stateView",
+                        "getSlot0",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "current-slot0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                "zero sqrtPriceX96",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "stateView",
+                            "getLiquidity",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "current-liquidity"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    "zero liquidity",
+                    null
+                  ]
+                }
+              ]
+            },
+            "precision": []
+          }
+        }
+      ],
+      "result": "$steps.core"
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [],
+      "rows": {
+        "op": "map",
+        "args": [
+          {
+            "op": "model",
+            "args": [
+              "pricing",
+              {
+                "descriptor": "$descriptor",
+                "snapshot": "$snapshot",
+                "routes": {
+                  "op": "filter",
+                  "args": [
+                    "$routes",
+                    "route",
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    "$snapshot.inactiveReason"
+                                  ]
+                                },
+                                "$snapshot.inactiveReason",
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "defined",
+                                      "args": [
+                                        {
+                                          "op": "model",
+                                          "args": [
+                                            "precisionAmount",
+                                            {
+                                              "sqrtPriceX96": "$snapshot.sqrtPriceX96",
+                                              "liquidity": "$snapshot.liquidity",
+                                              "maxAmountIn": {
+                                                "op": "uint",
+                                                "args": [
+                                                  "340282366920938463463374607431768211455"
+                                                ]
+                                              },
+                                              "token0": "$descriptor.poolKey.currency0",
+                                              "token1": "$descriptor.poolKey.currency1",
+                                              "direction": "$route.direction",
+                                              "manager": "$descriptor.immutableBinding.manager",
+                                              "tokenIn": "$route.tokenIn",
+                                              "tokenOut": "$route.tokenOut"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "join",
+                                      "args": [
+                                        [
+                                          "angstrom-v4 direction",
+                                          "$route.tokenIn",
+                                          "requires tx-bound precision"
+                                        ],
+                                        " "
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "row",
+          {
+            "op": "merge",
+            "args": [
+              {
+                "op": "omit",
+                "args": [
+                  "$row",
+                  [
+                    "feeBps"
+                  ]
+                ]
+              },
+              {
+                "feePpm": "$snapshot.lpFee"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "angstrom-v4-exact-quote",
+              "to": "0xca11bde05977b3631167028862be2a173976ca11",
+              "kind": "eth-call",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "multicall",
+                  "aggregate3",
+                  [
+                    {
+                      "op": "map",
+                      "args": [
+                        {
+                          "op": "map",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    "$authenticatedEvidence"
+                                  ]
+                                },
+                                {
+                                  "op": "map",
+                                  "args": [
+                                    "$authenticatedEvidence.items",
+                                    "item",
+                                    "$item.1"
+                                  ]
+                                },
+                                [
+                                  "0x"
+                                ]
+                              ]
+                            },
+                            "sigData",
+                            {
+                              "op": "encode",
+                              "args": [
+                                "quoter",
+                                "quoteExactInputSingle",
+                                [
+                                  {
+                                    "poolKey": "$descriptor.poolKey",
+                                    "zeroForOne": {
+                                      "op": "eq",
+                                      "args": [
+                                        "$route.direction",
+                                        "zero-for-one"
+                                      ]
+                                    },
+                                    "exactAmount": "$amountIn",
+                                    "hookData": "$sigData"
+                                  }
+                                ]
+                              ]
+                            }
+                          ]
+                        },
+                        "cd",
+                        [
+                          "0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203",
+                          true,
+                          "$cd"
+                        ]
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "multicall",
+                          "aggregate3",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "angstrom-v4-exact-quote"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "length",
+                    "args": [
+                      {
+                        "op": "map",
+                        "args": [
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "defined",
+                                "args": [
+                                  "$authenticatedEvidence"
+                                ]
+                              },
+                              {
+                                "op": "map",
+                                "args": [
+                                  "$authenticatedEvidence.items",
+                                  "item",
+                                  "$item.1"
+                                ]
+                              },
+                              [
+                                "0x"
+                              ]
+                            ]
+                          },
+                          "sigData",
+                          {
+                            "op": "encode",
+                            "args": [
+                              "quoter",
+                              "quoteExactInputSingle",
+                              [
+                                {
+                                  "poolKey": "$descriptor.poolKey",
+                                  "zeroForOne": {
+                                    "op": "eq",
+                                    "args": [
+                                      "$route.direction",
+                                      "zero-for-one"
+                                    ]
+                                  },
+                                  "exactAmount": "$amountIn",
+                                  "hookData": "$sigData"
+                                }
+                              ]
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "wrong aggregate quote result count"
+            },
+            {
+              "let": "positive",
+              "value": {
+                "op": "filter",
+                "args": [
+                  {
+                    "op": "map",
+                    "args": [
+                      {
+                        "op": "decode",
+                        "args": [
+                          "multicall",
+                          "aggregate3",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "angstrom-v4-exact-quote"
+                                ]
+                              },
+                              "data"
+                            ]
+                          },
+                          0
+                        ]
+                      },
+                      "sub",
+                      {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "and",
+                            "args": [
+                              "$sub.0",
+                              {
+                                "op": "matches",
+                                "args": [
+                                  "$sub.1",
+                                  "^0x[0-9a-fA-F]{128}$"
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "idx": "$index",
+                            "amount": {
+                              "op": "decode",
+                              "args": [
+                                "quoter",
+                                "quoteExactInputSingle",
+                                "$sub.1",
+                                0
+                              ]
+                            }
+                          },
+                          {
+                            "idx": "$index",
+                            "amount": {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "row",
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$row.amount",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "gt",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$positive"
+                    ]
+                  },
+                  0
+                ]
+              },
+              "error": "no successful current source quote"
+            },
+            {
+              "return": "$positive.0"
+            }
+          ]
+        }
+      ],
+      "result": "$steps.quote",
+      "chainQuote": {
+        "version": 2,
+        "step": "quote",
+        "requestId": "angstrom-v4-exact-quote",
+        "signature": "function quoteExactInputSingle(((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) poolKey,bool zeroForOne,uint128 exactAmount,bytes hookData) params) returns (uint256 amountOut,uint256 gasEstimate)",
+        "amountPath": [
+          0,
+          2
+        ],
+        "outputPath": [
+          0
+        ],
+        "requestBinding": {
+          "target": "0xca11bde05977b3631167028862be2a173976ca11",
+          "caller": {
+            "kind": "none"
+          }
+        },
+        "multicall": {
+          "index": "$steps.quote.idx",
+          "target": "0x52f0e24d1c21c8a0cb1e5a5dd6198556bd9e1203",
+          "calldata": {
+            "op": "at",
+            "args": [
+              {
+                "op": "map",
+                "args": [
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "defined",
+                        "args": [
+                          "$authenticatedEvidence"
+                        ]
+                      },
+                      {
+                        "op": "map",
+                        "args": [
+                          "$authenticatedEvidence.items",
+                          "item",
+                          "$item.1"
+                        ]
+                      },
+                      [
+                        "0x"
+                      ]
+                    ]
+                  },
+                  "sigData",
+                  {
+                    "op": "encode",
+                    "args": [
+                      "quoter",
+                      "quoteExactInputSingle",
+                      [
+                        {
+                          "poolKey": "$descriptor.poolKey",
+                          "zeroForOne": {
+                            "op": "eq",
+                            "args": [
+                              "$route.direction",
+                              "zero-for-one"
+                            ]
+                          },
+                          "exactAmount": "$amountIn",
+                          "hookData": "$sigData"
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              },
+              "$steps.quote.idx"
+            ]
+          }
+        }
+      }
+    },
+    "executionProjection": {
+      "version": 1,
+      "result": {
+        "allowanceSpender": "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+        "prewarmQuoteCalls": []
+      }
+    },
+    "liveStateProjection": {
+      "version": 1,
+      "result": {
+        "kind": "angstrom-v4-live",
+        "manager": "$descriptor.immutableBinding.manager",
+        "poolId": "$descriptor.poolId",
+        "poolKey": "$descriptor.poolKey",
+        "sqrtPriceX96": "$snapshot.sqrtPriceX96",
+        "liquidity": "$snapshot.liquidity",
+        "tick": "$snapshot.tick",
+        "protocolFee": "$snapshot.protocolFee",
+        "lpFee": "$snapshot.lpFee",
+        "blockNumber": "$snapshot.source.number"
+      }
+    }
+  },
+  "swap": {
+    "version": 1,
+    "canonicalIntakeTargets": [
+      "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8",
+      "0x0000000aa232009084bd71a5797d089aa4edfad4",
+      "0x000000000004444c5dc75cb358380d2e3de08a90"
+    ],
+    "victimSupport": "replay",
+    "events": [
+      {
+        "id": "angstrom-v4-manager-swap-log",
+        "signature": "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+        "classification": "swap",
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$log.address",
+                "0x000000000004444c5dc75cb358380d2e3de08a90"
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "lt",
+                      "args": [
+                        "$args.amount0",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$args.amount1",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "lt",
+                      "args": [
+                        "$args.amount1",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$args.amount0",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "pool": {
+          "op": "lower",
+          "args": [
+            "$args.id"
+          ]
+        },
+        "poolBinding": {
+          "emitter": "$descriptor.immutableBinding.manager",
+          "id": "$descriptor.poolId",
+          "when": {
+            "op": "defined",
+            "args": [
+              "$descriptor"
+            ]
+          }
+        },
+        "match": {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor"
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$descriptor"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$descriptor.poolId",
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$args.id"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.immutableBinding.manager",
+                    "0x000000000004444c5dc75cb358380d2e3de08a90"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenIn",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "lt",
+                              "args": [
+                                "$args.amount0",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "0"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "gt",
+                              "args": [
+                                "$args.amount1",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "0"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "$descriptor.poolKey.currency0",
+                        "$descriptor.poolKey.currency1"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenOut",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "lt",
+                              "args": [
+                                "$args.amount0",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "0"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "gt",
+                              "args": [
+                                "$args.amount1",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "0"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "$descriptor.poolKey.currency1",
+                        "$descriptor.poolKey.currency0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$edge.v4PoolKey"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.target",
+                    "0x000000000004444c5dc75cb358380d2e3de08a90"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.v4PoolKey.hooks",
+                    "0x0000000aa232009084bd71a5797d089aa4edfad4"
+                  ]
+                },
+                {
+                  "op": "defined",
+                  "args": [
+                    "$edge.poolId"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$edge.poolId"
+                      ]
+                    },
+                    "$pool"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        {
+                          "op": "abiEncode",
+                          "args": [
+                            [
+                              "address",
+                              "address",
+                              "uint24",
+                              "int24",
+                              "address"
+                            ],
+                            [
+                              "$edge.v4PoolKey.currency0",
+                              "$edge.v4PoolKey.currency1",
+                              "$edge.v4PoolKey.fee",
+                              "$edge.v4PoolKey.tickSpacing",
+                              "$edge.v4PoolKey.hooks"
+                            ]
+                          ]
+                        }
+                      ]
+                    },
+                    "$pool"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenIn",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "lt",
+                          "args": [
+                            "$args.amount0",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        "$edge.v4PoolKey.currency0",
+                        "$edge.v4PoolKey.currency1"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenOut",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "lt",
+                          "args": [
+                            "$args.amount0",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        "$edge.v4PoolKey.currency1",
+                        "$edge.v4PoolKey.currency0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "manager": {
+            "op": "address",
+            "args": [
+              "$log.address"
+            ]
+          },
+          "poolId": {
+            "op": "lower",
+            "args": [
+              "$args.id"
+            ]
+          },
+          "amount0": "$args.amount0",
+          "amount1": "$args.amount1",
+          "sqrtPriceX96": "$args.sqrtPriceX96",
+          "liquidity": "$args.liquidity",
+          "tick": {
+            "op": "number",
+            "args": [
+              "$args.tick"
+            ]
+          },
+          "fee": {
+            "op": "number",
+            "args": [
+              "$args.fee"
+            ]
+          }
+        },
+        "impact": {
+          "pool": {
+            "op": "if",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$descriptor"
+                ]
+              },
+              "$descriptor.immutableBinding.manager",
+              "$log.address"
+            ]
+          },
+          "tokenIn": "$edge.tokenIn",
+          "tokenOut": "$edge.tokenOut",
+          "matchedAdapterId": "$edge.adapterId",
+          "poolId": {
+            "op": "lower",
+            "args": [
+              "$args.id"
+            ]
+          },
+          "amountIn": {
+            "op": "sub",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "lt",
+                        "args": [
+                          "$args.amount0",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "gt",
+                        "args": [
+                          "$args.amount1",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "$args.amount0",
+                  "$args.amount1"
+                ]
+              }
+            ]
+          },
+          "v4PostState": {
+            "poolId": {
+              "op": "lower",
+              "args": [
+                "$args.id"
+              ]
+            },
+            "sqrtPriceX96": "$args.sqrtPriceX96",
+            "liquidity": "$args.liquidity",
+            "tick": {
+              "op": "number",
+              "args": [
+                "$args.tick"
+              ]
+            },
+            "lpFee": {
+              "op": "number",
+              "args": [
+                "$args.fee"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "replay": {
+      "bind": {
+        "op": "program",
+        "args": [
+          "replayBind",
+          {
+            "descriptor": "$descriptor",
+            "routes": "$routes",
+            "impact": "$impact"
+          }
+        ]
+      },
+      "applyLocal": {
+        "op": "program",
+        "args": [
+          "replayApplyLocal",
+          {
+            "descriptor": "$descriptor",
+            "route": "$route",
+            "impact": "$impact",
+            "source": "$source"
+          }
+        ]
+      },
+      "exactPostState": {
+        "op": "program",
+        "args": [
+          "replayExactPostState",
+          {
+            "descriptor": "$descriptor",
+            "route": "$route",
+            "impact": "$impact",
+            "source": "$source"
+          }
+        ]
+      },
+      "buildOverlay": {
+        "op": "program",
+        "args": [
+          "replayOverlay",
+          {
+            "descriptor": "$descriptor",
+            "route": "$route",
+            "impact": "$impact"
+          }
+        ]
+      }
+    },
+    "calls": [
+      {
+        "id": "angstrom-v4-adapter-swap-call",
+        "signature": "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,bool zeroForOne,uint128 amountSpecified,uint128 minAmountOut,(uint64 blockNumber,bytes unlockData)[] attestations,address recipient,uint256 deadline) returns (uint256 amountOut)",
+        "classification": "swap",
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$observation.target",
+                "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$args.key.hooks",
+                "0x0000000aa232009084bd71a5797d089aa4edfad4"
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "$args.key.currency0"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "$args.key.currency0"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "$args.key.currency1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "manager": {
+            "op": "address",
+            "args": [
+              "0x000000000004444c5dc75cb358380d2e3de08a90"
+            ]
+          },
+          "adapter": {
+            "op": "address",
+            "args": [
+              "0xb535aeb27335b91e1b5bccbd64888ba7574efbf8"
+            ]
+          },
+          "poolId": {
+            "op": "codeHash",
+            "args": [
+              {
+                "op": "abiEncode",
+                "args": [
+                  [
+                    "address",
+                    "address",
+                    "uint24",
+                    "int24",
+                    "address"
+                  ],
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args.key",
+                        "currency0"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args.key",
+                        "currency1"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args.key",
+                        "fee"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args.key",
+                        "tickSpacing"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        "$args.key",
+                        "hooks"
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          },
+          "poolKey": {
+            "currency0": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args.key",
+                    "currency0"
+                  ]
+                }
+              ]
+            },
+            "currency1": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args.key",
+                    "currency1"
+                  ]
+                }
+              ]
+            },
+            "fee": {
+              "op": "number",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args.key",
+                    "fee"
+                  ]
+                }
+              ]
+            },
+            "tickSpacing": {
+              "op": "number",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args.key",
+                    "tickSpacing"
+                  ]
+                }
+              ]
+            },
+            "hooks": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args.key",
+                    "hooks"
+                  ]
+                }
+              ]
+            }
+          },
+          "zeroForOne": "$args.zeroForOne",
+          "amountIn": "$args.amountSpecified",
+          "minAmountOut": "$args.minAmountOut",
+          "attestations": {
+            "op": "map",
+            "args": [
+              "$args.attestations",
+              "item",
+              {
+                "blockNumber": "$item.0",
+                "unlockData": "$item.1"
+              }
+            ]
+          },
+          "recipient": "$args.recipient",
+          "deadline": "$args.deadline"
+        }
+      }
+    ],
+    "poolMaterialization": {
+      "patternIds": [
+        "angstrom-v4-pool-initialize"
+      ],
+      "result": {
+        "op": "program",
+        "args": [
+          "initializeBinding",
+          {
+            "observation": "$observation"
+          }
+        ]
+      }
+    }
+  }
+}

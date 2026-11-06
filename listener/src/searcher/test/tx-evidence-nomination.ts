@@ -9,7 +9,7 @@ import { attestPoolIdentitiesStrict, mergeStartupFamilyPublications } from "../s
 import { executeCatalogCaptureNominations } from "../venues/capture-materialization.js";
 import type { FamilyCapabilityCatalog } from "../venues/family-capability-catalog.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as productionCatalog } from "../venues/production-family-composition.js";
-import { ASTRA_MULTITOKEN_INTERFACE as astraAbi, ASTRA_ERC20_INTERFACE as tokenAbi } from "../venues/protocols/astra-multitoken-family/codec.js";
+import { ASTRA_MULTITOKEN_INTERFACE as astraAbi, ASTRA_ERC20_INTERFACE as tokenAbi } from "./fixtures/protocol-json/astra-multitoken-fixture.js";
 
 const A = ethers.getAddress("0x00000000000000000000000000000000000000a1");
 const B = ethers.getAddress("0x00000000000000000000000000000000000000b2");

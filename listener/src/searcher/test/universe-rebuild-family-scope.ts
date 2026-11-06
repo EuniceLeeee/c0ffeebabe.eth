@@ -21,7 +21,7 @@ import {
   PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog,
   PRODUCTION_STRICT_SHADOW_FAMILY_LOAD as load,
 } from "../venues/production-family-composition.js";
-import { WSTETH_INTERFACE } from "../venues/protocols/wsteth-family/codec.js";
+import { WSTETH_INTERFACE } from "../venues/protocols/wsteth-family/test/fixture-codec.js";
 import { PSM_INTERFACE } from "../venues/protocols/psm-family/codec.js";
 import { UNIV4_SWAP_TOPIC } from "../venues/swaps/univ4-abi.js";
 

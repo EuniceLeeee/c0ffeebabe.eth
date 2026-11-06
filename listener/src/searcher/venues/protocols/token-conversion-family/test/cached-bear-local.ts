@@ -3,9 +3,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { ABI, proveBearRuntime } from "../variants.js";
-import { provePlainConversionAssetRuntime } from "../asset-runtime.js";
-import { quoteBear } from "../bear-local.js";
+import { ABI, proveBearRuntime } from "./reference/variants.js";
+import { provePlainConversionAssetRuntime } from "./reference/asset-runtime.js";
+import { quoteBear } from "./reference/bear-local.js";
 
 // Saved-state regression, not a new historical run: compare production local
 // math with archived simulation-backed effective outputs at their original P.

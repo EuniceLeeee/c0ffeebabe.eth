@@ -3,7 +3,7 @@ import { compileInstanceEvidence, executionProjection } from "./declarative-inst
 import { compileDeclarativeSwap } from "./declarative-swap-domain.js";
 import { projectDeclarativePrices } from "./declarative-pricing-projection.js";
 import { buildDeclarativeExecutionSimulation } from "./declarative-simulation.js";
-import { getAddress, hexlify } from "ethers";
+import { getAddress, hexlify, MaxUint256 } from "ethers";
 import { readFamilyModules, type DeclarativeQuoteFlow } from "./declarative-family-modules.js";
 import { verifyDeclarativeQuoteChain } from "./declarative-quote-proof.js";
 import { compileDeclarativeTrialState } from "./declarative-trial-state.js";
@@ -13,6 +13,7 @@ import type { BoundRuntimeMath, createDeclarativeRuntimeMathRegistry } from "./d
 import type { DeclarativeMathFunctions, createDeclarativeMathRegistry } from "./declarative-math.js";
 import { normalizeDeclarativeVariant, normalizeDeclarativeChecks, normalizeDeclarativeFieldModel } from "./declarative-variant.js";
 import { validateDeclarativeTypeMetadata } from "./declarative-types.js";
+import { compileSignedBlockEvidence } from "./declarative-runtime-evidence.js";
 import { compileDeclarativeDiscovery } from "./declarative-discovery.js";
 import { compileDeclarativeIdentity } from "./declarative-identity.js";
 import { expandConversionDefinition } from "./declarative-definition.js";
@@ -20,6 +21,7 @@ import { compileDeclarativeValues, validateDeclarativeValue, validateDeclarative
 import { createCreditCaptureMaterialization, createRouteCaptureMaterialization } from "./capture-materialization.js";
 import { compileAddressMutations } from "./mutation-index.js";
 import { hashCanonical } from "./canonical-value.js";
+import { ExactAmountRejectedError } from "./adapter-amount-rejection.js";
 import { instanceKey, routeKey } from "./adapter-family-identifiers.js";
 import { localZeroExactMethod, NO_EXECUTION_RUNTIME_PROJECTION } from "./adapter-family-plugin.js";
 import type { ExactQuoteInput, FamilyCandidate, VerifiedIdentity, CompiledInstanceDescriptor, FamilyRouteDescriptor,
@@ -141,7 +143,9 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
       if (typeof v.exact.unavailableReason !== "string" || !v.exact.unavailableReason.trim()) throw new Error("exact unavailable reason is required");
     } else {
       shape(v.exact, ["methodId", "requirements", "evidence"],
-        ["guardProgram", "guardPrefix", "caller", "checks", "outputChecks", "protectedAddresses", "retainReadEvidence", "zeroEvidence", "stateOnlyReads", "amountOut"], "exact declaration");
+        ["authenticatedMethodId", "guardProgram", "guardPrefix", "caller", "checks", "outputChecks", "protectedAddresses", "retainReadEvidence", "zeroEvidence", "stateOnlyReads", "amountOut", "allowAmountRejection"], "exact declaration");
+      if (v.exact.allowAmountRejection !== undefined && v.exact.allowAmountRejection !== true)
+        throw new Error("allowAmountRejection must be true when declared");
       if (v.exact.stateOnlyReads !== undefined && typeof v.exact.stateOnlyReads !== "boolean")
         throw new Error("stateOnlyReads must be an explicit boolean declaration");
       if (v.exact.retainReadEvidence !== undefined && v.exact.retainReadEvidence !== true)
@@ -184,6 +188,8 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
     const extendedProof = (value: unknown): boolean => !!value && typeof value === "object" &&
       ((value as Data).version === 2 || Object.values(value).some(extendedProof));
     variant.quoteProofEvaluation = extendedProof(quote.chainQuote);
+    if (v.exact.allowAmountRejection && quote.sourceKind !== "view")
+      throw new Error("amount rejection requires a source-bound view quote");
     if (v.exact.stateOnlyReads === true && quote.sourceKind !== "local-math")
       throw new Error("stateOnlyReads requires a local-math quote flow");
     if (quote.sourceKind === "local-math" && !Object.keys(modules.blocks.trialState!).length && !quote.localStateUnsupportedReason)
@@ -202,6 +208,14 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
     for (const program of Object.values(v.readPrograms) as Data[]) validateDeclarativeStatements(program.decode);
   }
   const primary = variants[0]!;
+  const signedDefinition = primary.modules.get<Data>("signedBlockEvidence");
+  if (signedDefinition && domain !== "swap") throw new Error("signed block evidence requires a Swap Family");
+  const signed = signedDefinition && compileSignedBlockEvidence(document.manifest.familyId, signedDefinition, primary.values);
+  for (const variant of variants) {
+    const id = variant.document.exact.authenticatedMethodId;
+    if (id !== undefined && (!signed || typeof id !== "string" || !id.trim() || id === variant.document.exact.methodId))
+      throw new Error("invalid authenticated Exact method declaration");
+  }
   if (domain === "credit" && children.length) throw new Error("declarative Credit currently requires one risk-proof variant");
   if (domain !== "protocol" && primary.modules.get("oracleVictim")) throw new Error("oracleVictim is a Protocol capability");
   const evalRoot = (expression: any, env: Data) => primary.values.evaluate(expression, env);
@@ -213,7 +227,10 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
   }
   function environment(v: Variant, input: Data): Data {
     const descriptor = input.descriptor;
-    const env = { ...input, routes: input.routes ?? descriptor?.routes ?? [], direction: input.direction ?? input.route?.direction };
+    const env = { ...input, routes: input.routes ?? descriptor?.routes ?? [], direction: input.direction ?? input.route?.direction,
+      ...(signed && Object.hasOwn(input, "runtimeEvidence") && { authenticatedEvidence: signed.authenticate({
+        runtimeEvidence: input.runtimeEvidence, source: input.source ?? input.exactEvidence?.source, descriptor: input.descriptor,
+      }) }) };
     return { ...env, ...v.values.evaluate(v.document.context ?? {}, env),
       binding: v.values.evaluate(v.document.boundState, env),
       target: evalRoot(document.routes.target, { descriptor }) };
@@ -317,7 +334,8 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
         { math: modules.get<BoundRuntimeMath>("executionMath") });
     });
   }
-  const discovery = compileDeclarativeDiscovery<Candidate>(document.discovery.definition, primary.values);
+  const baseDiscovery = compileDeclarativeDiscovery<Candidate>(document.discovery.definition, primary.values);
+  const discovery = signed ? { ...baseDiscovery, ...signed.discovery } : baseDiscovery;
   const identity: IdentitySemantics<Candidate, Identity> = {
     memoReuse: document.identity.memoReuse,
     identityKey: identity => evalRoot(document.identity.key, { identity }),
@@ -599,6 +617,16 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
     if (value && Object.hasOwn(value, "readProof")) throw new Error("exact evidence cannot replace framework read proof");
     return frozen(v.trialState ? { ...value, executor: getAddress(input.executor) } : value);
   }
+  function validateAuthenticatedInvocation(input: ExactQuoteInput<Descriptor, Route>) {
+    assertInvocation(input.descriptor, input.route);
+    assertDeclarativeExecutionSource(input.source);
+    const v = select(input.descriptor);
+    const env = environment(v, input);
+    v.values.run(v.document.exact.checks ?? [], env);
+    if (v.document.exact.protectedAddresses)
+      runtimeExecutor(input.executor, ...v.values.evaluate(v.document.exact.protectedAddresses, env));
+    return env.authenticatedEvidence;
+  }
   const exact: ExactQuoteSemantics<Descriptor, Route, Data> = {
     methods: invocation => {
       const selected = invocation ? select(invocation.descriptor) : primary;
@@ -606,9 +634,17 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
       requireAvailableExtension(selected, "quoteFlow");
       requireAvailableExtension(selected, "trialState");
       const provenance = selected.modules.get<DeclarativeQuoteFlow>("quoteFlow");
+      const authenticated = signed && invocation ? validateAuthenticatedInvocation(invocation) : null;
+      const assertEvidenceMode = signed ? (current: ExactQuoteInput<Descriptor, Route>) => {
+        if (Boolean(signed.authenticate(current)) !== Boolean(authenticated))
+          throw new Error("changed signed authority for selected Exact method");
+      } : undefined;
+      const methodId = authenticated && selected.document.exact.authenticatedMethodId
+        ? selected.document.exact.authenticatedMethodId : selected.document.exact.methodId;
       return Object.freeze([
       localZeroExactMethod("local-zero", input => {
-        assertInvocation(input.descriptor, input.route);
+        assertEvidenceMode?.(input);
+            assertInvocation(input.descriptor, input.route);
         const v = select(input.descriptor);
         const env = environment(v, input);
         assertDeclarativeExecutionSource(input.source);
@@ -616,11 +652,12 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
         if (v.document.exact.protectedAddresses) runtimeExecutor(input.executor, ...v.values.evaluate(v.document.exact.protectedAddresses, env));
         return { amountOut: 0n, evidence: evidence(input, 0n) };
       }),
-      { id: selected.document.exact.methodId, kind: "request-program" as const,
+      { id: methodId, kind: "request-program" as const,
         ...(provenance?.sourceKind === "local-math"
           ? { ...(selected.document.exact.stateOnlyReads === true ? { stateOnlyReads: true as const } : {}),
               trialState: selected.trialState && selected.trialState.isAvailable(invocation) ? { quote(input: ExactQuoteInput<Descriptor, Route>) {
-              assertInvocation(input.descriptor, input.route);
+              assertEvidenceMode?.(input);
+            assertInvocation(input.descriptor, input.route);
               const v = select(input.descriptor), env = environment(v, input);
               requireAvailableExtension(v, "trialState");
               if (!v.trialState) throw new Error("trial-state method/variant mismatch");
@@ -636,7 +673,9 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
           : { chainAmountQuote: true as const }),
         program: {
           requirements(input) {
+            assertEvidenceMode?.(input);
             assertInvocation(input.descriptor, input.route);
+            if (input.amountIn === 0n) return { transports: [] };
             const v = select(input.descriptor);
             requireAvailableExtension(v, "quoteFlow");
             requireAvailableExtension(v, "trialState");
@@ -644,8 +683,10 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
             return requirements(v.document.exact.requirements, v.quoteFlow?.program.requirements(flowEnvironment(v, input)));
           },
           buildRequests(input) {
+            assertEvidenceMode?.(input);
             assertInvocation(input.descriptor, input.route);
             if (input.amountIn < 0n) throw new Error("exact input cannot be negative");
+            if (input.amountIn > MaxUint256) throw new Error("exact input is outside the uint256 range");
             if (input.amountIn === 0n) return [];
             const v = select(input.descriptor), env = environment(v, input);
             requireAvailableExtension(v, "quoteFlow");
@@ -656,6 +697,7 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
               ? v.quoteFlow.program.buildRequests(flowEnvironment(v, input)) : quoteRequests(v, input, "exact-preview"))]);
           },
           buildDependentProgram(input) {
+            assertEvidenceMode?.(input.programInput);
             const v = select(input.programInput.descriptor);
             requireAvailableExtension(v, "quoteFlow");
             requireAvailableExtension(v, "trialState");
@@ -666,12 +708,15 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
             return v.quoteFlow.program.buildDependentProgram!({ ...input, programInput: env,
               initialResults: initialFlowResults(v.quoteFlow, env, input.initialResults) });
           },
-          decode: decodeExact,
+          decode: signed ? work => { assertEvidenceMode!(work.programInput); return decodeExact(work); } : decodeExact,
         },
       },
     ]);
     },
-    cacheCompatibilityProjection: input => evalRoot(document.pricing.exactCompatibility, input),
+    cacheCompatibilityProjection: input => {
+      if (signed) validateAuthenticatedInvocation(input);
+      return evalRoot(document.pricing.exactCompatibility, input);
+    },
   };
   function decodeExact({ programInput: input, initialResults: results, dependentEvidence }: {
     programInput: ExactQuoteInput<Descriptor, Route>; initialResults: readonly AdapterRequestResult[]; dependentEvidence: readonly unknown[];
@@ -686,6 +731,15 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
             const flowInput = flowEnvironment(v, input);
             const output = v.quoteFlow ? v.quoteFlow.program.decode({ programInput: flowInput,
               initialResults: initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence }) : program(v, "quote", env, "decode");
+            if (v.document.exact.allowAmountRejection && output && typeof output === "object" &&
+                Object.hasOwn(output, "amountRejection")) {
+              const rejected = output as { amountRejection: unknown };
+              const reads = v.quoteFlow!.observedResults(flowInput, initialFlowResults(v.quoteFlow!, flowInput, results), dependentEvidence);
+              if (Object.keys(rejected).length !== 1 || typeof rejected.amountRejection !== "string" ||
+                  !rejected.amountRejection.trim() || !reads.length || reads.some(result => !result.ok))
+                throw new Error("invalid or incomplete amount rejection evidence");
+              throw new ExactAmountRejectedError(rejected.amountRejection);
+            }
             const transition = v.trialState?.isAvailable(input) ? v.trialState.fromReadFlow(input, output, v.quoteFlow!.observedResults(flowInput,
               initialFlowResults(v.quoteFlow!, flowInput, results), dependentEvidence)) : undefined;
             const amountOut = transition ? transition.amountOut : v.document.exact.amountOut === undefined ? output
@@ -756,7 +810,8 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
         expected = decoded.evidence;
       } else expected = evidence({ ...input, source: e.source }, input.quotedAmountOut);
       if (e.executor !== undefined && !sameAddress(e.executor, input.executor)) throw new Error("execution actor/evidence mismatch");
-      if (input.amountIn <= 0n || input.quotedAmountOut <= 0n || input.minAmountOut <= 0n || input.minAmountOut > input.quotedAmountOut ||
+      if (input.amountIn <= 0n || input.amountIn > MaxUint256 || input.quotedAmountOut <= 0n || input.quotedAmountOut > MaxUint256 ||
+          input.minAmountOut < 0n || (input.minAmountOut === 0n && v.execution?.allowZeroMinimum !== true) || input.minAmountOut > input.quotedAmountOut ||
           hashCanonical(e) !== hashCanonical(expected))
         throw new Error("execution received incompatible exact evidence");
       const program = executionProgram({ ...input, source: e.source, recipient: input.executor, settlementRequested: false,

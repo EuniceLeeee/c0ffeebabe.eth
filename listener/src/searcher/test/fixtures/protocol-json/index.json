@@ -540,18 +540,41 @@
         {
           "id": "reference-transaction",
           "classification": "real-historical-evidence",
-          "variant": null,
-          "directions": [],
+          "variant": "eigenpie:observed-active-pair",
+          "directions": [
+            "RED-to-mRED"
+          ],
           "transactionHash": "0x4cca0e665fa0d66181fd5aa89551d4e449c63fb987d87a2c4b7c8e305ae28be4",
           "source": {
-            "number": null,
-            "hash": null
+            "number": 25585335,
+            "hash": "0x7cbdaf19a25e9615f09a3d695c9deb48bfa949fdf76f168ecbe4f4517d47b809"
           },
-          "stateScope": "after-transaction",
-          "instanceKey": null,
-          "lineageId": null,
-          "actors": null,
-          "amounts": [],
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x24db6717db1c75b9db6ea47164d8730b63875db7:0xc43c6bfeda065fe2c4c11765bf838789bd0bb5de:0xd48067f122afc3a58f0f79611f5f1afae0d7f25b",
+          "lineageId": "eigenpie:observed-active-pair",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001",
+            "scope": "isolated current executor/origin; not historical transaction sender"
+          },
+          "amounts": [
+            {
+              "direction": "RED-to-mRED",
+              "label": "original-call-input",
+              "tokenIn": "0xc43c6bfeda065fe2c4c11765bf838789bd0bb5de",
+              "tokenOut": "0xd48067f122afc3a58f0f79611f5f1afae0d7f25b",
+              "amountIn": "155167433355795378068",
+              "recordedAmountOut": "149640805284635957914",
+              "amountScope": "original-transaction-input-borrowed-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/eigenpie-debug_traceTransaction.json",
+                "sha256": "d5bfbb9d78f7e31e2cdc006542baf012b57bcb27531baca7a1113b0332105db4",
+                "jsonPointer": "/result",
+                "line": 1,
+                "endLine": 1
+              }
+            }
+          ],
           "provenance": [
             {
               "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/adapter-families/eigenpie-deposit-tx4cca.json",
@@ -559,33 +582,41 @@
               "jsonPointer": "",
               "line": 1,
               "endLine": 106
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/eigenpie-eth_getTransactionReceipt.json",
+              "sha256": "4ffc39b6e124c7dda126d9e03842af2828c3dc68c5698aff477379a19d98966f",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/eigenpie-eth_getBlockByNumber.json",
+              "sha256": "99a6604949e4d1bafd88f39005088a77979f7cdd74cf24614045a86e55277d19",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/eigenpie-debug_traceTransaction.json",
+              "sha256": "d5bfbb9d78f7e31e2cdc006542baf012b57bcb27531baca7a1113b0332105db4",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
             }
           ],
-          "casePath": null,
+          "casePath": "cases/eigenpie--red-to-mred.json",
           "limitations": [
             "Real transaction reference in a route-pinned Adapter Replay fixture; not a synthetic transaction, not proof of new JSON acceptance.",
-            "stateAnchor block may be parent/after-trigger; it is not assumed to be the transaction block."
+            "stateAnchor block may be parent/after-trigger; it is not assumed to be the transaction block.",
+            "Inputs extracted from the canonical transaction block receipt/header and debug_traceTransaction protocol call; recorded output remains index metadata only and is not an expected block-end output."
           ],
-          "missing": [
-            "instanceKey",
-            "lineageId",
-            "actors",
-            "source.hash",
-            "source.number",
-            "amount/direction/token pair"
-          ],
-          "missingResponsibility": {
-            "instanceKey": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "lineageId": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "actors": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "source.hash": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "source.number": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "amount/direction/token pair": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config"
-          }
+          "missing": [],
+          "missingResponsibility": {}
         }
       ],
       "missing": [],
-      "completeCases": 0,
+      "completeCases": 1,
       "scope": {
         "migratedJsonPresent": true,
         "appRun2Enabled": true,
@@ -5021,18 +5052,41 @@
         {
           "id": "reference-transaction",
           "classification": "real-historical-evidence",
-          "variant": null,
-          "directions": [],
+          "variant": "goldx:active-unit-mint",
+          "directions": [
+            "PAXG-to-GOLDx"
+          ],
           "transactionHash": "0x149df3ec17a6044e0c66c25aa55ce044abe33bf14cedea26295e1b6d4c9fde60",
           "source": {
             "number": 25535056,
             "hash": "0x5a1cbd6b472206d2c695f4960d177e5b78188ac277c441f4a60da71ce7ede3fa"
           },
-          "stateScope": "parent-block",
-          "instanceKey": "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0",
-          "lineageId": null,
-          "actors": null,
-          "amounts": [],
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
+          "lineageId": "goldx:active-unit-mint",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001",
+            "scope": "isolated current executor/origin; not historical transaction sender"
+          },
+          "amounts": [
+            {
+              "direction": "PAXG-to-GOLDx",
+              "label": "original-call-input",
+              "tokenIn": "0x45804880de22913dafe09f4980848ece6ecbaf78",
+              "tokenOut": "0x355c665e101b9da58704a8fddb5feef210ef20c0",
+              "amountIn": "14748788796739946",
+              "recordedAmountOut": "458738610167500826",
+              "amountScope": "original-transaction-input-borrowed-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/goldx-debug_traceTransaction.json",
+                "sha256": "8ea50e3023ff0cf1b289695bd2e3af857aa8fd304aad0cde44e72ada6bf8d218",
+                "jsonPointer": "/result",
+                "line": 1,
+                "endLine": 1
+              }
+            }
+          ],
           "provenance": [
             {
               "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/adapter-families/goldx-tx149.json",
@@ -5047,28 +5101,42 @@
               "jsonPointer": "/families/8/historicalAnchors/0",
               "line": 4453,
               "endLine": 4467
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/goldx-eth_getTransactionReceipt.json",
+              "sha256": "01c7a05656cab6530095fc048a7680a20073be25d142defac0892318635d5901",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/goldx-eth_getBlockByNumber.json",
+              "sha256": "5fcf3c7f81ce056fe64336e3efff7ae15db8a0e9d13f73be396834aee1c63ada",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/goldx-debug_traceTransaction.json",
+              "sha256": "8ea50e3023ff0cf1b289695bd2e3af857aa8fd304aad0cde44e72ada6bf8d218",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
             }
           ],
-          "casePath": null,
+          "casePath": "cases/goldx--paxg-to-goldx.json",
           "limitations": [
             "Real transaction reference in a route-pinned Adapter Replay fixture; not a synthetic transaction, not proof of new JSON acceptance.",
             "stateAnchor block may be parent/after-trigger; it is not assumed to be the transaction block.",
-            "Added canonical transaction-block hash is an identity anchor only; no N-end expected output claim."
+            "Added canonical transaction-block hash is an identity anchor only; no N-end expected output claim.",
+            "Inputs extracted from the canonical transaction block receipt/header and debug_traceTransaction protocol call; recorded output remains index metadata only and is not an expected block-end output."
           ],
-          "missing": [
-            "lineageId",
-            "actors",
-            "amount/direction/token pair"
-          ],
-          "missingResponsibility": {
-            "lineageId": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "actors": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "amount/direction/token pair": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config"
-          }
+          "missing": [],
+          "missingResponsibility": {}
         }
       ],
       "missing": [],
-      "completeCases": 0,
+      "completeCases": 1,
       "scope": {
         "migratedJsonPresent": true,
         "appRun2Enabled": true,
@@ -5133,8 +5201,10 @@
         {
           "id": "metronome-winner",
           "classification": "real-historical-evidence",
-          "variant": null,
-          "directions": [],
+          "variant": "metronome-hgusdc:observed-path-active-quote-v1",
+          "directions": [
+            "msUSD-to-USDC"
+          ],
           "transactionHash": "0x4d1e4e5103cb8e754847e085fcd8de7d2fb18f6fbe1fdfd84e0c74b5cae0e0e4",
           "source": {
             "number": 25515277,
@@ -5142,9 +5212,30 @@
           },
           "stateScope": "canonical-block-end",
           "instanceKey": "0x365084b05fa7d5028346bd21d842ed0601bab5b8",
-          "lineageId": null,
-          "actors": null,
-          "amounts": [],
+          "lineageId": "metronome-hgusdc:observed-path-active-quote-v1",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001",
+            "scope": "isolated current executor/origin; not historical transaction sender"
+          },
+          "amounts": [
+            {
+              "direction": "msUSD-to-USDC",
+              "label": "original-executePath-input",
+              "tokenIn": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+              "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+              "amountIn": "123201027004629751869029",
+              "recordedAmountOut": "122586287641",
+              "amountScope": "original-transaction-input-borrowed-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/metronome-debug_traceTransaction.json",
+                "sha256": "9eec1048eb74dd350c4ab96ddc8556b14c50aba03e6ba95f4949cd3a09f41ca5",
+                "jsonPointer": "/result",
+                "line": 1,
+                "endLine": 1
+              }
+            }
+          ],
           "provenance": [
             {
               "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
@@ -5164,27 +5255,41 @@
               "sha256": "9d337d1b15711b994a738d55c1c5f16790635ad9071db8e145cdc9b8fee71bc3",
               "line": 31,
               "endLine": 31
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/metronome-eth_getTransactionReceipt.json",
+              "sha256": "95c4f1070d05a9822f3b812ce3b4eb9eed854a3adcbf99981bb44ceeef9579f0",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/metronome-eth_getBlockByNumber.json",
+              "sha256": "cb09a5b9159b5806bb02637d46eb4c01727f5666ae2f925ed51d419b638f749f",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/metronome-debug_traceTransaction.json",
+              "sha256": "9eec1048eb74dd350c4ab96ddc8556b14c50aba03e6ba95f4949cd3a09f41ca5",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
             }
           ],
-          "casePath": null,
+          "casePath": "cases/metronome-hgusdc--msusd-to-usdc.json",
           "limitations": [
             "Source anchor retained; winner is backrun after an oracle trigger. Amount and per-call direction require saved receipt/trace, not whole-loop flash amount.",
-            "The earlier target reference 0x4F95C5bA0C7c69FB2f9340E190cCeE890B3bd87c is the vault component. Current Family instance uses the executePath router; identity still requires production revalidation."
+            "The earlier target reference 0x4F95C5bA0C7c69FB2f9340E190cCeE890B3bd87c is the vault component. Current Family instance uses the executePath router; identity still requires production revalidation.",
+            "Inputs extracted from the canonical transaction block receipt/header and debug_traceTransaction protocol call; recorded output remains index metadata only and is not an expected block-end output."
           ],
-          "missing": [
-            "lineageId",
-            "actors",
-            "amount/direction/token pair"
-          ],
-          "missingResponsibility": {
-            "lineageId": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "actors": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "amount/direction/token pair": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config"
-          }
+          "missing": [],
+          "missingResponsibility": {}
         }
       ],
       "missing": [],
-      "completeCases": 0,
+      "completeCases": 1,
       "scope": {
         "migratedJsonPresent": true,
         "appRun2Enabled": true,
@@ -5197,18 +5302,58 @@
         {
           "id": "metronome-winner",
           "classification": "real-historical-evidence",
-          "variant": null,
-          "directions": [],
+          "variant": "metronome-synth:active-membership",
+          "directions": [
+            "msETH-to-msBTC",
+            "msBTC-to-msUSD"
+          ],
           "transactionHash": "0x4d1e4e5103cb8e754847e085fcd8de7d2fb18f6fbe1fdfd84e0c74b5cae0e0e4",
           "source": {
             "number": 25515277,
             "hash": "0x62df172938e48b7bd6ca7aecfd812fd15168caea049289a72d45d4c7bfb60580"
           },
           "stateScope": "canonical-block-end",
-          "instanceKey": "0x3364f53cB866762Aef66DeEF2a6b1a17C1F17f46",
-          "lineageId": null,
-          "actors": null,
-          "amounts": [],
+          "instanceKey": "0x3364f53cb866762aef66deef2a6b1a17c1f17f46",
+          "lineageId": "metronome-synth:active-membership",
+          "actors": {
+            "executor": "0x1000000000000000000000000000000000000002",
+            "owner": "0x1000000000000000000000000000000000000001",
+            "scope": "isolated current executor/origin; not historical transaction sender"
+          },
+          "amounts": [
+            {
+              "direction": "msETH-to-msBTC",
+              "label": "original-swap-input-1",
+              "tokenIn": "0x64351fc9810adad17a690e4e1717df5e7e085160",
+              "tokenOut": "0x8b4f8ad3801b4015dea6da1d36f063cbf4e231c7",
+              "amountIn": "68190059945110642892",
+              "recordedAmountOut": "1929728504258755511",
+              "amountScope": "original-transaction-input-borrowed-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/metronome-debug_traceTransaction.json",
+                "sha256": "9eec1048eb74dd350c4ab96ddc8556b14c50aba03e6ba95f4949cd3a09f41ca5",
+                "jsonPointer": "/result",
+                "line": 1,
+                "endLine": 1
+              }
+            },
+            {
+              "direction": "msBTC-to-msUSD",
+              "label": "original-swap-input-2",
+              "tokenIn": "0x8b4f8ad3801b4015dea6da1d36f063cbf4e231c7",
+              "tokenOut": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+              "amountIn": "1929728504258755512",
+              "recordedAmountOut": "123201027004629751869029",
+              "amountScope": "original-transaction-input-borrowed-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/metronome-debug_traceTransaction.json",
+                "sha256": "9eec1048eb74dd350c4ab96ddc8556b14c50aba03e6ba95f4949cd3a09f41ca5",
+                "jsonPointer": "/result",
+                "line": 1,
+                "endLine": 1
+              }
+            }
+          ],
           "provenance": [
             {
               "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
@@ -5222,26 +5367,40 @@
               "sha256": "48d250e89c9d5c7951799d71eb019cb95d9718ff663aa7ed982b0ec77c88ac94",
               "line": 1,
               "endLine": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/metronome-eth_getTransactionReceipt.json",
+              "sha256": "95c4f1070d05a9822f3b812ce3b4eb9eed854a3adcbf99981bb44ceeef9579f0",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/metronome-eth_getBlockByNumber.json",
+              "sha256": "cb09a5b9159b5806bb02637d46eb4c01727f5666ae2f925ed51d419b638f749f",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/sample-public-reads/metronome-debug_traceTransaction.json",
+              "sha256": "9eec1048eb74dd350c4ab96ddc8556b14c50aba03e6ba95f4949cd3a09f41ca5",
+              "jsonPointer": "/result",
+              "line": 1,
+              "endLine": 1
             }
           ],
-          "casePath": null,
+          "casePath": "cases/metronome-synth--metronome-winner.json",
           "limitations": [
-            "Source anchor retained; winner is backrun after an oracle trigger. Amount and per-call direction require saved receipt/trace, not whole-loop flash amount."
+            "Source anchor retained; winner is backrun after an oracle trigger. Amount and per-call direction require saved receipt/trace, not whole-loop flash amount.",
+            "Inputs extracted from the canonical transaction block receipt/header and debug_traceTransaction protocol call; recorded output remains index metadata only and is not an expected block-end output."
           ],
-          "missing": [
-            "lineageId",
-            "actors",
-            "amount/direction/token pair"
-          ],
-          "missingResponsibility": {
-            "lineageId": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "actors": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "amount/direction/token pair": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config"
-          }
+          "missing": [],
+          "missingResponsibility": {}
         }
       ],
       "missing": [],
-      "completeCases": 0,
+      "completeCases": 1,
       "scope": {
         "migratedJsonPresent": false,
         "appRun2Enabled": true,
@@ -6155,70 +6314,6 @@
       "familyId": "protocol:rocksolid",
       "samples": [
         {
-          "id": "7ce631",
-          "classification": "real-historical-evidence",
-          "variant": "syncDeposit",
-          "directions": [
-            "deposit"
-          ],
-          "transactionHash": "0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87",
-          "source": {
-            "number": 25535037,
-            "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e"
-          },
-          "stateScope": "pre-competitor-in-block",
-          "instanceKey": "0x936faCdf10c8c36294e7b9d28345255539d81bc7",
-          "lineageId": null,
-          "actors": null,
-          "amounts": [
-            {
-              "direction": "deposit",
-              "label": "original-call",
-              "tokenIn": "0xae78736Cd615f374D3085123A210448E74Fc6393",
-              "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
-              "amountIn": "665705106594162807",
-              "recordedOriginalAmountOut": "653072044530122959",
-              "amountScope": "original-call-prestate-only"
-            }
-          ],
-          "provenance": [
-            {
-              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/loops/rocksolid-balancer-v3-7ce631.json",
-              "sha256": "9732624f374f7ebb0fc10b2bf35ee91c4b85f825698c52d80c701703167ac4ec",
-              "jsonPointer": "/legs/1",
-              "line": 30,
-              "endLine": 41
-            },
-            {
-              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/loops/rocksolid-balancer-v3-7ce631.json",
-              "sha256": "9732624f374f7ebb0fc10b2bf35ee91c4b85f825698c52d80c701703167ac4ec",
-              "jsonPointer": "/txHash",
-              "line": 3,
-              "endLine": 3
-            },
-            {
-              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/docs/research/reports/family-settlement-interfaces-protocols-a-20261014.json",
-              "sha256": "42ecb1953e0b22456b65fad10cdf2c99f7028dfa81e4e67455e8f19461d7f172",
-              "jsonPointer": "/families/14/historicalAnchors/0",
-              "line": 5769,
-              "endLine": 5783
-            }
-          ],
-          "casePath": null,
-          "limitations": [
-            "Original output is not valid as a block-end expected output.",
-            "Added canonical transaction-block hash is an identity anchor only; no N-end expected output claim."
-          ],
-          "missing": [
-            "lineageId",
-            "actors"
-          ],
-          "missingResponsibility": {
-            "lineageId": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "actors": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config"
-          }
-        },
-        {
           "id": "original-input-at-block-end",
           "classification": "real-historical-evidence",
           "variant": "rocksolid:active-sync-deposit",
@@ -6279,7 +6374,9 @@
           ],
           "casePath": "cases/rocksolid--original-input-at-block-end.json",
           "limitations": [
-            "Original syncDeposit input is borrowed for a block-end test. Original output remains metadata and is not an expected block-end output. Actors are configured local test actors. This inventory did not execute this case."
+            "Original syncDeposit input is borrowed for a block-end test. Original output remains metadata and is not an expected block-end output. Actors are configured local test actors. This inventory did not execute this case.",
+            "Original output is not valid as a block-end expected output.",
+            "Added canonical transaction-block hash is an identity anchor only; no N-end expected output claim."
           ],
           "missing": [],
           "missingResponsibility": {}
@@ -6296,52 +6393,6 @@
     {
       "familyId": "protocol:self-burn-native",
       "samples": [
-        {
-          "id": "reference-transaction",
-          "classification": "real-historical-evidence",
-          "variant": null,
-          "directions": [],
-          "transactionHash": "0xb51c9e139384978731d58c526d337bf78ac223647c5c0b570a574855bda723a7",
-          "source": {
-            "number": null,
-            "hash": null
-          },
-          "stateScope": "after-transaction",
-          "instanceKey": null,
-          "lineageId": null,
-          "actors": null,
-          "amounts": [],
-          "provenance": [
-            {
-              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/adapter-families/self-burn-native-txb51c.json",
-              "sha256": "fcb021162511416744ca5c0267f49a900c16d4b60ed5d21374b1117c7b9145a8",
-              "jsonPointer": "",
-              "line": 1,
-              "endLine": 107
-            }
-          ],
-          "casePath": null,
-          "limitations": [
-            "Real transaction reference in a route-pinned Adapter Replay fixture; not a synthetic transaction, not proof of new JSON acceptance.",
-            "stateAnchor block may be parent/after-trigger; it is not assumed to be the transaction block."
-          ],
-          "missing": [
-            "instanceKey",
-            "lineageId",
-            "actors",
-            "source.hash",
-            "source.number",
-            "amount/direction/token pair"
-          ],
-          "missingResponsibility": {
-            "instanceKey": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "lineageId": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "actors": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "source.hash": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "source.number": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config",
-            "amount/direction/token pair": "agent-derivable-from-receipt-trace-current-manifest-or-local-test-config"
-          }
-        },
         {
           "id": "original-input-at-block-end",
           "classification": "real-historical-evidence",
@@ -6390,11 +6441,20 @@
               "sha256": "2415db6f563c274548a70cb805ccc89b11961baf9780f0536c1cc79e04dd7998",
               "line": 3,
               "endLine": 23
+            },
+            {
+              "file": "/Users/eunice/src/MEV/logs/protocol-json-enabled-20261030/stage/listener/src/searcher/test/fixtures/adapter-families/self-burn-native-txb51c.json",
+              "sha256": "fcb021162511416744ca5c0267f49a900c16d4b60ed5d21374b1117c7b9145a8",
+              "jsonPointer": "",
+              "line": 1,
+              "endLine": 107
             }
           ],
           "casePath": "cases/self-burn-native--original-input-at-block-end.json",
           "limitations": [
-            "Actors are configured local test actors, not historical sender. Input selected for future same-state acceptance; this inventory did not execute it."
+            "Actors are configured local test actors, not historical sender. Input selected for future same-state acceptance; this inventory did not execute it.",
+            "Real transaction reference in a route-pinned Adapter Replay fixture; not a synthetic transaction, not proof of new JSON acceptance.",
+            "stateAnchor block may be parent/after-trigger; it is not assumed to be the transaction block."
           ],
           "missing": [],
           "missingResponsibility": {}
@@ -6851,11 +6911,145 @@
     },
     {
       "familyId": "protocol:wsteth",
-      "samples": [],
-      "missing": [
-        "No confirmed wrap/unwrap transaction found in the original IMPL table or bounded existing sample/test records. Token presence in an unrelated swap or synthetic rate probe is not a protocol-leg sample. Continue historical sample lookup; ask user only if no real transaction can be recovered."
+      "samples": [
+        {
+          "id": "wrap-original-input",
+          "classification": "real-historical-evidence",
+          "variant": "wsteth:steth-active-binding",
+          "directions": [
+            "wrap"
+          ],
+          "transactionHash": "0xb5bbf0a6a6fa0e29e77943fd3b51fd507145c0df4ab0597ed4eee1a244a24421",
+          "source": {
+            "number": 26319753,
+            "hash": "0xefd3117c72b6614caf178c31685c4aa3ea8d1ce2b554762b605f30789eefc263"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+          "lineageId": "wsteth:steth-active-binding",
+          "actors": {
+            "executor": "0x9C7F3400109F04e8044989BBb7D483dc4587053a",
+            "owner": "0x1000000000000000000000000000000000000001",
+            "scope": "historical transaction sender as executor; synthetic origin"
+          },
+          "amounts": [
+            {
+              "direction": "wrap",
+              "label": "original-wrap-input",
+              "tokenIn": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+              "tokenOut": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+              "amountIn": "603000000000000000000",
+              "recordedAmountOut": "483132003123191994951",
+              "amountScope": "original-transaction-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--wrap-original-input.json",
+                "sha256": "2eec373b9bd03183a8ec7687920024475ed85f1ccf2daa942a1ada33e39ac41b",
+                "jsonPointer": "/trials/0",
+                "line": 1,
+                "endLine": 1
+              }
+            }
+          ],
+          "casePath": "cases/wsteth--wrap-original-input.json",
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--wrap-original-input.json",
+              "sha256": "2eec373b9bd03183a8ec7687920024475ed85f1ccf2daa942a1ada33e39ac41b",
+              "jsonPointer": "/trials/0",
+              "line": 1,
+              "endLine": 1
+            }
+          ],
+          "missing": []
+        },
+        {
+          "id": "unwrap-original-input",
+          "classification": "real-historical-evidence",
+          "variant": "wsteth:steth-active-binding",
+          "directions": [
+            "unwrap"
+          ],
+          "transactionHash": "0x603e9a589073f30281ba5c1be20588129a7c8516812f4602247066a74a551175",
+          "source": {
+            "number": 26319029,
+            "hash": "0xa05f345f525994a85281b6de336d62ac6f34f834e1d1e8f573d8880618513f3f"
+          },
+          "stateScope": "canonical-block-end",
+          "instanceKey": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+          "lineageId": "wsteth:steth-active-binding",
+          "actors": {
+            "executor": "0x0DFD172B4D908dDac1DA2Bf5b474ADcee836c9e0",
+            "owner": "0x1000000000000000000000000000000000000001",
+            "scope": "historical transaction sender as executor; synthetic origin"
+          },
+          "amounts": [
+            {
+              "direction": "unwrap",
+              "label": "original-unwrap-input",
+              "tokenIn": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+              "tokenOut": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+              "amountIn": "30000000000000000000",
+              "recordedAmountOut": "37443182987377674483",
+              "amountScope": "original-transaction-input-at-block-end",
+              "provenance": {
+                "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--unwrap-original-input.json",
+                "sha256": "8ff1b3d1abc53e79605e85cc0de076f58197dd1d4efba1c41d2d80c87f2ad031",
+                "jsonPointer": "/trials/0",
+                "line": 1,
+                "endLine": 1
+              }
+            }
+          ],
+          "casePath": "cases/wsteth--unwrap-original-input.json",
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--unwrap-original-input.json",
+              "sha256": "8ff1b3d1abc53e79605e85cc0de076f58197dd1d4efba1c41d2d80c87f2ad031",
+              "jsonPointer": "/trials/0",
+              "line": 1,
+              "endLine": 1
+            }
+          ],
+          "missing": [],
+          "limitations": [
+            "Root cause of the earlier runtime failure was the JSON credit equality (1-wei stETH rebase rounding), fixed by declaring direction-only credit effects; the remaining quoted-path panic is unrelated to balance overrides."
+          ]
+        },
+        {
+          "id": "unwrap-zero-tolerance-control",
+          "classification": "historical-reference-needs-execution",
+          "variant": null,
+          "directions": [],
+          "transactionHash": "0x603e9a589073f30281ba5c1be20588129a7c8516812f4602247066a74a551175",
+          "source": {
+            "number": 26319029,
+            "hash": "0xa05f345f525994a85281b6de336d62ac6f34f834e1d1e8f573d8880618513f3f"
+          },
+          "stateScope": "reference-only-not-execution",
+          "instanceKey": null,
+          "lineageId": null,
+          "actors": null,
+          "amounts": [],
+          "casePath": null,
+          "provenance": [
+            {
+              "file": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028/listener/src/searcher/test/fixtures/protocol-json/README.md",
+              "sha256": "6f85e5e99e997a27e7d71b4983d989c8dfb07704bf86163295d2e5004ebd2416",
+              "jsonPointer": "/",
+              "line": 1,
+              "endLine": 1
+            }
+          ],
+          "missing": [
+            "zero-tolerance quoted floor: actual stETH credit is 1 wei below the unwrap return, so this control is expected to reject; the runnable sample declares outputToleranceRawUnits=1"
+          ],
+          "limitations": [
+            "Boundary control: 1 wei shortfall passes only with explicit tolerance 1; a 2-wei shortfall must still be rejected."
+          ]
+        }
       ],
-      "completeCases": 0,
+      "missing": [],
+      "completeCases": 2,
       "scope": {
         "migratedJsonPresent": true,
         "appRun2Enabled": true,

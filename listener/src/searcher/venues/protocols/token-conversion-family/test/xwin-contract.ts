@@ -6,28 +6,26 @@ import { getAddress, hexlify, Interface, keccak256, toUtf8Bytes, zeroPadValue } 
 import { createStrictCentralAdapterRuntime } from "../../../../strict-central-adapter-runtime.js";
 import { executeAdapterWork } from "../../../../adapter-work-intent.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource, ObservedEffects, RequestRequirements } from "../../../adapter-request-program.js";
-import { ABI, MAX_UINT } from "../variants.js";
-import { FAMILY } from "../manifest.js";
-import { discovery } from "../discovery.js";
-import { xwinIdentity } from "../xwin-identity.js";
-import { identity as conversionIdentity } from "../identity.js";
-import { instance } from "../instance.js";
-import { routes } from "../routes.js";
-import { pricing } from "../pricing.js";
-import { createConversionExact, exact } from "../exact.js";
-import { xwinCurrent, xwinSimulationCurrent } from "../xwin-pricing.js";
-import { xwinPrefix } from "../sequential.js";
+import { ABI, MAX_UINT } from "./reference/variants.js";
+import { FAMILY } from "./reference/manifest.js";
+import { xwinIdentity } from "./reference/xwin-identity.js";
+import { identity as conversionIdentity } from "./reference/identity.js";
+import { createConversionExact } from "./reference/exact.js";
+import { xwinCurrent, xwinSimulationCurrent } from "./reference/xwin-pricing.js";
+import { xwinPrefix } from "./reference/sequential.js";
 import { defineProtocolFamily, definedFamilyPluginContractSummary, type ExactQuotePrefixStep } from "../../../adapter-family-plugin.js";
 import { capabilityManifestHash, FAMILY_CAPABILITY_NAMES, FamilyCapabilityCatalog } from "../../../family-capability-catalog.js";
 import { plugin as productionPlugin } from "../../../production-families/token-conversion.production.js";
-import { execution } from "../execution.js";
-import { mintAction, redeemAction } from "../action.js";
-import { XWIN_ABI, XWIN_IMPLEMENTATION_HASH, XWIN_IMPLEMENTATION_SLOT, decodeXwinReceipt, proveXwinProxy, xwinCalldata, type XwinSurface } from "../xwin.js";
-import type { ConversionDescriptor, ConversionIdentity, ConversionPricingDescriptor, ConversionRoute, Direction } from "../types.js";
+import { checkIssuedConversion } from "./encoded-action.js";
+import { XWIN_ABI, XWIN_IMPLEMENTATION_HASH, XWIN_IMPLEMENTATION_SLOT, decodeXwinReceipt, proveXwinProxy, xwinCalldata, type XwinSurface } from "./reference/xwin.js";
+import type { ConversionDescriptor, ConversionIdentity, ConversionPricingDescriptor, ConversionRoute, Direction } from "./reference/types.js";
 import { runStrictFamilyLifecycle } from "../../../../strict-family-lifecycle-runner.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../../../production-family-composition.js";
 import { refreshFixture } from "./refresh-fixture.js";
 import { attestPoolIdentitiesStrict } from "../../../../strict-identity-attestation.js";
+
+const { discovery, instance, routes, execution, exact, pricing } = productionPlugin;
+
 
 // Offline fixtures exercise the real request issuer and Family methods. They
 // are NOT EVM/historical execution. The production-root test below additionally
@@ -243,7 +241,8 @@ test("xWin cached templates, implementation identity and canonical call nominati
 });
 test("xWin identity requires actual executor effects and code, not only selectors or refresh declaration", async () => {
   const id = await identify(); assert.equal(id.variant, "xwin-allocations-v1");
-  assert.equal(pricing.refreshPolicy, "each-block");
+  const descriptor = instance.finalizeDescriptor({ identity: id, draft: instance.compileDraft(id), sharedBindings: [] });
+  assert.equal(pricing.refreshPolicyForInstance!({descriptor}), "each-block");
   await assert.rejects(identify(fixture(SOURCE, { badImplementation: true })), /implementation code/);
   await assert.rejects(identify(fixture(SOURCE, { malformedReceipt: true })), /log mismatch/);
   await assert.rejects(identify(fixture(SOURCE, { eoa: true })), /runtime code/);
@@ -335,11 +334,9 @@ test("xWin explicit simulation Exact preserves each amount, re-reads dependencie
     assert.equal((await quote(alternateActor, d, r, 7n)).amountOut, 11n);
     assert.equal(alternateActor.simulated[0]!.actor, NEXT);
     await assert.rejects(quote(fixture(SOURCE, { actor: PROXY.proxyAdmin }), d, r, 7n), /admin/);
-    const fragment = execution.buildFragment({ descriptor: d, route: r, executor: EXECUTOR, amountIn: 7n, quotedAmountOut: a.amountOut,
+    const fragment = execution.buildFragment({ descriptor: d, route: r, executor: EXECUTOR, transactionOrigin: ORIGIN, amountIn: 7n, quotedAmountOut: a.amountOut,
       minAmountOut: a.amountOut, exactEvidence: a.evidence, runtimeEvidence: [] });
-    const bytes = hexlify((r.direction === "mint" ? mintAction : redeemAction).encode(fragment.nodes[0]!, EXECUTOR, new Uint8Array()));
-    assert(bytes.includes(xwinCalldata(r.direction, 7n).slice(2)));
-    assert.equal((bytes.match(/095ea7b3/g) ?? []).length, r.direction === "mint" ? 3 : 0);
+    checkIssuedConversion(fragment.nodes[0]!, EXECUTOR, a.amountOut, xwinCalldata(r.direction, 7n), r.direction === "mint");
     await assert.rejects(quote(fixture(), d, r, MAX_UINT + 1n), /uint256/);
   }
 });

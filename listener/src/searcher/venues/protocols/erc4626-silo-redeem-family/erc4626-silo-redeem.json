@@ -1,0 +1,3361 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:erc4626-silo-redeem"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:erc4626-silo-redeem",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "erc4626-redeem-silo"
+    ],
+    "requiredInfraActionAdapterIds": [],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "redeem"
+      }
+    ],
+    "supportedLineages": [
+      "erc4626-silo:observed-payout-active-proof"
+    ],
+    "poolAdapterIds": [
+      "erc4626-silo-redeem"
+    ],
+    "edgeAdapterIds": [
+      "erc4626-redeem-silo"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [
+        "dex-token-domain",
+        "observed-interaction"
+      ],
+      "candidate": {
+        "kind": "erc4626-silo-payout",
+        "addressField": "vault",
+        "fields": {
+          "vault": "address",
+          "payoutToken": "address",
+          "observedMode": "string",
+          "observedAmount": "uint",
+          "transactionHash": "bytes32",
+          "blockNumber": "number",
+          "blockHash": "bytes32"
+        },
+        "optionalFields": [
+          "transactionHash",
+          "blockNumber",
+          "blockHash"
+        ],
+        "nullableFields": [
+          "transactionHash"
+        ],
+        "key": [
+          "vault",
+          "payoutToken"
+        ]
+      },
+      "calls": [
+        {
+          "id": "silo-redeem-call",
+          "signature": "redeem(address,uint256,address,address)",
+          "fields": {
+            "vault": {
+              "from": "target"
+            },
+            "payoutToken": {
+              "from": "argument",
+              "index": 0
+            },
+            "observedMode": {
+              "from": "literal",
+              "value": "redeem"
+            },
+            "observedAmount": {
+              "from": "argument",
+              "index": 1
+            }
+          },
+          "predicates": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.payoutToken",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.payoutToken",
+                    "$candidate.vault"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.vault",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$candidate.observedAmount",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "silo-withdraw-call",
+          "signature": "withdraw(address,uint256,address,address)",
+          "fields": {
+            "vault": {
+              "from": "target"
+            },
+            "payoutToken": {
+              "from": "argument",
+              "index": 0
+            },
+            "observedMode": {
+              "from": "literal",
+              "value": "withdraw"
+            },
+            "observedAmount": {
+              "from": "argument",
+              "index": 1
+            }
+          },
+          "predicates": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.payoutToken",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.payoutToken",
+                    "$candidate.vault"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.vault",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$candidate.observedAmount",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "silo-redeem-withdraw-log",
+          "signature": "Withdraw(address,address,address,uint256,uint256)",
+          "fields": {},
+          "nominationOnly": true
+        }
+      ],
+      "surface": {
+        "id": "silo-redeem-vault-surface",
+        "fingerprint": "erc4626-silo-redeem:vault-surface-v1",
+        "fields": {
+          "vault": {
+            "from": "emitter"
+          },
+          "payoutToken": {
+            "from": "opaque",
+            "path": "payoutToken"
+          },
+          "observedMode": {
+            "from": "opaque",
+            "path": "observedMode"
+          },
+          "observedAmount": {
+            "from": "opaque",
+            "path": "observedAmount"
+          },
+          "transactionHash": {
+            "from": "opaque",
+            "path": "transactionHash"
+          },
+          "blockNumber": {
+            "from": "opaque",
+            "path": "blockNumber"
+          },
+          "blockHash": {
+            "from": "opaque",
+            "path": "blockHash"
+          }
+        },
+        "predicates": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$candidate.payoutToken",
+                  "0x0000000000000000000000000000000000000000"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$candidate.payoutToken",
+                  "$candidate.vault"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$candidate.vault",
+                  "0x0000000000000000000000000000000000000000"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "gt",
+            "args": [
+              "$candidate.observedAmount",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$candidate.observedMode",
+                  "redeem"
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  "$candidate.observedMode",
+                  "withdraw"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "labels": [
+        "erc4626-silo-redeem",
+        "protocol:erc4626-silo-redeem"
+      ],
+      "nomination": "address-surface",
+      "nominationReadFlow": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "vault",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "nomination-vault-asset",
+                "kind": "eth-call",
+                "to": "$address",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "asset",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "underlying",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "asset",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "nomination-vault-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": "$underlying"
+              }
+            ]
+          },
+          {
+            "id": "probe",
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "let": "records",
+                "value": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$nomination.opaque",
+                        "evidence"
+                      ]
+                    },
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$nomination.opaque",
+                            "candidateEvidence"
+                          ]
+                        },
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$nomination.opaque",
+                                    "candidate"
+                                  ]
+                                },
+                                "evidence"
+                              ]
+                            },
+                            []
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "record",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$records",
+                        "entry",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "or",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$entry",
+                                        "kind"
+                                      ]
+                                    },
+                                    "erc4626-silo-payout-candidate"
+                                  ]
+                                },
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$entry",
+                                        "kind"
+                                      ]
+                                    },
+                                    "silo-payout-candidate"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "matches",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$entry",
+                                    "underlyingAsset"
+                                  ]
+                                },
+                                "^0x[0-9a-fA-F]{40}$"
+                              ]
+                            },
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$entry",
+                                    "underlyingAsset"
+                                  ]
+                                },
+                                "$steps.vault"
+                              ]
+                            },
+                            {
+                              "op": "and",
+                              "args": [
+                                {
+                                  "op": "or",
+                                  "args": [
+                                    {
+                                      "op": "and",
+                                      "args": [
+                                        {
+                                          "op": "matches",
+                                          "args": [
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                "$entry",
+                                                "sampleShares"
+                                              ]
+                                            },
+                                            "^[0-9]+$"
+                                          ]
+                                        },
+                                        {
+                                          "op": "gt",
+                                          "args": [
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    "$entry",
+                                                    "sampleShares"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                "0"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "and",
+                                      "args": [
+                                        {
+                                          "op": "matches",
+                                          "args": [
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    "$entry",
+                                                    "sampleShares"
+                                                  ]
+                                                },
+                                                "__mev_protocol_bigint__"
+                                              ]
+                                            },
+                                            "^[0-9]+$"
+                                          ]
+                                        },
+                                        {
+                                          "op": "gt",
+                                          "args": [
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "get",
+                                                      "args": [
+                                                        "$entry",
+                                                        "sampleShares"
+                                                      ]
+                                                    },
+                                                    "__mev_protocol_bigint__"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                "0"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "or",
+                                  "args": [
+                                    {
+                                      "op": "and",
+                                      "args": [
+                                        {
+                                          "op": "matches",
+                                          "args": [
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                "$entry",
+                                                "sampleAssets"
+                                              ]
+                                            },
+                                            "^[0-9]+$"
+                                          ]
+                                        },
+                                        {
+                                          "op": "gt",
+                                          "args": [
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    "$entry",
+                                                    "sampleAssets"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                "0"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "and",
+                                      "args": [
+                                        {
+                                          "op": "matches",
+                                          "args": [
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    "$entry",
+                                                    "sampleAssets"
+                                                  ]
+                                                },
+                                                "__mev_protocol_bigint__"
+                                              ]
+                                            },
+                                            "^[0-9]+$"
+                                          ]
+                                        },
+                                        {
+                                          "op": "gt",
+                                          "args": [
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "get",
+                                                      "args": [
+                                                        "$entry",
+                                                        "sampleAssets"
+                                                      ]
+                                                    },
+                                                    "__mev_protocol_bigint__"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "op": "uint",
+                                              "args": [
+                                                "0"
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "sampleShares",
+                "value": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "matches",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$record",
+                                "sampleShares"
+                              ]
+                            },
+                            "^[0-9]+$"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$record",
+                            "sampleShares"
+                          ]
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "matches",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$record",
+                                    "sampleShares"
+                                  ]
+                                },
+                                "__mev_protocol_bigint__"
+                              ]
+                            },
+                            "^[0-9]+$"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$record",
+                                "sampleShares"
+                              ]
+                            },
+                            "__mev_protocol_bigint__"
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$record"
+                          ]
+                        },
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$sampleShares"
+                          ]
+                        },
+                        {
+                          "op": "not",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$steps.vault",
+                                "0x0000000000000000000000000000000000000000"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "not",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$steps.vault",
+                                "$address"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "candidateKind": "erc4626-silo-payout",
+                      "vault": "$address",
+                      "payoutToken": "$steps.vault",
+                      "observedMode": "redeem",
+                      "observedAmount": {
+                        "op": "uint",
+                        "args": [
+                          "$sampleShares"
+                        ]
+                      }
+                    },
+                    null
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "result": "$steps.probe"
+      }
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "vault": [
+          "function asset() view returns (address)",
+          "function totalSupply() view returns (uint256)",
+          "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+          "function redeem(address token,uint256 shares,address receiver,address owner) returns (uint256 amountOut)",
+          "function withdraw(address token,uint256 assets,address receiver,address owner) returns (uint256 shares)",
+          "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)"
+        ],
+        "payout": [
+          "function asset() view returns (address)",
+          "function previewWithdraw(uint256 assets) view returns (uint256 shares)"
+        ],
+        "token": [
+          "function decimals() view returns (uint8)",
+          "function balanceOf(address account) view returns (uint256)",
+          "function totalSupply() view returns (uint256)"
+        ]
+      },
+      "constants": {
+        "probeActor": "0x00000000000000000000000000000000000051a0",
+        "caller": {
+          "kind": "verified-actor",
+          "evidenceId": "erc4626-silo-probe-actor"
+        },
+        "zero": "0x0000000000000000000000000000000000000000",
+        "sampleSharesCap": "1000000000000000000"
+      },
+      "expressions": {
+        "sampleShares": {
+          "op": "if",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                "$totalSupply",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "min",
+              "args": [
+                {
+                  "op": "div",
+                  "args": [
+                    "$totalSupply",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "2"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "$constants.sampleSharesCap"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "baseValid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$underlyingAsset",
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$underlyingAsset",
+                "$payoutAsset"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$candidate.vault",
+                    "$underlyingAsset"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$sampleShares",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "identity": {
+        "select": [
+          {
+            "return": "base",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "preview",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "base"
+              ]
+            }
+          },
+          {
+            "return": "active",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "preview"
+              ]
+            }
+          },
+          {
+            "return": "terminal"
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-vault-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                }
+              },
+              {
+                "id": "identity-payout-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.payoutToken"
+                  ]
+                }
+              },
+              {
+                "id": "identity-vault-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "asset",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-payout-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.payoutToken"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "payout",
+                    "asset",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-total-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "totalSupply",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "vaultCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "identity-vault-code"
+                  ]
+                }
+              },
+              {
+                "let": "payoutCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "identity-payout-code"
+                  ]
+                }
+              },
+              {
+                "let": "underlyingAsset",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "asset",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-vault-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "payoutAsset",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "payout",
+                        "asset",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-payout-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "totalSupply",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "vault",
+                    "totalSupply",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-total-supply"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "sampleShares",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "sampleShares",
+                    {}
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "vault": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.vault"
+                    ]
+                  },
+                  "payoutToken": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.payoutToken"
+                    ]
+                  },
+                  "underlyingAsset": "$underlyingAsset",
+                  "totalSupply": "$totalSupply",
+                  "sampleShares": "$sampleShares",
+                  "behaviorValid": {
+                    "op": "expression",
+                    "args": [
+                      "baseValid",
+                      {}
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "preview": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-preview-redeem",
+                "kind": "eth-call",
+                "to": "$evidence.vault",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "previewRedeem",
+                    [
+                      "$evidence.sampleShares"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "sampleAssets",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "vault",
+                    "previewRedeem",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-preview-redeem"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "preview",
+                      "sampleAssets": "$sampleAssets",
+                      "behaviorValid": {
+                        "op": "and",
+                        "args": [
+                          "$evidence.behaviorValid",
+                          {
+                            "op": "gt",
+                            "args": [
+                              "$sampleAssets",
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "0"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "effect-delta-simulation"
+              ],
+              "caller": "verified-actor",
+              "effects": [
+                "return-data",
+                "token-delta",
+                "total-supply-delta",
+                "logs"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-preview-withdraw",
+                "kind": "eth-call",
+                "to": "$evidence.payoutToken",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "payout",
+                    "previewWithdraw",
+                    [
+                      "$evidence.sampleAssets"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-active-redeem",
+                "kind": "effect-delta-simulation",
+                "call": {
+                  "caller": "$constants.caller",
+                  "executionMode": "impersonated-call-frame",
+                  "to": "$evidence.vault",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "vault",
+                      "redeem",
+                      [
+                        "$evidence.payoutToken",
+                        "$evidence.sampleShares",
+                        "$constants.probeActor",
+                        "$constants.probeActor"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": "$constants.caller",
+                  "tokenBalances": [
+                    {
+                      "token": "$evidence.vault",
+                      "amount": "$evidence.sampleShares"
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": "$evidence.vault",
+                    "account": "$constants.caller"
+                  },
+                  {
+                    "token": "$evidence.payoutToken",
+                    "account": "$constants.caller"
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "logs"
+                ]
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "expectedPayout",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "payout",
+                    "previewWithdraw",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-preview-withdraw"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "attempt": [
+                  {
+                    "let": "active",
+                    "value": {
+                      "op": "successful",
+                      "args": [
+                        "identity-active-redeem"
+                      ]
+                    }
+                  },
+                  {
+                    "let": "actualPayout",
+                    "value": {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "redeem",
+                        {
+                          "op": "get",
+                          "args": [
+                            "$active",
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  },
+                  {
+                    "let": "tokenDeltas",
+                    "value": {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "effects",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$active",
+                                "effects"
+                              ]
+                            }
+                          ]
+                        },
+                        "tokenDeltas"
+                      ]
+                    }
+                  },
+                  {
+                    "let": "supplyDeltas",
+                    "value": {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "effects",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$active",
+                                "effects"
+                              ]
+                            }
+                          ]
+                        },
+                        "totalSupplyDeltas"
+                      ]
+                    }
+                  },
+                  {
+                    "let": "tokenSpent",
+                    "value": {
+                      "op": "some",
+                      "args": [
+                        "$tokenDeltas",
+                        "delta",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$delta",
+                                    "token"
+                                  ]
+                                },
+                                "$evidence.vault"
+                              ]
+                            },
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$delta",
+                                    "account"
+                                  ]
+                                },
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$constants.probeActor"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$delta",
+                                    "delta"
+                                  ]
+                                },
+                                {
+                                  "op": "sub",
+                                  "args": [
+                                    {
+                                      "op": "uint",
+                                      "args": [
+                                        "0"
+                                      ]
+                                    },
+                                    "$evidence.sampleShares"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "supplyBurned",
+                    "value": {
+                      "op": "some",
+                      "args": [
+                        "$supplyDeltas",
+                        "delta",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$delta",
+                                    "token"
+                                  ]
+                                },
+                                "$evidence.vault"
+                              ]
+                            },
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$delta",
+                                    "delta"
+                                  ]
+                                },
+                                {
+                                  "op": "sub",
+                                  "args": [
+                                    {
+                                      "op": "uint",
+                                      "args": [
+                                        "0"
+                                      ]
+                                    },
+                                    "$evidence.sampleShares"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "payoutReceived",
+                    "value": {
+                      "op": "some",
+                      "args": [
+                        "$tokenDeltas",
+                        "delta",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$delta",
+                                    "token"
+                                  ]
+                                },
+                                "$evidence.payoutToken"
+                              ]
+                            },
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$delta",
+                                    "account"
+                                  ]
+                                },
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$constants.probeActor"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$delta",
+                                    "delta"
+                                  ]
+                                },
+                                "$actualPayout"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "assert": {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "shape",
+                          "args": [
+                            "identity-active-redeem"
+                          ]
+                        },
+                        "returned"
+                      ]
+                    },
+                    "error": "ERC4626 Silo redeem simulation did not return"
+                  },
+                  {
+                    "let": "behaviorProofHash",
+                    "value": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "vault": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.vault"
+                            ]
+                          },
+                          "payoutToken": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.payoutToken"
+                            ]
+                          },
+                          "underlyingAsset": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.underlyingAsset"
+                            ]
+                          },
+                          "sampleShares": "$evidence.sampleShares",
+                          "sampleAssets": "$evidence.sampleAssets",
+                          "expectedPayout": "$expectedPayout",
+                          "actualPayout": "$actualPayout",
+                          "effects": {
+                            "op": "effects",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "successful",
+                                    "args": [
+                                      "identity-active-redeem"
+                                    ]
+                                  },
+                                  "effects"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "return": {
+                      "op": "merge",
+                      "args": [
+                        "$evidence",
+                        {
+                          "phase": "active",
+                          "expectedPayout": "$expectedPayout",
+                          "behaviorValid": {
+                            "op": "and",
+                            "args": [
+                              "$evidence.behaviorValid",
+                              {
+                                "op": "gt",
+                                "args": [
+                                  "$expectedPayout",
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "0"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "eq",
+                                "args": [
+                                  "$actualPayout",
+                                  "$expectedPayout"
+                                ]
+                              },
+                              "$tokenSpent",
+                              "$supplyBurned",
+                              "$payoutReceived"
+                            ]
+                          },
+                          "behaviorProofHash": "$behaviorProofHash"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "catch": [
+                  {
+                    "let": "behaviorProofHash",
+                    "value": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "vault": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.vault"
+                            ]
+                          },
+                          "payoutToken": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.payoutToken"
+                            ]
+                          },
+                          "underlyingAsset": {
+                            "op": "lower",
+                            "args": [
+                              "$evidence.underlyingAsset"
+                            ]
+                          },
+                          "sampleShares": "$evidence.sampleShares",
+                          "sampleAssets": "$evidence.sampleAssets",
+                          "expectedPayout": "$expectedPayout",
+                          "actualPayout": {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          },
+                          "effects": {
+                            "op": "effects",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "successful",
+                                    "args": [
+                                      "identity-active-redeem"
+                                    ]
+                                  },
+                                  "effects"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "return": {
+                      "op": "merge",
+                      "args": [
+                        "$evidence",
+                        {
+                          "phase": "active",
+                          "expectedPayout": "$expectedPayout",
+                          "behaviorValid": false,
+                          "behaviorProofHash": "$behaviorProofHash"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "terminal": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "silo_static_behavior_failed",
+              "evidenceRequestIds": [
+                "identity-active-redeem",
+                "observed-payout-active-proof"
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.behaviorValid"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "active"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "silo-payout-active-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.vault"
+                      ]
+                    },
+                    "evidenceHash": "$evidence.behaviorProofHash"
+                  }
+                ],
+                "vault": "$evidence.vault",
+                "payoutToken": "$evidence.payoutToken",
+                "underlyingAsset": "$evidence.underlyingAsset"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.vault"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.payoutToken"
+                ]
+              }
+            ]
+          }
+        ],
+        ":"
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.vault"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.payoutToken"
+                ]
+              }
+            ]
+          }
+        ],
+        ":"
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "join",
+        "args": [
+          [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$identity.vault"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$identity.payoutToken"
+                  ]
+                }
+              ]
+            }
+          ],
+          ":"
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        },
+        {
+          "kind": "execution-actor",
+          "role": "executor"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-data"
+        },
+        {
+          "kind": "effect-observation",
+          "effects": [
+            "token-delta",
+            "total-supply-delta",
+            "logs"
+          ]
+        }
+      ],
+      "vault": {
+        "op": "address",
+        "args": [
+          "$identity.vault"
+        ]
+      },
+      "payoutToken": {
+        "op": "address",
+        "args": [
+          "$identity.payoutToken"
+        ]
+      },
+      "underlyingAsset": {
+        "op": "address",
+        "args": [
+          "$identity.underlyingAsset"
+        ]
+      }
+    },
+    "bindingProjection": {
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "payoutToken": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.payoutToken"
+            ]
+          }
+        ]
+      },
+      "underlyingAsset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.underlyingAsset"
+            ]
+          }
+        ]
+      },
+      "redeemSemantics": "silo-multitoken-exact-in-v1"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.vault",
+    "bindingKey": {
+      "op": "join",
+      "args": [
+        [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.vault"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.payoutToken"
+                ]
+              }
+            ]
+          }
+        ],
+        ":"
+      ]
+    },
+    "directions": [
+      {
+        "id": "silo-redeem",
+        "enabled": true,
+        "tokenIn": "$descriptor.vault",
+        "tokenOut": "$descriptor.payoutToken",
+        "adapterId": "erc4626-redeem-silo",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.familyId",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.vault"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.payoutToken"
+                ]
+              }
+            ]
+          }
+        ],
+        "\u001f"
+      ]
+    },
+    "assertions": [
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            "$descriptor.instanceKey",
+            "$route.instanceKey"
+          ]
+        },
+        "error": "ERC4626 Silo route is not bound to its instance descriptor"
+      },
+      {
+        "condition": {
+          "op": "sameAddress",
+          "args": [
+            "$route.target",
+            "$descriptor.vault"
+          ]
+        },
+        "error": "ERC4626 Silo route target is incompatible with its descriptor"
+      },
+      {
+        "condition": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            "$descriptor.vault"
+          ]
+        },
+        "error": "ERC4626 Silo route input is not the vault share"
+      },
+      {
+        "condition": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            "$descriptor.payoutToken"
+          ]
+        },
+        "error": "ERC4626 Silo route output is not the payout token"
+      },
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            "$route.direction",
+            "silo-redeem"
+          ]
+        },
+        "error": "ERC4626 Silo route direction is incompatible with its descriptor"
+      },
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            "erc4626-redeem-silo"
+          ]
+        },
+        "error": "ERC4626 Silo route adapter is incompatible with its descriptor"
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-subinstance",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "payoutToken": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.payoutToken"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      },
+      {
+        "kind": "total-supply-delta",
+        "token": "$descriptor.vault",
+        "direction": "decrease"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "vault": "$descriptor.vault",
+      "payoutToken": "$descriptor.payoutToken",
+      "underlyingAsset": "$descriptor.underlyingAsset",
+      "route": {
+        "op": "at",
+        "args": [
+          "$routes",
+          0
+        ]
+      },
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "vault": "$descriptor.vault",
+      "payoutToken": "$descriptor.payoutToken",
+      "quoteChain": "previewRedeem->previewWithdraw"
+    },
+    "static": {
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$draft.vault",
+        "$draft.payoutToken"
+      ],
+      "requests": [
+        {
+          "id": "static-share-decimals",
+          "kind": "eth-call",
+          "to": "$draft.vault",
+          "data": {
+            "op": "encode",
+            "args": [
+              "token",
+              "decimals",
+              []
+            ]
+          },
+          "completion": "return-data"
+        }
+      ],
+      "decode": {
+        "fields": [
+          {
+            "name": "shareDecimals",
+            "value": {
+              "op": "word",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "static-share-decimals"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            },
+            "checks": [
+              {
+                "condition": {
+                  "op": "lte",
+                  "args": [
+                    "$shareDecimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "77"
+                      ]
+                    }
+                  ]
+                },
+                "error": "protocol token decimals exceed uint256 scale"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "oneShare": {
+            "op": "pow",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  "10"
+                ]
+              },
+              "$shareDecimals"
+            ]
+          }
+        }
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "finalizeChecks": [
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$draft.routes"
+              ]
+            },
+            1
+          ]
+        },
+        "error": "ERC4626 Silo pricing requires one behavior-proven route"
+      }
+    ],
+    "sampleAmount": "$descriptor.oneShare",
+    "exactCompatibility": {
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "payoutToken": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.payoutToken"
+            ]
+          }
+        ]
+      },
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "exactChain": "preview-redeem->preview-withdraw-v1"
+    },
+    "mutationKinds": [
+      "log"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "observed-payout-active-proof",
+    "lineageId": "erc4626-silo:observed-payout-active-proof",
+    "abi": {
+      "vault": [
+        "function asset() view returns (address)",
+        "function totalSupply() view returns (uint256)",
+        "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+        "function redeem(address token,uint256 shares,address receiver,address owner) returns (uint256 amountOut)",
+        "function withdraw(address token,uint256 assets,address receiver,address owner) returns (uint256 shares)",
+        "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)"
+      ],
+      "payout": [
+        "function asset() view returns (address)",
+        "function previewWithdraw(uint256 assets) view returns (uint256 shares)"
+      ],
+      "token": [
+        "function decimals() view returns (uint8)",
+        "function balanceOf(address account) view returns (uint256)",
+        "function totalSupply() view returns (uint256)"
+      ]
+    },
+    "constants": {},
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "custom",
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.vault",
+        "$descriptor.payoutToken",
+        "$descriptor.underlyingAsset"
+      ],
+      "mutationAddresses": [
+        "$descriptor.vault",
+        "$descriptor.payoutToken"
+      ],
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$snapshot.previewAssets",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$snapshot.quotes",
+                              "$route.routeKey"
+                            ]
+                          },
+                          "amountOut"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          [
+            "$route.routeKey",
+            "silo_preview_chain_zero"
+          ]
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "preview-redeem-then-withdraw",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "retainReadEvidence": true,
+      "evidence": {
+        "kind": "erc4626-silo-preview-chain",
+        "source": "$source",
+        "vault": "$descriptor.vault",
+        "payoutToken": "$descriptor.payoutToken",
+        "amountIn": "$amountIn",
+        "previewAssets": "$steps.previewRedeem",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "zeroEvidence": {
+        "kind": "erc4626-silo-preview-chain",
+        "source": "$source",
+        "vault": "$descriptor.vault",
+        "payoutToken": "$descriptor.payoutToken",
+        "amountIn": "$amountIn",
+        "previewAssets": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.vault",
+        "$descriptor.payoutToken",
+        "$descriptor.underlyingAsset"
+      ],
+      "call": {
+        "target": "$descriptor.vault",
+        "signature": "function redeem(address,uint256,address,address) returns(uint256)",
+        "args": [
+          "$route.tokenOut",
+          {
+            "runtime": "amountIn"
+          },
+          "$recipient",
+          "$executor"
+        ],
+        "save": {
+          "output": 0
+        }
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "output"
+          },
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "supply",
+          "token": "$descriptor.vault",
+          "direction": "decrease",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-native",
+          "when": "$directSettlement"
+        }
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "eq",
+            "args": [
+              "$direction",
+              "silo-redeem"
+            ]
+          },
+          "error": "ERC4626 Silo execution direction unsupported"
+        }
+      ]
+    }
+  },
+  "modules": {
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "previewRedeem",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-preview-redeem",
+              "kind": "eth-call",
+              "to": "$descriptor.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "vault",
+                  "previewRedeem",
+                  [
+                    "$descriptor.oneShare"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "previewAssets",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "vault",
+                  "previewRedeem",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-preview-redeem"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "return": "$previewAssets"
+            }
+          ]
+        },
+        {
+          "id": "previewWithdraw",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-preview-withdraw",
+              "kind": "eth-call",
+              "to": "$descriptor.payoutToken",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "payout",
+                  "previewWithdraw",
+                  [
+                    "$steps.previewRedeem"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "amountOut",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "payout",
+                  "previewWithdraw",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-preview-withdraw"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "return": "$amountOut"
+            }
+          ]
+        }
+      ],
+      "result": {
+        "source": "$source",
+        "previewAssets": "$steps.previewRedeem",
+        "quotes": {
+          "op": "objectFromEntries",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$routes",
+                "route",
+                [
+                  "$route.routeKey",
+                  {
+                    "amountIn": "$descriptor.oneShare",
+                    "amountOut": "$steps.previewWithdraw"
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "chainQuote": {
+        "steps": [
+          {
+            "step": "previewRedeem",
+            "requestId": "exact-preview-redeem",
+            "signature": "function previewRedeem(uint256 shares) view returns (uint256 assets)",
+            "amountPath": [
+              0
+            ],
+            "outputPath": [
+              0
+            ],
+            "completion": "returned"
+          },
+          {
+            "step": "previewWithdraw",
+            "requestId": "exact-preview-withdraw",
+            "signature": "function previewWithdraw(uint256 assets) view returns (uint256 shares)",
+            "amountPath": [
+              0
+            ],
+            "outputPath": [
+              0
+            ],
+            "completion": "returned"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "id": "previewRedeem",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "exact-preview-redeem",
+              "kind": "eth-call",
+              "to": "$descriptor.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "vault",
+                  "previewRedeem",
+                  [
+                    "$amountIn"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "previewAssets",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "vault",
+                  "previewRedeem",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "exact-preview-redeem"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "gt",
+                "args": [
+                  "$previewAssets",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "error": "ERC4626 Silo exact preview chain returned no assets"
+            },
+            {
+              "return": "$previewAssets"
+            }
+          ]
+        },
+        {
+          "id": "previewWithdraw",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "exact-preview-withdraw",
+              "kind": "eth-call",
+              "to": "$descriptor.payoutToken",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "payout",
+                  "previewWithdraw",
+                  [
+                    "$steps.previewRedeem"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "amountOut",
+              "value": {
+                "op": "decode",
+                "args": [
+                  "payout",
+                  "previewWithdraw",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "exact-preview-withdraw"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "gt",
+                "args": [
+                  "$amountOut",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "error": "ERC4626 Silo exact preview chain returned no output"
+            },
+            {
+              "return": "$amountOut"
+            }
+          ]
+        }
+      ],
+      "result": "$steps.previewWithdraw"
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "erc4626-redeem-silo",
+        "lineage": "erc4626",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function redeem(address,uint256,address,address)"
+        }
+      ]
+    }
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "SiloCandidate": {
+        "type": "object",
+        "extends": [
+          "FamilyCandidate"
+        ],
+        "fields": {
+          "candidateKind": {
+            "literal": "erc4626-silo-payout"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "payoutToken": {
+            "type": "string"
+          },
+          "observedMode": {
+            "union": [
+              {
+                "literal": "redeem"
+              },
+              {
+                "literal": "withdraw"
+              }
+            ]
+          },
+          "observedAmount": {
+            "type": "bigint"
+          },
+          "transactionHash": {
+            "type": "string"
+          },
+          "blockNumber": {
+            "type": "number"
+          },
+          "blockHash": {
+            "type": "string"
+          }
+        },
+        "optional": [
+          "transactionHash",
+          "blockNumber",
+          "blockHash"
+        ]
+      },
+      "SiloBaseEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {
+            "literal": "base"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "payoutToken": {
+            "type": "string"
+          },
+          "underlyingAsset": {
+            "type": "string"
+          },
+          "totalSupply": {
+            "type": "bigint"
+          },
+          "sampleShares": {
+            "type": "bigint"
+          },
+          "behaviorValid": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SiloPreviewEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {
+            "literal": "preview"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "payoutToken": {
+            "type": "string"
+          },
+          "underlyingAsset": {
+            "type": "string"
+          },
+          "totalSupply": {
+            "type": "bigint"
+          },
+          "sampleShares": {
+            "type": "bigint"
+          },
+          "sampleAssets": {
+            "type": "bigint"
+          },
+          "behaviorValid": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SiloActiveEvidence": {
+        "type": "object",
+        "fields": {
+          "phase": {
+            "literal": "active"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "payoutToken": {
+            "type": "string"
+          },
+          "underlyingAsset": {
+            "type": "string"
+          },
+          "totalSupply": {
+            "type": "bigint"
+          },
+          "sampleShares": {
+            "type": "bigint"
+          },
+          "sampleAssets": {
+            "type": "bigint"
+          },
+          "expectedPayout": {
+            "type": "bigint"
+          },
+          "behaviorValid": {
+            "type": "boolean"
+          },
+          "behaviorProofHash": {
+            "type": "string"
+          }
+        }
+      },
+      "SiloIdentityEvidence": {
+        "union": [
+          {
+            "ref": "SiloBaseEvidence"
+          },
+          {
+            "ref": "SiloPreviewEvidence"
+          },
+          {
+            "ref": "SiloActiveEvidence"
+          }
+        ]
+      },
+      "SiloIdentity": {
+        "type": "object",
+        "extends": [
+          "VerifiedIdentity"
+        ],
+        "fields": {
+          "vault": {
+            "type": "string"
+          },
+          "payoutToken": {
+            "type": "string"
+          },
+          "underlyingAsset": {
+            "type": "string"
+          }
+        }
+      },
+      "SiloDescriptor": {
+        "type": "object",
+        "extends": [
+          "CompiledInstanceDescriptor"
+        ],
+        "fields": {
+          "vault": {
+            "type": "string"
+          },
+          "payoutToken": {
+            "type": "string"
+          },
+          "underlyingAsset": {
+            "type": "string"
+          }
+        }
+      },
+      "SiloRoute": {
+        "type": "object",
+        "extends": [
+          "FamilyRouteDescriptor"
+        ],
+        "fields": {
+          "target": {
+            "type": "string"
+          },
+          "direction": {
+            "literal": "silo-redeem"
+          },
+          "adapterId": {
+            "literal": "erc4626-redeem-silo"
+          }
+        }
+      },
+      "SiloPricingDraft": {
+        "type": "object",
+        "fields": {
+          "instanceKey": {
+            "ref": "InstanceKey"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "payoutToken": {
+            "type": "string"
+          },
+          "underlyingAsset": {
+            "type": "string"
+          },
+          "route": {
+            "ref": "SiloRoute"
+          },
+          "routes": {
+            "array": {
+              "ref": "SiloRoute"
+            }
+          }
+        }
+      },
+      "SiloPricingStatic": {
+        "type": "object",
+        "fields": {
+          "oneShare": {
+            "type": "bigint"
+          }
+        }
+      },
+      "SiloPricingDescriptor": {
+        "type": "object",
+        "extends": [
+          "SiloPricingDraft",
+          "SiloPricingStatic"
+        ],
+        "fields": {}
+      },
+      "SiloReadProof": {
+        "type": "object",
+        "fields": {
+          "initialResults": {
+            "array": {
+              "type": "object",
+              "fields": {}
+            }
+          },
+          "dependentEvidence": {
+            "array": {
+              "type": "object",
+              "fields": {}
+            }
+          }
+        }
+      },
+      "SiloExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {
+            "literal": "erc4626-silo-preview-chain"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "payoutToken": {
+            "type": "string"
+          },
+          "amountIn": {
+            "type": "bigint"
+          },
+          "previewAssets": {
+            "type": "bigint"
+          },
+          "amountOut": {
+            "type": "bigint"
+          },
+          "bindingFingerprint": {
+            "type": "string"
+          },
+          "readProof": {
+            "ref": "SiloReadProof"
+          }
+        },
+        "optional": [
+          "readProof"
+        ]
+      }
+    },
+    "contracts": {
+      "candidate": "SiloCandidate",
+      "identityEvidence": "SiloIdentityEvidence",
+      "identity": "SiloIdentity",
+      "descriptor": "SiloDescriptor",
+      "route": "SiloRoute",
+      "pricingDraft": "SiloPricingDraft",
+      "pricingDescriptor": "SiloPricingDescriptor",
+      "pricingStatic": "SiloPricingStatic",
+      "exactEvidence": "SiloExactEvidence"
+    }
+  }
+}

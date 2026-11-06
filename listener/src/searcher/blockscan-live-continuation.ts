@@ -56,6 +56,21 @@ export function liveContinuationEnabled(value?: string): boolean {
   return value === "1";
 }
 
+/** A scoped Ready may cold-start only when the operator explicitly requests fresh prices. */
+export function liveReadySubsetPriceMode(env: NodeJS.ProcessEnv): "resume" | "fresh" | undefined {
+  if (env.SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET !== "1") return undefined;
+  const enabled = env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED;
+  if (enabled === "1") return "resume";
+  assert(enabled === "0", "live Ready subset requires explicit fresh or resumed prices");
+  assert(!env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR &&
+    !env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_COMPATIBILITY &&
+    !env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY, "fresh subset cannot import old prices");
+  const dest = env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR;
+  assert(dest && isAbsolute(dest) && (!existsSync(dest) || !readdirSync(dest).length),
+    "fresh subset requires a new or empty continuation directory");
+  return "fresh";
+}
+
 /** Header observers also update the amount-reference module. Restore its
  * data first, then verify both anchors before installing any pricing state. */
 export async function validateLiveContinuationAnchors(

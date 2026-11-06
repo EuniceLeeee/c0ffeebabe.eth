@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { LivePricingContinuationStore, liveContinuationEnabled, validateLiveContinuationAnchors, liveContinuationIdentity,
+import { LivePricingContinuationStore, liveContinuationEnabled, liveReadySubsetPriceMode, validateLiveContinuationAnchors, liveContinuationIdentity,
   liveContinuationFiles, compatibleLiveContinuationIdentity, compatibleLiveContinuationIdentities } from "../blockscan-live-continuation.js";
 import { BlockScanAmountReference } from "../blockscan-amount-reference.js";
 import { buildEffectiveMids, effectiveRowAmountReference, exportEffectiveMidReplayState,
@@ -30,6 +30,28 @@ const build = (n: number, extra: Partial<Parameters<typeof buildEffectiveMids>[0
   buildEffectiveMids({ pricing: prices(n), weth: ADDR.WETH, fixedWethInput: 100n,
     gasCostWei: null, enumerationSpreadBps: 0, control: {}, concurrency: 2,
     quote: async ({ amountIn }) => ({ source: source(n), amountIn, amountOut: amountIn * 2n }), ...extra });
+
+test("subset cold start is explicit, isolated and independent of the default restore mode", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "live-subset-fresh-"));
+  try {
+    const fresh = { SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET: "1", SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED: "0",
+      SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR: dir };
+    assert.equal(liveReadySubsetPriceMode({}), undefined);
+    assert.equal(liveReadySubsetPriceMode(fresh), "fresh");
+    assert.equal(liveReadySubsetPriceMode({ ...fresh, SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED: "1" }), "resume");
+    for (const invalid of [undefined, "yes"]) assert.throws(() => liveReadySubsetPriceMode({
+      ...fresh, SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED: invalid,
+    }), /explicit/);
+    for (const key of ["SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR", "SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_COMPATIBILITY",
+      "SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY"]) {
+      assert.throws(() => liveReadySubsetPriceMode({ ...fresh, [key]: dir }), /cannot import/);
+    }
+    assert.throws(() => liveReadySubsetPriceMode({ ...fresh, SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR: "" }), /directory/);
+    await writeFile(join(dir, "current.bin"), "keep");
+    assert.throws(() => liveReadySubsetPriceMode(fresh), /directory/);
+    assert.equal(await readFile(join(dir, "current.bin"), "utf8"), "keep");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
 
 test("private atomic checkpoint roundtrip, corruption and incompatible versions fail closed", async () => {
   assert.equal(liveContinuationEnabled(), false);

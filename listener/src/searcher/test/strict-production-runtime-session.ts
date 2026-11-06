@@ -3166,6 +3166,61 @@ for (const mode of ["partial", "source", "abort", "canonical", "newer-prepare", 
   console.log(`strict effective run exclusion atomicity: PASS ${mode}`);
 }
 
+// A budget-limited bootstrap retains only actual successful samples. An
+// explicit abort, source change or reset must not grant the same reuse cursor.
+// Use the real amount builder so its process-local lineage is exercised too.
+for (const path of ["coarse", "runtime"] as const) {
+  for (const mode of ["deadline", "abort", "source-change", "reset"] as const) {
+    let first = true, quotes = 0, publications = 0;
+    let observedPrevious: EffectiveMidSnapshot | undefined;
+    let partial: EffectiveMidSnapshot | undefined;
+    let controller = new AbortController();
+    const realNow = Date.now;
+    const coordinator = new StrictCurrentRuntimeCoordinator(request => parallelRoot.createSession({
+      source: request.source, runtime: runtime(request.source), fundingAssets: [], control: request.control,
+      kind: request.purpose === "exact-execution" ? "exact" : "pricing", requiredEdgeIds: request.requiredEdgeIds,
+    }), () => {}, () => { publications++; }, async (pricing, control, _backend, reuse) => {
+      observedPrevious = reuse?.previous;
+      const target = reuse?.quoteGraph ?? pricing;
+      const result = await buildEffectiveMids({ pricing, control, quoteGraph: reuse?.quoteGraph,
+        previous: reuse?.previous, touchedStateKeys: reuse?.touchedStateKeys,
+        weth: UNIV2_FIXTURE_TOKEN0, gasCostWei: null, enumerationSpreadBps: 0, concurrency: 1,
+        quote: async ({ amountIn }) => {
+          quotes++;
+          if (first && quotes === 2) {
+            if (mode === "abort") controller.abort(new Error("partial bootstrap cancelled"));
+            else Date.now = () => control.deadlineAtMs! + 1;
+          }
+          return { source: { number: target.sourceBlock, hash: target.sourceBlockHash, generation: target.generation },
+            amountIn, amountOut: amountIn * 2n };
+        },
+      });
+      if (first) partial = result;
+      return result;
+    });
+    const prepare = (graph = carryBaseGraph) => {
+      const args = { graph, signal: controller.signal, deadlineAtMs: realNow() + 60_000 };
+      return path === "coarse" ? coordinator.prepareCoarsePricing(args)
+        : coordinator.prepare({ ...args, fundingTokens: [] });
+    };
+    try { await assert.rejects(prepare(), mode === "abort" ? /cancelled/ : /deadline/); }
+    finally { Date.now = realNow; }
+    assert(partial && !partial.complete);
+    assert.equal([...partial.rows.values()].filter(row => row.status === "quoted").length, 1);
+    assert.equal(publications, 0);
+    assert.equal(coordinator.latestPricingSnapshot(), null);
+    if (mode === "reset") await coordinator.resetDynamicStateForReplay();
+    first = false; quotes = 0; controller = new AbortController();
+    await prepare(mode === "source-change" ? carryNextGraph : carryBaseGraph);
+    assert.equal(observedPrevious, mode === "deadline" ? partial : undefined,
+      `${path}/${mode}: only valid same-source partial progress may resume`);
+    assert.equal(quotes, carryBaseGraph.edges.length - (mode === "deadline" ? 1 : 0));
+    assert.equal(publications, 1);
+    assert.equal(effectiveEnumerationMids(coordinator.latestPricingSnapshot()!).size, carryBaseGraph.edges.length);
+    console.log(`strict bootstrap partial progress: PASS ${path}/${mode}`);
+  }
+}
+
 // Reorg/topology/reset create a fresh raw epoch. A forward source gap retains
 // sizing raw, but does not authorize effective carry across the missing blocks.
 for (const mode of ["same-height-reorg", "parent-mismatch", "backward", "topology", "reset", "forward-gap"] as const) {

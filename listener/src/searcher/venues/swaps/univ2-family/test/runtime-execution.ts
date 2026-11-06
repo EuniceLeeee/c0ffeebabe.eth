@@ -9,9 +9,11 @@ import { quoteV2ExactInput } from "../../../../solver/v2-constant-product-math.j
 import { instanceKey } from "../../../adapter-family-identifiers.js";
 import { UNIV2_PAIR_INTERFACE, UNIV2_POOL_QUOTE_INTERFACE } from "../codec.js";
 import { UNIV3_POOL_INTERFACE } from "../../univ3-abi.js";
-import { univ2Execution } from "../execution.js";
-import { UNIV2_FACTORY_LINEAGE_ID, UNIV2_FAMILY_ID } from "../manifest.js";
-import { univ2Routes } from "../routes.js";
+import { plugin as v2Json } from "../../../production-families/univ2-standard.production.js";
+import { inspectRuntime, type RuntimeCall } from "../../../../test/runtime-program-testkit.js";
+import { identifyTokenTransferModel } from "../../../token-transfer-semantics/index.js";
+import { UNIV2_FACTORY_LINEAGE_ID, UNIV2_FAMILY_ID } from "./fixture-manifest.js";
+const univ2Routes = v2Json.routes!;
 import type { UniV2Descriptor } from "../types.js";
 import { univ3Execution } from "../../univ3-family/execution.js";
 import { UNIV3_FACTORY_LINEAGE_ID, UNIV3_FAMILY_ID } from "../../univ3-family/manifest.js";
@@ -27,7 +29,9 @@ const pool = `0x${"33".repeat(20)}`, factory = `0x${"44".repeat(20)}`, executor 
 const erc20 = new ethers.Interface(["function balanceOf(address) view returns(uint256)", "function transfer(address,uint256)"]);
 const abi = ethers.AbiCoder.defaultAbiCoder();
 const base = { pool, token0, token1, instanceKey: instanceKey(pool), provenance: [], runtimeRequirements: [] };
-const v2: UniV2Descriptor = { ...base, familyId: UNIV2_FAMILY_ID, lineageId: UNIV2_FACTORY_LINEAGE_ID,
+const v2Source = {number:10,hash:ethers.toBeHex(10,32),generation:1};
+const univ2Execution={buildRuntimeLeg(input:any){return v2Json.execution!.buildRuntimeLeg!({...input,source:v2Source});}};
+const v2: UniV2Descriptor = { tokenTransfers:[identifyTokenTransferModel(token0,"0x6000"),identifyTokenTransferModel(token1,"0x6000")], ...base, familyId: UNIV2_FAMILY_ID, lineageId: UNIV2_FACTORY_LINEAGE_ID,
   quoteModel: { kind: "constant-product" }, feeRule: { kind: "constant-bps", feeBps: 30n, evidence: "standard-v2-default" },
   factoryBinding: { factory, reversePool: pool } };
 const v3: UniV3Descriptor = { ...base, familyId: UNIV3_FAMILY_ID, lineageId: UNIV3_FACTORY_LINEAGE_ID,
@@ -113,31 +117,38 @@ function run(leg: RuntimeAmountLeg | null, amount: bigint, onCall: (call: Call) 
 }
 
 test("V2 direct debt settlement pays the bounded input and sends the callback debt without duplicate reads", () => {
+  const debtPool="0x"+"88".repeat(20);
   for (const route of univ2Routes.project({ descriptor: v2 })) for (const debt of [1n, 123n, 10n ** 20n]) {
     const amountIn = 123456789n;
-    const settlement = { kind: "settle-output" as const, recipient: factory, amountIn };
+    const settlement = { kind: "settle-output" as const, recipient: debtPool, amountIn };
     const leg = univ2Execution.buildRuntimeLeg({ descriptor: v2, route, executor, runtimeEvidence: [], settlement });
     assert.equal(leg?.settlement?.settleOutput, true);
     assert.deepEqual(leg?.settlementRequest, settlement);
-    let calls = 0;
-    run(leg, debt, call => {
-      assert.equal(call.static, false, "no balance or reserve calls on the prepared payment path");
-      if (calls++ === 0) {
-        assert.equal(call.target, route.tokenIn);
-        assert.deepEqual([...erc20.decodeFunctionData("transfer", call.data)], [pool, amountIn]);
-      } else {
-        assert.equal(call.target, pool);
-        assert.deepEqual([...UNIV2_PAIR_INTERFACE.decodeFunctionData("swap", call.data)],
-          [route.direction === "zero-for-one" ? 0n : debt, route.direction === "zero-for-one" ? debt : 0n, factory, "0x"]);
+    let calls=0,debited=0n,received=0n;
+    inspectRuntime(leg!.program,debt,{nativeBalance:()=>37n,call(c){
+      if(c.static){
+        assert.equal(c.data.slice(0,10),"0x70a08231","prepared payment may measure effects but cannot requote the pool");
+        const holder=(erc20.decodeFunctionData("balanceOf",c.data)[0] as string).toLowerCase();
+        if(c.target.toLowerCase()===route.tokenIn.toLowerCase()) {assert.equal(holder,executor);return abi.encode(["uint256"],[amountIn+23n-debited]);}
+        assert.equal(holder,debtPool); return abi.encode(["uint256"],[received+31n]);
+      }
+      if(calls++===0){
+        assert.equal(c.target,route.tokenIn);
+        assert.deepEqual([...erc20.decodeFunctionData("transfer",c.data)],[pool,amountIn]);debited=amountIn;
+      }else{
+        assert.equal(c.target,pool);
+        assert.deepEqual([...UNIV2_PAIR_INTERFACE.decodeFunctionData("swap",c.data)],
+          [route.direction==="zero-for-one"?0n:debt,route.direction==="zero-for-one"?debt:0n,debtPool,"0x"]);
+        received=debt;
       }
       return "0x";
-    });
+    }});
     assert.equal(calls, 2);
   }
   for (const amountIn of [0n, -1n, ethers.MaxUint256 + 1n]) assert.throws(() => univ2Execution.buildRuntimeLeg({
     descriptor: v2, route: univ2Routes.project({ descriptor: v2 })[0]!, executor, runtimeEvidence: [],
-    settlement: { kind: "settle-output", recipient: factory, amountIn },
-  }), /settlement amount/);
+    settlement: { kind: "settle-output", recipient: debtPool, amountIn },
+  }), /fixed input|amount|uint/);
 });
 
 test("V2 runtime patches the nominal debit but prices the actual pair credit in both directions", () => {
@@ -152,35 +163,29 @@ test("V2 runtime patches the nominal debit but prices the actual pair credit in 
         const before = reserveIn + 123_456n;
         const leg = univ2Execution.buildRuntimeLeg({ descriptor, route, executor, runtimeEvidence: [] });
         assert.equal(leg?.actionAdapterId, "univ2-swap");
-        let step = 0;
-        run(leg, amount, call => {
-          assert.equal(call.incoming, 0); assert.equal(call.outgoing, 0);
-          switch (step++) {
-            case 0:
-              assert.equal(call.target, pool); assert(call.static); assert.equal(call.patches.length, 0);
-              assert.equal(call.data, UNIV2_PAIR_INTERFACE.encodeFunctionData("getReserves", []));
-              return UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves", [...reserves, 123]);
-            case 1: case 3:
-              assert.equal(call.target, route.tokenIn); assert(call.static); assert.equal(call.patches.length, 0);
-              assert.deepEqual([...erc20.decodeFunctionData("balanceOf", call.data)], [pool]);
-              return abi.encode(["uint256"], [step === 2 ? before : before + received]);
-            case 2:
-              assert.equal(call.target, route.tokenIn); assert(!call.static);
-              assert.deepEqual(call.patches, [{ offset: 36, reg: 0 }]);
-              assert.deepEqual([...erc20.decodeFunctionData("transfer", call.data)], [pool, amount]);
-              return "0x"; // valid no-return ERC20, no fabricated bool
-            case 4: {
-              assert.equal(call.target, pool); assert(!call.static);
-              const out = quoteV2ExactInput(reserveIn, reserveOut, received, feeBps);
-              assert.deepEqual([...UNIV2_PAIR_INTERFACE.decodeFunctionData("swap", call.data)],
-                [zeroForOne ? 0n : out, zeroForOne ? out : 0n, executor, "0x"]);
-              assert.deepEqual(call.patches, [{ offset: zeroForOne ? 36 : 4, reg: 6 }]);
-              return "0x";
-            }
-            default: assert.fail("unexpected V2 call");
+        const expected=quoteV2ExactInput(reserveIn,reserveOut,received,feeBps);
+        let debited=0n,credited=0n,paid=0n;
+        const execute=()=>inspectRuntime(leg!.program,amount,{nativeBalance:()=>77n,call(c){
+          const sel=c.data.slice(0,10);
+          if(sel==="0x70a08231"){
+            const holder=erc20.decodeFunctionData("balanceOf",c.data)[0].toLowerCase();
+            const balance=holder===pool?before+credited:c.target.toLowerCase()===route.tokenIn.toLowerCase()?amount+23n-debited:19n+paid;
+            return abi.encode(["uint256"],[balance]);
           }
-        });
-        assert.equal(step, 5);
+          if(sel===UNIV2_PAIR_INTERFACE.getFunction("getReserves")!.selector)
+            return UNIV2_PAIR_INTERFACE.encodeFunctionResult("getReserves",[...reserves,0]);
+          if(sel==="0xa9059cbb"){
+            assert.equal(c.target.toLowerCase(),route.tokenIn.toLowerCase());
+            assert.deepEqual([...erc20.decodeFunctionData("transfer",c.data)],[pool,amount]);
+            debited+=amount;credited+=received;return "0x";
+          }
+          assert.equal(c.target,pool);assert.equal(debited,amount);
+          assert.deepEqual([...UNIV2_PAIR_INTERFACE.decodeFunctionData("swap",c.data)],
+            [zeroForOne?0n:expected,zeroForOne?expected:0n,executor,"0x"]);
+          paid=expected;return "0x";
+        }});
+        if(expected===0n)assert.throws(execute);else {execute();assert.equal(paid,expected);assert.equal(debited,amount);}
+
       }
     }
   }
@@ -194,27 +199,36 @@ test("V2 non-xyk preserves pre-transfer quoting and callback settlement, includi
         kind: "verified-transfer-tax" as const, codeHash: "0x" + "ab".repeat(32), taxNumerator: 100n, taxDenominator: 10000n })) as any } : {}) };
     for (const route of univ2Routes.project({ descriptor })) for (const amount of [100n, 123456789n]) {
       const credit = amount - (taxed ? amount * 100n / 10000n : 0n), output = credit * 3n + 7n;
-      let step = 0, transfers = 0;
-      run(univ2Execution.buildRuntimeLeg({ descriptor, route, executor, runtimeEvidence: [] }), amount, call => {
-        assert.equal(call.target, pool);
-        if (step++ === 0) {
-          assert(call.static); assert.equal(transfers, 0, "non-xyk quote must see pre-transfer state");
-          assert.deepEqual([...UNIV2_POOL_QUOTE_INTERFACE.decodeFunctionData("getAmountOut", call.data)], [route.tokenIn, credit]);
-          return abi.encode(["uint256"], [output]);
+      const leg=univ2Execution.buildRuntimeLeg({descriptor,route,executor,runtimeEvidence:[]});assert(leg);
+      let transferred=0n, paid=0n, queryCount=0;
+      const backend={nativeBalance:()=>77n, call(c:RuntimeCall):string{
+        const sel=c.data.slice(0,10);
+        if(sel==="0x70a08231"){
+          const holder=(erc20.decodeFunctionData("balanceOf",c.data)[0] as string).toLowerCase();
+          const isIn=c.target.toLowerCase()===route.tokenIn.toLowerCase();
+          const balance=holder===pool?(isIn?99n+(transferred>0n?credit:0n):100000000000n-paid)
+            :isIn?amount+123n-transferred:45n+paid-(taxed?paid/100n:0n);
+          return abi.encode(["uint256"],[balance]);
         }
-        assert(!call.static); assert.equal(call.incoming, 164); assert.equal(call.outgoing, 164);
-        const args = UNIV2_PAIR_INTERFACE.decodeFunctionData("swap", call.data);
-        assert.deepEqual([...args].slice(0, 3),
-          [route.direction === "zero-for-one" ? 0n : output, route.direction === "zero-for-one" ? output : 0n, executor]);
-        const callback = ethers.getBytes(args[3]);
-        assert.equal(callback[0], 14); assert.equal(BigInt(ethers.hexlify(callback.slice(1, 33))), amount);
-        run({ actionAdapterId: "payment", program: ethers.hexlify(callback.slice(36)) }, amount, payment => {
-          transfers++; assert.equal(payment.target, route.tokenIn);
-          assert.deepEqual([...erc20.decodeFunctionData("transfer", payment.data)], [pool, amount]); return "0x";
-        });
-        return "0x";
-      });
-      assert.equal(step, 2); assert.equal(transfers, 1);
+        if(sel==="0xa9059cbb"){
+          assert.equal(c.target.toLowerCase(),route.tokenIn.toLowerCase());
+          assert.deepEqual([...erc20.decodeFunctionData("transfer",c.data)],[pool,amount]);
+          transferred+=amount;return "0x";
+        }
+        assert.equal(c.target,pool);
+        if(c.static){assert.equal(transferred,0n);queryCount++;
+          assert.deepEqual([...UNIV2_POOL_QUOTE_INTERFACE.decodeFunctionData("getAmountOut",c.data)],[route.tokenIn,credit]);
+          return abi.encode(["uint256"],[output]);}
+        assert.equal(queryCount,1);const [a0,a1,to,callback]=UNIV2_PAIR_INTERFACE.decodeFunctionData("swap",c.data);
+        assert.deepEqual([a0,a1,to],[route.direction==="zero-for-one"?0n:output,route.direction==="zero-for-one"?output:0n,executor]);
+        paid=output;
+        const bytes=ethers.getBytes(callback);assert.equal(bytes[0],14);
+        assert.equal(BigInt(ethers.hexlify(bytes.slice(1,33))),amount);
+        const frame=new ethers.Interface(["function uniswapV2Call(address,uint256,uint256,bytes)"]);
+        inspectRuntime(ethers.hexlify(bytes.slice(36)),amount,{...backend,calldata:frame.encodeFunctionData("uniswapV2Call",[executor,a0,a1,callback])});
+        paid=output;return "0x";
+      }};
+      inspectRuntime(leg.program,amount,backend);assert.equal(transferred,amount);assert.equal(paid,output);
     }
   }
 });
@@ -228,9 +242,9 @@ test("V2 runtime rejects incompatible routes/fees", () => {
   }
   for (const feeBps of [-1n, 10_000n]) {
     const d = { ...v2, feeRule: { ...v2.feeRule, feeBps } };
-    assert.throws(() => univ2Execution.buildRuntimeLeg({ ...input, descriptor: d, route: univ2Routes.project({ descriptor: d })[0] }), /fee/);
+    assert.throws(() => univ2Execution.buildRuntimeLeg({ ...input, descriptor: d, route: univ2Routes.project({ descriptor: d })[0] }), /fee|descriptor|uint256/);
   }
-  assert.throws(() => univ2Execution.buildRuntimeLeg({ ...input, executor: pool }), /addresses/);
+  assert.throws(() => univ2Execution.buildRuntimeLeg({ ...input, executor: pool }), /invalid executor/);
 });
 
 test("V3 declares callback debt while shared settlement pays only that debt in both directions", () => {

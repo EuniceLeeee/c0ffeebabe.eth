@@ -10,8 +10,8 @@ const { buildFamilyRouteGraphView } = await import("../../../../adapter-family-g
 const { createVictimSourceGeneration, detectImpactTransitionFromLogs } =
   await import("../../../../detector/pool-impact.js");
 const { SOURCE, EXECUTOR, PUBLIC, PINNED, CANDIDATE, answer } = await import("./fixtures.js");
-const { POOL, FACTORY_ADDRESS } = await import("../codec.js");
-const { ID } = await import("../manifest.js");
+const { POOL, FACTORY_ADDRESS } = await import("./fixture-abi.js");
+const ID = (await import("../../../production-families/balancer-v1.production.js")).plugin.manifest.familyId;
 const family = catalog.forFamily(ID);
 
 // Saved public view results bound to a synthetic transport; real production

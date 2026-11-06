@@ -55,7 +55,7 @@ import {
   UNIV2_SWAP_SELECTOR,
 } from "../venues/swaps/univ2-family/codec.js";
 import { UNIV2_FAMILY_ID } from
-  "../venues/swaps/univ2-family/manifest.js";
+  "../venues/swaps/univ2-family/test/fixture-manifest.js";
 
 const CATALOG = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG;
 const FAMILY = CATALOG.forFamily(UNIV2_FAMILY_ID);

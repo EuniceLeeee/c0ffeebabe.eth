@@ -1,0 +1,2093 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:metronome-hgusdc"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_METRONOME_HGUSDC_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:metronome-hgusdc",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "metronome-hgusdc-exit"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-transfer"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "redeem"
+      }
+    ],
+    "supportedLineages": [
+      "metronome-hgusdc:observed-path-active-quote-v1"
+    ],
+    "poolAdapterIds": [
+      "metronome-hgusdc"
+    ],
+    "edgeAdapterIds": [
+      "metronome-hgusdc-exit"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "metronome-hgusdc-router",
+        "addressField": "router",
+        "fields": {
+          "router": "address"
+        },
+        "key": [
+          "router"
+        ]
+      },
+      "calls": [
+        {
+          "id": "metronome-hgusdc-execute-path",
+          "signature": "executePath(bytes,uint256[],address)",
+          "fields": {
+            "router": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$args.0"
+                  ]
+                },
+                "0x0102060067010000010201000246000103040500ff00000000000000000000009a9e2e70919c75d80aaaa1d483c46cdbb8ac4d1bab5eb14c09d416f0ac63661e57edb7aecdb9befa4f95c5ba0c7c69fb2f9340e190ccee890b3bd87ccacd6fd266af91b8aed52accc382b4e165586e29a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                1
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    },
+                    0
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "encode",
+                      "args": [
+                        "router",
+                        "executePath",
+                        "$args"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [],
+      "labels": [
+        "metronome-hgusdc",
+        "protocol:metronome-hgusdc"
+      ],
+      "nomination": "tx-evidence"
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "router": [
+          "function executePath(bytes,uint256[],address)"
+        ],
+        "curve": [
+          "function coins(uint256) view returns (address)",
+          "function get_dy(int128,int128,uint256) view returns (uint256)"
+        ],
+        "vault": [
+          "function asset() view returns (address)",
+          "function previewRedeem(uint256) view returns (uint256)"
+        ],
+        "token": [
+          "function decimals() view returns (uint8)"
+        ]
+      },
+      "constants": {
+        "path": "0x0102060067010000010201000246000103040500ff00000000000000000000009a9e2e70919c75d80aaaa1d483c46cdbb8ac4d1bab5eb14c09d416f0ac63661e57edb7aecdb9befa4f95c5ba0c7c69fb2f9340e190ccee890b3bd87ccacd6fd266af91b8aed52accc382b4e165586e29a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "pathHash": "0x0fb85b1c1c841c3cf756600d6badf1549b1cd873192d257210eb9e941e7a5e74",
+        "curve": "0x9a9e2e70919c75d80aaaa1d483c46cdbb8ac4d1b",
+        "vault": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+        "tokenIn": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+        "curveIntermediate": "0xcacd6fd266af91b8aed52accc382b4e165586e29",
+        "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+      },
+      "expressions": {},
+      "identity": {
+        "select": [
+          {
+            "return": "base",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "curve",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "base"
+              ]
+            }
+          },
+          {
+            "return": "active",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "curve"
+              ]
+            }
+          },
+          {
+            "return": "active"
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-router-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.router"
+                  ]
+                }
+              },
+              {
+                "id": "identity-curve-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$constants.curve"
+                  ]
+                }
+              },
+              {
+                "id": "identity-vault-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$constants.vault"
+                  ]
+                }
+              },
+              {
+                "id": "identity-token-in-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$constants.tokenIn"
+                  ]
+                }
+              },
+              {
+                "id": "identity-token-out-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$constants.tokenOut"
+                  ]
+                }
+              },
+              {
+                "id": "identity-curve-coin-0",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$constants.curve"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "coins",
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-curve-coin-1",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$constants.curve"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "coins",
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-vault-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$constants.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "asset",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-token-in-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$constants.tokenIn"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "code",
+                  "args": [
+                    "identity-router-code"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "code",
+                  "args": [
+                    "identity-curve-code"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "code",
+                  "args": [
+                    "identity-vault-code"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "code",
+                  "args": [
+                    "identity-token-in-code"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "code",
+                  "args": [
+                    "identity-token-out-code"
+                  ]
+                }
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "number",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "token",
+                        "decimals",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-token-in-decimals"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$decimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "77"
+                      ]
+                    }
+                  ]
+                },
+                "error": "Metronome hgUSDC token decimals exceed uint256 scale"
+              },
+              {
+                "let": "one",
+                "value": {
+                  "op": "pow",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "10"
+                      ]
+                    },
+                    "$decimals"
+                  ]
+                }
+              },
+              {
+                "let": "coin0",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "curve",
+                        "coins",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-curve-coin-0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "coin1",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "curve",
+                        "coins",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-curve-coin-1"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "vaultAsset",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "asset",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-vault-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "base",
+                  "router": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.router"
+                    ]
+                  },
+                  "sampleAmount": "$one",
+                  "behaviorValid": {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "gt",
+                        "args": [
+                          "$one",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$coin0",
+                          "$constants.curveIntermediate"
+                        ]
+                      },
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$coin1",
+                          "$constants.tokenIn"
+                        ]
+                      },
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$vaultAsset",
+                          "$constants.tokenOut"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "curve": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-curve-quote",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$constants.curve"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "get_dy",
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      },
+                      "$evidence.sampleAmount"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "curveOut",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "curve",
+                        "get_dy",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-curve-quote"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "curve",
+                      "curveOut": "$curveOut",
+                      "behaviorValid": {
+                        "op": "and",
+                        "args": [
+                          "$evidence.behaviorValid",
+                          {
+                            "op": "gt",
+                            "args": [
+                              "$curveOut",
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "0"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-vault-preview",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$constants.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "previewRedeem",
+                    [
+                      "$evidence.curveOut"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "amountOut",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "previewRedeem",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity-vault-preview"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "behaviorValid",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    "$evidence.behaviorValid",
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$amountOut",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "behaviorProofHash",
+                "value": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "router": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$evidence.router"
+                            ]
+                          }
+                        ]
+                      },
+                      "curve": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$constants.curve"
+                            ]
+                          }
+                        ]
+                      },
+                      "vault": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$constants.vault"
+                            ]
+                          }
+                        ]
+                      },
+                      "tokenIn": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$constants.tokenIn"
+                            ]
+                          }
+                        ]
+                      },
+                      "curveIntermediate": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$constants.curveIntermediate"
+                            ]
+                          }
+                        ]
+                      },
+                      "tokenOut": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$constants.tokenOut"
+                            ]
+                          }
+                        ]
+                      },
+                      "sampleAmount": "$evidence.sampleAmount",
+                      "curveOut": "$evidence.curveOut",
+                      "amountOut": "$amountOut",
+                      "pathHash": {
+                        "op": "lower",
+                        "args": [
+                          "$constants.pathHash"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "active",
+                      "amountOut": "$amountOut",
+                      "behaviorValid": "$behaviorValid",
+                      "behaviorProofHash": "$behaviorProofHash"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "metronome_hgusdc_binding_failed",
+              "evidenceRequestIds": [
+                "observed-path-active-quote-proof"
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.behaviorValid"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "active"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.router"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "observed-path-active-dependent-quote-proof",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.router"
+                      ]
+                    },
+                    "evidenceHash": "$evidence.behaviorProofHash"
+                  }
+                ],
+                "router": "$evidence.router"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.router"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.router"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.router"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        },
+        {
+          "kind": "quote-completion",
+          "mode": "return-data"
+        }
+      ],
+      "router": {
+        "op": "address",
+        "args": [
+          "$identity.router"
+        ]
+      },
+      "curve": {
+        "op": "address",
+        "args": [
+          "$constants.curve"
+        ]
+      },
+      "vault": {
+        "op": "address",
+        "args": [
+          "$constants.vault"
+        ]
+      },
+      "tokenIn": {
+        "op": "address",
+        "args": [
+          "$constants.tokenIn"
+        ]
+      },
+      "curveIntermediate": {
+        "op": "address",
+        "args": [
+          "$constants.curveIntermediate"
+        ]
+      },
+      "tokenOut": {
+        "op": "address",
+        "args": [
+          "$constants.tokenOut"
+        ]
+      },
+      "pathHash": "$constants.pathHash"
+    },
+    "bindingProjection": {
+      "router": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.router"
+            ]
+          }
+        ]
+      },
+      "curve": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.curve"
+            ]
+          }
+        ]
+      },
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "tokenIn": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.tokenIn"
+            ]
+          }
+        ]
+      },
+      "curveIntermediate": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.curveIntermediate"
+            ]
+          }
+        ]
+      },
+      "tokenOut": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.tokenOut"
+            ]
+          }
+        ]
+      },
+      "curveDirection": [
+        1,
+        0
+      ],
+      "pathHash": "$descriptor.pathHash",
+      "quoteChain": "curve-get-dy->vault-preview-redeem-v1"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.router",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.router"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "msusd-to-usdc",
+        "enabled": true,
+        "tokenIn": "$descriptor.tokenIn",
+        "tokenOut": "$descriptor.tokenOut",
+        "adapterId": "metronome-hgusdc-exit",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ],
+    "key": {
+      "op": "join",
+      "args": [
+        {
+          "op": "concat",
+          "args": [
+            "$descriptor.familyId",
+            [
+              "\u001f",
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.router"
+                    ]
+                  }
+                ]
+              }
+            ]
+          ]
+        },
+        ""
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-path-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.router"
+            ]
+          }
+        ]
+      },
+      "pathHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.pathHash"
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.adapterId",
+            "metronome-hgusdc-exit"
+          ]
+        },
+        "error": "Metronome hgUSDC route is incompatible with its descriptor"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "finalizeChecks": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$draft.routes"
+              ]
+            },
+            1
+          ]
+        },
+        "error": "Metronome hgUSDC pricing requires one bound route"
+      }
+    ],
+    "compatibility": {
+      "curve": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.curve"
+            ]
+          }
+        ]
+      },
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "tokenIn": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.tokenIn"
+            ]
+          }
+        ]
+      },
+      "tokenOut": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.tokenOut"
+            ]
+          }
+        ]
+      },
+      "curveDirection": [
+        1,
+        0
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$draft.tokenIn"
+      ],
+      "requests": [
+        {
+          "id": "static-token-in-decimals",
+          "kind": "eth-call",
+          "to": "$draft.tokenIn",
+          "data": {
+            "op": "encode",
+            "args": [
+              "token",
+              "decimals",
+              []
+            ]
+          },
+          "completion": "return-data"
+        }
+      ],
+      "decode": {
+        "fields": [
+          {
+            "name": "decimals",
+            "value": {
+              "op": "number",
+              "args": [
+                {
+                  "op": "decode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "static-token-in-decimals"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "checks": [
+              {
+                "condition": {
+                  "op": "lte",
+                  "args": [
+                    "$decimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "77"
+                      ]
+                    }
+                  ]
+                },
+                "error": "Metronome hgUSDC token decimals exceed uint256 scale"
+              }
+            ]
+          },
+          {
+            "name": "oneTokenIn",
+            "value": {
+              "op": "pow",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "10"
+                  ]
+                },
+                "$decimals"
+              ]
+            }
+          }
+        ],
+        "output": {
+          "oneTokenIn": "$oneTokenIn"
+        }
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": "$descriptor.oneTokenIn",
+    "exactCompatibility": {
+      "router": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.router"
+            ]
+          }
+        ]
+      },
+      "curve": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.curve"
+            ]
+          }
+        ]
+      },
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "tokenIn": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.tokenIn"
+            ]
+          }
+        ]
+      },
+      "tokenOut": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.tokenOut"
+            ]
+          }
+        ]
+      },
+      "pathHash": "$descriptor.pathHash",
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "exactChain": "curve-get-dy->vault-preview-redeem-v1"
+    },
+    "mutationKinds": [
+      "log"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "observed-path-active-quote-proof",
+    "lineageId": "metronome-hgusdc:observed-path-active-quote-v1",
+    "identityKind": "custom",
+    "abi": {
+      "router": [
+        "function executePath(bytes,uint256[],address)"
+      ],
+      "curve": [
+        "function coins(uint256) view returns (address)",
+        "function get_dy(int128,int128,uint256) view returns (uint256)"
+      ],
+      "vault": [
+        "function asset() view returns (address)",
+        "function previewRedeem(uint256) view returns (uint256)"
+      ],
+      "token": [
+        "function decimals() view returns (uint8)"
+      ]
+    },
+    "constants": {
+      "path": "0x0102060067010000010201000246000103040500ff00000000000000000000009a9e2e70919c75d80aaaa1d483c46cdbb8ac4d1bab5eb14c09d416f0ac63661e57edb7aecdb9befa4f95c5ba0c7c69fb2f9340e190ccee890b3bd87ccacd6fd266af91b8aed52accc382b4e165586e29a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "pathHash": "0x0fb85b1c1c841c3cf756600d6badf1549b1cd873192d257210eb9e941e7a5e74",
+      "curve": "0x9a9e2e70919c75d80aaaa1d483c46cdbb8ac4d1b",
+      "vault": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+      "tokenIn": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+      "curveIntermediate": "0xcacd6fd266af91b8aed52accc382b4e165586e29",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "zeroAddress": "0x0000000000000000000000000000000000000000"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "inputs": [
+      "prefix",
+      "trialState"
+    ],
+    "pricing": {
+      "refreshPolicy": "on-touch",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.router",
+        "$descriptor.curve",
+        "$descriptor.vault",
+        "$descriptor.tokenIn",
+        "$descriptor.curveIntermediate",
+        "$descriptor.tokenOut"
+      ],
+      "mutationAddresses": [
+        "$descriptor.router",
+        "$descriptor.curve",
+        "$descriptor.vault",
+        "$descriptor.tokenIn",
+        "$descriptor.curveIntermediate",
+        "$descriptor.tokenOut"
+      ],
+      "classifyUnavailable": {
+        "op": "if",
+        "args": [
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$snapshot.curveOut",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              {
+                                "op": "objectEntries",
+                                "args": [
+                                  "$snapshot.quotes"
+                                ]
+                              },
+                              0
+                            ]
+                          },
+                          1
+                        ]
+                      },
+                      "amountOut"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "map",
+            "args": [
+              "$routes",
+              "r",
+              [
+                {
+                  "op": "get",
+                  "args": [
+                    "$r",
+                    "routeKey"
+                  ]
+                },
+                "metronome_hgusdc_quote_chain_zero"
+              ]
+            ]
+          },
+          []
+        ]
+      }
+    },
+    "exact": {
+      "methodId": "curve-then-vault",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "retainReadEvidence": true,
+      "checks": [
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  {
+                    "op": "coalesce",
+                    "args": [
+                      "$prefix",
+                      []
+                    ]
+                  }
+                ]
+              },
+              0
+            ]
+          },
+          "error": "Metronome hgUSDC prefix quotes require issued trial state"
+        },
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                ]
+              }
+            ]
+          },
+          "error": "Metronome hgUSDC exact input exceeds uint256"
+        }
+      ],
+      "evidence": {
+        "kind": "metronome-hgusdc-dependent-quote",
+        "source": "$source",
+        "router": "$descriptor.router",
+        "curve": "$descriptor.curve",
+        "vault": "$descriptor.vault",
+        "amountIn": "$amountIn",
+        "curveOut": "$steps.curve",
+        "amountOut": "$amountOut",
+        "pathHash": "$descriptor.pathHash",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "zeroEvidence": {
+        "kind": "metronome-hgusdc-dependent-quote",
+        "source": "$source",
+        "router": "$descriptor.router",
+        "curve": "$descriptor.curve",
+        "vault": "$descriptor.vault",
+        "amountIn": "$amountIn",
+        "curveOut": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "amountOut": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "pathHash": "$descriptor.pathHash",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "modules": {
+      "quoteFlow": {
+        "version": 1,
+        "sourceKind": "view",
+        "chainQuote": {
+          "steps": [
+            {
+              "step": "curve",
+              "requestId": "exact-curve-quote",
+              "signature": "function get_dy(int128,int128,uint256) view returns(uint256)",
+              "amountPath": [
+                2
+              ],
+              "outputPath": [
+                0
+              ]
+            },
+            {
+              "step": "vault",
+              "requestId": "exact-vault-preview",
+              "signature": "function previewRedeem(uint256) view returns(uint256)",
+              "amountPath": [
+                0
+              ],
+              "outputPath": [
+                0
+              ]
+            }
+          ]
+        },
+        "steps": [
+          {
+            "id": "curve",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "exact-curve-quote",
+                "kind": "eth-call",
+                "to": "$descriptor.curve",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "get_dy",
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      },
+                      "$amountIn"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "return": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "curve",
+                        "get_dy",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "exact-curve-quote"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "vault",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "exact-vault-preview",
+                "kind": "eth-call",
+                "to": "$descriptor.vault",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "previewRedeem",
+                    [
+                      "$steps.curve"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "return": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "previewRedeem",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "exact-vault-preview"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "result": "$steps.vault"
+      },
+      "pricingFlow": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "curve",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "current-curve-quote",
+                "kind": "eth-call",
+                "to": "$descriptor.curve",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "get_dy",
+                    [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      },
+                      "$descriptor.oneTokenIn"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "return": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "curve",
+                        "get_dy",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "current-curve-quote"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "vault",
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "current-vault-preview",
+                "kind": "eth-call",
+                "to": "$descriptor.vault",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "previewRedeem",
+                    [
+                      "$steps.curve"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "return": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "previewRedeem",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "current-vault-preview"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "result": {
+          "source": "$source",
+          "curveOut": "$steps.curve",
+          "quotes": {
+            "op": "objectFromEntries",
+            "args": [
+              [
+                [
+                  {
+                    "op": "at",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.routes",
+                          0
+                        ]
+                      },
+                      "routeKey"
+                    ]
+                  },
+                  {
+                    "amountIn": "$descriptor.oneTokenIn",
+                    "amountOut": "$steps.vault"
+                  }
+                ]
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$descriptor.router",
+        "$descriptor.curve",
+        "$descriptor.vault"
+      ],
+      "steps": [
+        {
+          "id": "transferIn",
+          "call": {
+            "target": "$descriptor.tokenIn",
+            "signature": "function transfer(address,uint256) returns(bool)",
+            "args": [
+              "$descriptor.curve",
+              {
+                "runtime": "amountIn"
+              }
+            ]
+          }
+        },
+        {
+          "id": "exit",
+          "call": {
+            "target": "$descriptor.router",
+            "signature": "function executePath(bytes,uint256[],address)",
+            "args": [
+              "$constants.path",
+              [
+                {
+                  "runtime": "amountIn"
+                }
+              ],
+              "$constants.zeroAddress"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "metronome-hgusdc-exit",
+        "lineage": "metronome",
+        "edgeKind": "protocol",
+        "action": "redeem",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function executePath(bytes,uint256[],address)",
+          "target": "0x365084b05fa7d5028346bd21d842ed0601bab5b8"
+        }
+      ]
+    }
+  ]
+}

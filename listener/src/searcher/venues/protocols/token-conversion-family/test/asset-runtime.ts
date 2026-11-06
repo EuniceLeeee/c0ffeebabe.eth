@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { keccak256, TypedDataEncoder, zeroPadValue } from "ethers";
-import { proveConversionAssetRuntime } from "../asset-runtime.js";
-import { proveLocalAssetRuntime } from "../variants.js";
-import { identity } from "../identity.js";
-import { ABI } from "../variants.js";
+import { proveConversionAssetRuntime } from "./reference/asset-runtime.js";
+import { proveLocalAssetRuntime } from "./reference/variants.js";
+import { identity } from "./reference/identity.js";
+import { ABI } from "./reference/variants.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
 
 const directory = process.env.TOKEN_CONVERSION_ASSET_EVIDENCE;

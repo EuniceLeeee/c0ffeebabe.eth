@@ -5,14 +5,17 @@ import { RuntimeAmountProgram } from "../../../../../adapters/runtime-amount-pro
 import { encodeCall } from "../../../../../encoder.js";
 import { applyQuotedAssetBoundary, applyRuntimeAssetBoundary, executionAssetBoundaryAdapter } from "../../../../execution-asset-boundary.js";
 import type { AdapterRequestResult } from "../../../adapter-request-program.js";
-import { selfBurnNativeFamilyOwnedAction as action } from "../action.js";
-import { selfBurnNativeExecution as execution } from "../execution.js";
-import { selfBurnNativeExact as exact } from "../exact.js";
-import { selfBurnNativeInstance as instance } from "../instance.js";
-import { selfBurnNativeRoutes as routes } from "../routes.js";
 import { SELF_BURN_NATIVE_FAMILY_ID, SELF_BURN_NATIVE_LINEAGE_ID } from "../manifest.js";
 import { SELF_BURN_NATIVE_TOKEN_INTERFACE as abi, SELF_BURN_NATIVE_PROBE_ACTOR as actor,
   SELF_BURN_NATIVE_PROBE_ACTOR_EVIDENCE_ID, selfBurnNativeSimulation, validateSelfBurnNativeEffects } from "../shared.js";
+import { plugin as selfBurnNativeJsonPlugin } from "../../../production-families/self-burn-native.production.js";
+
+const action = selfBurnNativeJsonPlugin.actionAdapters.find(action => action.id === "self-burn-native-redeem")!;
+const execution = selfBurnNativeJsonPlugin.execution;
+const exact = selfBurnNativeJsonPlugin.exact;
+const instance = selfBurnNativeJsonPlugin.instance;
+const routes = selfBurnNativeJsonPlugin.routes;
+
 
 // Synthetic fee/behavior answers only; not new strict or historical acceptance.
 const token = "0x2222222222222222222222222222222222222222", executor = "0x1111111111111111111111111111111111111111";

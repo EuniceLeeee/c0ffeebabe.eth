@@ -8,7 +8,7 @@ import { compileDeclarativeTrialState } from "../venues/declarative-trial-state.
 import { compileDeclarativeValues } from "../venues/declarative-values.js";
 import { hashCanonical } from "../venues/canonical-value.js";
 import { readV3TrialState, v3TrialStateRef } from "../venues/local-state-models/v3-state.js";
-import { quoteXwinTransition, type XwinLocalFundState } from "../venues/protocols/token-conversion-family/xwin-transition.js";
+import { quoteXwinTransition, type XwinLocalFundState } from "../venues/protocols/token-conversion-family/test/reference/xwin-transition.js";
 import type { V3PoolState } from "../solver/v3-math.js";
 
 const address = (n: number) => toBeHex(n, 20);

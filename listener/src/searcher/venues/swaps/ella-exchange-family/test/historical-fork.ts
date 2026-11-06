@@ -23,9 +23,9 @@ import { concatBytes, encodeAssertBalanceGte } from "../../../../../encoder.js";
 import type { ResolvedPlanNode } from "../../../../../types.js";
 import type { CanonicalSource } from "../../../adapter-request-program.js";
 import { DEFAULT_EFFECTIVE_WETH_INPUT } from "../../../../blockscan-effective-mid.js";
-import { ELLA_ID } from "../manifest.js";
-import { UNIT, assertSource, same, TOKEN, POOL } from "../codec.js";
-import type { EllaDescriptor, EllaState } from "../types.js";
+import { ELLA_ID } from "./definition-fixture.js";
+import { UNIT, assertSource, same, TOKEN, POOL } from "./definition-fixture.js";
+import type { EllaDescriptor, EllaState } from "./definition-fixture.js";
 import sample from "./public-sample.json";
 import { assertAcceptanceBinding, assertInventoryRejection, requireProductionReference } from "./historical-evidence.js";
 

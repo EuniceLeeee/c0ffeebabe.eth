@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getSqrtRatioAtTick, MIN_TICK, v3SwapToState, type V3PoolState } from "../../../../solver/v3-math.js";
-import { MAX_UINT } from "../variants.js";
-import { quoteXwinTransition, xwinLocalUnitPrice, xwinLocalVaultValue, type XwinLocalFundState } from "../xwin-transition.js";
+import { MAX_UINT } from "./reference/variants.js";
+import { quoteXwinTransition, xwinLocalUnitPrice, xwinLocalVaultValue, type XwinLocalFundState } from "./reference/xwin-transition.js";
 
 const BASE = "0x0000000000000000000000000000000000000001";
 const TARGET = "0x0000000000000000000000000000000000000002";

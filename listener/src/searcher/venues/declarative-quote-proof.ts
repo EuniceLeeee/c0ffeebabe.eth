@@ -1,6 +1,7 @@
 import { ErrorFragment, FunctionFragment, Interface, getAddress, type ParamType } from "ethers";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "./adapter-request-program.js";
 import { assertSource } from "./protocols/standard-family/common.js";
+import { verifiedMulticallItem } from "./declarative-multicall-proof.js";
 import { validateDeclarativeValue } from "./declarative-values.js";
 
 export type DeclarativeQuoteSource = "view" | "effect-simulation";
@@ -14,8 +15,18 @@ export interface DeclarativeQuoteProof {
   readonly completion?: "returned" | "reverted-as-declared";
   readonly requestBinding?: { readonly target: unknown; readonly caller: unknown };
   readonly errorSignature?: string;
+  readonly multicall?: { readonly index: unknown; readonly target: unknown; readonly calldata: unknown };
   readonly outputWord?: { readonly offset: number; readonly width: number; readonly signed: boolean; readonly negate?: boolean };
   readonly inputBinding?: { readonly value: unknown; readonly checks: readonly unknown[] };
+  /** An ABI view may return a gross transfer. The declaration binds the input asset,
+   * source-derived headroom and a proven proportional output deduction. */
+  readonly receiptBinding?: {
+    readonly inputAssetPath: readonly number[];
+    readonly feeNumerator: unknown;
+    readonly feeDenominator: unknown;
+    readonly maximumInput: unknown;
+    readonly unavailableOnRevertOrEmpty: boolean;
+  };
 }
 export interface DeclarativeQuoteEvaluation {
   readonly evaluate?: (value: unknown, environment: Record<string, unknown>) => unknown;
@@ -51,7 +62,7 @@ export function validateDeclarativeQuoteProof(raw: unknown, sourceKind: Declarat
   const extended = raw.version === 2;
   const allowed = sourceKind === "view"
     ? ["step", "requestId", "signature", "amountPath", "outputPath", "completion",
-      ...(extended ? ["version", "requestBinding", "errorSignature", "outputWord", "inputBinding"] : [])] : ["step", "requestId"];
+      ...(extended ? ["version", "multicall", "requestBinding", "errorSignature", "outputWord", "inputBinding", "receiptBinding"] : [])] : ["step", "requestId"];
   if (Reflect.ownKeys(raw).some(key => typeof key !== "string" || !allowed.includes(key))) throw new Error("unknown chain quote proof field");
   if (typeof raw.step !== "string" || !/^[a-zA-Z][a-zA-Z0-9]*$/.test(raw.step) ||
     typeof raw.requestId !== "string" || !raw.requestId || raw.requestId.trim() !== raw.requestId)
@@ -60,6 +71,13 @@ export function validateDeclarativeQuoteProof(raw: unknown, sourceKind: Declarat
     if (typeof raw.signature !== "string" || !raw.signature) throw new Error("chain quote proof requires an ABI signature");
     const fragment = FunctionFragment.from(raw.signature);
     if (extended) {
+      if (raw.multicall !== undefined) {
+        record(raw.multicall);
+        if (Object.keys(raw.multicall).length !== 3 || !["index", "target", "calldata"].every(key => Object.hasOwn(raw.multicall as object, key)) ||
+            (raw.completion !== undefined && raw.completion !== "returned") || raw.errorSignature)
+          throw new Error("invalid aggregate quote proof");
+        validateDeclarativeValue(raw.multicall);
+      }
       record(raw.requestBinding);
       if (Object.keys(raw.requestBinding).length !== 2 || !Object.hasOwn(raw.requestBinding, "target") || !Object.hasOwn(raw.requestBinding, "caller"))
         throw new Error("extended quote requires target and caller binding");
@@ -92,6 +110,20 @@ export function validateDeclarativeQuoteProof(raw: unknown, sourceKind: Declarat
       const refersToInput = (value: unknown): boolean => value === "$quote.amountIn" ||
         !!value && typeof value === "object" && Object.values(value).some(refersToInput);
       if (!refersToInput(binding.value)) throw new Error("derived quote input must explicitly bind the original amountIn");
+    }
+    if (raw.receiptBinding !== undefined) {
+      record(raw.receiptBinding);
+      const binding = raw.receiptBinding;
+      const keys = ["inputAssetPath", "feeNumerator", "feeDenominator", "maximumInput", "unavailableOnRevertOrEmpty"];
+      if (keys.some(key => !Object.hasOwn(binding, key)) || Object.keys(binding).length !== keys.length ||
+          typeof binding.unavailableOnRevertOrEmpty !== "boolean" || raw.errorSignature || raw.outputWord ||
+          raw.completion === "reverted-as-declared" || raw.multicall !== undefined)
+        throw new Error("invalid view receipt binding");
+      amountType(fragment.inputs, binding.inputAssetPath, /^address$/);
+      const fromReads = (v: unknown): boolean => typeof v === "string" && v.startsWith("$steps.") ||
+        !!v && typeof v === "object" && Object.values(v).some(fromReads);
+      if (!fromReads(binding.maximumInput)) throw new Error("view receipt capacity must use source-bound reads");
+      validateDeclarativeValue(binding);
     }
     if (raw.completion !== undefined && raw.completion !== "returned" && raw.completion !== "reverted-as-declared")
       throw new Error("unsupported chain quote proof completion");
@@ -171,13 +203,18 @@ export function verifyDeclarativeQuoteProof(input: {
   const { proof, sourceKind, request, result, source, amountIn, amountOut } = input;
   validateDeclarativeQuoteProof(proof, sourceKind);
   canonicalSource(source); canonicalSource(result.source); assertSource(result.source, source);
-  if (typeof amountIn !== "bigint" || amountIn <= 0n || typeof amountOut !== "bigint" || amountOut <= 0n)
+  if (typeof amountIn !== "bigint" || amountIn <= 0n || typeof amountOut !== "bigint" || amountOut < 0n ||
+      (amountOut === 0n && (sourceKind !== "view" || !proof.receiptBinding)))
     throw new Error("chain quote proof requires positive input and output");
   if (request.id !== proof.requestId || result.id !== proof.requestId || !result.ok)
     throw new Error("chain quote proof lacks the declared successful request");
   if (!result.provenance?.kind || !result.provenance.fingerprint) throw new Error("chain quote proof lacks transport provenance");
   if (sourceKind === "view") {
-    if (request.kind !== "eth-call" || result.completion !== (proof.completion ?? "returned") ||
+    const unavailable = proof.receiptBinding?.unavailableOnRevertOrEmpty === true &&
+      request.kind === "eth-call" && request.completion === "return-or-revert-data" &&
+      (result.completion === "reverted-as-declared" && /^0x(?:[a-fA-F0-9]{2})*$/.test(result.data) ||
+       result.completion === "returned" && result.data === "0x");
+    if (request.kind !== "eth-call" || (!unavailable && result.completion !== (proof.completion ?? "returned")) ||
       (result.completion === "reverted-as-declared" && request.completion !== "return-or-revert-data"))
       throw new Error("chain quote proof transport or completion mismatch");
     if (proof.requestBinding) {
@@ -186,7 +223,43 @@ export function verifyDeclarativeQuoteProof(input: {
           callerKey(evaluate(proof.requestBinding.caller, input, amountIn)) !== callerKey(request.caller ?? { kind: "none" }))
         throw new Error("chain quote proof target or caller mismatch");
     }
-    const decoded = decodeView(proof, request, result);
+    const inner = proof.multicall && verifiedMulticallItem({
+      outerTarget: request.to, calldata: request.data, returndata: result.data,
+      index: evaluate(proof.multicall.index, input, amountIn), target: evaluate(proof.multicall.target, input, amountIn),
+      expectedCalldata: evaluate(proof.multicall.calldata, input, amountIn),
+    });
+    let capacity: bigint | undefined;
+    let feeNumerator = 0n, feeDenominator = 1n;
+    let unavailableCallAmount: bigint | undefined;
+    if (proof.receiptBinding) {
+      const binding = proof.receiptBinding;
+      const fn = FunctionFragment.from(proof.signature!), abi = new Interface([fn]);
+      const args = abi.decodeFunctionData(fn, request.data);
+      const token = atPath(args, binding.inputAssetPath);
+      if (abi.encodeFunctionData(fn, args).toLowerCase() !== request.data.toLowerCase() ||
+          typeof token !== "string" || getAddress(token) !== getAddress(input.tokenIn))
+        throw new Error("view receipt input asset or canonical calldata differs");
+      const uint = (value: unknown): bigint => {
+        const n = evaluate(value, input, amountIn);
+        if (typeof n !== "bigint" || n < 0n || n >= 1n << 256n)
+          throw new Error("invalid source-bound view receipt amount");
+        return n;
+      };
+      capacity = uint(binding.maximumInput);
+      feeNumerator = uint(binding.feeNumerator);
+      feeDenominator = uint(binding.feeDenominator);
+      if (feeDenominator === 0n || feeNumerator >= feeDenominator)
+        throw new Error("invalid view receipt deduction");
+      if (unavailable) {
+        const n = atPath(args, proof.amountPath!);
+        if (typeof n !== "bigint" || n < 0n) throw new Error("invalid unavailable view input");
+        unavailableCallAmount = n;
+      }
+    }
+    // A pinned revert/empty reply proves only unavailability, never a positive receipt.
+    const decoded = unavailableCallAmount === undefined ? (inner ? decodeView(proof, { ...request, data: inner.calldata }, { ...result, data: inner.returndata })
+      : decodeView(proof, request, result))
+      : { callAmount: unavailableCallAmount, output: 0n };
     let expectedInput = amountIn;
     if (proof.inputBinding) {
       for (const check of proof.inputBinding.checks)
@@ -195,7 +268,13 @@ export function verifyDeclarativeQuoteProof(input: {
       if (typeof transformed !== "bigint") throw new Error("derived quote input is not an integer");
       expectedInput = transformed;
     }
-    if (decoded.callAmount !== expectedInput || decoded.output !== amountOut)
+    let receipt = decoded.output;
+    if (capacity !== undefined) {
+      const product = decoded.output * feeNumerator;
+      if (decoded.output < 0n || product >= 1n << 256n) throw new Error("view receipt deduction overflow");
+      receipt = expectedInput > capacity ? 0n : decoded.output - product / feeDenominator;
+    }
+    if (decoded.callAmount !== expectedInput || receipt !== amountOut)
       throw new Error("chain quote proof input or output amount mismatch");
     return;
   }
@@ -235,6 +314,8 @@ function sequence(raw: unknown, kind: DeclarativeQuoteSource): readonly Declarat
     if (seen.has(key)) throw new Error("duplicate chain quote proof request");
     seen.add(key);
   }
+  if (raw.steps.slice(0, -1).some(step => step.receiptBinding !== undefined))
+    throw new Error("a receipt-bound quote may only be the final quote step");
   return raw.steps;
 }
 /** Compile-time groups allow each alternative to be checked in flow order. */

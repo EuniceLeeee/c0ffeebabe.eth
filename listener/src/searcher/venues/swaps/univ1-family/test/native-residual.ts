@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { concatBytes, encodeCall } from "../../../../../encoder.js";
 import { plugin } from "../../../production-families/uniswap-v1.production.js";
-import { MAX_UINT, POOL } from "../codec.js";
+import { MAX_UINT, POOL } from "./definition-fixture.js";
 import { answer, EXECUTOR, quote, result, TOKEN_ADDRESS, word } from "./fixtures.js";
 
 // In-process EVM only. This runner never creates a provider, forks a chain,

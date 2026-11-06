@@ -8,24 +8,23 @@ import type {
   AdapterRequestResult,
   CanonicalSource,
 } from "../venues/adapter-request-program.js";
+import { createIdentityAssetMetadataPlan } from "../identity-asset-metadata.js";
+import { RequiredAdapterRequestError } from "../venues/adapter-request-failure.js";
 import { hashCanonical } from "../venues/canonical-value.js";
-import { fluidDexStrictFamilyPlugin } from
-  "../venues/swaps/fluid-dex-family-plugin.js";
+import { plugin as fluidDexStrictFamilyPlugin } from
+  "../venues/production-families/fluid-dex.production.js";
 import {
   FLUID_DEX_CONSTANTS_INTERFACE,
   FLUID_DEX_ERC20_INTERFACE,
   FLUID_DEX_FACTORY_INTERFACE,
   FLUID_DEX_INTERFACE,
   FLUID_DEX_SWAP_SELECTOR,
-  describeFluidDexQuoteFailure,
-} from "../venues/swaps/fluid-dex-family/codec.js";
-import { FLUID_DEX_SWAP_CALL_PATTERN_ID } from
-  "../venues/swaps/fluid-dex-family/discovery.js";
+} from "../venues/swaps/fluid-dex-family/test/fixture-codec.js";
 import type {
   FluidDexCandidate,
   FluidDexIdentity,
   FluidDexIdentityEvidence,
-} from "../venues/swaps/fluid-dex-family/types.js";
+} from "../venues/swaps/fluid-dex-family/test/fixture-types.js";
 
 const POOL = ethers.getAddress("0x1111111111111111111111111111111111111111");
 const OTHER_POOL = ethers.getAddress("0x1212121212121212121212121212121212121212");
@@ -56,7 +55,7 @@ const observation: UnifiedObservation = Object.freeze({
 assert.equal(observation.data.slice(0, 10).toLowerCase(), FLUID_DEX_SWAP_SELECTOR);
 const candidate = fluidDexStrictFamilyPlugin.discovery.decodeCandidate({
   observation,
-  matchedPatternId: FLUID_DEX_SWAP_CALL_PATTERN_ID,
+  matchedPatternId: "fluid-dex-swap-call",
 });
 assert(candidate !== null);
 assert.equal(candidate.pool, POOL);
@@ -89,7 +88,7 @@ assert.throws(
       failure: "rpc",
     }],
   }),
-  /unresolved: rpc/,
+  (error: unknown) => error instanceof RequiredAdapterRequestError && error.failureCode === "rpc",
   "ordinary transport failure cannot be decoded as unavailable",
 );
 
@@ -123,8 +122,12 @@ const pricingDraft = fluidDexStrictFamilyPlugin.pricing.compileDraft({
   stateKey: fluidDexStrictFamilyPlugin.pricing.stateKey(route),
   routes: [route],
 });
+const staticProgram = fluidDexStrictFamilyPlugin.pricing.staticEvidence!;
+const staticRequests = staticProgram.buildRequests(pricingDraft);
+assert.equal(staticRequests.length, 0);
+const staticEvidence = staticProgram.decode({ programInput: pricingDraft, initialResults: [], dependentEvidence: [] });
 const pricingDescriptor = fluidDexStrictFamilyPlugin.pricing
-  .finalizePricingDescriptor({ draft: pricingDraft, sharedBindings: [] });
+  .finalizePricingDescriptor({ draft: pricingDraft, sharedBindings: [], staticEvidence });
 const currentInput = { descriptor: pricingDescriptor, routes: [route], source: SOURCE };
 const currentRequests = fluidDexStrictFamilyPlugin.pricing.current
   .buildRequests(currentInput);
@@ -155,7 +158,7 @@ assert.throws(
     initialResults: [returnedCustomError("current-fluid-dex-quote", 999_000n)],
     dependentEvidence: [],
   }),
-  /did not return its declared custom-error payload/,
+  /positive declared revert quote required/,
   "an ordinary return cannot impersonate Fluid's declared revert quote",
 );
 
@@ -196,7 +199,7 @@ assert.throws(
     }],
     dependentEvidence: [],
   }),
-  /unresolved: deadline/,
+  (error: unknown) => error instanceof RequiredAdapterRequestError && error.failureCode === "deadline",
   "ordinary failure remains unresolved and never becomes quote data",
 );
 assert.throws(
@@ -209,7 +212,7 @@ assert.throws(
     )],
     dependentEvidence: [],
   }),
-  /lacked the declared FluidDexSwapResult revert/,
+  /selector=0xdeadbeef error=unknown/,
   "unknown custom errors fail closed",
 );
 
@@ -224,14 +227,11 @@ for (const rejected of [declaredRevert("exact-fluid-dex-declared-revert", 0n), r
   assert.throws(() => exactRequestMethod.program.decode({ programInput: exactInput,
     initialResults: [rejected], dependentEvidence: [] }), /error=FluidDexSwapResult/);
 }
-const longPayload = success("diagnostic", "0xdeadbeef" + "ab".repeat(1024), "reverted-as-declared");
-assert(longPayload.ok);
-const description = describeFluidDexQuoteFailure(longPayload);
-assert(description.length < 512);
-assert(description.includes("truncated=true"));
-const malformedPayload = success("diagnostic", "https://example.invalid/private-key", "reverted-as-declared");
-assert(malformedPayload.ok);
-assert(!describeFluidDexQuoteFailure(malformedPayload).includes("example.invalid"));
+for (const [bytes, check] of [["0xdeadbeef" + "ab".repeat(1024), /truncated=true/], ["invalid-private-example", /data=non-hex/]] as const) {
+  assert.throws(() => exactRequestMethod.program.decode({ programInput: exactInput,
+    initialResults: [success("exact-fluid-dex-declared-revert", bytes, "reverted-as-declared")], dependentEvidence: [] }),
+    (e: Error) => check.test(e.message) && e.message.length < 512 && !e.message.includes("invalid-private-example"));
+}
 
 const fragment = fluidDexStrictFamilyPlugin.execution.buildFragment({
   descriptor,
@@ -244,8 +244,12 @@ const fragment = fluidDexStrictFamilyPlugin.execution.buildFragment({
   runtimeEvidence: [],
 });
 assert.equal(fragment.nodes[0]?.adapterId, "fluid-dex-swap");
-assert.equal(fragment.nodes[0]?.params.swap0to1, true);
-assert.equal(fragment.requirements[0]?.kind, "approve");
+const program = String(fragment.nodes[0]?.params.runtimeAmountProgram);
+assert(program.includes(FLUID_DEX_SWAP_SELECTOR.slice(2) + ethers.zeroPadValue("0x01", 32).slice(2)),
+  "the encoded swapIn direction must remain token0 to token1");
+const approvalPrefix = ethers.id("approve(address,uint256)").slice(2, 10) +
+  ethers.zeroPadValue(POOL, 32).slice(2).toLowerCase();
+assert.equal(program.split(approvalPrefix).length - 1, 3, "embedded approvals zero, set, then clear the pool allowance");
 assert.throws(
   () => fluidDexStrictFamilyPlugin.execution.buildFragment({
     descriptor,
@@ -305,27 +309,12 @@ function runThroughReverse(
   assert.deepEqual(variant.decide({ candidate: input, evidence: constants, step: 1 }), {
     status: "continue",
   });
-  return variant.decode({
-    step: { candidate: input, evidence: constants, step: 1 },
-    results: [
-      success(
-        "factory-reverse-dex",
-        FLUID_DEX_FACTORY_INTERFACE.encodeFunctionResult(
-          "getDexAddress",
-          [reversePool],
-        ),
-      ),
-      success("token0-code", "0x6001"),
-      success("token1-code", "0x6002"),
-      success(
-        "token0-decimals",
-        FLUID_DEX_ERC20_INTERFACE.encodeFunctionResult("decimals", [6]),
-      ),
-      success(
-        "token1-decimals",
-        FLUID_DEX_ERC20_INTERFACE.encodeFunctionResult("decimals", [6]),
-      ),
-    ],
+  const step = { candidate: input, evidence: constants, step: 1 };
+  const metadata = createIdentityAssetMetadataPlan(variant.assets!(step), SOURCE);
+  const assets = metadata.decode(metadata.append([]).map(request => success(request.id, request.kind === "get-code"
+    ? "0x6001" : FLUID_DEX_ERC20_INTERFACE.encodeFunctionResult("decimals", [6]))));
+  return variant.decode({ step, assets,
+    results: [success("factory-reverse-dex", FLUID_DEX_FACTORY_INTERFACE.encodeFunctionResult("getDexAddress", [reversePool]))],
   }) as FluidDexIdentityEvidence;
 }
 

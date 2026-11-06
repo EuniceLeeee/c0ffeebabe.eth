@@ -137,3 +137,40 @@ test("runtime construction never reads quoted-input, quote-output, evidence or m
   const leg = buildDeclarativeRuntimeLeg(definition, input, values);
   assert(leg); execute(leg.program, 91n, false);
 });
+
+test("debt delivery binds fixed trial debit and measured receipt to separate input words", () => {
+  const router = new Interface(["function deliver(address,uint256,uint256)", "function balanceOf(address) view returns(uint256)"]);
+  const step = (amount: any, debt: any) => ({ id: "deliver", call: { target: TARGET,
+    signature: "function deliver(address,uint256,uint256)", args: ["$recipient", amount, debt] } });
+  const declaration = { version: 2 as const, protectedAddresses: [INPUT, OUTPUT, TARGET],
+    steps: [step(ref("amountIn"), 1n)],
+    settlement: { directOutput: true, settleOutput: { version: 1 as const, steps: [step(ref("amountIn"), ref("settlementDebt"))] } },
+    effects: [{ kind: "debit", token: INPUT, account: "$executor", equals: ref("amountIn") },
+              { kind: "credit", token: OUTPUT, account: "$recipient" }] };
+  const input = { ...context(), settlement: { kind: "settle-output", recipient: RECIPIENT, amountIn: 17n } };
+  const leg = buildDeclarativeRuntimeLeg(declaration, input, values);
+  assert.equal(leg?.settlement.settleOutput, true);
+  assert(leg);
+  function settle(debt: bigint, debit: bigint, credit: bigint) {
+    let ownerBalance = 211n, recipientBalance = 391n;
+    inspectRuntime(leg!.program, debt, { nativeBalance: () => 0n, call(call) {
+      const action = router.parseTransaction({ data: call.data }); assert(action);
+      if (action.name === "balanceOf") {
+        const balance = call.target.toLowerCase() === INPUT ? ownerBalance : recipientBalance;
+        return router.encodeFunctionResult(action.name, [balance]);
+      }
+      assert.equal(action.name, "deliver");
+      assert.equal(action.args[0].toLowerCase(), RECIPIENT);
+      assert.equal(action.args[1], 17n);
+      assert.equal(action.args[2], debt);
+      ownerBalance -= debit; recipientBalance += credit;
+      return "0x";
+    } });
+  }
+  settle(11n, 17n, 11n);
+  for (const [debt, debit, credit] of [[0n, 17n, 0n], [11n, 0n, 11n], [11n, 18n, 11n], [11n, 17n, 10n]])
+    assert.throws(() => settle(debt!, debit!, credit!));
+  assert.throws(() => buildDeclarativeRuntimeLeg(declaration, { ...input, settlement: { ...input.settlement, amountIn: 0n } }, values));
+  assert.equal(buildDeclarativeRuntimeLeg({ ...declaration, settlement: { directOutput: true } }, input, values), null);
+  assert.throws(() => buildDeclarativeQuotedFragment(declaration, input, values));
+});

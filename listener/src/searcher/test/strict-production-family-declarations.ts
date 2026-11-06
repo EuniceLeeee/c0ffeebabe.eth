@@ -23,7 +23,7 @@ import {
 import { UNIV2_SWAP_TOPIC } from
   "../venues/swaps/univ2-family/codec.js";
 import { METRONOME_SYNTH_FORWARDER_INTERFACE } from
-  "../venues/protocols/metronome-synth-family/shared.js";
+  "../venues/protocols/metronome-synth-family/test/fixture-shared.js";
 import {
   deriveTemplateTradeAdapterIds,
   FLASH_LEND_SWAP_REPAY,

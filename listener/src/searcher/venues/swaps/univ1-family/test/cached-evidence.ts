@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { plugin } from "../../../production-families/uniswap-v1.production.js";
-import { IMPLEMENTATION, POOL } from "../codec.js";
+import { IMPLEMENTATION, POOL } from "./definition-fixture.js";
 
 // Explicit read-only cached input; outputs must be caller-selected ignored logs.
 const [cache, out] = process.argv.slice(2);

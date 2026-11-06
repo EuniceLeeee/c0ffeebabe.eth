@@ -3,11 +3,9 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import type { UnifiedObservation } from "../venues/adapter-family-plugin.js";
 import type { CanonicalSource } from "../venues/adapter-request-program.js";
-import { univ4FeeHookStrictFamilyPlugin } from "../venues/swaps/univ4-fee-hook-family-plugin.js";
+import { plugin as univ4FeeHookStrictFamilyPlugin } from "../venues/production-families/univ4-fee-hook.production.js";
 import { UNIV4_POOL_MANAGER_INTERFACE } from "../venues/swaps/univ4-abi.js";
 import { v4PoolId } from "../venues/swaps/univ4-common.js";
-import { poolKeyFingerprint } from
-  "../venues/swaps/univ4-family/codec.js";
 import {
   UNIV4_FEE_HOOK_ADDRESS,
   UNIV4_FEE_HOOK_CODE_HASH,
@@ -50,8 +48,8 @@ const candidate = univ4FeeHookStrictFamilyPlugin.discovery.decodeCandidate({
 });
 assert(candidate !== null);
 assert.equal(candidate.poolId, POOL_ID);
-assert.equal(candidate.poolKey.hooks.toLowerCase(), UNIV4_FEE_HOOK_ADDRESS.toLowerCase());
-assert.equal(candidate.poolKey.fee, 0x800000);
+assert.equal(candidate.hooks.toLowerCase(), UNIV4_FEE_HOOK_ADDRESS.toLowerCase());
+assert.equal(BigInt(candidate.fee), 0x800000n);
 
 const identityVariant = univ4FeeHookStrictFamilyPlugin.identity.variants[0];
 assert.deepEqual(identityVariant.decide({ candidate, step: 0 }), { status: "continue" });
@@ -60,9 +58,11 @@ assert.deepEqual(
     candidate: {
       ...candidate,
       poolId: v4PoolId({ ...KEY, hooks: OTHER_HOOK }),
-      poolKey: { ...KEY, hooks: OTHER_HOOK },
+      hooks: OTHER_HOOK,
     },
-    step: 0,
+    step: 1,
+    evidence: { managerCodeHash: ethers.id("fixture-manager"), hookCodeHash: ethers.id("unknown hook"),
+      sqrtPriceX96: Q96, liquidity: LIQUIDITY },
   }),
   { status: "chain-proven-rejected", reasonCode: "unknown_hook_fail_closed", evidenceRequestIds: [] },
 );
@@ -118,28 +118,26 @@ const descriptor = univ4FeeHookStrictFamilyPlugin.instance.finalizeDescriptor({
 const route = univ4FeeHookStrictFamilyPlugin.routes.project({ descriptor })[0];
 const amountIn = 1_000_000n;
 const amountOut = 1_001_000n;
-const fragment = univ4FeeHookStrictFamilyPlugin.execution.buildFragment({
-  descriptor,
-  route,
-  amountIn,
-  quotedAmountOut: amountOut,
-  minAmountOut: amountOut,
-  exactEvidence: Object.freeze({
-    kind: "univ4-fee-hook-quoter" as const,
-    source: SOURCE,
-    poolId: descriptor.poolId,
-    poolKeyFingerprint: poolKeyFingerprint(descriptor.poolKey),
-    quoter: descriptor.managerBinding.quoter,
-    tokenIn: route.tokenIn,
-    tokenOut: route.tokenOut,
-    amountIn,
-    amountOut,
-    gasEstimate: 80_000n,
-    hookData: "0x" as const,
-  }),
-  executor: "0x3000000000000000000000000000000000000003",
-  runtimeEvidence: [],
-});
+const executor = "0x3000000000000000000000000000000000000003";
+const transactionOrigin = "0x7000000000000000000000000000000000000007";
+const quoteInput = { descriptor, route, amountIn, source: SOURCE, executor, transactionOrigin, runtimeEvidence: [] };
+const method = univ4FeeHookStrictFamilyPlugin.exact.methods(quoteInput).find((m) => m.kind === "request-program");
+assert(method?.kind === "request-program");
+const [request] = method.program.buildRequests(quoteInput);
+assert.equal(request.kind, "effect-delta-simulation");
+const quote = method.program.decode({ programInput: quoteInput, dependentEvidence: [], initialResults: [{
+  id: request.id, ok: true, source: SOURCE, completion: "returned", data: "0x",
+  provenance: { kind: "fixture", fingerprint: "tiered-unit-receipt" },
+  effects: { tokenDeltas: [{ token: route.tokenIn, account: executor, delta: -amountIn },
+    { token: route.tokenOut, account: executor, delta: amountOut }], nativeDeltas: [{ account: executor, delta: 0n }] },
+}] });
+assert.equal(quote.amountOut, amountOut);
+const fragmentInput = { ...quoteInput, quotedAmountOut: quote.amountOut,
+  minAmountOut: quote.amountOut, exactEvidence: quote.evidence };
+const fragment = univ4FeeHookStrictFamilyPlugin.execution.buildFragment(fragmentInput);
+assert.throws(() => univ4FeeHookStrictFamilyPlugin.execution.buildFragment({
+  ...fragmentInput, exactEvidence: { ...quote.evidence, kind: "univ4-fee-hook-quoter" },
+}), /incompatible exact evidence/);
 assertPlanTokensAreCanonical(fragment.nodes);
 
 console.log("univ4 fee-hook strict Family plugin tests passed");

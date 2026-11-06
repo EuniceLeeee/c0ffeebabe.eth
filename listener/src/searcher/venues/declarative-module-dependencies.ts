@@ -4,6 +4,7 @@ import ts from "typescript";
 // Framework-owned dependency boundaries, never Family-authored source paths.
 // Core interpreters and modules with non-module entry points stay conservative.
 export const OPTIONAL_DECLARATIVE_MODULE_SOURCES = Object.freeze({
+  "declarative-runtime-evidence.ts": ["signedBlockEvidence"],
   "declarative-oracle-victim.ts": ["oracleVictim"],
   "declarative-trial-state.ts": ["trialState"],
   "declarative-pricing-projection.ts": ["pricingProjection"],

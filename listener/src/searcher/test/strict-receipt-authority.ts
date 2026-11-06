@@ -16,7 +16,7 @@ import {
 } from "../venues/swaps/angstrom-attestation.js";
 import {
   FLUID_DEX_SWAP_TOPIC,
-} from "../venues/swaps/fluid-dex-family/codec.js";
+} from "../venues/swaps/fluid-dex-family/test/fixture-codec.js";
 import {
   UNIV2_PAIR_INTERFACE,
 } from "../venues/swaps/univ2-abi.js";
@@ -106,15 +106,23 @@ function edge(input: {
 async function transition(
   logs: ReceiptLog[], graph: TokenEdge[], resolveBinding?: SwapObservationBindingResolver,
 ) {
+  const transactionHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(logs)));
+  const blockHash = `0x${"62".repeat(32)}`;
+  const blockNumber = SOURCE.number + 1;
+  const receiptLogs = logs.map((log) => ({ ...log, transactionHash, blockNumber, blockHash }));
   const sourceGeneration = createVictimSourceGeneration({
     sourceBlock: SOURCE.number,
     sourceBlockHash: SOURCE.hash,
-    receiptId: ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(logs))),
-    logs,
+    receiptId: transactionHash,
+    receiptTransactionHash: transactionHash,
+    receiptBlockNumber: blockNumber,
+    receiptBlockHash: blockHash,
+    receiptParentBlockHash: SOURCE.hash,
+    logs: receiptLogs,
     logsCompleteness: "complete-receipt",
   });
   return await detectImpactTransitionFromLogs(
-    logs,
+    receiptLogs,
     graph,
     sourceGeneration,
     null,
@@ -285,6 +293,18 @@ async function testV4PoolIdentityAndWethAlias(): Promise<void> {
     impact.tokenIn.toLowerCase() === ADDR.WETH.toLowerCase() &&
     impact.tokenOut.toLowerCase() === TOKEN1.toLowerCase()
   ));
+  const reverse = edge({ adapterId: "univ4-unlock", target: ADDR.UNISWAP_V4_POOL_MANAGER,
+    tokenIn: TOKEN1, tokenOut: ADDR.WETH, poolId: v4PoolId(key0), v4PoolKey: key0 });
+  const reversed = await transition([v4Log(key0, 12n, -11n)], [...graph, reverse]);
+  assert.equal(reversed.steps.length, 1);
+  assert.equal(reversed.impacts[0]?.amountIn, 11n);
+  assert.equal(reversed.impacts[0]?.amountOut, 12n);
+  assert.equal(reversed.impacts[0]?.v4PostState?.poolId, v4PoolId(key0));
+  const forged = await transition([v4Log(key0, -9n, 10n)], [{ ...graph[0], v4PoolKey: key1 }]);
+  assert.equal(forged.complete, false, "same token pair cannot substitute a different PoolKey");
+  assert.equal(forged.steps.length, 0);
+  const foreign = await transition([{ ...v4Log(key0, -9n, 10n), address: UNKNOWN_POOL }], graph);
+  assert.equal(foreign.impacts.length, 0, "identical bytes from a foreign manager cannot claim the pool");
 }
 
 async function testAngstromDoesNotInventAmountOut(): Promise<void> {
@@ -294,15 +314,11 @@ async function testAngstromDoesNotInventAmountOut(): Promise<void> {
     fee: 0x80_0000,
     hooks: ANGSTROM_MAINNET_HOOK,
   });
-  const graph = [edge({
-    adapterId: "angstrom-v4-swap",
-    target: ADDR.UNISWAP_V4_POOL_MANAGER,
-    tokenIn: TOKEN0,
-    tokenOut: TOKEN1,
-    poolId: v4PoolId(key),
-    v4PoolKey: key,
-  })];
+  const graph=[edge({adapterId:"angstrom-v4-swap",target:ADDR.UNISWAP_V4_POOL_MANAGER,
+    tokenIn:TOKEN0,tokenOut:TOKEN1,poolId:v4PoolId(key),v4PoolKey:key})];
   const result = await transition([v4Log(key, -13n, 14n)], graph);
+  const forged=await transition([v4Log(key, -13n, 14n)], [{ ...graph[0]!, v4PoolKey:{...key,tickSpacing:key.tickSpacing+1} }]);
+  assert.equal(forged.impacts.length,0);
   assert.equal(result.complete, true);
   assert.equal(result.steps[0]?.familyId, "custom-swap:angstrom-v4");
   assert.equal(result.impacts.length, 1);

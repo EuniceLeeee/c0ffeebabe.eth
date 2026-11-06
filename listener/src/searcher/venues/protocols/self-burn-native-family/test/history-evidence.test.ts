@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
 import { originalSelfBurnLeg, assertOriginalReceipt, SAMPLE } from "./history-evidence.js";
-import { selfBurnNativeDiscovery } from "../discovery.js";
+import { plugin as selfBurnNativeJsonPlugin } from "../../../production-families/self-burn-native.production.js";
+
+const selfBurnNativeDiscovery = selfBurnNativeJsonPlugin.discovery;
+
 const actor = "0x1000000000000000000000000000000000000002", token = SAMPLE.token;
 const descriptor = { token, nativeAnchor: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" };
 const abi = new ethers.Interface(["function transfer(address,uint256) returns(bool)",

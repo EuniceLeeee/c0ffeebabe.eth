@@ -1,3 +1,4 @@
+import { plugin as conversionPlugin } from "../../../production-families/token-conversion.production.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -8,13 +9,14 @@ import { executeAdapterWork } from "../../../../adapter-work-intent.js";
 import { applyExactTrialState, emptyExactTrialState } from "../../../../exact-trial-state.js";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource, RequestRequirements } from "../../../adapter-request-program.js";
 import type { ExactQuoteInput, ExactQuotePrefixStep } from "../../../adapter-family-plugin.js";
-import { exact } from "../exact.js";
-import { instance } from "../instance.js";
-import { FAMILY, XWIN_LINEAGE } from "../manifest.js";
-import { routes } from "../routes.js";
-import { decodeXwinSurface } from "../xwin.js";
-import { XWIN_LOCAL_ABI } from "../xwin-local.js";
-import type { ConversionDescriptor, ConversionRoute, Direction } from "../types.js";
+import { exact } from "./reference/exact.js";
+import { FAMILY, XWIN_LINEAGE } from "./reference/manifest.js";
+import { decodeXwinSurface } from "./reference/xwin.js";
+import { XWIN_LOCAL_ABI } from "./reference/xwin-local.js";
+import type { ConversionDescriptor, ConversionRoute, Direction } from "./reference/types.js";
+
+const { instance, routes } = conversionPlugin;
+
 
 // Offline issuer integration, not new identity admission or final EVM execution.
 // All protocol reads are captured at B; the executor runtime is the code-only

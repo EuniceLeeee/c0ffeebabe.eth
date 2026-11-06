@@ -1,3 +1,4 @@
+import { plugin as conversionPlugin } from "../../../production-families/token-conversion.production.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { instanceKey } from "../../../adapter-family-identifiers.js";
@@ -9,12 +10,14 @@ import { createUniV3Exact } from "../../../swaps/univ3-family/exact.js";
 import { univ3Routes } from "../../../swaps/univ3-family/routes.js";
 import type { UniV3Descriptor } from "../../../swaps/univ3-family/types.js";
 import { v3SwapToState, type V3PoolState } from "../../../../solver/v3-math.js";
-import { quoteXwinTransition, type XwinLocalFundState } from "../xwin-transition.js";
-import { quoteBearTrial, quoteXwinTrial, type XwinTrialFund } from "../trial-state.js";
-import { createConversionExact } from "../exact.js";
-import { routes } from "../routes.js";
-import { FAMILY, LINEAGE, XWIN_LINEAGE } from "../manifest.js";
-import type { ConversionDescriptor, ConversionRoute } from "../types.js";
+import { quoteXwinTransition, type XwinLocalFundState } from "./reference/xwin-transition.js";
+import { quoteBearTrial, quoteXwinTrial, type XwinTrialFund } from "./reference/trial-state.js";
+import { createConversionExact } from "./reference/exact.js";
+import { FAMILY, LINEAGE, XWIN_LINEAGE } from "./reference/manifest.js";
+import type { ConversionDescriptor, ConversionRoute } from "./reference/types.js";
+
+const { routes } = conversionPlugin;
+
 
 const addr = (n: number) => `0x${n.toString(16).padStart(40, "0")}`;
 const BASE = addr(1), TARGET = addr(2), POOL = addr(3), FUND = addr(4), ACTOR = addr(5);
