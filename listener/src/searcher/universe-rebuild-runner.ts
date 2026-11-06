@@ -87,9 +87,10 @@ export interface UniverseRebuildDependencies {
   readonly candidateFamilyId?: (candidate: unknown) => string;
   readonly familyDefinitionHash?: (familyId: string) => string;
   readonly familyDiscoveryDefinitionHash?: (familyId: string) => string;
-  /** Unique family candidates for the run (dedupe by familyCandidateKey). */
+  /** One representative per Family instance. An explicit selection pins its durable evidence keys. */
   readonly dedupeFamilyCandidates: (
     observations: readonly unknown[],
+    selected?: ReadonlySet<string>,
   ) => readonly unknown[];
   /**
    * Optional retain-channel candidate resolution (central driver; plugin
@@ -359,6 +360,7 @@ export async function rebuildUniverse(
     (!incumbentRun || incumbentRun.reviewInputFingerprint) && input.readyReviewInputFingerprint;
   const review: RebuildUniverseInput["previousReadyReview"] = input.previousReadyReview ??
     (defaultReview ? { inputFingerprint: defaultReview() } : undefined);
+  const selected = review?.candidateKeys ?? input.scopedCandidateKeys;
   if (review && (!checkpoint?.readyGeneration?.familyPartitions || familyUpdateScope ||
       !/^[0-9a-f]{64}$/.test(review.inputFingerprint))) {
     throw new Error("Ready review requires a partitioned parent and bound current input");
@@ -466,7 +468,7 @@ export async function rebuildUniverse(
       candidates = input.dedupeFamilyCandidates(Object.freeze([
         ...observations,
         ...retainedCandidateInputs,
-      ]));
+      ]), selected);
       if (input.reverseBindOpaqueCandidates !== undefined) {
         // Retain-channel candidates: opaque observations (e.g. univ4 swap
         // logs carrying only a poolId) are resolved to complete candidates
@@ -494,7 +496,7 @@ export async function rebuildUniverse(
               kind: "startup-candidate",
               candidate,
             })),
-          ]));
+          ]), selected);
         }
       }
     }
@@ -527,7 +529,7 @@ export async function rebuildUniverse(
     candidates = input.dedupeFamilyCandidates(Object.freeze([
       ...observations,
       ...retainedCandidateInputs,
-    ]));
+    ]), selected);
     if (input.reverseBindOpaqueCandidates !== undefined) {
       // Retain-channel candidates: opaque observations (e.g. univ4 swap
       // logs carrying only a poolId) are resolved to complete candidates
@@ -555,16 +557,18 @@ export async function rebuildUniverse(
             kind: "startup-candidate",
             candidate,
           })),
-        ]));
+        ]), selected);
       }
     }
   }
   if (input.scopedCandidateKeys && !familyUpdateScope) throw new Error("candidate selection requires an explicit supplement scope");
-  const selected = review?.candidateKeys ?? input.scopedCandidateKeys;
   if (selected) {
     candidates = candidates.filter(candidate => selected.has(input.familyCandidateKey(candidate)));
-    if (new Set(candidates.map(input.familyCandidateKey)).size !== selected.size) {
-      throw new Error("Ready review could not resolve every selected Family candidate");
+    const retainedKeys = new Set(candidates.map(input.familyCandidateKey));
+    if (retainedKeys.size !== selected.size) {
+      const missing = [...selected].filter(key => !retainedKeys.has(key));
+      throw new Error("Ready review could not resolve every selected Family candidate: " +
+        "missing=" + missing.length + " examples=" + missing.slice(0, 3).join(","));
     }
   }
   log(

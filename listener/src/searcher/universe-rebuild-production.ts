@@ -2142,7 +2142,18 @@ export function rebuildFamilyInstanceDedupeKey(
 function preferCandidateRepresentative(
   incumbent: Readonly<Record<string, unknown>>,
   candidate: Readonly<Record<string, unknown>>,
+  selected?: ReadonlySet<string>,
 ): boolean {
+  if (selected) {
+    const oldKey = rebuildFamilyCandidateKey(incumbent), nextKey = rebuildFamilyCandidateKey(candidate);
+    if (oldKey !== nextKey) {
+      const oldSelected = selected.has(oldKey), nextSelected = selected.has(nextKey);
+      if (oldSelected && nextSelected) {
+        throw new Error("explicit Ready selection names two durable keys for one Family instance: " + oldKey + ", " + nextKey);
+      }
+      if (oldSelected !== nextSelected) return nextSelected;
+    }
+  }
   const incumbentBlock = Number.isSafeInteger(incumbent.blockNumber)
     ? Number(incumbent.blockNumber)
     : -1;
@@ -3443,7 +3454,7 @@ export function createRebuildWiring(input?: {
       rebuildFamilyCandidateKey(
         candidate as Readonly<Record<string, unknown>>,
       ),
-    dedupeFamilyCandidates: (observations) => {
+    dedupeFamilyCandidates: (observations, selected) => {
       // Candidate dedupe is per pool (familyCandidateKey), NOT per log: the
       // fixed activity window may hold multiple Swap logs per pool, and the run
       // attests one Family+Instance once. Full log identity dedupe (audit
@@ -3467,7 +3478,7 @@ export function createRebuildWiring(input?: {
           const existing = byKey.get(key);
           if (
             existing === undefined ||
-            preferCandidateRepresentative(existing, candidate)
+            preferCandidateRepresentative(existing, candidate, selected)
           ) {
             byKey.set(key, candidate);
           }
@@ -3486,7 +3497,7 @@ export function createRebuildWiring(input?: {
             const existing = byKey.get(key);
             if (
               existing === undefined ||
-              preferCandidateRepresentative(existing, candidate)
+              preferCandidateRepresentative(existing, candidate, selected)
             ) {
               byKey.set(key, candidate);
             }
@@ -3502,7 +3513,7 @@ export function createRebuildWiring(input?: {
           const existing = byKey.get(key);
           if (
             existing === undefined ||
-            preferCandidateRepresentative(existing, candidate)
+            preferCandidateRepresentative(existing, candidate, selected)
           ) {
             byKey.set(key, candidate);
           }

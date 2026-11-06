@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { createRebuildWiring } from "../universe-rebuild-production.js";
 import { canonicalJsonFingerprint } from "../universe-rebuild-checkpoint.js";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
@@ -53,3 +55,34 @@ try {
   assert(!isFamilySetOnlyReadyUpdate(active, ["old"], []));
   console.log("Ready maintenance CLI PASS: exclusive lease, error release, parent binding, option refusal; no RPC");
 } finally { await rm(directory, { recursive: true, force: true }); }
+
+// These same-block observations can spell one Family instance with two durable
+// keys. The exact selection still owns the original evidence and transaction.
+{
+  const recorded = JSON.parse(readFileSync(new URL("./fixtures/ready-selected-univ4-aliases.json", import.meta.url), "utf8")) as {
+    source: { number: number; hash: string };
+    pairs: { selected: Record<string, unknown>; activity: Record<string, unknown> }[];
+  };
+  const w = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1", familyIds: ["univ4", "univ4-fee-hook"] });
+  assert.equal(recorded.pairs.length, 12);
+  const asNomination = (candidate: Record<string, unknown>) => ({ kind: "startup-candidate", candidate });
+  for (const { selected, activity } of recorded.pairs) {
+    assert.equal(selected.familyId, "univ4");
+    assert.equal(selected.poolId, activity.poolId);
+    for (const c of [selected,activity]) {
+      assert.equal(c.blockNumber,recorded.source.number); assert.equal(c.blockHash,recorded.source.hash);
+    }
+    const key = w.familyCandidateKey(selected), alternate = w.familyCandidateKey(activity);
+    assert.notEqual(key, alternate);
+    const inputs = [asNomination(selected), asNomination(activity)];
+    assert.deepEqual(w.dedupeFamilyCandidates(inputs), [activity], "unscoped discovery retains its normal representative");
+    for (const ordered of [inputs, [...inputs].reverse()]) {
+      assert.deepEqual(w.dedupeFamilyCandidates(ordered, new Set([key])), [selected]);
+      assert.deepEqual(w.dedupeFamilyCandidates(ordered, new Set([alternate])), [activity]);
+      assert.throws(() => w.dedupeFamilyCandidates(ordered, new Set([key, alternate])), /two durable keys for one Family instance/);
+    }
+    const otherFamily = { ...selected, familyId: "univ4-fee-hook", adapter: "univ4-fee-hook" };
+    const both = w.dedupeFamilyCandidates([...inputs, asNomination(otherFamily)], new Set([key, w.familyCandidateKey(otherFamily)]));
+    assert.deepEqual(both, [selected, otherFamily], "Family ownership remains independent");
+  }
+}

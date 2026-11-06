@@ -1,0 +1,488 @@
+{
+  "source": {
+    "number": 26222895,
+    "hash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+  },
+  "pairs": [
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7",
+        "poolId": "0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7",
+        "poolKey": {
+          "currency0": "0x0000000000000000000000000000000000000000",
+          "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "fee": 100,
+          "hooks": "0x0000000000000000000000000000000000000000",
+          "tickSpacing": 1
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0xacbf46c13d0f15114090baf3a1b29b5dbdf2441379f04376fa90f9250971a470"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7",
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "fee": "100",
+        "tickSpacing": "1",
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0x00b9edc1583bf6ef09ff3a09f6c23ecb57fd7d0bb75625717ec81eed181e22d7\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0xacbf46c13d0f15114090baf3a1b29b5dbdf2441379f04376fa90f9250971a470",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xf4bce6d3c42479225205d901a3f67956df3f4f7f45ccd9f7ce6bc16c3a0ee09f",
+        "poolId": "0xf4bce6d3c42479225205d901a3f67956df3f4f7f45ccd9f7ce6bc16c3a0ee09f",
+        "poolKey": {
+          "currency0": "0x940a2dB1B7008B6C776d4faaCa729d6d4A4AA551",
+          "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "fee": 3000,
+          "hooks": "0x0000000000000000000000000000000000000000",
+          "tickSpacing": 60
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0xfe8b50813cad80f561422047d6ec52b5394d2eda7d2c2474251292147fa022ca"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0xf4bce6d3c42479225205d901a3f67956df3f4f7f45ccd9f7ce6bc16c3a0ee09f",
+        "currency0": "0x940a2dB1B7008B6C776d4faaCa729d6d4A4AA551",
+        "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "fee": "3000",
+        "tickSpacing": "60",
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0xf4bce6d3c42479225205d901a3f67956df3f4f7f45ccd9f7ce6bc16c3a0ee09f\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0xcb8445c25ed76512e88e04a192ca2e3b74bf6d95e519c2421b6b73b14a1cd7db",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657",
+        "poolId": "0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657",
+        "poolKey": {
+          "currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "currency1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "fee": 8388608,
+          "hooks": "0x0000000aa232009084Bd71A5797d089AA4Edfad4",
+          "tickSpacing": 10
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0x472469eca24e29493ec950869e7897adf70938afb38a5e9d05c31bb4f48f0f81"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657",
+        "currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "currency1": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "fee": "8388608",
+        "tickSpacing": "10",
+        "hooks": "0x0000000aa232009084Bd71A5797d089AA4Edfad4",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0xe500210c7ea6bfd9f69dce044b09ef384ec2b34832f132baec3b418208e3a657\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0x472469eca24e29493ec950869e7897adf70938afb38a5e9d05c31bb4f48f0f81",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x98316e8405502774a5d0a0761276b5d26505a8195c1905169864008d5e7a3eea",
+        "poolId": "0x98316e8405502774a5d0a0761276b5d26505a8195c1905169864008d5e7a3eea",
+        "poolKey": {
+          "currency0": "0x0000000000000000000000000000000000000000",
+          "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "fee": 8388608,
+          "hooks": "0x000022Ec4eBD6b12294396E852E4C3876b253Cc0",
+          "tickSpacing": 4
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0xacbf46c13d0f15114090baf3a1b29b5dbdf2441379f04376fa90f9250971a470"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0x98316e8405502774a5d0a0761276b5d26505a8195c1905169864008d5e7a3eea",
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "fee": "8388608",
+        "tickSpacing": "4",
+        "hooks": "0x000022Ec4eBD6b12294396E852E4C3876b253Cc0",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0x98316e8405502774a5d0a0761276b5d26505a8195c1905169864008d5e7a3eea\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0xacbf46c13d0f15114090baf3a1b29b5dbdf2441379f04376fa90f9250971a470",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x28a6442c3ba326ae39e2d4b3c804ed3d0b4205667b0fe4fd7c62e2aedf1d2225",
+        "poolId": "0x28a6442c3ba326ae39e2d4b3c804ed3d0b4205667b0fe4fd7c62e2aedf1d2225",
+        "poolKey": {
+          "currency0": "0x0000000000000000000000000000000000000000",
+          "currency1": "0xC5f10a8997032aD9A4a07a9Bb53721a2DDa416df",
+          "fee": 0,
+          "hooks": "0xC50373838b1E670c997E04FF96A6F6e631E3c0cC",
+          "tickSpacing": 60
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0xa8ba202729758868c1c92a1a18a4b5ed33f2c881a0c12150330f657af5e9f50e"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0x28a6442c3ba326ae39e2d4b3c804ed3d0b4205667b0fe4fd7c62e2aedf1d2225",
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0xC5f10a8997032aD9A4a07a9Bb53721a2DDa416df",
+        "fee": "0",
+        "tickSpacing": "60",
+        "hooks": "0xC50373838b1E670c997E04FF96A6F6e631E3c0cC",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0x28a6442c3ba326ae39e2d4b3c804ed3d0b4205667b0fe4fd7c62e2aedf1d2225\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0xa8ba202729758868c1c92a1a18a4b5ed33f2c881a0c12150330f657af5e9f50e",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x9a5c1d2f4a7a7962a63259de6fcc1afb1d0aa1abdf5d19c23d22fd78953c5167",
+        "poolId": "0x9a5c1d2f4a7a7962a63259de6fcc1afb1d0aa1abdf5d19c23d22fd78953c5167",
+        "poolKey": {
+          "currency0": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+          "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "fee": 3000,
+          "hooks": "0x0000000000000000000000000000000000000000",
+          "tickSpacing": 60
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0x0ecc25a3438ffad85795d009bfdb5d34ffb7d8093ee8c775a58c6e94e4caed0f"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0x9a5c1d2f4a7a7962a63259de6fcc1afb1d0aa1abdf5d19c23d22fd78953c5167",
+        "currency0": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "fee": "3000",
+        "tickSpacing": "60",
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0x9a5c1d2f4a7a7962a63259de6fcc1afb1d0aa1abdf5d19c23d22fd78953c5167\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0x0ecc25a3438ffad85795d009bfdb5d34ffb7d8093ee8c775a58c6e94e4caed0f",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x5895e3c4f48243a1f59802c30ba73914ac4930628a5b8172932b698811d70ff1",
+        "poolId": "0x5895e3c4f48243a1f59802c30ba73914ac4930628a5b8172932b698811d70ff1",
+        "poolKey": {
+          "currency0": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+          "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "fee": 9000,
+          "hooks": "0x0000000000000000000000000000000000000000",
+          "tickSpacing": 90
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0x0ecc25a3438ffad85795d009bfdb5d34ffb7d8093ee8c775a58c6e94e4caed0f"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0x5895e3c4f48243a1f59802c30ba73914ac4930628a5b8172932b698811d70ff1",
+        "currency0": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "fee": "9000",
+        "tickSpacing": "90",
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0x5895e3c4f48243a1f59802c30ba73914ac4930628a5b8172932b698811d70ff1\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0x0ecc25a3438ffad85795d009bfdb5d34ffb7d8093ee8c775a58c6e94e4caed0f",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x0fb0e40cec3bb23e13abc585958a93c796fbea56955e19a23727a716a0423239",
+        "poolId": "0x0fb0e40cec3bb23e13abc585958a93c796fbea56955e19a23727a716a0423239",
+        "poolKey": {
+          "currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "currency1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "fee": 7,
+          "hooks": "0x0000000000000000000000000000000000000000",
+          "tickSpacing": 1
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0xd6e45864c38a15cdd708f1c1e39c9c6d4d1ab998fc9559ba7fbd5f70d4be3820"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0x0fb0e40cec3bb23e13abc585958a93c796fbea56955e19a23727a716a0423239",
+        "currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "currency1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "fee": "7",
+        "tickSpacing": "1",
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0x0fb0e40cec3bb23e13abc585958a93c796fbea56955e19a23727a716a0423239\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0xd6e45864c38a15cdd708f1c1e39c9c6d4d1ab998fc9559ba7fbd5f70d4be3820",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3",
+        "poolId": "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3",
+        "poolKey": {
+          "currency0": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "currency1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "fee": 8388608,
+          "hooks": "0x0000000aa232009084Bd71A5797d089AA4Edfad4",
+          "tickSpacing": 10
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0x472469eca24e29493ec950869e7897adf70938afb38a5e9d05c31bb4f48f0f81"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3",
+        "currency0": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "currency1": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        "fee": "8388608",
+        "tickSpacing": "10",
+        "hooks": "0x0000000aa232009084Bd71A5797d089AA4Edfad4",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0x472469eca24e29493ec950869e7897adf70938afb38a5e9d05c31bb4f48f0f81",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x80235dd0d2b0fbac1fc5b9e04d4af3e030efd2b1026823affec8f5a6c9306c38",
+        "poolId": "0x80235dd0d2b0fbac1fc5b9e04d4af3e030efd2b1026823affec8f5a6c9306c38",
+        "poolKey": {
+          "currency0": "0x0000000000000000000000000000000000000000",
+          "currency1": "0xaea46A60368A7bD060eec7DF8CBa43b7EF41Ad85",
+          "fee": 3000,
+          "hooks": "0x0000000000000000000000000000000000000000",
+          "tickSpacing": 60
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0xacbf46c13d0f15114090baf3a1b29b5dbdf2441379f04376fa90f9250971a470"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0x80235dd0d2b0fbac1fc5b9e04d4af3e030efd2b1026823affec8f5a6c9306c38",
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0xaea46A60368A7bD060eec7DF8CBa43b7EF41Ad85",
+        "fee": "3000",
+        "tickSpacing": "60",
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0x80235dd0d2b0fbac1fc5b9e04d4af3e030efd2b1026823affec8f5a6c9306c38\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0xacbf46c13d0f15114090baf3a1b29b5dbdf2441379f04376fa90f9250971a470",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xb36b288ddf77cdb7fadda088cf02aa289a9e65b816f57f87b5f23e791080651d",
+        "poolId": "0xb36b288ddf77cdb7fadda088cf02aa289a9e65b816f57f87b5f23e791080651d",
+        "poolKey": {
+          "currency0": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+          "currency1": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+          "fee": 375,
+          "hooks": "0x0000000000000000000000000000000000000000",
+          "tickSpacing": 4
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0x0ecc25a3438ffad85795d009bfdb5d34ffb7d8093ee8c775a58c6e94e4caed0f"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0xb36b288ddf77cdb7fadda088cf02aa289a9e65b816f57f87b5f23e791080651d",
+        "currency0": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+        "currency1": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "fee": "375",
+        "tickSpacing": "4",
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0xb36b288ddf77cdb7fadda088cf02aa289a9e65b816f57f87b5f23e791080651d\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0x0ecc25a3438ffad85795d009bfdb5d34ffb7d8093ee8c775a58c6e94e4caed0f",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    },
+    {
+      "selected": {
+        "adapter": "univ4",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "blockNumber": 26222895,
+        "candidateKind": "univ4-pool-key",
+        "familyId": "univ4",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "pluginCandidateKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x3d8a4e3c8985f514808a901424724c9bc03b7a5b5ac3ca8b679d4681690d1e7f",
+        "poolId": "0x3d8a4e3c8985f514808a901424724c9bc03b7a5b5ac3ca8b679d4681690d1e7f",
+        "poolKey": {
+          "currency0": "0x0000000000000000000000000000000000000000",
+          "currency1": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+          "fee": 100,
+          "hooks": "0x0000000000000000000000000000000000000000",
+          "tickSpacing": 1
+        },
+        "sourceKind": "manager-swap-call",
+        "transactionHash": "0xacbf46c13d0f15114090baf3a1b29b5dbdf2441379f04376fa90f9250971a470"
+      },
+      "activity": {
+        "candidateKind": "univ4-pool-key",
+        "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "poolId": "0x3d8a4e3c8985f514808a901424724c9bc03b7a5b5ac3ca8b679d4681690d1e7f",
+        "currency0": "0x0000000000000000000000000000000000000000",
+        "currency1": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+        "fee": "100",
+        "tickSpacing": "1",
+        "hooks": "0x0000000000000000000000000000000000000000",
+        "sourceKind": "manager-swap-call",
+        "address": "0x000000000004444c5dc75cb358380d2e3de08a90",
+        "pluginCandidateKey": "[\"0x000000000004444c5dc75cb358380d2e3de08a90\",\"0x3d8a4e3c8985f514808a901424724c9bc03b7a5b5ac3ca8b679d4681690d1e7f\"]",
+        "familyId": "univ4",
+        "adapter": "univ4",
+        "transactionHash": "0x0ecc25a3438ffad85795d009bfdb5d34ffb7d8093ee8c775a58c6e94e4caed0f",
+        "blockNumber": 26222895,
+        "blockHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c"
+      }
+    }
+  ]
+}
