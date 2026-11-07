@@ -1,0 +1,297 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:33:42Z",
+  "family": "balancer-v2",
+  "domain": "swap",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "summary": "The v2 declarative Swap compiler cannot express the balancer-v2 exact quote faithfully. The family quotes a specified amount through Balancer Vault queryBatchSwap, whose ABI result is a signed int256[2] asset-delta array; the declarative chain-quote proof only accepts an unsigned uintN ABI output, or a bytes32 word through the bounded outputWord extraction. A compile probe of the real queryBatchSwap signature is rejected at declarative-quote-proof.ts:55 with 'chain quote proof ABI path must identify an unsigned amount or declared word'. The legacy readPrograms.quote fallback compiles and can issue the same call, but it produces no chainQuote proof and therefore cannot carry the family's signed-delta/invocation checks through verifyDeclarativeQuoteChain; it is a weaker legacy read path, not the documented exact evidence contract. A second production behavior gap remains: current pricing decides from the first quote result whether to issue the remaining probe batch (pricing.ts:43-55); declarative read-flow step conditions may only reference invocation inputs, never prior step results (declarative-read-flow.ts:60-62,100-107), so a JSON flow cannot reproduce the family's batch shape (contract.ts:159-168). Independently, no JSON entry can pass the existing family contract suite without public test changes: contract.ts:156,194,284 require /descriptor/ from tampered-route rejection while declarative-family.ts:307 throws 'declarative route binding mismatch', and contract.ts:176-193 asserts the handwritten runtime amount patch/high-bit guard. The task forbids public TS/test changes, so the required family-test validation is not attainable. No prior JSON/math draft exists on backup-local-82bfc8fc, the family sources are byte-identical across branches, and the swap-credit JSON framework record explicitly excludes Balancer V2 from the migration. The handwritten entry remains authoritative.",
+  "baseline": {
+    "workspace": "work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "head": "c5a3ea1add4e54b344beb5d8a29a0582cc273fb6",
+    "familyRuntimeBaseline": "104ff465",
+    "workingTreeAtStart": "dirty with concurrent unrelated work (modified declarative-math-models.ts and few-wrapped.production.ts; deleted fluid-credit.production.ts moved to pending/handwritten-entries with a replacement fluid.production.ts; untracked aqua/balancer-flash/morpho-flash/peapods/vault-spot blockers, fluid/few-wrapped JSON and math files); all left untouched",
+    "generatorRun": false,
+    "publicTsOrTestChanges": false
+  },
+  "reference": {
+    "implementationRow": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md:34",
+    "familyRow": "Balancer V2 (兑换，非同名闪贷资金源)",
+    "familyId": "balancer-v2",
+    "lineageId": "balancer-v2:vault-registered-exact-in",
+    "envKey": "SEARCHER_FAMILY_BALANCER_V2_ENABLED",
+    "defaultEnabled": false,
+    "vault": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+    "tx": "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+    "blocks": [
+      {
+        "number": 26138724,
+        "hash": "0xcad9e81827cbe1f29ff77fc163855dfe1647a17b8b4a44b209e900273ac4f70b",
+        "tx": "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+        "recorded": "1 pool / 2 directions"
+      },
+      {
+        "number": 26138511,
+        "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771",
+        "tx": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+        "recorded": "2 pools / 8 directions"
+      }
+    ],
+    "recordedScope": "3 pools / 10 directions; 20 amount groups; 20 quoted + 20 runtime + 20 direct-recipient executions; 130 EVM rejections",
+    "existingEvidence": [
+      "docs/research/reports/family-three-historical-integration-20261007.json",
+      "docs/research/reports/family-original-exact-parity-20261008.json",
+      "docs/research/reports/balancer-v2-settlement-behavior-20261014.json",
+      "docs/research/reports/balancer-v2-recipient-independent-review-20261014.json",
+      "docs/research/reports/balancer-v2-retained-current-compatibility-20261016.json",
+      "docs/research/reports/current-interface-balancer-v2-20261016.json"
+    ]
+  },
+  "priorArtifactsSearch": {
+    "backupLocalRef": "backup-local-82bfc8fc (82bfc8fc inverse-auction: new declarative protocol family)",
+    "balancerV2JsonDraft": "none",
+    "balancerV2MathDraft": "none",
+    "balancerV2SpecificMigrationBlocker": "none",
+    "familySourceDiff": "git diff HEAD backup-local-82bfc8fc -- listener/src/searcher/venues/swaps/balancer-v2-family listener/src/searcher/venues/production-families/balancer-v2.production.ts -> empty (byte-identical handwritten TS)",
+    "pendingBlockersChecked": [
+      "HEAD docs/research/migration/pending-20261028 has no balancer-v2 draft or blocker; the sibling park is for flash-loan:balancer-v2 only (balancer-flash.blockers.json).",
+      "backup-local-82bfc8fc docs/research/migration/pending-20261028 contains drafts/blockers for many families but none for balancer-v2; git grep -i balancer finds only balancer-v1 progress notes.",
+      "backup-local-82bfc8fc docs/research/design/swap-credit-json-framework-20261030.md:13 states that disabled Balancer V2/V3, Curve plain/underlying and Mooniswap are not migrated or re-enabled.",
+      "backup-local-82bfc8fc docs/research/migration/progress-20261028.md final Swap matrix lists 15 app-run2 Swap families; balancer-v2 is absent from both the cut-over and parked lists because it was outside that batch."
+    ],
+    "filesFound": [
+      "listener/src/searcher/venues/swaps/balancer-v2-family/{manifest,discovery,nomination,identity,instance,routes,pricing,exact,execution,action,capture,runtime,swap,codec,types}.ts (handwritten TS)",
+      "listener/src/searcher/venues/production-families/balancer-v2.production.ts (handwritten entry)",
+      "docs/research/reports/balancer-v2-*.json and family-three/family-original reports (recorded acceptance)"
+    ],
+    "commands": [
+      "git ls-tree -r --name-only backup-local-82bfc8fc | grep -iE 'balancer-v2.*json' -> only six docs/research/reports JSON, no family JSON",
+      "git grep -n -i balancer backup-local-82bfc8fc -- docs/research/migration -> only balancer-v1 progress notes, no balancer-v2 draft",
+      "git diff HEAD backup-local-82bfc8fc -- listener/src/searcher/venues/swaps/balancer-v2-family listener/src/searcher/venues/production-families/balancer-v2.production.ts -> empty",
+      "git grep -n queryBatchSwap backup-local-82bfc8fc -- ':!listener/src/searcher/venues/swaps/balancer-v2-family' -> only recorded reports, no declarative draft"
+    ],
+    "conclusion": "No earlier declarative Swap JSON, family math draft or balancer-v2-specific blocker exists to reuse; only the handwritten TS family/settlement evidence and the generic framework limitation apply."
+  },
+  "decisiveBlocker": {
+    "id": "balancer-v2-signed-query-batch-swap-quote-proof",
+    "capability": "Specified-amount Exact via Vault.queryBatchSwap: one eth-call returns int256[2] asset deltas; the family requires inputDelta === amountIn, -MAX_INPUT <= outputDelta < 0, and amountOut = -outputDelta.",
+    "existingSource": [
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v2-family/exact.ts",
+        "lines": "6-29",
+        "fact": "validate rejects amountIn outside [0, MAX_INPUT]; buildRequests issues the queryBatchSwap eth-call with caller executor; decode calls resultSet then quoteOutput and returns quote(i, quoteOutput(...))."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v2-family/codec.ts",
+        "lines": "122-133",
+        "fact": "quoteOutput requires exactly four ABI words (offset=32, length=2, input delta, output delta), decodes both as int256, requires inputDelta===amountIn, outputDelta <= 0 and outputDelta >= -MAX_INPUT, then returns -outputDelta."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v2-family/test/contract.ts",
+        "lines": "128-157",
+        "fact": "The family contract preserves every specified amount and asserts the queryBatchSwap request/caller; it separately rejects empty, single-element, altered-input and out-of-bound signed deltas and requires the quote result to be positive."
+      }
+    ],
+    "frameworkLimitation": [
+      {
+        "path": "listener/src/searcher/venues/declarative-quote-proof.ts",
+        "lines": "50-55",
+        "fact": "amountType walks the declared ABI output path and accepts only the supplied unsigned regex; an int256 array child never matches /^uint([0-9]+)?$/."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-quote-proof.ts",
+        "lines": "86-102",
+        "fact": "The v2 outputWord escape only changes the accepted output type to bytes32; it cannot reinterpret an int256 dynamic-array child, and docs/research/design/family-common-capabilities-20261102.md:116 limits outputWord to packed bytes32 fields."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-quote-proof.ts",
+        "lines": "206-208,260-278",
+        "fact": "verifyDeclarativeQuoteProof requires amountOut >= 0 and compares decoded.output directly with amountOut; a signed negative queryBatchSwap delta cannot be negated across that boundary."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "744-770",
+        "fact": "decodeExact passes the same nonnegative amountOut into verifyDeclarativeQuoteChain; the chain proof cannot receive the family's -outputDelta result."
+      }
+    ],
+    "probe": {
+      "method": "A temporary tsx probe (removed) imported quoteProofGroups from listener/src/searcher/venues/declarative-quote-proof.ts and passed the real queryBatchSwap signature with amountPath [1,0,3], outputPath [1], and an executor requestBinding.",
+      "result": "BLOCKED: chain quote proof ABI path must identify an unsigned amount or declared word",
+      "secondProbe": "A clone of the working balancer-v1 JSON with modules.quoteFlow.chainQuote replaced by the same queryBatchSwap proof was passed to compileDeclarativeSwap(...); it failed with the same error before any family entry was rendered.",
+      "fallbackChecked": "Replacing modules.quoteFlow with standard.readPrograms.quote compiles, but the exact method then has no chainQuote declaration and carries no verifyDeclarativeQuoteChain proof; this is the legacy read-program path, not a faithful replacement for the documented exact evidence contract."
+    }
+  },
+  "secondDecisiveBlocker": {
+    "id": "balancer-v2-family-contract-cannot-pass-without-public-changes",
+    "capability": "Required family-test validation: the existing balancer-v2 contract suite must pass against the rendered declarative entry.",
+    "existingSource": [
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v2-family/test/contract.ts",
+        "lines": "156,194,284",
+        "fact": "Tampered-route rejection must match /descriptor/ in Exact buildRequests, buildRuntimeLeg and a stale-route runtime leg."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v2-family/test/contract.ts",
+        "lines": "159-168",
+        "fact": "The current-pricing first-success/fallback test asserts the exact dependent batch count and size (1, then N-1)."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v2-family/test/contract.ts",
+        "lines": "176-193",
+        "fact": "The runtime test asserts the handwritten patch offset SWAP_AMOUNT_OFFSET and rejection of MAX_INPUT+1 with /mismatch/."
+      }
+    ],
+    "frameworkLimitation": [
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "303-307",
+        "fact": "Any declared route is re-projected and compared by canonical hash; a tampered route throws 'declarative route binding mismatch', which cannot satisfy the tests' /descriptor/ regex."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-execution.ts",
+        "lines": "739-762",
+        "fact": "v2 emits checked runtime ABI patches for signed/narrow integer leaves only; it does not expose the handwritten SWAP_AMOUNT_OFFSET patch or the runtime 2^255 MAX_INPUT guard."
+      }
+    ],
+    "consequence": "Even if the signed quote delta were forced through the legacy readPrograms.quote path, the required family tests would still fail on route-tamper error text, result-dependent pricing batches and runtime program shape. The task explicitly forbids public TS/test changes, so the family-test acceptance cannot be met on 104ff465; this is a second decisive park reason, separate from the protocol-semantics quote-proof gap."
+  },
+  "additionalBlockers": [
+    {
+      "id": "balancer-v2-current-pricing-first-success-result-dependent-batches",
+      "severity": "behavior + family-contract failure",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v2-family/pricing.ts",
+          "lines": "37-61",
+          "fact": "buildDependentProgram issues only the first probe in round 0; in round 1 it inspects current-quote:0 and returns null when it is positive, otherwise issues all remaining probes."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v2-family/test/contract.ts",
+          "lines": "159-168",
+          "fact": "The contract test asserts exactly one first dependent batch of one request on success and exactly two batches (1 + N-1) on zero/revert, preserving probe order."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-read-flow.ts",
+          "lines": "60-66",
+          "fact": "A step when condition is resolved against an empty step map; references(step.when, new Set()) rejects any prior-step reference as 'unknown or forward read-flow reference'."
+        },
+        {
+          "path": "listener/src/searcher/venues/declarative-read-flow.ts",
+          "lines": "100-107",
+          "fact": "invocationSteps evaluates every when with env(input, {}) so a condition cannot depend on a prior quote result; only invocation inputs are available."
+        }
+      ],
+      "probe": {
+        "method": "A temporary tsx probe (removed) called validateDeclarativeReadFlow with a second step whose when compared $steps.firstQuote.amountOut.",
+        "result": "BLOCKED: unknown or forward read-flow reference: $steps.firstQuote.amountOut"
+      },
+      "consequence": "A JSON flow must issue all quotes in one dependent round or add an empty follow-up round; neither preserves the handwritten batch shape and the family contract fails, while the extra/all-probe variant changes per-block quote volume. This is not a pure local-math point-price substitution; the family's first-success fallback is part of its production pricing behavior."
+    },
+    {
+      "id": "balancer-v2-family-contract-route-tamper-error-shape",
+      "severity": "family-contract failure with no public test/TS changes allowed",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v2-family/test/contract.ts",
+          "lines": "156,194,284",
+          "fact": "Three family tests require /descriptor/ from a tampered-route rejection in Exact buildRequests, buildRuntimeLeg and a stale-route runtime leg."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-family.ts",
+          "lines": "303-307",
+          "fact": "assertInvocation throws 'declarative route binding mismatch' before any declared checks; the message contains no 'descriptor'."
+        }
+      ],
+      "consequence": "A faithful JSON entry still fails these three existing family tests without editing public tests or framework error text, both out of the task's allowed change set. This is a test-shape obstruction on top of the semantic quote gap, not evidence that the route binding is weaker."
+    },
+    {
+      "id": "balancer-v2-nomination-opaque-filter-loss",
+      "severity": "candidate-set behavior deviation",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v2-family/nomination.ts",
+          "lines": "40-49",
+          "fact": "The handwritten nomination re-reads a nominated receipt and keeps only Vault Swap logs matching the opaque poolId and nomination address before emitting observations."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-discovery.ts",
+          "lines": "446-449",
+          "fact": "tx-evidence nomination always uses allMatches:true with no opaque pool/address filter; it accepts every declaration-matching log in the receipt."
+        }
+      ],
+      "consequence": "A JSON nomination would emit extra Vault pools from the same transaction instead of the family's single opaque target. Identity still validates each emitted pool, so this is not a forged admission, but it changes the strict candidate set and can add unrelated Ready candidates; it cannot be represented without a new generic opaque-filter capability or public TS change."
+    },
+    {
+      "id": "balancer-v2-runtime-max-input-high-bit-guard",
+      "severity": "execution-contract deviation (fail-closed)",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v2-family/runtime.ts",
+          "lines": "9-10",
+          "fact": "Every runtime leg begins with constant 1<<255 + shr + eq 0, rejecting an amount whose high bit is set before the Vault swap."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v2-family/test/contract.ts",
+          "lines": "176-193",
+          "fact": "The contract asserts the runtime program patches the exact input word at SWAP_AMOUNT_OFFSET and rejects MAX_INPUT+1 with /mismatch/."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-execution.ts",
+          "lines": "739-762",
+          "fact": "v2 runtime ABI checks are emitted only for signed or narrow intN/uintN leaves; the uint256 swap amount leaf has no 2^255 bound, and no declared runtime-math/check field was found that reproduces the TS high-bit guard in buildRuntimeLeg."
+        }
+      ],
+      "consequence": "A JSON runtime leg would accept a 2^255 input and rely on a later Vault revert; this remains fail-closed but is not the same execution program/contract as the handwritten family, and the family's MAX_INPUT+1 assertion cannot pass."
+    }
+  ],
+  "validation": {
+    "generatorRun": false,
+    "publicTsOrTestChanges": false,
+    "handwrittenEntryRestored": "not applicable (no JSON entry rendered)",
+    "commands": [
+      {
+        "command": "npm run searcher:balancer-v2-family-contract",
+        "result": "31 pass / 0 fail on the handwritten baseline. The first run during the concurrent workspace repair was 29 pass / 1 fail because generated production-family-entries.generated.ts still imported the moved fluid-credit.production.js; the concurrent agent then updated that generated registry and the rerun passed 31/31 (15 contract.ts, codec-equivalence, lifecycle-observation). The balancer-v2 handwritten family was not modified."
+      },
+      {
+        "command": "npm run build:live",
+        "result": "PASS on the handwritten baseline (tsc exits 0, no output). An earlier run during the concurrent repair failed at src/searcher/generated/production-family-entries.generated.ts:23 with Cannot find module '../venues/production-families/fluid-credit.production.js'; the concurrent agent updated the generated registry and the rerun passed. No JSON was authored, so no rendered-entry tsc run was performed; this validates only the unchanged handwritten entry."
+      },
+      {
+        "command": "temporary tsx quoteProofGroups probe (removed)",
+        "result": "BLOCKED: chain quote proof ABI path must identify an unsigned amount or declared word"
+      },
+      {
+        "command": "temporary compileDeclarativeSwap clone probe (removed)",
+        "result": "BLOCKED: chain quote proof ABI path must identify an unsigned amount or declared word"
+      },
+      {
+        "command": "temporary validateDeclarativeReadFlow probe (removed)",
+        "result": "BLOCKED: unknown or forward read-flow reference: $steps.firstQuote.amountOut"
+      },
+      {
+        "command": "temporary compileDeclarativeSwap clone with legacy readPrograms.quote (removed)",
+        "result": "COMPILED; fallback recorded but rejected as a faithful chain-proof replacement"
+      }
+    ],
+    "baselineNote": "Baseline is green after the concurrent fluid-credit/fluid registry repair: npm run build:live exits 0 and the handwritten balancer-v2 family contract is 31/31. No generator run or production entry change was made by this task. The blockers above are JSON-cutover gaps, not baseline failures."
+  },
+  "files": {
+    "created": [
+      "docs/research/migration/pending-20261028/balancer-v2.blockers.json"
+    ],
+    "modified": [],
+    "renderedEntry": "none",
+    "generatedArtifacts": "none"
+  },
+  "conclusion": "Parked: no faithful declarative Swap JSON was authored. The handwritten balancer-v2.production.ts and its TS family remain authoritative. Within the no-public-TS/no-tests constraint, the signed queryBatchSwap exact quote cannot be represented by the framework's chain-quote proof, and the current-pricing result-dependent probe batching plus the family's route-tamper error-shape assertions cannot be reproduced. Required next framework work would be a signed/negated ABI quote-output primitive, result-dependent pricing-step selection, and a route-tamper error-shape compatible with declarative binding (or an explicit test-delta policy); no generator or production entry was run or changed."
+}

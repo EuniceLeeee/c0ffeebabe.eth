@@ -1,0 +1,279 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:19:16Z",
+  "family": "vault-spot",
+  "domain": "swap",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "summary": "The GMX-V1-style Vault spot family cannot be expressed faithfully with declarative Swap JSON on the pinned 104ff465 framework. Two decisive gaps remain. (1) Exact quote evidence: the family's executor-program effect-delta simulation observes executor AND Vault token balances for both assets plus both total supplies and binds the Vault Swap log with its fee relation (exact.ts:12-16, simulation.ts:20-38); the declarative execution-simulation bridge observes only executor token balances, has no total-supply effect, and its receipt decoder rejects a receipt with the family's four token deltas (declarative-simulation.ts:25,66-76,130-139). The family lifecycle fixture returns that four-token/two-supply receipt, so a JSON plugin fails lifecycle.ts:34-38; historical-dual.ts:59-66 asserts the same shape. (2) Startup nomination: the handwritten discovery filters each opaque nomination by vault address, token pair and block (discovery.ts:40-66); declarative tx-evidence nomination accepts every matching log in the receipt and has no opaque filters (declarative-discovery.ts:446-448, tx-evidence-nomination.ts:44-60), and nominationReadFlow is address-surface-only (declarative-discovery.ts:354-356). A probe returned 3 observations (foreign Vault plus both Vault markets) and ignored a wrong blockNumber, whereas contract.ts:123-128 requires 1 and 0. The declarative pricing plugin also omits the static pricing.refreshPolicy property asserted by contract.ts:49 (only refreshPolicyForInstance exists, declarative-family.ts:478-484). No canonical JSON was authored and the handwritten entry remains authoritative; a JSON draft would have to narrow real exact/nomination semantics.",
+  "baseline": {
+    "workspace": "work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "head": "284afb49",
+    "familyRuntimeBaseline": "104ff465",
+    "workingTreeAtStart": "dirty with concurrent unrelated changes (declarative-math-models.ts, few-wrapped.production.ts, aqua/peapods/fluid pending files); all were left untouched",
+    "generatorRun": false,
+    "publicTsOrTestChanges": false
+  },
+  "reference": {
+    "implementationRow": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live \u67b6\u6784\u590d\u5199/IMPL\u914d\u7f6e\u5217\u8868.md:15",
+    "scopeAuditRow": "docs/research/reports/family-impl-scope-audit-20261016.json row starting line 15, families at line 27 (protocol:few-wrapped, vault-spot)",
+    "tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+    "txBlock": 26182689,
+    "txBlockHash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c",
+    "previousBlock": 26182688,
+    "familyId": "vault-spot",
+    "lineageId": "vault-spot:gmx-v1-abi",
+    "envKey": "SEARCHER_FAMILY_VAULT_SPOT_ENABLED",
+    "defaultEnabled": false,
+    "vault": "0x2d0aff409bde00451334011d55c141aff2103744",
+    "tokens": {
+      "APE": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "WETH": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    },
+    "sample": {
+      "directions": "both (APE->WETH and WETH->APE)",
+      "executorSource": "family test fixture E=0x1000000000000000000000000000000000000002; the landed tx used the real sender, see the acceptance report",
+      "amountIn": "71854376210288490340",
+      "amountOut": "4430934597103818",
+      "gross": "4444267399301724",
+      "feeBasisPoints": "30"
+    },
+    "existingEvidence": [
+      "docs/research/reports/vault-spot-family-acceptance-20261014.json",
+      "docs/research/reports/few-vault-recipient-correctness-20261015.json",
+      "docs/research/reports/few-vault-blockscan-acceptance-20261014.json",
+      "docs/research/reports/vault-recipient-interface-review-20261015.json"
+    ]
+  },
+  "priorArtifactsSearch": {
+    "backupLocalRef": "backup-local-82bfc8fc (82bfc8fc inverse-auction: new declarative protocol family)",
+    "vaultSpotJsonDraft": "none",
+    "vaultSpotMathDraft": "none",
+    "vaultSpotSpecificMigrationBlocker": "none",
+    "pendingBlockersChecked": [
+      "HEAD docs/research/migration/pending-20261028 contains only the curve-lp park plus handwritten entries; no vault-spot blocker or draft.",
+      "backup-local-82bfc8fc docs/research/migration/pending-20261028 has blockers for many other families but none for vault-spot.",
+      "pending-20261028/few-wrapped.blockers.md item 4 records the same class of limitation: family receipt evidence is broader than the generic program receipt (token scope, supplies, log arithmetic), and that family remains parked."
+    ],
+    "filesFound": [
+      "listener/src/searcher/venues/swaps/vault-spot-family/* (handwritten TS, unchanged)",
+      "listener/src/searcher/venues/production-families/vault-spot.production.ts (handwritten entry, unchanged)",
+      "docs/research/reports/vault-spot-* and few-vault-* (recorded acceptance/settlement evidence)"
+    ],
+    "commands": [
+      "git ls-tree -r --name-only backup-local-82bfc8fc | grep -i vault-spot",
+      "git grep -n -i 'vault-spot' backup-local-82bfc8fc -- docs/research/migration",
+      "git diff HEAD backup-local-82bfc8fc -- listener/src/searcher/venues/swaps/vault-spot-family",
+      "git ls-tree -r --name-only backup-local-82bfc8fc docs/research/migration | grep -i 'vault\\|few'"
+    ],
+    "conclusion": "No earlier declarative JSON or family math exists to reuse. The backup branch carries the identical handwritten family (empty diff) and no vault-spot pending draft; only recorded TS/acceptance evidence exists."
+  },
+  "decisiveBlocker": {
+    "id": "vault-spot-exact-executor-program-observation-scope",
+    "capability": "chain-amount Exact proof must observe executor and Vault token deltas for both assets, both total supplies and the Vault Swap log, and must enforce the exact input debit / Vault receipt / output receipt relation",
+    "existingSource": [
+      {
+        "path": "listener/src/searcher/venues/swaps/vault-spot-family/exact.ts",
+        "lines": "12-19",
+        "fact": "The request-program quote issues effect-delta-simulation 'spot-exact' with executor-program calldata, fee-free reverse reads and simulationRequest(...) in the first dependent round."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/vault-spot-family/simulation.ts",
+        "lines": "12-16",
+        "fact": "simulationRequest observes both tokens for BOTH caller=executor and the Vault (4 token rows) and observesTokenSupplies [tokenIn, tokenOut]."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/vault-spot-family/simulation.ts",
+        "lines": "19-30",
+        "fact": "decodeReceipt requires tokenDeltas.length === 4, totalSupplyDeltas.length === 2, nativeDeltas.length === 1, checks executor debit -input, Vault +input, Vault -out, both supplies zero, native zero and one Vault Swap log; the log is re-decoded through decodeSwapLog."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/vault-spot-family/discovery.ts",
+        "lines": "5-13",
+        "fact": "decodeSwapLog additionally enforces amountOutAfterFees === amountOut * (10000 - feeBasisPoints) / 10000, canonical event bytes and nonzero/bounded fields."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/vault-spot-family/test/lifecycle.ts",
+        "lines": "34-41",
+        "fact": "The production strict lifecycle fixture answers issueExact with the family receipt fixture (4 token / 2 supply / 1 native rows plus the Vault log)."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/vault-spot-family/test/fixtures.ts",
+        "lines": "40-49",
+        "fact": "receipt() builds tokenDeltas for executor+Vault on both tokens, totalSupplyDeltas for both tokens and nativeDeltas."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/vault-spot-family/test/historical-dual.ts",
+        "lines": "59-66",
+        "fact": "The historical dual acceptance asserts tokenDeltas.length === 4, nativeDeltas.length === 1, totalSupplyDeltas.length === 2 and each executor/Vault delta exactly."
+      }
+    ],
+    "frameworkLimitation": [
+      {
+        "path": "listener/src/searcher/venues/declarative-simulation.ts",
+        "lines": "25-26",
+        "fact": "BASE_EFFECTS is return-data/revert-data/token-delta/native-delta plus optional logs; there is no total-supply-delta observation declaration."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-simulation.ts",
+        "lines": "66-80",
+        "fact": "buildDeclarativeExecutionSimulation hardcodes observeTokenBalances to {token, account: caller} for tokenIn/tokenOut/protectedTokens and funds exactly one tokenIn row; it cannot observe the route target's token deposits/withdrawals or total supplies."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-simulation.ts",
+        "lines": "129-139",
+        "fact": "decodeDeclarativeExecutionSimulationReceipt requires every observed row to be the symbolic executor account and requires observed tokenDeltas.length === observed token count; a receipt carrying executor+Vault rows is rejected with 'executor-program receipt token scope mismatch'."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-values.ts",
+        "lines": "230-237",
+        "fact": "The only simulated-log check is the 'event' operation, which matches parsed fields by exact equality; it cannot evaluate the fee/amount arithmetic that decodeSwapLog enforces."
+      }
+    ],
+    "probe": {
+      "method": "A temporary tsx probe (removed) built the declarative execution simulation for a v2 transfer->swap execution using the real family descriptor/route, then fed the family fixtures.receipt() to decodeDeclarativeExecutionSimulationReceipt.",
+      "observationRows": "2 (tokenIn and tokenOut, both account.kind=executor)",
+      "familyReceiptRows": "4 token / 2 total-supply / 1 native",
+      "result": "decode rejected family receipt: 'executor-program receipt token scope mismatch'",
+      "consequence": "A JSON exact quote could only prove the executor-side input/output delta plus unchanged native. It cannot reproduce the Vault receipt, the Vault output debit, or supply conservation, and it cannot consume the family's lifecycle/historical-dual evidence. Adding hidden on-chain supply checks would not produce the declared observed rows and would also change the family runtime VM call set."
+    }
+  },
+  "additionalBlockers": [
+    {
+      "id": "vault-spot-tx-evidence-nomination-loses-market-filters",
+      "severity": "behavior + family-contract failure",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/vault-spot-family/discovery.ts",
+          "lines": "40-66",
+          "fact": "nominate re-reads the nominated receipt, requires receipt.blockNumber <= source.number and the optional opaque.blockNumber match, filters logs to n.address, and optionally matches opaque.tokens against the logged pair before emitting observations."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/vault-spot-family/test/contract.ts",
+          "lines": "119-128",
+          "fact": "The contract test supplies a receipt with event(OTHER), event(V, otherToken) and event(V) and requires exactly 1 observation; a wrong opaque.blockNumber and a tokens-only opaque must both return 0."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-discovery.ts",
+          "lines": "66-73",
+          "fact": "Discovery declares one nomination discriminator ('tx-evidence' or 'address-surface'); there is no combined or filtered form."
+        },
+        {
+          "path": "listener/src/searcher/venues/declarative-discovery.ts",
+          "lines": "446-448",
+          "fact": "tx-evidence uses createTxEvidenceNomination({allMatches:true, acceptObservation}) with no per-nomination address/token/block filter hook."
+        },
+        {
+          "path": "listener/src/searcher/venues/tx-evidence-nomination.ts",
+          "lines": "44-60",
+          "fact": "allMatches emits every receipt log whose topic is declared and whose decoded candidate is accepted; opaque.blockNumber and opaque.tokens are never consulted."
+        },
+        {
+          "path": "listener/src/searcher/venues/declarative-discovery.ts",
+          "lines": "354-356",
+          "fact": "nominationReadFlow is rejected unless nomination === 'address-surface', so the receipt-reading custom nominate cannot be reconstructed; the read flow also supports only get-code/get-storage/eth-call."
+        }
+      ],
+      "probe": {
+        "method": "Temporary tsx probe (removed) compiled a v2 discovery with the Vault Swap event and call mapping, nomination tx-evidence, and called nominate with the contract-test receipt/provider and opaque payload.",
+        "expectedByContract": "1 observation for the nominated Vault pair; 0 for wrong blockNumber",
+        "actual": "3 observations (foreign Vault 0x1000...0003, Vault otherToken market, Vault pair) and 3 for wrong blockNumber",
+        "consequence": "Startup strict would nominate foreign markets from the same transaction and drop the block/token evidence guards; contract.ts:123-128 fails. Identity re-verification still protects admission, but the discovery behavior and evidence scope are not the family's."
+      }
+    },
+    {
+      "id": "vault-spot-declarative-pricing-static-refresh-property",
+      "severity": "family-contract API parity (runtime behavior is per-instance equivalent)",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/vault-spot-family/test/contract.ts",
+          "lines": "49",
+          "fact": "assert.equal(plugin.pricing.refreshPolicy, 'each-block')."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-family.ts",
+          "lines": "478-484",
+          "fact": "The declarative pricing object exposes refreshPolicyForInstance from the variant declaration but never the static refreshPolicy property; no JSON field maps to the static property."
+        }
+      ],
+      "consequence": "TypeScript-free JSON cannot make the existing family contract test pass unchanged. Runtime scheduling is not narrowed (refreshPolicyForInstance returns each-block per descriptor), but this needs a public TS property (or an allowed test adaptation) to restore contract parity."
+    }
+  ],
+  "nonBlockingAnalysis": {
+    "note": "Structural observations only; these were not validated end-to-end and are not acceptance claims.",
+    "expressibleWithJsonPlusFamilyMath": [
+      "Discovery mapping for the Swap log and swap() call, including canonical ABI re-encode and fee/bounds predicates via declarative values (the probe compiled the event/call mapping and decoded the real Swap log). The candidate can be carried as vault+token0/token1 sorted by expression.",
+      "Identity three-stage proof (vault runtime codeHash, root router/USDG/VaultUtils/priceFeed/decimals/whitelist, reverse registration and canonical returns) with source checks and a hash proof, because the declarative identity stage machine supports $step/$evidence selecting requirements/requests/decode.",
+      "Routes: two directions over the sorted pair, address-pool graph venue, binding key/fingerprint and routing action id.",
+      "Pricing: two-round pricingFlow (root profile, then reverse reads + per-token min/max getPrice, poolAmounts/reservedAmounts/bufferAmounts/getSwapFeeBasisPoints), each-block refresh, deriveMids as pricingProjection rows (numerator = minPrice*10^decimals*(10000-fee), denominator = maxPrice*10^decimals*10000, depth = min(pool,available), reserveA/B and feeBps), classifyUnavailable for inactive/zero-capacity routes, mutation index over the Vault address, and live state projection.",
+      "Execution: v2 steps for tokenIn.transfer(vault, amountIn), vault.swap(tokenIn, tokenOut, recipient) with the swap return saved, Vault balanceOf/tokenBalances parity checks around the transfer, and effects for the full input debit, recipient credit, output equality, old-inventory and unchanged native. The family-dual VM accepts transfer/balanceOf/tokenBalances/swap calls.",
+      "Swap domain: Swap event observation with canonical payload, detect-only victim support, receipt impact expression, action adapter trace/encoding and route capture."
+    ],
+    "deviationsStillToReviewIfUnblocked": [
+      "The candidate shape cannot carry the family's tokens:[address,address] tuple: declarative candidate fields are scalar-only (declarative-discovery.ts:24,57,150-158), so vault+token0/token1 are needed. The candidate key encoding then differs from the family's vault:t0:t1 form (multi-field JSON.stringify). The family fixtures/tests construct candidates with tokens, so identity would need to accept both shapes until a framework tuple field exists.",
+      "The declarative program instruction layout is behaviorally equivalent but not byte-identical to swapProgram (action adapter and runtime leg bytes differ), which matters for any byte-equality assertion.",
+      "The declarative exact method id would be the declared methodId plus the framework 'local-zero' method rather than the handwritten 'zero' id; no current vault-spot test asserts methods() ids."
+    ]
+  },
+  "validation": {
+    "executed": [
+      {
+        "command": "node --import tsx --test src/searcher/venues/swaps/vault-spot-family/test/contract.ts",
+        "result": "8 tests, 8 pass, 0 fail (handwritten baseline green)"
+      },
+      {
+        "command": "SEARCHER_FAMILY_VAULT_SPOT_ENABLED=1 node --import tsx --test src/searcher/venues/swaps/vault-spot-family/test/lifecycle.ts",
+        "result": "1 test, 1 pass, 0 fail (handwritten baseline green; without the env key the catalog intentionally omits the disabled family)"
+      },
+      {
+        "command": "temporary tsx discovery probe using compileDeclarativeDiscovery with tx-evidence nomination (removed)",
+        "result": "3 observations for a one-pair nomination; 3 for a wrong blockNumber"
+      },
+      {
+        "command": "temporary tsx execution-simulation probe using buildDeclarativeExecutionSimulation and decodeDeclarativeExecutionSimulationReceipt (removed)",
+        "result": "2 executor observation rows; family 4-token/2-supply receipt rejected: 'executor-program receipt token scope mismatch'"
+      },
+      {
+        "command": "npm run build:live",
+        "result": "exit 0"
+      },
+      {
+        "command": "npx tsc -p tsconfig.json --noEmit",
+        "result": "exit 2 with pre-existing unrelated errors in src/searcher/venues/token-transfer-semantics/test/contract.ts (lines 150,162); no vault-spot file was modified and the errors are outside the task scope"
+      },
+      {
+        "command": "git ls-tree / git grep / git diff on backup-local-82bfc8fc and docs/research/migration",
+        "result": "no vault-spot JSON/math draft, no vault-spot blocker, family TS identical to HEAD; concurrent unrelated pending changes left untouched"
+      }
+    ],
+    "notExecuted": [
+      "No vault-spot JSON was authored or compiled (no faithful definition to compile).",
+      "No temporary generated production entry rendered, no family test run against a JSON plugin, no generator run, no cutover.",
+      "No Ready/Graph/mid/effective/price or performance run; this park makes no adaptation, replication or opportunity claim."
+    ]
+  },
+  "files": {
+    "added": [
+      "docs/research/migration/pending-20261028/vault-spot.blockers.json"
+    ],
+    "modified": [],
+    "handwrittenEntry": "listener/src/searcher/venues/production-families/vault-spot.production.ts (unchanged, remains authoritative)",
+    "generatedArtifacts": "none",
+    "tempFilesRemoved": [
+      "listener/tmp-vault-spot-probe.ts",
+      "listener/tmp-vault-spot-probe2.ts",
+      "listener/tmp-vault-spot-probe3.ts"
+    ]
+  },
+  "unblockRequirement": "A public framework change is required before a faithful cutover: (a) declarative execution simulations must accept declared observed (token, account) rows, including the route target, plus total-supply observations and an arithmetic log/event binding (or a sanctioned executor-program request builder with an explicit observation scope); (b) tx-evidence nomination must support per-nomination opaque filters (address/tokens/block) or a receipt-capable nomination read flow; (c) a uniform variant refreshPolicy must be exposed as the static pricing.refreshPolicy (or the family contract test must be allowed to consume refreshPolicyForInstance). These are shared TS/test-surface changes outside this JSON + family math + append-only registry scope; the result must still satisfy the existing lifecycle and historical-dual evidence shapes.",
+  "nextSteps": [
+    "Keep the handwritten vault-spot entry, default-disabled activation and recorded acceptance evidence unchanged.",
+    "Do not author or cut over a vault-spot JSON that drops the Vault/supply exact observations, the fee-consistent Swap log, or the per-nomination market/block filters.",
+    "Re-run this assessment when the declarative simulation and nomination capabilities above exist, then author JSON plus family math and validate contract/lifecycle/historical-dual, a temporary generated entry, tsc and build:live."
+  ]
+}

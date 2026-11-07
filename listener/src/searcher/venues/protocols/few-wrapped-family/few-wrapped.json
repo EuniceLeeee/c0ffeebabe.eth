@@ -1,0 +1,5589 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:few-wrapped"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_FEW_WRAPPED_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:few-wrapped",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "few-wrap",
+      "few-unwrap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "wrap"
+      },
+      {
+        "slotKind": "protocol",
+        "protocolAction": "unwrap"
+      }
+    ],
+    "supportedLineages": [
+      "few:factory-backed-wrap-v1"
+    ],
+    "poolAdapterIds": [
+      "few-wrapped"
+    ],
+    "edgeAdapterIds": [
+      "few-wrap",
+      "few-unwrap"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "observed-call",
+        "landed-log",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "txSeedNominations": true,
+      "candidate": {
+        "kind": "few-wrapper",
+        "addressField": "target",
+        "fields": {
+          "target": "address"
+        },
+        "key": [
+          "target"
+        ]
+      },
+      "calls": [
+        {
+          "id": "few-wrap-call",
+          "signature": "wrap(uint256)",
+          "fields": {
+            "target": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                "$args.0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "few-unwrap-call",
+          "signature": "unwrap(uint256)",
+          "fields": {
+            "target": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                "$args.0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "few-wrapTo-call",
+          "signature": "wrapTo(uint256,address)",
+          "fields": {
+            "target": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                "$args.0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "few-unwrapTo-call",
+          "signature": "unwrapTo(uint256,address)",
+          "fields": {
+            "target": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                "$args.0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "few-Wrap-log",
+          "signature": "Wrap(address indexed sender,uint256 amount,address indexed to)",
+          "fields": {
+            "target": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                "$args.1",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "few-Unwrap-log",
+          "signature": "Unwrap(address indexed sender,uint256 amount,address indexed to)",
+          "fields": {
+            "target": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gte",
+              "args": [
+                "$args.1",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "surface": {
+        "id": "few-wrapper-surface",
+        "fingerprint": "few-factory-wrapper-v1",
+        "fields": {
+          "target": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "few-wrapped",
+        "protocol:few-wrapped"
+      ],
+      "nomination": "address-surface"
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "abi": {
+        "wrapper": [
+          "function factory() view returns(address)",
+          "function token() view returns(address)",
+          "function getWrappedToken(address) view returns(address)",
+          "function decimals() view returns(uint8)",
+          "function totalSupply() view returns(uint256)",
+          "function balanceOf(address) view returns(uint256)",
+          "function allowance(address,address) view returns(uint256)",
+          "function wrap(uint256) returns(uint256)",
+          "function unwrap(uint256) returns(uint256)",
+          "function wrapTo(uint256,address) returns(uint256)",
+          "function unwrapTo(uint256,address) returns(uint256)"
+        ],
+        "token": [
+          "function balanceOf(address) view returns(uint256)",
+          "function totalSupply() view returns(uint256)",
+          "function decimals() view returns(uint8)",
+          "function approve(address,uint256) returns(bool)",
+          "function allowance(address,address) view returns(uint256)"
+        ]
+      },
+      "constants": {
+        "wrapperCodeHash": "0xbe63f68c8de6e3f7cf411d9b117b931128468c36e0753fc5878fd5359f16acf5",
+        "zero": "0x0000000000000000000000000000000000000000",
+        "maxUint": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "wrapTopic": "0xeb5580a0908e96b78bdcb1a3c5638793b491a6073c3ff56061a069cb20581773",
+        "unwrapTopic": "0x12d6424519838e57637c6db9df31af32d7926ff0a53dd37007c191d0fe302818",
+        "maxDecimals": 77
+      },
+      "inputs": [
+        "result",
+        "binding",
+        "direction",
+        "value",
+        "source",
+        "sample",
+        "target",
+        "asset",
+        "factory",
+        "codeHash",
+        "assetCodeHash",
+        "factoryCodeHash",
+        "wrap",
+        "unwrap",
+        "amount"
+      ],
+      "expressions": {
+        "fewSignedAmount": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$direction",
+                "wrap"
+              ]
+            },
+            "$amount",
+            {
+              "op": "sub",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                },
+                "$amount"
+              ]
+            }
+          ]
+        },
+        "fewProbeRequests": {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$binding"
+              ]
+            },
+            [
+              {
+                "id": "few-probe-wrap",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {
+                      "kind": "executor"
+                    },
+                    "to": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "asset"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "token",
+                        "approve",
+                        [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$binding",
+                              "target"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  },
+                  {
+                    "caller": {
+                      "kind": "executor"
+                    },
+                    "to": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "asset"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "token",
+                        "approve",
+                        [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$binding",
+                              "target"
+                            ]
+                          },
+                          "$sample"
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "target"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "wrapper",
+                      "wrap",
+                      [
+                        "$sample"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "get",
+                        "args": [
+                          "$binding",
+                          "asset"
+                        ]
+                      },
+                      "amount": "$sample"
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "target"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "target"
+                      ]
+                    }
+                  }
+                ],
+                "observeTotalSupplies": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "target"
+                    ]
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "native-delta",
+                  "logs"
+                ]
+              },
+              {
+                "id": "few-probe-unwrap",
+                "kind": "effect-delta-simulation",
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "target"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "wrapper",
+                      "unwrap",
+                      [
+                        "$sample"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "get",
+                        "args": [
+                          "$binding",
+                          "target"
+                        ]
+                      },
+                      "amount": "$sample"
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "target"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "target"
+                      ]
+                    }
+                  }
+                ],
+                "observeTotalSupplies": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "target"
+                    ]
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "native-delta",
+                  "logs"
+                ]
+              }
+            ],
+            []
+          ]
+        }
+      },
+      "programs": {
+        "fewReceipt": [
+          {
+            "let": "deltas",
+            "value": {
+              "op": "coalesce",
+              "args": [
+                "$result.effects.tokenDeltas",
+                []
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$deltas"
+                  ]
+                },
+                3
+              ]
+            },
+            "error": "few probe missing or duplicate token balances"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$result",
+                    "completion"
+                  ]
+                },
+                "returned"
+              ]
+            },
+            "error": "few probe receipt completion"
+          },
+          {
+            "let": "targetRows",
+            "value": {
+              "op": "filter",
+              "args": [
+                "$deltas",
+                "d",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$d",
+                        "token"
+                      ]
+                    },
+                    "$binding.target"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$targetRows"
+                  ]
+                },
+                1
+              ]
+            },
+            "error": "few probe wrapper observation missing"
+          },
+          {
+            "let": "actor",
+            "value": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$targetRows",
+                    0
+                  ]
+                },
+                "account"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$actor",
+                        "$binding.target"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$actor",
+                        "$binding.asset"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "few probe actor is a protocol account"
+          },
+          {
+            "let": "signedValue",
+            "value": {
+              "op": "expression",
+              "args": [
+                "fewSignedAmount",
+                {
+                  "direction": "$direction",
+                  "amount": "$value"
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$targetRows",
+                        0
+                      ]
+                    },
+                    "delta"
+                  ]
+                },
+                "$signedValue"
+              ]
+            },
+            "error": "few probe wrapper receipt mismatch"
+          },
+          {
+            "let": "actorRows",
+            "value": {
+              "op": "filter",
+              "args": [
+                "$deltas",
+                "d",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$d",
+                            "token"
+                          ]
+                        },
+                        "$binding.asset"
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$d",
+                                "account"
+                              ]
+                            },
+                            "$binding.target"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$actorRows"
+                  ]
+                },
+                1
+              ]
+            },
+            "error": "few probe actor asset observation missing"
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$actorRows",
+                        0
+                      ]
+                    },
+                    "account"
+                  ]
+                },
+                "$actor"
+              ]
+            },
+            "error": "few probe receipt actor mismatch"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$actorRows",
+                        0
+                      ]
+                    },
+                    "delta"
+                  ]
+                },
+                {
+                  "op": "sub",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    "$signedValue"
+                  ]
+                }
+              ]
+            },
+            "error": "few probe actor debit/credit mismatch"
+          },
+          {
+            "let": "backingRows",
+            "value": {
+              "op": "filter",
+              "args": [
+                "$deltas",
+                "d",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$d",
+                            "token"
+                          ]
+                        },
+                        "$binding.asset"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$d",
+                            "account"
+                          ]
+                        },
+                        "$binding.target"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$backingRows"
+                  ]
+                },
+                1
+              ]
+            },
+            "error": "few probe wrapper backing observation missing"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$backingRows",
+                        0
+                      ]
+                    },
+                    "delta"
+                  ]
+                },
+                "$signedValue"
+              ]
+            },
+            "error": "few probe wrapper backing mismatch"
+          },
+          {
+            "let": "supplies",
+            "value": {
+              "op": "coalesce",
+              "args": [
+                "$result.effects.totalSupplyDeltas",
+                []
+              ]
+            }
+          },
+          {
+            "let": "targetSupply",
+            "value": {
+              "op": "filter",
+              "args": [
+                "$supplies",
+                "s",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$s",
+                        "token"
+                      ]
+                    },
+                    "$binding.target"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$targetSupply"
+                  ]
+                },
+                1
+              ]
+            },
+            "error": "few probe supply observation missing"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$targetSupply",
+                        0
+                      ]
+                    },
+                    "delta"
+                  ]
+                },
+                "$signedValue"
+              ]
+            },
+            "error": "few probe supply mismatch"
+          },
+          {
+            "assert": {
+              "op": "every",
+              "args": [
+                "$supplies",
+                "s",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$s",
+                            "token"
+                          ]
+                        },
+                        "$binding.target"
+                      ]
+                    },
+                    true,
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$s",
+                            "delta"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "few probe unrelated supply changed"
+          },
+          {
+            "let": "native",
+            "value": {
+              "op": "coalesce",
+              "args": [
+                "$result.effects.nativeDeltas",
+                []
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$native"
+                  ]
+                },
+                1
+              ]
+            },
+            "error": "few probe native observation missing"
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$native",
+                        0
+                      ]
+                    },
+                    "account"
+                  ]
+                },
+                "$actor"
+              ]
+            },
+            "error": "few probe native actor mismatch"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$native",
+                        0
+                      ]
+                    },
+                    "delta"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            "error": "few probe native delta"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "decode",
+                  "args": [
+                    "wrapper",
+                    "$direction",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$result",
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                },
+                "$value"
+              ]
+            },
+            "error": "few probe return amount mismatch"
+          },
+          {
+            "let": "targetLogs",
+            "value": {
+              "op": "filter",
+              "args": [
+                {
+                  "op": "coalesce",
+                  "args": [
+                    "$result.effects.logs",
+                    []
+                  ]
+                },
+                "l",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$l",
+                        "address"
+                      ]
+                    },
+                    "$binding.target"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$targetLogs"
+                  ]
+                },
+                1
+              ]
+            },
+            "error": "few probe event missing"
+          },
+          {
+            "let": "log",
+            "value": {
+              "op": "at",
+              "args": [
+                "$targetLogs",
+                0
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$log.topics",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$direction",
+                        "wrap"
+                      ]
+                    },
+                    "$constants.wrapTopic",
+                    "$constants.unwrapTopic"
+                  ]
+                }
+              ]
+            },
+            "error": "few probe event topic mismatch"
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$log.topics",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                "$actor"
+              ]
+            },
+            "error": "few probe event sender mismatch"
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$log.topics",
+                        2
+                      ]
+                    }
+                  ]
+                },
+                "$actor"
+              ]
+            },
+            "error": "few probe event recipient mismatch"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "word",
+                  "args": [
+                    "$log.data"
+                  ]
+                },
+                "$value"
+              ]
+            },
+            "error": "few probe event amount mismatch"
+          },
+          {
+            "return": {
+              "actor": "$actor",
+              "amountOut": "$value"
+            }
+          }
+        ]
+      },
+      "identity": {
+        "select": [
+          {
+            "return": "base",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "surface",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "surface"
+              ]
+            }
+          },
+          {
+            "return": "guard",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "guard"
+              ]
+            }
+          },
+          {
+            "return": "probe",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "probe"
+              ]
+            }
+          },
+          {
+            "return": "terminal"
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code"
+              ]
+            },
+            "requests": [
+              {
+                "id": "few-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.target"
+                  ]
+                }
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "few-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "when": {
+                  "op": "ne",
+                  "args": [
+                    "$codeHash",
+                    "$constants.wrapperCodeHash"
+                  ]
+                },
+                "return": {
+                  "phase": "unsupported",
+                  "source": "$source",
+                  "codeHash": "$codeHash",
+                  "evidenceRequestIds": [
+                    "few-code"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "surface",
+                  "source": "$source",
+                  "target": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.target"
+                    ]
+                  },
+                  "codeHash": "$codeHash"
+                }
+              }
+            ]
+          },
+          "surface": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "few-factory",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "factory",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "few-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "token",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                },
+                "error": "few probe source changed"
+              },
+              {
+                "let": "asset",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "token",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "few-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "factory",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "factory",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "few-factory"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$asset",
+                            "$constants.zero"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$factory",
+                            "$constants.zero"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$asset",
+                            "$evidence.target"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$factory",
+                            "$evidence.target"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$asset",
+                            "$factory"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "return": {
+                  "phase": "guard",
+                  "source": "$evidence.source",
+                  "target": "$evidence.target",
+                  "asset": "$asset",
+                  "factory": "$factory",
+                  "codeHash": "$evidence.codeHash"
+                }
+              }
+            ]
+          },
+          "guard": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "few-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.target"
+                  ]
+                }
+              },
+              {
+                "id": "few-asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.asset"
+                  ]
+                }
+              },
+              {
+                "id": "few-factory-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.factory"
+                  ]
+                }
+              },
+              {
+                "id": "few-factory",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "factory",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "few-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "token",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "few-member",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.factory"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "getWrappedToken",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$evidence.asset"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "few-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "totalSupply",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "few-backing",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.asset"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "balanceOf",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$evidence.target"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "few-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.asset"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                },
+                "error": "few probe source changed"
+              },
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "few-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "assetCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "few-asset-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "factoryCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "few-factory-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "when": {
+                  "op": "ne",
+                  "args": [
+                    "$codeHash",
+                    "$constants.wrapperCodeHash"
+                  ]
+                },
+                "return": {
+                  "phase": "unsupported",
+                  "evidenceRequestIds": [
+                    "few-code"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "factory",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "few-factory"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$evidence.factory"
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "token",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "few-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$evidence.asset"
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "getWrappedToken",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "few-member"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$evidence.target"
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "let": "supply",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "wrapper",
+                    "totalSupply",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "few-supply"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "backing",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "token",
+                    "balanceOf",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "few-backing"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "few-decimals"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$decimals",
+                    "$constants.maxDecimals"
+                  ]
+                },
+                "error": "few unsupported asset decimals"
+              },
+              {
+                "let": "oneToken",
+                "value": {
+                  "op": "pow",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "10"
+                      ]
+                    },
+                    "$decimals"
+                  ]
+                }
+              },
+              {
+                "let": "sample",
+                "value": {
+                  "op": "min",
+                  "args": [
+                    "$oneToken",
+                    {
+                      "op": "min",
+                      "args": [
+                        "$supply",
+                        "$backing"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$sample",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      "retry",
+                      "probe"
+                    ]
+                  },
+                  "source": "$evidence.source",
+                  "sample": "$sample",
+                  "binding": {
+                    "target": "$evidence.target",
+                    "asset": "$evidence.asset",
+                    "factory": "$evidence.factory",
+                    "codeHash": "$codeHash",
+                    "assetCodeHash": "$assetCodeHash",
+                    "factoryCodeHash": "$factoryCodeHash"
+                  }
+                }
+              }
+            ]
+          },
+          "probe": {
+            "requirements": {
+              "transports": [
+                "effect-delta-simulation"
+              ],
+              "caller": "executor",
+              "effects": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta",
+                "native-delta",
+                "logs"
+              ]
+            },
+            "requests": {
+              "op": "expression",
+              "args": [
+                "fewProbeRequests",
+                {
+                  "binding": "$evidence.binding",
+                  "sample": "$evidence.sample"
+                }
+              ]
+            },
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                },
+                "error": "few probe source changed"
+              },
+              {
+                "let": "wrap",
+                "value": {
+                  "op": "program",
+                  "args": [
+                    "fewReceipt",
+                    {
+                      "result": {
+                        "op": "successful",
+                        "args": [
+                          "few-probe-wrap"
+                        ]
+                      },
+                      "binding": "$evidence.binding",
+                      "direction": "wrap",
+                      "value": "$evidence.sample"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "unwrap",
+                "value": {
+                  "op": "program",
+                  "args": [
+                    "fewReceipt",
+                    {
+                      "result": {
+                        "op": "successful",
+                        "args": [
+                          "few-probe-unwrap"
+                        ]
+                      },
+                      "binding": "$evidence.binding",
+                      "direction": "unwrap",
+                      "value": "$evidence.sample"
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$wrap.actor",
+                    "$unwrap.actor"
+                  ]
+                },
+                "error": "few probe actor mismatch"
+              },
+              {
+                "return": {
+                  "phase": "verified",
+                  "source": "$evidence.source",
+                  "binding": "$evidence.binding",
+                  "sample": "$evidence.sample",
+                  "wrap": "$wrap",
+                  "unwrap": "$unwrap",
+                  "proofHash": {
+                    "op": "hash",
+                    "args": [
+                      {
+                        "source": "$evidence.source",
+                        "binding": "$evidence.binding",
+                        "sample": "$evidence.sample",
+                        "results": {
+                          "op": "map",
+                          "args": [
+                            {
+                              "op": "filter",
+                              "args": [
+                                "$results",
+                                "r",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$r",
+                                    "ok"
+                                  ]
+                                }
+                              ]
+                            },
+                            "r",
+                            {
+                              "id": {
+                                "op": "get",
+                                "args": [
+                                  "$r",
+                                  "id"
+                                ]
+                              },
+                              "completion": {
+                                "op": "get",
+                                "args": [
+                                  "$r",
+                                  "completion"
+                                ]
+                              },
+                              "effects": {
+                                "op": "effects",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$r",
+                                      "effects"
+                                    ]
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        "directions": {
+                          "op": "objectFromEntries",
+                          "args": [
+                            [
+                              [
+                                "wrap",
+                                "$wrap.actor"
+                              ],
+                              [
+                                "unwrap",
+                                "$unwrap.actor"
+                              ]
+                            ]
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "terminal": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "few_wrapper_runtime_unsupported",
+              "evidenceRequestIds": [
+                "few-code"
+              ]
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "unsupported"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "few_no_backed_probe_capacity"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "retry"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "surface"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "guard"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "probe"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "few_identity_not_proven"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "verified"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.binding.target"
+                  ]
+                },
+                "target": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.binding.target"
+                  ]
+                },
+                "asset": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.binding.asset"
+                  ]
+                },
+                "factory": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.binding.factory"
+                  ]
+                },
+                "codeHash": "$evidence.binding.codeHash",
+                "assetCodeHash": "$evidence.binding.assetCodeHash",
+                "factoryCodeHash": "$evidence.binding.factoryCodeHash",
+                "provenance": [
+                  {
+                    "kind": "factory-wrapper-reverse-binding-and-effects",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$evidence.binding.factory"
+                      ]
+                    },
+                    "evidenceHash": "$evidence.proofHash"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "target": {
+        "op": "address",
+        "args": [
+          "$identity.target"
+        ]
+      },
+      "asset": {
+        "op": "address",
+        "args": [
+          "$identity.asset"
+        ]
+      },
+      "factory": {
+        "op": "address",
+        "args": [
+          "$identity.factory"
+        ]
+      },
+      "codeHash": "$identity.codeHash",
+      "assetCodeHash": "$identity.assetCodeHash",
+      "factoryCodeHash": "$identity.factoryCodeHash"
+    },
+    "bindingProjection": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "factory": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.factory"
+            ]
+          }
+        ]
+      },
+      "codeHash": "$descriptor.codeHash",
+      "assetCodeHash": "$descriptor.assetCodeHash",
+      "factoryCodeHash": "$descriptor.factoryCodeHash",
+      "semantics": "few-backed-wrap-v1"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.target",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "wrap",
+        "enabled": true,
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.target",
+        "adapterId": "few-wrap",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "wrap"
+        }
+      },
+      {
+        "id": "unwrap",
+        "enabled": true,
+        "tokenIn": "$descriptor.target",
+        "tokenOut": "$descriptor.asset",
+        "adapterId": "few-unwrap",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "unwrap"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "target": {
+        "op": "address",
+        "args": [
+          "$descriptor.target"
+        ]
+      },
+      "asset": {
+        "op": "address",
+        "args": [
+          "$descriptor.asset"
+        ]
+      },
+      "factory": {
+        "op": "address",
+        "args": [
+          "$descriptor.factory"
+        ]
+      },
+      "codeHash": "$descriptor.codeHash",
+      "assetCodeHash": "$descriptor.assetCodeHash",
+      "factoryCodeHash": "$descriptor.factoryCodeHash",
+      "semantics": "few-backed-wrap-v1",
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "factory": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.factory"
+            ]
+          }
+        ]
+      },
+      "codeHash": "$descriptor.codeHash",
+      "assetCodeHash": "$descriptor.assetCodeHash",
+      "factoryCodeHash": "$descriptor.factoryCodeHash",
+      "semantics": "few-backed-wrap-v1"
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": {
+        "fields": [],
+        "output": {}
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": "$steps.current.sample",
+    "exactCompatibility": {
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "executor": {
+        "op": "lower",
+        "args": [
+          "$executor"
+        ]
+      }
+    },
+    "mutationKinds": [
+      "log"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "factory-wrapper-effects",
+    "lineageId": "few:factory-backed-wrap-v1",
+    "abi": {
+      "wrapper": [
+        "function factory() view returns(address)",
+        "function token() view returns(address)",
+        "function getWrappedToken(address) view returns(address)",
+        "function decimals() view returns(uint8)",
+        "function totalSupply() view returns(uint256)",
+        "function balanceOf(address) view returns(uint256)",
+        "function allowance(address,address) view returns(uint256)",
+        "function wrap(uint256) returns(uint256)",
+        "function unwrap(uint256) returns(uint256)",
+        "function wrapTo(uint256,address) returns(uint256)",
+        "function unwrapTo(uint256,address) returns(uint256)"
+      ],
+      "token": [
+        "function balanceOf(address) view returns(uint256)",
+        "function totalSupply() view returns(uint256)",
+        "function decimals() view returns(uint8)",
+        "function approve(address,uint256) returns(bool)",
+        "function allowance(address,address) view returns(uint256)"
+      ]
+    },
+    "constants": {
+      "wrapperCodeHash": "0xbe63f68c8de6e3f7cf411d9b117b931128468c36e0753fc5878fd5359f16acf5",
+      "zero": "0x0000000000000000000000000000000000000000",
+      "maxUint": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "wrapTopic": "0xeb5580a0908e96b78bdcb1a3c5638793b491a6073c3ff56061a069cb20581773",
+      "unwrapTopic": "0x12d6424519838e57637c6db9df31af32d7926ff0a53dd37007c191d0fe302818",
+      "maxDecimals": 77
+    },
+    "expressions": {
+      "fewSignedAmount": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$direction",
+              "wrap"
+            ]
+          },
+          "$amount",
+          {
+            "op": "sub",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              },
+              "$amount"
+            ]
+          }
+        ]
+      },
+      "fewProbeRequests": {
+        "op": "if",
+        "args": [
+          {
+            "op": "defined",
+            "args": [
+              "$binding"
+            ]
+          },
+          [
+            {
+              "id": "few-probe-wrap",
+              "kind": "effect-delta-simulation",
+              "preCalls": [
+                {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "to": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "asset"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "approve",
+                      [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$binding",
+                            "target"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                },
+                {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "to": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "asset"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "approve",
+                      [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$binding",
+                            "target"
+                          ]
+                        },
+                        "$sample"
+                      ]
+                    ]
+                  }
+                }
+              ],
+              "call": {
+                "caller": {
+                  "kind": "executor"
+                },
+                "executionMode": "impersonated-call-frame",
+                "to": {
+                  "op": "get",
+                  "args": [
+                    "$binding",
+                    "target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "wrap",
+                    [
+                      "$sample"
+                    ]
+                  ]
+                }
+              },
+              "overrideIntent": {
+                "caller": {
+                  "kind": "executor"
+                },
+                "tokenBalances": [
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "asset"
+                      ]
+                    },
+                    "amount": "$sample"
+                  }
+                ]
+              },
+              "observeTokenBalances": [
+                {
+                  "token": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "target"
+                    ]
+                  },
+                  "account": {
+                    "kind": "executor"
+                  }
+                },
+                {
+                  "token": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "asset"
+                    ]
+                  },
+                  "account": {
+                    "kind": "executor"
+                  }
+                },
+                {
+                  "token": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "asset"
+                    ]
+                  },
+                  "account": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "target"
+                    ]
+                  }
+                }
+              ],
+              "observeTotalSupplies": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$binding",
+                    "target"
+                  ]
+                }
+              ],
+              "observe": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta",
+                "native-delta",
+                "logs"
+              ]
+            },
+            {
+              "id": "few-probe-unwrap",
+              "kind": "effect-delta-simulation",
+              "call": {
+                "caller": {
+                  "kind": "executor"
+                },
+                "executionMode": "impersonated-call-frame",
+                "to": {
+                  "op": "get",
+                  "args": [
+                    "$binding",
+                    "target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "unwrap",
+                    [
+                      "$sample"
+                    ]
+                  ]
+                }
+              },
+              "overrideIntent": {
+                "caller": {
+                  "kind": "executor"
+                },
+                "tokenBalances": [
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$binding",
+                        "target"
+                      ]
+                    },
+                    "amount": "$sample"
+                  }
+                ]
+              },
+              "observeTokenBalances": [
+                {
+                  "token": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "target"
+                    ]
+                  },
+                  "account": {
+                    "kind": "executor"
+                  }
+                },
+                {
+                  "token": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "asset"
+                    ]
+                  },
+                  "account": {
+                    "kind": "executor"
+                  }
+                },
+                {
+                  "token": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "asset"
+                    ]
+                  },
+                  "account": {
+                    "op": "get",
+                    "args": [
+                      "$binding",
+                      "target"
+                    ]
+                  }
+                }
+              ],
+              "observeTotalSupplies": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$binding",
+                    "target"
+                  ]
+                }
+              ],
+              "observe": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta",
+                "native-delta",
+                "logs"
+              ]
+            }
+          ],
+          []
+        ]
+      }
+    },
+    "programs": {
+      "fewReceipt": [
+        {
+          "let": "deltas",
+          "value": {
+            "op": "coalesce",
+            "args": [
+              "$result.effects.tokenDeltas",
+              []
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$deltas"
+                ]
+              },
+              3
+            ]
+          },
+          "error": "few probe missing or duplicate token balances"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$result",
+                  "completion"
+                ]
+              },
+              "returned"
+            ]
+          },
+          "error": "few probe receipt completion"
+        },
+        {
+          "let": "targetRows",
+          "value": {
+            "op": "filter",
+            "args": [
+              "$deltas",
+              "d",
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$d",
+                      "token"
+                    ]
+                  },
+                  "$binding.target"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$targetRows"
+                ]
+              },
+              1
+            ]
+          },
+          "error": "few probe wrapper observation missing"
+        },
+        {
+          "let": "actor",
+          "value": {
+            "op": "get",
+            "args": [
+              {
+                "op": "at",
+                "args": [
+                  "$targetRows",
+                  0
+                ]
+              },
+              "account"
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$actor",
+                      "$binding.target"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$actor",
+                      "$binding.asset"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "few probe actor is a protocol account"
+        },
+        {
+          "let": "signedValue",
+          "value": {
+            "op": "expression",
+            "args": [
+              "fewSignedAmount",
+              {
+                "direction": "$direction",
+                "amount": "$value"
+              }
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$targetRows",
+                      0
+                    ]
+                  },
+                  "delta"
+                ]
+              },
+              "$signedValue"
+            ]
+          },
+          "error": "few probe wrapper receipt mismatch"
+        },
+        {
+          "let": "actorRows",
+          "value": {
+            "op": "filter",
+            "args": [
+              "$deltas",
+              "d",
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$d",
+                          "token"
+                        ]
+                      },
+                      "$binding.asset"
+                    ]
+                  },
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$d",
+                              "account"
+                            ]
+                          },
+                          "$binding.target"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$actorRows"
+                ]
+              },
+              1
+            ]
+          },
+          "error": "few probe actor asset observation missing"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$actorRows",
+                      0
+                    ]
+                  },
+                  "account"
+                ]
+              },
+              "$actor"
+            ]
+          },
+          "error": "few probe receipt actor mismatch"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$actorRows",
+                      0
+                    ]
+                  },
+                  "delta"
+                ]
+              },
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  "$signedValue"
+                ]
+              }
+            ]
+          },
+          "error": "few probe actor debit/credit mismatch"
+        },
+        {
+          "let": "backingRows",
+          "value": {
+            "op": "filter",
+            "args": [
+              "$deltas",
+              "d",
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$d",
+                          "token"
+                        ]
+                      },
+                      "$binding.asset"
+                    ]
+                  },
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$d",
+                          "account"
+                        ]
+                      },
+                      "$binding.target"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$backingRows"
+                ]
+              },
+              1
+            ]
+          },
+          "error": "few probe wrapper backing observation missing"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$backingRows",
+                      0
+                    ]
+                  },
+                  "delta"
+                ]
+              },
+              "$signedValue"
+            ]
+          },
+          "error": "few probe wrapper backing mismatch"
+        },
+        {
+          "let": "supplies",
+          "value": {
+            "op": "coalesce",
+            "args": [
+              "$result.effects.totalSupplyDeltas",
+              []
+            ]
+          }
+        },
+        {
+          "let": "targetSupply",
+          "value": {
+            "op": "filter",
+            "args": [
+              "$supplies",
+              "s",
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$s",
+                      "token"
+                    ]
+                  },
+                  "$binding.target"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$targetSupply"
+                ]
+              },
+              1
+            ]
+          },
+          "error": "few probe supply observation missing"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$targetSupply",
+                      0
+                    ]
+                  },
+                  "delta"
+                ]
+              },
+              "$signedValue"
+            ]
+          },
+          "error": "few probe supply mismatch"
+        },
+        {
+          "assert": {
+            "op": "every",
+            "args": [
+              "$supplies",
+              "s",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$s",
+                          "token"
+                        ]
+                      },
+                      "$binding.target"
+                    ]
+                  },
+                  true,
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$s",
+                          "delta"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "few probe unrelated supply changed"
+        },
+        {
+          "let": "native",
+          "value": {
+            "op": "coalesce",
+            "args": [
+              "$result.effects.nativeDeltas",
+              []
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$native"
+                ]
+              },
+              1
+            ]
+          },
+          "error": "few probe native observation missing"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$native",
+                      0
+                    ]
+                  },
+                  "account"
+                ]
+              },
+              "$actor"
+            ]
+          },
+          "error": "few probe native actor mismatch"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$native",
+                      0
+                    ]
+                  },
+                  "delta"
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "few probe native delta"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "decode",
+                "args": [
+                  "wrapper",
+                  "$direction",
+                  {
+                    "op": "get",
+                    "args": [
+                      "$result",
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              },
+              "$value"
+            ]
+          },
+          "error": "few probe return amount mismatch"
+        },
+        {
+          "let": "targetLogs",
+          "value": {
+            "op": "filter",
+            "args": [
+              {
+                "op": "coalesce",
+                "args": [
+                  "$result.effects.logs",
+                  []
+                ]
+              },
+              "l",
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$l",
+                      "address"
+                    ]
+                  },
+                  "$binding.target"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$targetLogs"
+                ]
+              },
+              1
+            ]
+          },
+          "error": "few probe event missing"
+        },
+        {
+          "let": "log",
+          "value": {
+            "op": "at",
+            "args": [
+              "$targetLogs",
+              0
+            ]
+          }
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$log.topics",
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$direction",
+                      "wrap"
+                    ]
+                  },
+                  "$constants.wrapTopic",
+                  "$constants.unwrapTopic"
+                ]
+              }
+            ]
+          },
+          "error": "few probe event topic mismatch"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "addressWord",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$log.topics",
+                      1
+                    ]
+                  }
+                ]
+              },
+              "$actor"
+            ]
+          },
+          "error": "few probe event sender mismatch"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "addressWord",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$log.topics",
+                      2
+                    ]
+                  }
+                ]
+              },
+              "$actor"
+            ]
+          },
+          "error": "few probe event recipient mismatch"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "word",
+                "args": [
+                  "$log.data"
+                ]
+              },
+              "$value"
+            ]
+          },
+          "error": "few probe event amount mismatch"
+        },
+        {
+          "return": {
+            "actor": "$actor",
+            "amountOut": "$value"
+          }
+        }
+      ]
+    },
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "identityKind": "factory-child",
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "get-code",
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.asset"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.factory"
+          ]
+        }
+      ],
+      "mutationAddresses": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.asset"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.factory"
+          ]
+        }
+      ]
+    },
+    "exact": {
+      "methodId": "few-conversion-receipt",
+      "requirements": {
+        "transports": [
+          "get-code",
+          "eth-call"
+        ]
+      },
+      "protectedAddresses": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.asset"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.factory"
+          ]
+        }
+      ],
+      "checks": [
+        {
+          "assert": {
+            "op": "lte",
+            "args": [
+              "$amountIn",
+              "$constants.maxUint"
+            ]
+          },
+          "error": "few exact input exceeds uint256"
+        }
+      ],
+      "evidence": {
+        "kind": "few-execution-receipt",
+        "source": "$source",
+        "executor": {
+          "op": "lower",
+          "args": [
+            "$executor"
+          ]
+        },
+        "direction": "$route.direction",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "zeroEvidence": {
+        "kind": "few-execution-receipt",
+        "source": "$source",
+        "executor": {
+          "op": "lower",
+          "args": [
+            "$executor"
+          ]
+        },
+        "direction": "$route.direction",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.asset"
+          ]
+        },
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.factory"
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "convert",
+          "when": {
+            "op": "not",
+            "args": [
+              "$directSettlement"
+            ]
+          },
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": {
+              "op": "address",
+              "args": [
+                "$descriptor.target"
+              ]
+            },
+            "mode": "exact-clear",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "wrap"
+              ]
+            }
+          },
+          "call": {
+            "target": {
+              "op": "address",
+              "args": [
+                "$descriptor.target"
+              ]
+            },
+            "signature": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "wrap"
+                  ]
+                },
+                "function wrap(uint256) returns (uint256)",
+                "function unwrap(uint256) returns (uint256)"
+              ]
+            },
+            "args": [
+              {
+                "runtime": "amountIn"
+              }
+            ],
+            "save": {
+              "converted": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "converted"
+                },
+                "operator": "eq",
+                "right": {
+                  "runtime": "amountIn"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "convertTo",
+          "when": "$directSettlement",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": {
+              "op": "address",
+              "args": [
+                "$descriptor.target"
+              ]
+            },
+            "mode": "exact-clear",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "wrap"
+              ]
+            }
+          },
+          "call": {
+            "target": {
+              "op": "address",
+              "args": [
+                "$descriptor.target"
+              ]
+            },
+            "signature": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "wrap"
+                  ]
+                },
+                "function wrapTo(uint256,address) returns (uint256)",
+                "function unwrapTo(uint256,address) returns (uint256)"
+              ]
+            },
+            "args": [
+              {
+                "runtime": "amountIn"
+              },
+              "$recipient"
+            ],
+            "save": {
+              "converted": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "converted"
+                },
+                "operator": "eq",
+                "right": {
+                  "runtime": "amountIn"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "allowance",
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.direction",
+              "wrap"
+            ]
+          },
+          "static": true,
+          "call": {
+            "target": "$route.tokenIn",
+            "signature": "function allowance(address,address) view returns (uint256)",
+            "args": [
+              "$executor",
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.target"
+                ]
+              }
+            ],
+            "save": {
+              "residual": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "residual"
+                },
+                "operator": "eq",
+                "right": 0
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    },
+    "modules": {
+      "pricingFlow": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "current",
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "current-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                }
+              },
+              {
+                "id": "current-asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                }
+              },
+              {
+                "id": "current-factory-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.factory"
+                  ]
+                }
+              },
+              {
+                "id": "current-factory",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "factory",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "current-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "token",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "current-member",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.factory"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "getWrappedToken",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.asset"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "current-supply",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "totalSupply",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "current-backing",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "balanceOf",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.target"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "current-decimals",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    "$source"
+                  ]
+                },
+                "error": "few binding source changed"
+              },
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "current-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "assetCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "current-asset-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "factoryCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "current-factory-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$codeHash",
+                    "$constants.wrapperCodeHash"
+                  ]
+                },
+                "error": "few wrapper runtime unsupported"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "factory",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "current-factory"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$descriptor.factory"
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "token",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "current-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$descriptor.asset"
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "getWrappedToken",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "current-member"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$descriptor.target"
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$codeHash",
+                    "$descriptor.codeHash"
+                  ]
+                },
+                "error": "few dependency code changed"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$assetCodeHash",
+                    "$descriptor.assetCodeHash"
+                  ]
+                },
+                "error": "few dependency code changed"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$factoryCodeHash",
+                    "$descriptor.factoryCodeHash"
+                  ]
+                },
+                "error": "few dependency code changed"
+              },
+              {
+                "let": "supply",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "wrapper",
+                    "totalSupply",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "current-supply"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "backing",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "token",
+                    "balanceOf",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "current-backing"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "token",
+                    "decimals",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "current-decimals"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$decimals",
+                    "$constants.maxDecimals"
+                  ]
+                },
+                "error": "few unsupported asset decimals"
+              },
+              {
+                "let": "oneToken",
+                "value": {
+                  "op": "pow",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "10"
+                      ]
+                    },
+                    "$decimals"
+                  ]
+                }
+              },
+              {
+                "let": "sample",
+                "value": {
+                  "op": "min",
+                  "args": [
+                    "$oneToken",
+                    {
+                      "op": "min",
+                      "args": [
+                        "$supply",
+                        "$backing"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "gt",
+                  "args": [
+                    "$sample",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                "error": "few no backed pricing capacity"
+              },
+              {
+                "return": {
+                  "source": "$source",
+                  "binding": {
+                    "target": {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.target"
+                      ]
+                    },
+                    "asset": {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.asset"
+                      ]
+                    },
+                    "factory": {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.factory"
+                      ]
+                    },
+                    "codeHash": "$codeHash",
+                    "assetCodeHash": "$assetCodeHash",
+                    "factoryCodeHash": "$factoryCodeHash"
+                  },
+                  "sample": "$sample"
+                }
+              }
+            ]
+          },
+          {
+            "id": "probe",
+            "requirements": {
+              "transports": [
+                "effect-delta-simulation"
+              ],
+              "caller": "executor",
+              "effects": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta",
+                "native-delta",
+                "logs"
+              ]
+            },
+            "requests": [
+              {
+                "id": "current-wrap",
+                "kind": "effect-delta-simulation",
+                "preCalls": [
+                  {
+                    "caller": {
+                      "kind": "executor"
+                    },
+                    "to": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "asset"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "token",
+                        "approve",
+                        [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$steps.current.binding",
+                              "target"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      ]
+                    }
+                  },
+                  {
+                    "caller": {
+                      "kind": "executor"
+                    },
+                    "to": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "asset"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "token",
+                        "approve",
+                        [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$steps.current.binding",
+                              "target"
+                            ]
+                          },
+                          "$steps.current.sample"
+                        ]
+                      ]
+                    }
+                  }
+                ],
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "get",
+                    "args": [
+                      "$steps.current.binding",
+                      "target"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "wrapper",
+                      "wrap",
+                      [
+                        "$steps.current.sample"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "get",
+                        "args": [
+                          "$steps.current.binding",
+                          "asset"
+                        ]
+                      },
+                      "amount": "$steps.current.sample"
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "target"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "target"
+                      ]
+                    }
+                  }
+                ],
+                "observeTotalSupplies": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$steps.current.binding",
+                      "target"
+                    ]
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "native-delta",
+                  "logs"
+                ]
+              },
+              {
+                "id": "current-unwrap",
+                "kind": "effect-delta-simulation",
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "get",
+                    "args": [
+                      "$steps.current.binding",
+                      "target"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "wrapper",
+                      "unwrap",
+                      [
+                        "$steps.current.sample"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "get",
+                        "args": [
+                          "$steps.current.binding",
+                          "target"
+                        ]
+                      },
+                      "amount": "$steps.current.sample"
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "target"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "op": "get",
+                      "args": [
+                        "$steps.current.binding",
+                        "target"
+                      ]
+                    }
+                  }
+                ],
+                "observeTotalSupplies": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$steps.current.binding",
+                      "target"
+                    ]
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "native-delta",
+                  "logs"
+                ]
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    "$source"
+                  ]
+                },
+                "error": "few current source changed"
+              },
+              {
+                "let": "wrap",
+                "value": {
+                  "op": "program",
+                  "args": [
+                    "fewReceipt",
+                    {
+                      "result": {
+                        "op": "successful",
+                        "args": [
+                          "current-wrap"
+                        ]
+                      },
+                      "binding": "$steps.current.binding",
+                      "direction": "wrap",
+                      "value": "$steps.current.sample"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "unwrap",
+                "value": {
+                  "op": "program",
+                  "args": [
+                    "fewReceipt",
+                    {
+                      "result": {
+                        "op": "successful",
+                        "args": [
+                          "current-unwrap"
+                        ]
+                      },
+                      "binding": "$steps.current.binding",
+                      "direction": "unwrap",
+                      "value": "$steps.current.sample"
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$wrap.actor",
+                    "$unwrap.actor"
+                  ]
+                },
+                "error": "few current actor mismatch"
+              },
+              {
+                "return": {
+                  "source": "$source",
+                  "sample": "$steps.current.sample",
+                  "amountOut": "$steps.current.sample"
+                }
+              }
+            ]
+          }
+        ],
+        "result": {
+          "source": "$steps.current.source",
+          "quotes": {
+            "op": "objectFromEntries",
+            "args": [
+              {
+                "op": "map",
+                "args": [
+                  "$routes",
+                  "route",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "routeKey"
+                      ]
+                    },
+                    {
+                      "amountIn": "$steps.probe.sample",
+                      "amountOut": "$steps.probe.amountOut"
+                    }
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "quoteFlow": {
+        "version": 1,
+        "sourceKind": "effect-simulation",
+        "chainQuote": {
+          "step": "quote",
+          "requestId": "few-exact"
+        },
+        "steps": [
+          {
+            "id": "guard",
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "exact-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                }
+              },
+              {
+                "id": "exact-asset-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                }
+              },
+              {
+                "id": "exact-factory-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.factory"
+                  ]
+                }
+              },
+              {
+                "id": "exact-factory",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "factory",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "exact-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.target"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "token",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "exact-member",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.factory"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "wrapper",
+                    "getWrappedToken",
+                    [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$descriptor.asset"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    "$source"
+                  ]
+                },
+                "error": "few binding source changed"
+              },
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "exact-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "assetCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "exact-asset-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "factoryCodeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "exact-factory-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$codeHash",
+                    "$constants.wrapperCodeHash"
+                  ]
+                },
+                "error": "few wrapper runtime unsupported"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "factory",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "exact-factory"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$descriptor.factory"
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "token",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "exact-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$descriptor.asset"
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "wrapper",
+                        "getWrappedToken",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "exact-member"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "$descriptor.target"
+                  ]
+                },
+                "error": "few reverse binding mismatch"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$codeHash",
+                    "$descriptor.codeHash"
+                  ]
+                },
+                "error": "few dependency code changed"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$assetCodeHash",
+                    "$descriptor.assetCodeHash"
+                  ]
+                },
+                "error": "few dependency code changed"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$factoryCodeHash",
+                    "$descriptor.factoryCodeHash"
+                  ]
+                },
+                "error": "few dependency code changed"
+              },
+              {
+                "return": {
+                  "source": "$source",
+                  "binding": {
+                    "target": {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.target"
+                      ]
+                    },
+                    "asset": {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.asset"
+                      ]
+                    },
+                    "factory": {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.factory"
+                      ]
+                    },
+                    "codeHash": "$codeHash",
+                    "assetCodeHash": "$assetCodeHash",
+                    "factoryCodeHash": "$factoryCodeHash"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": "quote",
+            "requirements": {
+              "transports": [
+                "effect-delta-simulation"
+              ],
+              "caller": "executor",
+              "effects": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta",
+                "native-delta",
+                "logs"
+              ]
+            },
+            "requests": [
+              {
+                "id": "few-exact",
+                "kind": "effect-delta-simulation",
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": {
+                    "op": "get",
+                    "args": [
+                      "$steps.guard.binding",
+                      "target"
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "wrapper",
+                      "$route.direction",
+                      [
+                        "$amountIn"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "op": "get",
+                        "args": [
+                          "$steps.guard.binding",
+                          "target"
+                        ]
+                      },
+                      "amount": "$amountIn"
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$steps.guard.binding",
+                        "target"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$steps.guard.binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "kind": "executor"
+                    }
+                  },
+                  {
+                    "token": {
+                      "op": "get",
+                      "args": [
+                        "$steps.guard.binding",
+                        "asset"
+                      ]
+                    },
+                    "account": {
+                      "op": "get",
+                      "args": [
+                        "$steps.guard.binding",
+                        "target"
+                      ]
+                    }
+                  }
+                ],
+                "observeTotalSupplies": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$steps.guard.binding",
+                      "target"
+                    ]
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "native-delta",
+                  "logs"
+                ]
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    "$source"
+                  ]
+                },
+                "error": "few exact source changed"
+              },
+              {
+                "let": "receipt",
+                "value": {
+                  "op": "program",
+                  "args": [
+                    "fewReceipt",
+                    {
+                      "result": {
+                        "op": "successful",
+                        "args": [
+                          "few-exact"
+                        ]
+                      },
+                      "binding": "$steps.guard.binding",
+                      "direction": "$route.direction",
+                      "value": "$amountIn"
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$receipt.actor",
+                    "$executor"
+                  ]
+                },
+                "error": "few exact actor mismatch"
+              },
+              {
+                "return": {
+                  "source": "$source",
+                  "amountOut": "$amountIn",
+                  "actor": "$receipt.actor"
+                }
+              }
+            ]
+          }
+        ],
+        "result": "$steps.quote.amountOut"
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "few-wrap",
+        "lineage": "custom-protocol:few-wrapped",
+        "edgeKind": "protocol",
+        "action": "wrap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function wrap(uint256)"
+        },
+        {
+          "signature": "function wrapTo(uint256,address)"
+        }
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "few-unwrap",
+        "lineage": "custom-protocol:few-wrapped",
+        "edgeKind": "protocol",
+        "action": "unwrap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function unwrap(uint256)"
+        },
+        {
+          "signature": "function unwrapTo(uint256,address)"
+        }
+      ]
+    }
+  ]
+}

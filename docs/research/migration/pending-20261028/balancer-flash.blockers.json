@@ -1,0 +1,265 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:35:00Z",
+  "family": "flash-loan:balancer-v2",
+  "domain": "funding",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "summary": "At 104ff465 the v2 declarative JSON compiler accepts only the protocol, swap and credit domains. Funding is a separate strict plugin domain: it has defineFundingFamily, its own capability-slot table and a separate funding runtime, but there is no declarative-funding compiler, no funding module catalogue and no JSON-to-FundingFamilyPlugin semantic path. The only production JSON format that currently accepts production.domain='funding' is bindings-v1, which merely imports the existing TypeScript balancerFlashManifest/balancerFlashDiscovery/balancerFlashFunding/balancerFlashFamilyOwnedAction objects (optionally balancerFlashCapture); it declares no funding semantics and is not a declarative cutover. Therefore a faithful declarative Funding JSON cannot be authored under the pinned 104ff465 framework or the no-public-TS/no-tests constraint. The handwritten listener/src/searcher/venues/production-families/balancer-flash.production.ts remains authoritative.",
+  "baseline": {
+    "workspace": "work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "head": "c5a3ea1add4e54b344beb5d8a29a0582cc273fb6",
+    "familyRuntimeBaseline": "104ff465",
+    "workingTreeAtStart": "dirty with concurrent unrelated work (modified declarative-math-models.ts and few-wrapped.production.ts; deleted fluid-credit.production.ts moved to pending/handwritten-entries with a replacement fluid.production.ts; untracked aqua/peapods/vault-spot/morpho blockers, fluid/few-wrapped JSON and math files); all left untouched",
+    "generatorRun": false,
+    "publicTsOrTestChanges": false
+  },
+  "reference": {
+    "implementationRow": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md:34",
+    "tx": "0x9db5b6b8efe9dacc0931ee1b48c861b0284e8088f7c27c93455e95c374b50a4b",
+    "familyRow": "Balancer V2 (兑换，非同名闪贷资金源)",
+    "implRowNote": "The IMPL list has no standalone flash-loan:balancer-v2 row. The Balancer V2 row is the swap family and explicitly states it is 兑换，非同名闪贷资金源 (not the same-named flash funding source); its recorded settlement heights are N26138724/N26138511, not a flash-family acceptance sample. The scope audit lists flash-loan:balancer-v2 in globalCatalogOutsideMappedImpl (docs/research/reports/family-impl-scope-audit-20261016.json:985-987), so no IMPL row maps to this funding family.",
+    "implRowsMentioningBalancerFlashFunding": [
+      {
+        "line": 45,
+        "familyRow": "BTBBear",
+        "tx": "0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91",
+        "N": 26029369,
+        "B": 26029368,
+        "quote": "N-1..N two-block Ready funding surface = [WBTC, WETH]（memo `flash-loan:balancer-v2` ×2）; selected flash 2,000,000,000,000,000 wei WETH; final sim success, net EV +29,302,972,158,198 wei",
+        "use": "the only recorded natural funding-surface use of flash-loan:balancer-v2 in the IMPL list; a funding-only mention, not a funding-family acceptance sample"
+      },
+      {
+        "line": 52,
+        "familyRow": "Ammalgam (tx1)",
+        "tx": "0xe9ba98c7aaa166b4cf12b140f17cdc9a4b3f381b7db3bc3935c86a4482fd250c",
+        "N": 26245017,
+        "B": 26245016,
+        "quote": "诊断资金 `flash-loan:balancer-v2`",
+        "use": "diagnostic funding override; the original TX used Morpho flash, so it is not a Balancer flash replay sample"
+      }
+    ],
+    "familyId": "flash-loan:balancer-v2",
+    "lineageId": "balancer-flash",
+    "envKey": "SEARCHER_FAMILY_BALANCER_FLASH_ENABLED",
+    "defaultEnabled": true,
+    "target": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+    "liquidityHolder": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+    "repayment": "transfer",
+    "paramShape": "tokens-and-amounts",
+    "discoveryEvent": {
+      "signature": "FlashLoan(address,address,uint256,uint256)",
+      "tokenTopicIndex": 2,
+      "providerFromBlock": 0
+    },
+    "planningPriority": 1,
+    "liquidityPriority": 0
+  },
+  "priorArtifactsSearch": {
+    "backupLocalRef": "backup-local-82bfc8fc (82bfc8fc inverse-auction: new declarative protocol family)",
+    "balancerFundingJsonDraft": "none",
+    "declarativeFundingCompiler": "none",
+    "balancerMathDraft": "none",
+    "pendingBlockersChecked": [
+      "HEAD docs/research/migration/pending-20261028 has no balancer/funding blocker or draft (only aqua, curve-lp, peapods-debond, vault-spot, yieldbasis-lt, handwritten entries and a concurrent morpho-flash park for the sibling funding family).",
+      "backup-local-82bfc8fc docs/research/migration/pending-20261028 contains many swap/protocol/credit drafts but no funding JSON and no balancer JSON (git ls-tree filtered for funding|balancer|flash returns nothing).",
+      "backup-local-82bfc8fc docs only mention flash-loan:balancer-v2 as one of the two typed funding families in docs/research/adapter-family-line-plan.md:407; no migration draft or declarative-funding design exists there.",
+      "backup-local-82bfc8fc listener/src/searcher/venues has no declarative-funding*.ts file; its declarative-family.ts:95 carries the same protocol/swap/credit allowlist."
+    ],
+    "filesFound": [
+      "listener/src/searcher/venues/funding/balancer-flash-family-plugin.ts (handwritten strict funding plugin)",
+      "listener/src/searcher/venues/funding/balancer-flash-family/{parts,config,discovery,capture}.ts (handwritten funding family)",
+      "listener/src/searcher/venues/funding/balancer-flash.ts and flash-loan-framework.ts (legacy FlashLoanAdapterFamily descriptor)",
+      "listener/src/searcher/venues/production-families/balancer-flash.production.ts (authoritative production entry)",
+      "listener/src/searcher/venues/funding/{erc20-balance-family-plugin.ts,funding-capability.ts} (funding TS shell and runtime contract)"
+    ],
+    "commands": [
+      "git ls-tree -r --name-only 104ff465 | grep -iE 'declarative-funding|funding.*declarative'  -> empty",
+      "git grep -n 'compileDeclarativeFunding' 104ff465 -- '*.ts' '*.json' '*.md'  -> empty",
+      "git ls-tree -r --name-only backup-local-82bfc8fc | grep -iE 'declarative-funding|funding.*declarative'  -> empty",
+      "git ls-tree -r --name-only backup-local-82bfc8fc -- docs/research/migration/pending-20261028 | grep -iE 'funding|balancer|flash'  -> empty",
+      "git show backup-local-82bfc8fc:listener/src/searcher/venues/declarative-family.ts | grep -n 'protocol\", \"swap\", \"credit'  -> 95"
+    ],
+    "conclusion": "No earlier declarative Funding JSON, funding math draft or crash pad exists to reuse; only the handwritten TS funding family and its recorded funding-surface uses exist."
+  },
+  "decisiveBlocker": {
+    "id": "no-v2-funding-domain-or-compiler",
+    "capability": "Compile a v2 Funding-domain JSON into the funding plugin shape (manifest, optional capture, discovery, liquidity sources/current-N read program, pure offer derivation, repayment/borrow plan fragments and a family-owned action adapter) without TypeScript bindings.",
+    "existingSource": [
+      {
+        "path": "listener/src/searcher/venues/funding/balancer-flash-family/parts.ts",
+        "lines": "9-23",
+        "fact": "The family manifest is domain 'funding' with ownedActionAdapterIds ['balancer-flash'], requiredInfraActionAdapterIds ['assert-balance','erc20-transfer'], allowedTaxonomy [{slotKind:'flash'}], supportedLineages ['balancer-flash']; the funding semantics and family-owned action are produced by createErc20BalanceFundingSemantics/createErc20BalanceFundingOwnedAction."
+      },
+      {
+        "path": "listener/src/searcher/venues/funding/balancer-flash-family/config.ts",
+        "lines": "6-23",
+        "fact": "BALANCER_FLASH_CONFIG pins family/lineage, the Balancer V2 Vault as both target and liquidityHolder, repayment 'transfer', paramShape 'tokens-and-amounts', priorities 1/0 and the FlashLoan(address,address,uint256,uint256) discovery event (indexed token topic 2, providerFromBlock 0)."
+      },
+      {
+        "path": "listener/src/searcher/venues/funding/erc20-balance-family-plugin.ts",
+        "lines": "186-364",
+        "fact": "createErc20BalanceFundingSemantics builds FundingDomainSemantics from functions: liquidity.sources snapshots one source per observed asset, liquidity.program issues balanceOf(liquidityHolder) eth-calls into a RequestProgram, deriveOffers derives fee-0 offers, and repayment.buildBorrowFragment/buildRepaymentFragment emit nested plan fragments (flashLoan root, assert-balance child, erc20-transfer repayment)."
+      },
+      {
+        "path": "listener/src/searcher/venues/production-families/balancer-flash.production.ts",
+        "lines": "11-19",
+        "fact": "The authoritative production entry imports balancerFlashCapture/Discovery/Funding/Manifest/owned action from TS modules and calls defineFundingFamily({...}); there is no JSON import and no declarative compiler call."
+      },
+      {
+        "path": "listener/src/searcher/venues/funding/balancer-flash-family-plugin.ts",
+        "lines": "10-15",
+        "fact": "The strict plugin is also a hand-written defineFundingFamily object over the same TS parts; the family has no JSON definition path."
+      }
+    ],
+    "frameworkLimitation": [
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "106",
+        "fact": "createDeclarativeFamilyRuntime rejects every version-2 document whose production.domain is not protocol, swap or credit: 'unsupported declarative Family version/domain'."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "108-117",
+        "fact": "Even past the domain check the v2 schema is route-shaped: it requires manifest, discovery, identity, instance, routes, pricing, the domain block and standard, then validates instance/routes/pricing direction declarations unconditionally. Funding's applicability table marks identity, instance, routes, pricing, exact, execution and sharedBindings as 'never'."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "840-850",
+        "fact": "The compiled definition always emits discovery, identity, instance, routes, pricing, exact and execution plus a protocol/swap/credit domain block and actionAdapters; no branch or output member exists for a funding domain."
+      },
+      {
+        "path": "listener/src/searcher/build-declarative-production.ts",
+        "lines": "117-119,167",
+        "fact": "renderDataFamilyEntry narrows the v2 domain to protocol/swap/credit, throws 'unsupported declarative v2 domain' otherwise, and resolves the compiler as src/searcher/venues/declarative-${domain}.ts. There is no declarative-funding.ts at 104ff465, so the funding compiler path cannot resolve."
+      },
+      {
+        "path": "listener/src/searcher/build-family-capability-manifest.ts",
+        "lines": "593-612",
+        "fact": "The capability manifest generator maps only swap/credit/protocol to define${Suffix}Family + compileDeclarative${Suffix}, rejects entry.domain outside [protocol,swap,credit], and requires the compiler root src/searcher/venues/declarative-${entry.domain}.ts."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family-modules.ts",
+        "lines": "25-104",
+        "fact": "The v2 module catalogue contains only liveStateProjection, instanceEvidence, executionProjection, pricingProjection, quoteOutput, signedBlockEvidence, oracleVictim, math, executionMath, quoteFlow, pricingFlow and trialState; there is no funding liquidity/read/offer/repayment module."
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "lines": "1486-1523,1649-1666,2107-2115,4359-4400",
+        "fact": "FundingDomainSemantics requires synchronous functions sources/deriveOffers and function-based borrow/repayment fragments; the funding applicability table requires manifest/discovery/funding/actionAdapters and forbids the routed-family slots; defineFundingFamily is a thin strict-plugin wrapper, not a JSON compiler, and validateFundingDomain rejects data-only funding objects."
+      },
+      {
+        "path": "listener/src/searcher/venues/strict-catalog-registry-projection.ts",
+        "lines": "1113-1148",
+        "fact": "projectFundingFamily and the 'funding' switch case project an already-loaded strict FundingFamilyPlugin into FlashLoanAdapterFamily; this is a TS-plugin projection, not a declarative definition path."
+      },
+      {
+        "path": "docs/research/design/erc4626-declarative-production-architecture-20261027.md",
+        "lines": "153",
+        "fact": "Authored design statement: Funding still has its own domain interface, but the current v2 JSON compiler accepts only Protocol/Swap/Credit; Funding must not be inferred to be JSON-ified."
+      }
+    ],
+    "probe": {
+      "location": "temporary tsx probes outside the tree (/tmp/probe-declarative-funding.mjs and /tmp/probe-declarative-funding-generator.mjs, removed before this record)",
+      "v2Runtime": "createDeclarativeFamilyRuntime({version:2, production:{domain:'funding', activation:{...}}, scope/manifest/funding minimal blocks}) -> Error: unsupported declarative Family version/domain",
+      "v2ProductionRenderer": "renderDeclarativeProductionEntry(... funding v2 JSON ...) -> Error: unsupported declarative v2 domain",
+      "v1Bindings": "The same renderer accepted version 1 with format=bindings-v1 for flash-loan:balancer-v2 and generated imports of balancerFlashManifest, balancerFlashDiscovery, balancerFlashFunding and balancerFlashFamilyOwnedAction from the existing TypeScript modules, rendering defineFundingFamily({...binding_*}) with no declarative semantics.",
+      "fileChecks": "listener/src/searcher/venues/declarative-funding.ts does not exist; git grep for compileDeclarativeFunding returns nothing at 104ff465, HEAD or backup-local-82bfc8fc."
+    }
+  },
+  "additionalBlockers": [
+    {
+      "id": "bindings-v1-is-a-ts-binding-shim-not-a-declarative-cutover",
+      "severity": "not a faithful migration path",
+      "evidence": [
+        "listener/src/searcher/build-declarative-production.ts:12 lists funding in CONSTRUCTORS for version-1 bindings only; :206-261 renders defineFundingFamily({...bindings}) by importing the referenced TypeScript modules.",
+        "The probe output for a v1 funding JSON contains import statements for balancerFlashManifest/Discovery/Funding/owned action and defineFundingFamily({...}); the funding logic, read program and plan fragments remain TypeScript."
+      ],
+      "consequence": "A v1 bindings JSON would only relocate an entry that already exists and would still require a generator run plus a TS entry; it neither migrates semantics nor reduces the handwritten funding family surface. It is therefore not a declarative Funding JSON answer under the migration policy."
+    },
+    {
+      "id": "routed-protocol-swap-credit-json-cannot-substitute",
+      "severity": "contract/behavior failure",
+      "evidence": [
+        "listener/src/searcher/venues/adapter-family-plugin.ts:1649-1666 and the plugin validator require manifest.domain 'funding' and a FundingDomainSemantics object for a funding family; a protocol/swap/credit declarative plugin has a routed manifest and identity/instance/routes/pricing/exact/execution objects instead.",
+        "listener/src/searcher/venues/declarative-family.ts:106 and build-declarative-production.ts:117-119 reject any other v2 domain, and defineFundingFamily never consumes the declarative runtime definition."
+      ],
+      "consequence": "Declaring the Balancer Vault flash logic under an existing routed domain would fail the funding plugin contract and would lose funding discovery, source-bound liquidity offers, coverage and borrow/repayment fragments."
+    }
+  ],
+  "nonBlockingAnalysis": {
+    "note": "Structural observations only; no JSON was authored or validated end-to-end, and these are not acceptance claims.",
+    "expressibleIfAFundingSchemaExisted": [
+      "Discovery: the FlashLoan(address,address,uint256,uint256) topic, singleton emitter 0xBA1222...F2C8, indexed token topic 2 and providerFromBlock 0 are data-shaped; the existing discovery types already model logPatterns and singleton-indexed-address.",
+      "Liquidity: one source per observed token, target/liquidityHolder both the Balancer V2 Vault, fee 0, maxBorrow from balanceOf(Vault), planningPriority 1 and liquidityPriority 0 are simple data/pure derivation.",
+      "Repayment: 'transfer' is a static erc20-transfer fragment to the Vault with the borrowed amount; the borrow fragment is a balancer-flash root with the route children, an assert-balance child for amount+minProfit and the transfer repayment child; paramShape 'tokens-and-amounts' is a static root params shape.",
+      "Registration: manifest domain funding, ownedActionAdapterIds ['balancer-flash'], requiredInfraActionAdapterIds ['assert-balance','erc20-transfer'], allowedTaxonomy [{slotKind:'flash'}], supportedLineages ['balancer-flash'], fundingPriority and the env key are all data."
+    ],
+    "missingContract": "What does not exist is a funding-domain JSON contract and compiler that turns those facts into FundingDomainSemantics functions before freezing the plugin. Until that exists, any funding JSON is either rejected (v2) or a pure TypeScript binding manifest (v1)."
+  },
+  "validation": {
+    "executed": [
+      {
+        "command": "temporary tsx probe: createDeclarativeFamilyRuntime with a v2 production.domain='funding' document (cwd listener; file removed)",
+        "result": "Error: unsupported declarative Family version/domain; listener/src/searcher/venues/declarative-funding.ts exists=false"
+      },
+      {
+        "command": "temporary tsx probe: renderDeclarativeProductionEntry with a v2 funding document then a v1 bindings funding document (cwd listener; file removed)",
+        "result": "v2 -> Error: unsupported declarative v2 domain; v1 -> format=bindings-v1, generated defineFundingFamily({...}) importing the existing TypeScript modules"
+      },
+      {
+        "command": "temp git worktree at 104ff465 (/tmp/bf-104ff465, removed afterwards): npm run --silent searcher:funding-production-family-plugin",
+        "result": "PASS (source-bound balances, offer parity, pure repayment, ownership, isolation) - covers the handwritten balancer/morpho strict funding plugins"
+      },
+      {
+        "command": "temp worktree at 104ff465: npm run --silent searcher:funding-token-discovery",
+        "result": "PASS (Balancer FlashLoan(address,address,uint256,uint256) topic and indexed-token decode included)"
+      },
+      {
+        "command": "temp worktree at 104ff465: npm run --silent searcher:funding-credit-family-plugin",
+        "result": "PASS (strict domains + repayment/risk + declared absence + loader/catalog)"
+      },
+      {
+        "command": "temp worktree at 104ff465: npm run --silent searcher:adapter-funding-runtime",
+        "result": "PASS (central work, source isolation, opaque issuer handles, TOCTOU, plan ownership)"
+      },
+      {
+        "command": "temp worktree at 104ff465: npm run build:live",
+        "result": "exit 0"
+      },
+      {
+        "command": "git ls-tree / git grep on 104ff465 and backup-local-82bfc8fc",
+        "result": "no declarative-funding.ts, no declarative-funding/compileDeclarativeFunding symbol, no balancer funding JSON/draft and no funding blocker in either ref"
+      }
+    ],
+    "environmentNote": "On the live worktree (HEAD c5a3ea1a, dirty from concurrent work) `npm run build:live` currently exits 2 with TS2307 at src/searcher/generated/production-family-entries.generated.ts:23 because fluid-credit.production.ts was moved to pending/handwritten-entries (with a replacement fluid.production.ts) and the generated import list was not regenerated. This is a concurrent fluid-credit migration artifact unrelated to this park; the clean 104ff465 temp worktree used for validation exits 0.",
+    "notExecuted": [
+      "No declarative Funding JSON was authored; there is no compileDeclarativeFunding to call and no funding v2 schema to validate.",
+      "No JSON-native defineFundingFamily invocation was attempted: defineFundingFamily accepts a plugin object, not a JSON document, and the only renderer path that accepts funding is bindings-v1 (TypeScript bindings).",
+      "No temporary generated production entry was rendered or installed; the handwritten balancer-flash.production.ts was not modified or restored because it was never replaced.",
+      "No family-capability-manifest generator run and no cutover build:live run (the task pins NO generator run and no public TS/tests changes; there is no faithful cutover candidate).",
+      "No Ready/Graph/mid/effective/final-sim/performance run; this park makes no adaptation, replication or opportunity claim."
+    ]
+  },
+  "files": {
+    "added": [
+      "docs/research/migration/pending-20261028/balancer-flash.blockers.json"
+    ],
+    "modified": [],
+    "handwrittenEntry": "listener/src/searcher/venues/production-families/balancer-flash.production.ts (unchanged, remains authoritative)",
+    "generatedArtifacts": "none",
+    "tempFilesRemoved": [
+      "/tmp/probe-declarative-funding.mjs",
+      "/tmp/probe-declarative-funding-generator.mjs",
+      "/tmp/bf-104ff465 (git worktree removed after validation)"
+    ]
+  },
+  "unblockRequirement": "A public framework change is required before a faithful flash-loan:balancer-v2 Funding JSON can exist: (1) admit domain='funding' in the v2 data-family runtime and production renderer without forcing route-shaped identity/instance/routes/pricing/exact/execution blocks; (2) add a declarative-funding compiler that emits the FundingFamilyPlugin shape (manifest, optional capture, discovery, funding semantics and actionAdapters) without importing TypeScript implementation; (3) add funding module catalogue blocks for dynamic per-asset sources, the current-N balanceOf(Vault) read program, pure offer derivation (fee 0), and the 'transfer'/'tokens-and-amounts' borrow/repayment plan fragments; (4) allow the family-owned balancer-flash action adapter (or declare an equivalent wrapper/callback action); (5) extend build-declarative-production.ts and build-family-capability-manifest.ts allowlists and register/load the generated entry while keeping the existing funding plugin contract tests green. This is out of scope for the JSON-only, no-public-TS/no-tests task.",
+  "nextSteps": [
+    "Keep listener/src/searcher/venues/production-families/balancer-flash.production.ts and the funding TS modules unchanged.",
+    "Do not author a v1 bindings-only 'JSON cutover': it would not migrate semantics and would still need the generator plus a TypeScript entry.",
+    "Do not narrow the family to a route-shaped Protocol/Swap/Credit JSON; such a definition would fail the funding plugin contract and would not preserve funding discovery/liquidity/repayment behavior.",
+    "If the framework later gains a funding-domain JSON compiler and a funding module catalogue, re-run this assessment and then author the JSON under the normal migration validation."
+  ]
+}

@@ -1,0 +1,208 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:20:00Z",
+  "family": "aqua-swapvm",
+  "domain": "swap",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "summary": "The quoted/default and direct-output paths are structurally expressible in declarative Swap JSON, but the deployed v1 SwapVM output-first callback (deferred-input settlement) cannot be declared: declarative callback compilers inject the callback script as the whole ABI bytes argument and derive offsets from that argument start, while Aqua embeds the script inside the 22-byte-header packed takerTraitsAndData at a later slice and requires VM patches at limitOffset/floorOffset. The family advertises deferredInput (execution.ts:17-20) and the universal family-dual fixture asserts both the capability and the packed layout. A JSON cutover would either fail that fixture or narrow a verified settlement mode, so no production JSON was authored and the handwritten entry remains authoritative.",
+  "baseline": {
+    "workspace": "work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "head": "284afb49",
+    "familyRuntimeBaseline": "104ff465",
+    "workingTreeAtStart": "clean for tracked aqua/framework files (concurrent unrelated pending changes were present and left untouched)",
+    "generatorRun": false,
+    "publicTsOrTestChanges": false
+  },
+  "reference": {
+    "implementationRow": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md:46",
+    "tx": "0x36764eba7fc601d36c67d575a2e656d803ce9c07240e0cb0ad32a0aed154307a",
+    "txBlock": 26151137,
+    "txBlockHash": "0x00638cbc10d3dda85525280d551dbc54992b6774a5a9a420fb500f994b9910d8",
+    "txIndex": 137,
+    "previousBlock": 26151136,
+    "type": "blockscan existing opportunity, not necessarily produced by a same-block prefix",
+    "deployedRouter": "0x111111338c5091e8440b67b168bae16a668ac0de",
+    "deployedAqua": "0x1111113ccf1426a8e30e2bff5e005d929bf6a90a",
+    "existingSamples": [
+      "N25680170 1INCH/WETH 18/18 1bp registered strategy",
+      "N25680171 1INCH/WBTC 18/8 30bp registered strategy"
+    ]
+  },
+  "priorArtifactsSearch": {
+    "backupLocalRef": "backup-local-82bfc8fc (82bfc8fc inverse-auction: new declarative protocol family)",
+    "aquaJsonDraft": "none",
+    "aquaMathDraft": "none",
+    "aquaSpecificMigrationBlocker": "none",
+    "filesFound": [
+      "listener/src/searcher/venues/swaps/aqua-swapvm-family/* (handwritten TS family, unchanged)",
+      "docs/research/reports/aqua-*-2026101*.json (settlement/identity evidence)",
+      "docs/research/reports/family-settlement-interfaces-swaps-root-20261014.json",
+      "docs/research/reports/family-settlement-interface-review-20261014.json"
+    ],
+    "commands": [
+      "git ls-tree -r backup-local-82bfc8fc --name-only | grep -i aqua",
+      "git grep -n -i aqua backup-local-82bfc8fc -- docs",
+      "git log --all -S'family\": \"aqua-swapvm' -- '*.json'"
+    ],
+    "conclusion": "No earlier declarative JSON or family math exists to reuse; only the handwritten TS family and its recorded settlement evidence."
+  },
+  "decisiveBlocker": {
+    "id": "aqua-v1-deferred-input-packed-taker-callback",
+    "capability": "deferred-input (output-first) settlement: release output, invoke the taker preTransferInCallback, then pull input from the executor and Aqua.push",
+    "existingSource": [
+      {
+        "path": "listener/src/searcher/venues/swaps/aqua-swapvm-family/execution.ts",
+        "lines": "11-20",
+        "fact": "buildRuntimeLeg advertises settlement {quoteOutput: true, directOutput: true, deferredInput: executor} and accepts deferred-input requests."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/aqua-swapvm-family/runtime.ts",
+        "lines": "26-29",
+        "fact": "deferred input builds runtimeDeferredPayment({tokenOut, executor, debtOffset: 132, ...settlement}) and then embeds its script in takerTraitsAndData."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/aqua-swapvm-family/runtime.ts",
+        "lines": "35-51",
+        "fact": "swap calldata = swap(order,tokenIn,tokenOut,0,takerData(minimum,{recipient?,callbackScript})); the callback is slice 7 inside a 22-byte-header packed taker payload; outgoing offset is takerStart + 22 + ends[6] + 64 and the VM patches outgoing+limitOffset and outgoing+floorOffset; incomingOffset is fixed 356."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/aqua-swapvm-family/codec.ts",
+        "lines": "65-82",
+        "fact": "takerData packs a 22-byte header with ten cumulative 16-bit slice ends followed by ten slices; slice 7 is the ABI-wrapped callback script. The header flags are 0x61 (direct/default) or 0x45 (output-first callback)."
+      },
+      {
+        "path": "listener/src/searcher/test/family-dual-execution.ts",
+        "lines": "1021-1025,1082-1108",
+        "fact": "The universal installed-family settlement fixture asserts the exact capability object and the deferred layout: flags 0x45, callback at traits slice 7, incoming 356, script at the ABI-wrapped outgoing offset, and script header 0x0e + input amount."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/aqua-swapvm-family/test/settlement-evidence.ts",
+        "lines": "32-43",
+        "fact": "Existing actual settlement tests construct {kind:'deferred-input', paymentAmount, paymentProgram} and require the leg's deferredInput capability and executor funding account."
+      },
+      {
+        "path": "docs/research/reports/family-settlement-interface-review-20261014.json",
+        "fact": "aqua-swapvm variant deferred-input is registered as interface/identity/callback/wiring/execution verified, output-first, paymentAccount=executor."
+      }
+    ],
+    "frameworkLimitation": [
+      {
+        "path": "listener/src/searcher/venues/declarative-callback.ts",
+        "lines": "90-120",
+        "fact": "A deferred declaration requires the outer call to have a bytes dataArgument and the incoming callback to have exactly one bytes argument; all other callback args are scalar."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-callback.ts",
+        "lines": "198-214",
+        "fact": "The compiler creates payload = runtimeProgramScript(callback.bytes()), splices payload into args[dataArgument], and computes outgoingOffset as the ABI bytes-argument content start via payloadOffset. This replaces the whole bytes argument; it cannot place the payload inside a packed header/slice table."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-callback-frames.ts",
+        "lines": "105-124,379-391",
+        "fact": "The framedSettlement compiler has the same shape: the callback payload must be one bytes argument and its offset is derived from that ABI argument start."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-execution.ts",
+        "lines": "995-1024",
+        "fact": "deferredInput is advertised only when definition.deferred or definition.framedSettlement exists. There is no JSON field for a family-provided callback script, nested payload offset, or extra VM patch offsets."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-execution.ts",
+        "lines": "49-52,444-448,655-665",
+        "fact": "Call declarations have no callback field; the only callback emissions are the deferred/frame compilers above. A plain call to router.swap with a prebuilt takerTraitsAndData would execute the router's callback without the VM authenticating/patching it, so it is not a faithful substitute."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-call-codec.ts",
+        "lines": "55-63",
+        "fact": "Runtime ABI references are allowed only for scalar uintN/intN/bytes32 leaves, not for a dynamic bytes argument; a nested callback payload cannot be patched at runtime through a plain call."
+      }
+    ],
+    "probe": {
+      "method": "Built the real deployed-v1 swap calldata for a deterministic deferred callback script with aqua codec.takerData, then replicated the declarative compiler's payload splice (declarative-callback.ts:198-201) through encodeDeclarativeCall.",
+      "aquaDeferred": {
+        "takerBytes": 214,
+        "flags": "0x45",
+        "callbackSliceIndex": 7,
+        "callbackSliceOffset": 54,
+        "scriptBytes": 71,
+        "scriptPrefix": "0x0e",
+        "scriptLengthWord": "0x000023",
+        "swapCalldataBytes": 644
+      },
+      "genericDeclarativeDeferred": {
+        "takerBytes": 71,
+        "firstByte": "0x0e",
+        "flags": "0x0",
+        "equalsAquaDeferred": false
+      },
+      "directOutputStaticBytes": {
+        "equalsAquaDirect": true,
+        "meaning": "The plain bytes argument path accepts a family-math-produced packed taker payload for direct/default; only the callback script insertion/authentication path is blocked."
+      },
+      "runtimeBytesReference": "rejected: runtime ABI references require uint256 or bytes32 leaves (full-width int256 also supported)",
+      "consequence": "A generic-declared deferred execution would send takerTraitsAndData = 0x0e... instead of the 22-byte-header packed payload. The router cannot decode the flags/slices, the callback is not invoked as Aqua expects, and the VM does not patch limit/floor. The family-dual assertions at flags 0x45, slice 7 and incoming 356 would also fail."
+    },
+    "whyPartialCutoverIsNotAcceptable": [
+      "Omitting deferred makes declarativeSettlementCapabilities omit deferredInput (declarative-execution.ts:1023-1024) and fails family-dual-execution.ts:1024, which asserts the complete {quoteOutput,directOutput,deferredInput} object for every installed family.",
+      "Declaring the generic deferred compiler compiles but produces non-Aqua calldata (probe above), so historical/output-first settlement and the fixture's layout assertions fail.",
+      "The settlement review registry lists deferred-input as verified; narrowing it would require a new not-required/gap classification and would drop an actual production capability, contrary to the family-adaptation requirement to preserve supported settlement modes."
+    ]
+  },
+  "nonBlockingAnalysis": {
+    "note": "These are structural observations, not validated implementations or acceptance claims.",
+    "expressibleWithJsonPlusFamilyMath": [
+      "Identity: codeHash/AQUA/hash(order), rawBalances pair, decimals, maker balance/allowance and capacity can be declared as identity stages plus a family math model; the strategy program profile parser is pure math.",
+      "Routes: two directions over the registered pair, registered-strategy graph venue, binding fingerprint and route key are data/expressions.",
+      "Pricing: point amount min(10^decimals, rawBalance/10000), per-side quote at takerData(1), capacity and quotedPoolMid projection can be a two-step pricingFlow plus math models.",
+      "Exact: the deployed quote(order,tokenIn,tokenOut,amount,takerData(1)) call is a view chain quote; amountIn/hash/capacity checks can be a flow decode plus exact.checks/outputChecks.",
+      "Quoted/default/direct execution: minAmountOut and the direct recipient can be supplied by a family math model into the packed taker payload; the probe shows encodeDeclarativeCall accepts the exact static bytes. Default/direct runtime checks (swap return word0 = input, word2 = strategy hash, allowance clear, exact debit/receipt, unchanged native and old inventory) map to call saves/checks and execution effects."
+    ],
+    "deviationsStillToReviewIfUnblocked": [
+      "Mapped discovery candidate fields have no bytes type (declarative-discovery.ts:25-30,151-155); the order bytes would have to be carried as a hex string field and rebuilt in identity.",
+      "tx-evidence nomination returns a decodable call observation without the receipt-log confirmation used by the handwritten nominate (aqua discovery.ts:50-63); identity still re-verifies, but it is a discovery-behavior difference.",
+      "The generated wrapper/action must reproduce the swap selector trace and encoding; no generator entry was rendered while parked."
+    ]
+  },
+  "validation": {
+    "executed": [
+      {
+        "command": "npm run --silent searcher:aqua-swapvm-contract",
+        "result": "11 tests, 11 pass, 0 fail (baseline handwritten family green)"
+      },
+      {
+        "command": "temporary tsx probe (outside the tree; removed)",
+        "result": "aqua deferred flags 0x45, callback slice 7 at byte 54, script 0x0e...; declarative injection taker 0x0e... with no header; calldata equality false; direct static-bytes calldata equality true"
+      },
+      {
+        "command": "git status / git ls-tree / git grep on backup-local-82bfc8fc",
+        "result": "no aqua JSON draft or math; unrelated pending changes in the shared tree left untouched"
+      }
+    ],
+    "notExecuted": [
+      "No JSON authored, no compileDeclarativeSwap/defineSwapFamily run for aqua JSON (no faithful definition to compile).",
+      "No temporary generated production entry rendered, no tsc/build:live run for a cutover, no generator run, no family tests against a JSON plugin.",
+      "No Ready/Graph/mid/effective/performance run; this park makes no adaptation or opportunity claim."
+    ]
+  },
+  "files": {
+    "added": [
+      "docs/research/migration/pending-20261028/aqua-swapvm.blockers.json"
+    ],
+    "modified": [],
+    "handwrittenEntry": "listener/src/searcher/venues/production-families/aqua-swapvm.production.ts (unchanged, remains authoritative)",
+    "generatedArtifacts": "none",
+    "tempFilesRemoved": [
+      "listener/.tmp-aqua-probe.ts",
+      "listener/.tmp-aqua-probe2.ts",
+      "listener/.tmp-aqua-probe3.ts"
+    ]
+  },
+  "unblockRequirement": "A public framework change would be required: declarative callback payload placement at a declared byte offset inside an ABI bytes argument, plus declared VM patch offsets for the script's limit/floor registers and a declared incoming callback offset (or an equivalent authenticated nested-callback frame). This must preserve the existing deferred/framed declarations and be validated against the Aqua family-dual fixture; it is out of scope for this JSON-only task.",
+  "nextSteps": [
+    "Keep the handwritten aqua-swapvm entry and settlement evidence unchanged.",
+    "Do not author/cut over an aqua JSON that omits deferred-input or uses the generic deferred/frame payload layout.",
+    "If the framework gains nested packed-callback placement plus patch-offset declarations, re-run this assessment and then author JSON plus family math under the normal migration validation."
+  ]
+}

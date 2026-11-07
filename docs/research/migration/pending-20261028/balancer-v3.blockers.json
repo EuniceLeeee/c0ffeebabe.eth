@@ -1,0 +1,308 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:40:00Z",
+  "family": "balancer-v3",
+  "domain": "swap",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "summary": "A faithful Balancer V3 declarative Swap JSON is not expressible on 104ff465. The decisive gap is discovery: the Family declares a custom receipt/txHash nomination (filtered to the nominated pool) and an address-surface reverse binding (discovery.ts:61-62), while declarative mapped discovery has exactly one nomination discriminator (declarative-discovery.ts:69), only address-surface mode can declare reverse binding (declarative-discovery.ts:453-455), and tx-evidence mode has no per-nomination pool/block/token filter (tx-evidence-nomination.ts:44-60). A compile probe confirms tx-evidence + reverseBinding throws, address-surface + reverseBinding works but has no receipt nomination, and tx-evidence alone has reverseBinding explicitly-unsupported. Independent gaps remain in pricing (current first-success probe batch needs a result-dependent step condition; declarative-read-flow.ts:60-62) and identity (normalized-bytecode classification uses sha256 in local-model.ts/stable-surge.ts/vault-model.ts; declarative identity only exposes keccak codeHash/maskHash at declarative-values.ts:184,241). No prior JSON/math draft exists on backup-local-82bfc8fc; the recorded migration contract also excludes the disabled Balancer V2/V3 from the 15-Family JSON cutover. The handwritten production entry remains authoritative.",
+  "baseline": {
+    "workspace": "work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "head": "c5a3ea1a",
+    "familyRuntimeBaseline": "104ff465",
+    "workingTreeAtStart": "dirty with concurrent unrelated Family work (declarative-math-models.ts, few-wrapped/fluid/peapods/mooniswap, generated entries, other pending blockers); all left untouched",
+    "generatorRun": false,
+    "publicTsOrTestChanges": false
+  },
+  "reference": {
+    "implementationRow": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md:17",
+    "implementationRowTitle": "Balancer V3：StableSurge v1/v2 Hook＋无 Hook Weighted V2；36/36方向正确性通过",
+    "primaryTx": "0x1969dedd475168204d782dc62d65efa62d650e60d000ba040fea5cbe979dbd20",
+    "primaryTxBlock": 26105714,
+    "samples": [
+      { "tx": "0x1969dedd475168204d782dc62d65efa62d650e60d000ba040fea5cbe979dbd20", "block": 26105714, "scope": "StableSurge coffee sample" },
+      { "tx": "0x1b474eb9c6da5bd400c4a20c0d029a039cb6d509df756140b3e09e42374845e3", "block": 25936827, "scope": "StableSurge coffee sample" },
+      { "tx": "0xf244dd0b413f99bb171d698d9b0c4392bdaad674329f70d26d11bf0183ccabd2", "block": 25985457, "scope": "StableSurge coffee sample" },
+      { "tx": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5", "block": 25944594, "scope": "StableSurge coffee sample" },
+      { "tx": "0x663e4452f85b0b91c729cc81122e565b61a76a85319fda2a0742ccdb7b1a0de0", "block": 25978385, "scope": "StableSurge coffee sample" },
+      { "tx": "0x7a068e5feffb98831e18cc0853c33072133ee233d0a215595002f0da71000640", "block": 26073941, "scope": "StableSurge coffee sample" },
+      { "tx": "0xf321cd5b5f7b29f933ae98dd7444af919e8eeac1854c6a7389ce09ea3deb7212", "block": 26030897, "scope": "StableSurge coffee sample" },
+      { "tx": "0x1eb6e238d7d3027a4d534347f2d4fb4b00f852b4545414c7eafed03ce4fd2e28", "block": 26003625, "scope": "no-Hook Weighted V2 sample" }
+    ],
+    "deployedInfrastructure": {
+      "vault": "0xbA1333333333a1BA1108E8412f11850A5C319bA9",
+      "router": "0xAE563E3f8219521950555F5962419C8919758Ea2",
+      "permit2": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+      "vaultExtension": "0x0E8B07657D719B86e06bF0806D6729e3D528C9A9",
+      "vaultAdmin": "0x35fFB749B273bEb20F40f35EdeB805012C539864"
+    },
+    "existingEvidence": [
+      "docs/research/reports/balancer-v3-stable-surge-acceptance-20261010.json",
+      "docs/research/reports/balancer-v3-four-token-natural-reference-20261010.json",
+      "docs/research/reports/balancer-v3-current-compatibility-20261015.json",
+      "docs/research/reports/balancer-v3-current-compatible-behavior-20261015.json",
+      "docs/research/reports/current-interface-balancer-v3-retained-20261015.json",
+      "listener/src/searcher/test/family-integration/balancer-v3/historical-evidence.json",
+      "listener/src/searcher/test/family-integration/balancer-v3/router-execution-evidence.json"
+    ]
+  },
+  "priorArtifactsSearch": {
+    "backupLocalRef": "backup-local-82bfc8fc (82bfc8fc inverse-auction: new declarative protocol family, 2026-11-05)",
+    "balancerV3JsonDraft": "none",
+    "balancerV3FamilyMathDraft": "none",
+    "balancerV3PendingBlocker": "none",
+    "filesFound": [
+      "listener/src/searcher/venues/swaps/balancer-v3-family/* (handwritten TS family, unchanged)",
+      "listener/src/searcher/venues/swaps/balancer-v3-family/local-math/* (existing protocol math/templates)",
+      "listener/src/searcher/venues/swaps/balancer-v3-family/stable-surge* (existing hook/pool classification data)",
+      "listener/src/searcher/test/family-integration/balancer-v3/* (existing contract/historical/local harness)",
+      "docs/research/reports/balancer-v3-*.json and current-interface-balancer-v3-*.json (recorded evidence)"
+    ],
+    "commands": [
+      "git ls-tree -r --name-only backup-local-82bfc8fc | grep -i balancer",
+      "git grep -n -i 'balancer' backup-local-82bfc8fc -- docs/research/migration docs/research/design",
+      "git log --all --oneline -- listener/src/searcher/venues/swaps/balancer-v3-family",
+      "git rev-list --all --objects | grep -i balancer | grep -i -E 'json|draft|blocker|math'"
+    ],
+    "conclusion": "No earlier declarative Balancer V3 JSON, draft or family math wrapper exists. The backup branch carries the same handwritten Family and recorded evidence; its progress/framework records state that the disabled Balancer V2/V3 families were not part of the Swap JSON migration. Existing local-math/fixed-point templates are the only prior math artifacts."
+  },
+  "decisiveBlocker": {
+    "id": "balancer-v3-combined-receipt-nomination-and-surface-reverse-binding",
+    "capability": "discovery must preserve both the custom receipt/txHash nomination filtered to the nominated pool and the address-surface reverse binding with code/Vault-membership checks",
+    "existingSource": [
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v3-family/discovery.ts",
+        "lines": "26-32",
+        "fact": "The Family declares evidenceChannel 'nominate', txSeedNominations true, sources landed-log/observed-call/address-surface, and a Vault.swap call pattern (the pool is tuple component 1)."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v3-family/discovery.ts",
+        "lines": "61-62",
+        "fact": "The Family declares both a custom receipt nominate (nominateBalancerV3) and an implementation reverseBinding (reverseBindBalancerV3)."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/balancer-v3-family/nomination.ts",
+        "lines": "12-49",
+        "fact": "The custom nomination re-reads the nominated receipt, decodes Vault Swap logs and keeps only logs whose decoded pool equals nomination.address; the reverse binding checks pool code, getVault()==VAULT and isPoolRegistered, then emits an address-surface observation."
+      }
+    ],
+    "frameworkLimitation": [
+      {
+        "path": "listener/src/searcher/venues/declarative-discovery.ts",
+        "lines": "69",
+        "fact": "DeclarativeMappedDiscovery has a single nomination discriminator: 'tx-evidence' | 'address-surface'. There is no combined or filtered form."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-discovery.ts",
+        "lines": "446-448",
+        "fact": "tx-evidence always uses createTxEvidenceNomination({allMatches:true, acceptObservation}); acceptObservation only decodes a candidate, it cannot filter by nomination address, block or token pair."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-discovery.ts",
+        "lines": "453-455",
+        "fact": "reverseBinding is rejected unless nomination === 'address-surface' and a surface is declared; reverse binding cannot be combined with tx-evidence."
+      },
+      {
+        "path": "listener/src/searcher/venues/tx-evidence-nomination.ts",
+        "lines": "44-60",
+        "fact": "allMatches emits every declared-topic receipt log/call whose decoded candidate is accepted; opaque nomination fields are never used to enforce the pool/block/token guards of the legacy custom nominate."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-recent-call-nomination.ts",
+        "lines": "1-40",
+        "fact": "recentCallNomination is not equivalent: it scans recent logs for a 32-byte topic key and traces a call; it does not re-read the nominated txHash receipt and cannot apply the Family's per-nomination pool/block/token filter. It is also only available on the address-surface nomination mode."
+      }
+    ],
+    "probe": {
+      "method": "Temporary tsx probe (removed) compiled a v2 mapping with a top-level-address call pattern and tested each nomination mode/reverse-binding combination.",
+      "results": {
+        "nomination tx-evidence + reverseBinding address-surface": "THROW: 'reverse binding requires a declared address-surface nomination'",
+        "nomination address-surface + reverseBinding address-surface": "OK, reverseBinding=implementation, txSeedNominations=undefined (no txHash receipt nomination)",
+        "nomination address-surface + reverseBinding + txSeedNominations:true": "OK, reverseBinding=implementation, txSeedNominations=true, nominate remains the address-surface nominate (no receipt/txHash nomination)",
+        "nomination tx-evidence alone": "OK, reverseBinding=explicitly-unsupported, txSeedNominations=true"
+      },
+      "consequence": "A JSON must choose one nomination path. tx-evidence drops the verified reverse binding; address-surface drops the receipt/txHash nomination. The generic allMatches path also loses the legacy per-nomination pool/block/token filter. recentCallNomination is a different recent-log/trace path, not a faithful substitute."
+    },
+    "whyPartialCutoverIsNotAcceptable": [
+      "The Family declares both paths as supported (discovery.ts:61-62); the recorded strict/Ready evidence and production universe reverse-binding path rely on them.",
+      "Choosing tx-evidence makes reverse binding explicitly unsupported and nominates every matching Vault market in a receipt, changing the evidence scope.",
+      "Choosing address-surface loses the nominated txHash receipt re-read; recentCallNomination's recent-log scan/trace is not the same evidence shape and cannot enforce the legacy opaque filters.",
+      "A cutover that silently drops either path narrows a supported discovery/settlement-adjacent capability, which the task forbids."
+    ]
+  },
+  "additionalBlockers": [
+    {
+      "id": "balancer-v3-current-pricing-result-dependent-probe-batch",
+      "severity": "pricing/refresh behavior",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v3-family/pricing.ts",
+          "lines": "52-75",
+          "fact": "For non-local pools, round 0 issues only the first probe; after reading current-quote:0, round 1 decides whether to return null or issue the remaining probes. The batch shape depends on prior quote results."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-read-flow.ts",
+          "lines": "60-62",
+          "fact": "A read-flow step 'when' may only reference invocation inputs, never $steps/prior results; only requests/results/decode can reference prior steps. A JSON flow cannot condition the second probe batch on the first quote."
+        }
+      ],
+      "consequence": "All probes would have to be issued up front (with required:false and decode filtering), changing the RPC batch count/order and issuing amounts the original stops before; this is a behavior/cost deviation, not the same pricing path. The same limitation class was decisive for balancer-v2."
+    },
+    {
+      "id": "balancer-v3-identity-normalized-bytecode-sha256",
+      "severity": "identity proof authoring",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v3-family/local-model.ts",
+          "lines": "14-35",
+          "fact": "Local pool model classification masks compiler immutables and compares sha256(normalized runtime) against model-template normalizedCodeSha256."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v3-family/stable-surge.ts",
+          "lines": "19-77",
+          "fact": "StableSurge hook and pool classification use sha256(normalized runtime) plus immutable value checks."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v3-family/vault-model.ts",
+          "lines": "35-68",
+          "fact": "Vault/extension/admin classification also compares sha256(normalized runtime) and validates constructor immutables/timing."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-values.ts",
+          "lines": "184,241",
+          "fact": "Declarative identity exposes keccak256 via codeHash and maskHash, not sha256 of normalized bytecode. A family math model could reproduce the legacy classifier, but that moves identity classification into an opaque family TS model rather than a declarative identity proof; it is not an equivalent JSON identity."
+        }
+      ],
+      "consequence": "The local-model/StableSurge/Vault proof cannot be declared with existing identity value ops. Replacing sha256 with precomputed keccak hashes would change the Family's content-hash algorithm; retaining it requires family-specific code outside the declarative identity."
+    },
+    {
+      "id": "balancer-v3-selective-vault-log-invalidation",
+      "severity": "pricing refresh/invalidation behavior",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v3-family/pricing.ts",
+          "lines": "141-150",
+          "fact": "A decoded Vault Swap log invalidates only that pool's routes; undecodable Vault logs invalidate all state-only weighted routes; Vault calls invalidate those routes."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-family.ts",
+          "lines": "605-612",
+          "fact": "Declarative mutation indexes match addresses; affectedStateKeys maps matched entries to state keys. Per-instance mutationPredicate can accept/reject an observation, but there is no declared event-payload-to-pool projection at the index level."
+        }
+      ],
+      "consequence": "A JSON mutation declaration can conservatively invalidate all routes on any Vault log (or use a family math predicate that decodes the log), changing selective refresh behavior and cost."
+    },
+    {
+      "id": "balancer-v3-refresh-policy-and-local-trial-split",
+      "severity": "behavior parity to review if discovery/identity are unblocked",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v3-family/pricing.ts",
+          "lines": "30-38",
+          "fact": "refreshPolicyForInstance is on-touch only for proven state-only weighted pools; other pools refresh each block."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/balancer-v3-family/exact.ts",
+          "lines": "60-73,110-125",
+          "fact": "Local exact uses sequential trial state only when tokens are plain, no hook addresses are present and no rate providers/yield-fee transitions are involved; otherwise it still returns a local quote with an unsupported trial-state reason."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-family.ts",
+          "lines": "476-484",
+          "fact": "Declarative pricing exposes refreshPolicyForInstance per selected variant; the variant declaration is static, so a conditional on-touch/each-block policy needs separate variants or accepts the conservative each-block policy."
+        }
+      ],
+      "consequence": "The local trial-state split can likely be expressed with a conditional trialState module plus localStateUnsupportedReason, but refresh policy and exact classification need a family-specific review; not the decisive blocker."
+    }
+  ],
+  "nonBlockingAnalysis": {
+    "note": "Structural observations only; none is a validated implementation or acceptance claim.",
+    "expressibleWithJsonPlusFamilyMath": [
+      "Vault.swap observed call: a probe compiled a mapped call pattern using the Vault target as the candidate address field plus the pool from tuple component 1 via an ABI path; the candidate key/instance key must include vault+pool, which differs from the legacy pool-only candidate shape but is expressible.",
+      "Discovery Swap event: Vault Swap event log with pool/tokenIn/tokenOut indexed and amount/fee fields; canonical ABI, predicates, pool materialization and swap observation can be declared.",
+      "Identity stages: get-code for pool/vault/router/permit2/extension/admin, getPermit2, getVault, isPoolRegistered, getPoolTokenInfo, getHooksConfig, decimals, hook-code; evidence phases and retryable unsupported-hook decision can follow the existing identity.",
+      "Routes/instance: all ordered token pairs, pool graph venue, binding key/fingerprint, runtime source-state/quote-completion requirements.",
+      "Execution: v2 steps can reproduce token.approve(0/amount/0), Permit2.approve(amount/0), Router.swapSingleTokenExactIn and direct executor output; effects can check actual input debit/output credit and unchanged native.",
+      "Local pricing/exact: family math can wrap the existing FixedPoint/StableMath/WeightedMath, decode getPoolData, compute probe amounts, and provide quote/transition and pricingProjection rows; the math.ts + append-only registry mechanism already supports nested arrays/objects.",
+      "Router pricing/exact: querySwapSingleTokenExactIn is a single return uint256, so a view chain quote can prove the amount; sender is an ABI argument and can be executor/zero as in the legacy paths."
+    ],
+    "deviationsStillToReviewIfUnblocked": [
+      "The Vault.swap candidate needs vault+pool in its key/instanceKey rather than the legacy pool-only candidate; identity would need to keep the pool field as its subject while accepting the vault field.",
+      "The generated action adapter would carry the declarative runtime program, not the handwritten multi-call action encoding; family-dual-execution asserts the exact approve/permit/swap call order, which must be reproduced by execution.steps before claiming parity.",
+      "The local math/fixed-point and bytecode template data would need to move into a family math module or be retained as legacy family TS; keeping sha256 classification in TS is a family-code dependency, not a JSON identity proof.",
+      "The Family is disabled by default and outside the recorded 15-Family Swap JSON cutover; activation and generated-catalog authorization are separate decisions."
+    ]
+  },
+  "validation": {
+    "executed": [
+      {
+        "command": "npm run --silent searcher:balancer-v3",
+        "result": "FAIL at baseline: plan-builder requires a strict current-source session (listener/src/searcher/solver/plan-builder.ts:69). Unrelated to JSON; no file modified."
+      },
+      {
+        "command": "node --import tsx --test src/searcher/test/family-integration/balancer-v3/contract.ts",
+        "result": "1 test, 1 pass, 0 fail (handwritten family baseline green)."
+      },
+      {
+        "command": "npm run build:live",
+        "result": "exit 0 (with the concurrent workspace state)."
+      },
+      {
+        "command": "npx tsc -p tsconfig.json --noEmit",
+        "result": "exit 2 with pre-existing unrelated errors (univ4-fee-hook test descriptor types, vault-spot historical-ready/recipient-historical, token-transfer-semantics test). No balancer-v3 file was modified."
+      },
+      {
+        "command": "temporary tsx compileDeclarativeDiscovery probe with the real Vault.swap tuple signature, candidate addressField pool and nested path (removed)",
+        "result": "BLOCKED: 'call candidate argument must be address' (expected; the candidate address cannot be the nested tuple component)."
+      },
+      {
+        "command": "temporary tsx compileDeclarativeDiscovery workaround probe using candidate addressField vault (target) and pool from tuple path [1] (removed)",
+        "result": "COMPILED for nomination address-surface + reverseBinding (with and without txSeedNominations:true) and for nomination tx-evidence alone; tx-evidence + reverseBinding THROW 'reverse binding requires a declared address-surface nomination'. The only compiled address-surface path has no receipt/txHash nomination."
+      },
+      {
+        "command": "temporary tsx compileDeclarativeDiscovery top-level-address control probe for nomination modes (removed)",
+        "result": "Same mode conflict: tx+reverse THROW; address+reverse OK but txSeed undefined; tx-only OK but reverseBinding explicitly-unsupported."
+      },
+      {
+        "command": "git ls-tree / git grep / git log / git rev-list on backup-local-82bfc8fc",
+        "result": "No Balancer V3 JSON, family math draft or pending blocker. Backup carries the same handwritten Family and evidence; its migration record excludes disabled Balancer V2/V3."
+      }
+    ],
+    "notExecuted": [
+      "No Balancer V3 JSON was authored or compiled: no faithful definition exists to compile.",
+      "No family math model was added to declarative-math-models.ts; no append-only registry change was made.",
+      "No temporary rendered production entry, no generator run, no family tests against a JSON plugin, no tsc/build:live with a rendered entry.",
+      "No Ready/Graph/mid/effective/price, historical execution, or performance run; this park makes no adaptation, replication or opportunity claim."
+    ]
+  },
+  "files": {
+    "added": [
+      "docs/research/migration/pending-20261028/balancer-v3.blockers.json"
+    ],
+    "modified": [],
+    "handwrittenEntry": "listener/src/searcher/venues/production-families/balancer-v3.production.ts (unchanged, remains authoritative)",
+    "generatedArtifacts": "none",
+    "tempFilesRemoved": [
+      "listener/.tmp-bv3-discovery-probe.mjs",
+      "listener/.tmp-bv3-discovery-probe2.mjs",
+      "listener/.tmp-bv3-discovery-probe3.mjs",
+      "listener/.tmp-bv3-discovery-workaround.mjs",
+      "listener/.tmp-bv3-discovery-txseed.mjs"
+    ]
+  },
+  "unblockRequirement": "A public framework change is required before a faithful JSON cutover: (a) mapped discovery must support combined receipt/txHash nomination and address-surface reverse binding, or per-nomination opaque address/block/token filters plus reverse binding in tx-evidence mode; (b) read-flow step conditions must be able to reference prior step results if the current first-success probe batch must be preserved; (c) identity must expose a normalized-bytecode sha256 proof (or an explicitly sanctioned family identity module) if the existing content-hash classification must be reused. These are shared TS/contract changes outside this task's JSON + family math + append-only registry scope.",
+  "nextSteps": [
+    "Keep the handwritten balancer-v3 production entry, default-disabled activation, and existing 36/36 evidence unchanged.",
+    "Do not author a balancer-v3 JSON that drops the receipt nomination, the reverse binding, the per-nomination filter, or the first-success probe batch and claims faithful parity.",
+    "Re-run this assessment when declarative discovery supports combined nomination/reverse binding and result-dependent read-flow conditions; then author JSON + family math, validate compile/defineSwapFamily, family tests, a temporary rendered entry (restore), tsc and build:live."
+  ]
+}

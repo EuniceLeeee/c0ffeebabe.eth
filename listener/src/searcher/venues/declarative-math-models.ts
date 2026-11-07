@@ -18,6 +18,8 @@ import { psmConversionMathModel } from "./psm-math.js";
 import { badgerSettWithdrawMathModel } from "./badger-sett-withdraw-math.js";
 import { compoundCTokenExchangeRateMathModel } from "./compound-ctoken-math.js";
 import { stakedUsdatEventAssetsMathModel } from "./staked-usdat-math.js";
+import { fluidCreditMathModels } from "./credit/fluid-family/math.js";
+import { peapodsDebondMathModel, peapodsRuntimeShapeMathModel } from "./peapods-math.js";
 
 // Static, source-hashed math entries are registered here by protocol migration.
 // JSON never imports arbitrary files or executable handlers. An absent model
@@ -44,5 +46,8 @@ const models: readonly DeclarativeMathModel[] = [
   badgerSettWithdrawMathModel,
   compoundCTokenExchangeRateMathModel,
   stakedUsdatEventAssetsMathModel,
+  ...fluidCreditMathModels,
+  peapodsDebondMathModel,
+  peapodsRuntimeShapeMathModel,
 ];
 export const declarativeMathRegistry = createDeclarativeMathRegistry(models);

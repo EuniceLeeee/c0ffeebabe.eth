@@ -1,0 +1,431 @@
+import assert from "node:assert/strict";
+import { ethers } from "ethers";
+import { createDeclarativeSwapRuntime } from "./src/searcher/venues/declarative-swap.js";
+import { defineSwapFamily } from "./src/searcher/venues/adapter-family-plugin.js";
+import definition from "./src/searcher/venues/swaps/mooniswap-family/mooniswap.json" with { type: "json" };
+import { mooniswapPricing } from "./src/searcher/venues/swaps/mooniswap-family/pricing.js";
+import { mooniswapQuoteProgram } from "./src/searcher/venues/swaps/mooniswap-family/exact.js";
+import { mooniswapRoutes } from "./src/searcher/venues/swaps/mooniswap-family/routes.js";
+import { mooniswapExecution } from "./src/searcher/venues/swaps/mooniswap-family/execution.js";
+import { MOONISWAP_ID, MOONISWAP_LINEAGE, MOONISWAP_ACTION, POOL, TOKEN, GOVERNANCE, MAX_UINT } from "./src/searcher/venues/swaps/mooniswap-family/codec.js";
+import { hashCanonical } from "./src/searcher/venues/canonical-value.js";
+import { instanceKey, routeKey } from "./src/searcher/venues/adapter-family-identifiers.js";
+import { inspectRuntime } from "./src/searcher/test/runtime-program-testkit.js";
+
+const runtime = createDeclarativeSwapRuntime(definition as any, []);
+const plugin = defineSwapFamily(runtime.definition as any);
+const source = { number: 26_030_091, hash: `0x${"ab".repeat(32)}`, generation: 1 };
+const provenance = { kind: "synthetic-unit-test", fingerprint: "not-chain-evidence" };
+const pool = ethers.getAddress("0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21");
+const token0 = ethers.getAddress("0x1111111111111111111111111111111111111111");
+const token1 = ethers.getAddress("0x2222222222222222222222222222222222222222");
+const governance = ethers.getAddress("0x5555555555555555555555555555555555555555");
+const executor = ethers.getAddress("0x6666666666666666666666666666666666666666");
+const codeHash = `0x${"88".repeat(32)}`;
+const raw = (label: string, fn: () => any) => { try { fn(); console.log("PASS", label); } catch (e) { console.log("FAIL", label); throw e; } };
+const ok = (id: string, data: string) => Object.freeze({ id, ok: true, source, provenance, completion: "returned", data });
+
+const descriptor: any = { familyId: MOONISWAP_ID, lineageId: MOONISWAP_LINEAGE, instanceKey: instanceKey(pool.toLowerCase()),
+  provenance: [], runtimeRequirements: [{ kind: "source-state", freshness: "pinned-block" }],
+  pool, token0, token1, codeHash };
+
+let routes: any[];
+raw("routes project matching handwritten", () => {
+  routes = plugin.routes.project({ descriptor }) as any[];
+  const tsRoutes = (mooniswapRoutes.project({ descriptor } as any) as any[]);
+  assert.equal(routes.length, 2);
+  assert.deepEqual(routes.map(r => r.routeKey), tsRoutes.map(r => r.routeKey));
+  assert.deepEqual(routes.map(r => r.direction), tsRoutes.map(r => r.tokenIn === token0 ? "token0-to-token1" : "token1-to-token0"));
+  for (const r of routes) {
+    const ts = tsRoutes.find(x => x.routeKey === r.routeKey)!;
+    assert.equal(r.tokenIn, ts.tokenIn); assert.equal(r.tokenOut, ts.tokenOut);
+    assert.equal(r.bindingRef.bindingKey, pool.toLowerCase());
+    assert.equal(ts.bindingRef.bindingKey, `mooniswap:${pool.toLowerCase()}:${ts.tokenIn.toLowerCase()}>${ts.tokenOut.toLowerCase()}`);
+    assert.equal(r.bindingRef.fingerprint, ts.bindingRef.fingerprint);
+    assert.equal(r.target, pool); assert.equal(r.adapterId, MOONISWAP_ACTION);
+  }
+});
+
+// ---- pricing: build same synthetic observations and compare snapshots/mids
+const balances = { balance0: 5000n * 10n ** 18n, balance1: 7000n * 10n ** 18n,
+  addition0: 6000n * 10n ** 18n, addition1: 8000n * 10n ** 18n,
+  removal0: 4000n * 10n ** 18n, removal1: 6000n * 10n ** 18n,
+  fee: 3n * 10n ** 15n, slippageFee: 5n * 10n ** 15n };
+function pricingResults(): any[] {
+  const data: Record<string, string> = {
+    governance: POOL.encodeFunctionResult("mooniswapFactoryGovernance", [governance]),
+    token0: POOL.encodeFunctionResult("token0", [token0]),
+    token1: POOL.encodeFunctionResult("token1", [token1]),
+    balance0: TOKEN.encodeFunctionResult("balanceOf", [balances.balance0]),
+    balance1: TOKEN.encodeFunctionResult("balanceOf", [balances.balance1]),
+    addition0: POOL.encodeFunctionResult("getBalanceForAddition", [balances.addition0]),
+    addition1: POOL.encodeFunctionResult("getBalanceForAddition", [balances.addition1]),
+    removal0: POOL.encodeFunctionResult("getBalanceForRemoval", [balances.removal0]),
+    removal1: POOL.encodeFunctionResult("getBalanceForRemoval", [balances.removal1]),
+    fee: POOL.encodeFunctionResult("fee", [balances.fee]),
+    slippageFee: POOL.encodeFunctionResult("slippageFee", [balances.slippageFee]),
+  };
+  return Object.entries(data).map(([id, value]) => ok(id, value));
+}
+const activeResult = ok("active", GOVERNANCE.encodeFunctionResult("isActive", [true]));
+
+raw("pricing requests/decode/mids match handwritten", () => {
+  const dReq = plugin.pricing.current.buildRequests({ descriptor, routes, source } as any);
+  const tReq = mooniswapPricing.current.buildRequests({ descriptor } as any);
+  assert.equal(dReq.length, tReq.length);
+  assert.deepEqual(dReq.map((r: any) => r.id), tReq.map((r: any) => r.id));
+  const dDep = plugin.pricing.current.buildDependentProgram!({ current: { descriptor, routes, source }, completedRound: 0, initialResults: pricingResults(), priorEvidence: [] } as any)!;
+  const tDep = mooniswapPricing.current.buildDependentProgram!({ current: { descriptor, routes, source }, completedRound: 0, initialResults: pricingResults(), priorEvidence: [] } as any)!;
+  assert.deepEqual(dDep.requests.map((r: any) => [r.id, r.to]), tDep.requests.map((r: any) => [r.id, r.to]));
+  const dSnap = plugin.pricing.current.decodeSnapshot({ descriptor, initialResults: pricingResults(), dependentEvidence: [{ stepId: "governance", results: [activeResult] }] } as any);
+  const tSnap = mooniswapPricing.current.decodeSnapshot({ descriptor, initialResults: pricingResults(), dependentEvidence: [{ results: [activeResult] }] } as any);
+  assert.deepEqual(dSnap, { ...tSnap, source });
+  assert.equal(dSnap.governance, governance.toLowerCase());
+  assert.equal(tSnap.governance, governance.toLowerCase());
+  const tsRoutes = (mooniswapRoutes.project({ descriptor } as any) as any[]);
+  const dMids = plugin.pricing.current.deriveMids({ descriptor, snapshot: dSnap, routes } as any);
+  const tMids = mooniswapPricing.current.deriveMids({ descriptor, snapshot: tSnap, routes: tsRoutes } as any);
+  assert.deepEqual([...dMids.keys()], [...tMids.keys()]);
+  for (const [key, value] of tMids) {
+    const d = dMids.get(key)!;
+    assert.equal(d.mid, value.mid, `mid ${key}`);
+    assert.equal(d.depthProxy, value.depthProxy, `depth ${key}`);
+    assert.ok(Math.abs(d.feeBps - value.feeBps) <= 0.01, `fee ${key}: ${d.feeBps} vs ${value.feeBps}`);
+    assert.equal(d.reserveA, value.reserveA);
+    assert.equal(d.reserveB, value.reserveB);
+  }
+});
+
+raw("pricing unavailable classification matches handwritten", () => {
+  for (const [label, patch] of [
+    ["shutdown", { active: false }],
+    ["empty balance0", { balance0: 0n }],
+    ["empty addition1", { addition1: 0n }],
+    ["empty removal1", { removal1: 0n }],
+  ] as const) {
+    const dSnap: any = { source, governance, active: true, ...balances, ...patch };
+    // recompute with declarative flow decode by rebuilding results is overkill; use snapshot directly
+    const tSnap: any = { source, governance, active: true, ...balances, ...patch };
+    const tsRoutes = (mooniswapRoutes.project({ descriptor } as any) as any[]);
+    const d = plugin.pricing.current.deriveMids({ descriptor, snapshot: dSnap, routes } as any);
+    const t = (mooniswapPricing.current as any).deriveMids({ descriptor, snapshot: tSnap, routes: tsRoutes });
+    assert.deepEqual([...d.keys()], [...t.keys()], label);
+    if ((mooniswapPricing.current as any).classifyUnavailable) {
+      const tU = (mooniswapPricing.current as any).classifyUnavailable({ descriptor, snapshot: tSnap, routes: tsRoutes });
+      const dU = plugin.pricing.current.classifyUnavailable({ descriptor, snapshot: dSnap, routes } as any);
+      assert.deepEqual([...dU.entries()], [...tU.entries()], `classify ${label}`);
+    }
+  }
+});
+
+// ---- exact
+function quoteResults(amountOut: bigint, outputBalance = amountOut + 1n, inputBalance = 10n ** 24n): any[] {
+  const data: Record<string, string> = {
+    "get-return": POOL.encodeFunctionResult("getReturn", [amountOut]),
+    "output-balance": TOKEN.encodeFunctionResult("balanceOf", [outputBalance]),
+    "input-balance": TOKEN.encodeFunctionResult("balanceOf", [inputBalance]),
+    governance: POOL.encodeFunctionResult("mooniswapFactoryGovernance", [governance]),
+    token0: POOL.encodeFunctionResult("token0", [token0]),
+    token1: POOL.encodeFunctionResult("token1", [token1]),
+  };
+  // TS program ids are quote/output-balance/input-balance/governance/token0/token1
+  const ids = ["quote", "output-balance", "input-balance", "governance", "token0", "token1"];
+  return ids.map(id => ok(id, data[id === "quote" ? "get-return" : id]));
+}
+function quoteResultsDeclarative(amountOut: bigint, outputBalance = amountOut + 1n, inputBalance = 10n ** 24n): any[] {
+  return quoteResults(amountOut, outputBalance, inputBalance).map(r => r.id === "quote" ? { ...r, id: "get-return" } : r);
+}
+
+raw("exact quote requests/decode/evidence match handwritten", () => {
+  const route = routes.find(r => r.tokenIn === token0)!;
+  const tsRoute = (mooniswapRoutes.project({ descriptor } as any) as any[]).find(r => r.tokenIn === token0)!;
+  const input = { descriptor, route, amountIn: 123456789123456789n, source, executor, runtimeEvidence: [] };
+  const tsInput = { ...input, route: tsRoute };
+  const tsReq = mooniswapQuoteProgram.buildRequests(tsInput as any);
+  const tsDep = mooniswapQuoteProgram.buildDependentProgram!({ programInput: tsInput, completedRound: 0, initialResults: quoteResults(987654321n), priorEvidence: [] } as any)!;
+  const methods = plugin.exact.methods(input as any).filter((m: any) => m.kind === "request-program");
+  assert.equal(methods.length, 1);
+  const dMethod = methods[0];
+  assert.equal(dMethod.id, "mooniswap-get-return");
+  const dReq = dMethod.program.buildRequests(input as any);
+  assert.deepEqual(dReq.map((r: any) => r.id), ["get-return", "output-balance", "input-balance", "governance", "token0", "token1"]);
+  assert.deepEqual(tsReq.map((r: any) => r.id), ["quote", "output-balance", "input-balance", "governance", "token0", "token1"]);
+  for (const [i, r] of dReq.entries()) {
+    assert.equal(r.to, tsReq[i].to);
+    assert.equal(r.data, tsReq[i].data);
+  }
+  const dDep = dMethod.program.buildDependentProgram!({ programInput: input, completedRound: 0, initialResults: quoteResultsDeclarative(987654321n), priorEvidence: [] } as any)!;
+  assert.equal(dDep.requests.length, 1);
+  assert.equal(dDep.requests[0].to, governance);
+  const dOut = dMethod.program.decode({ programInput: input, initialResults: quoteResultsDeclarative(987654321n),
+    dependentEvidence: [{ stepId: "governance", results: [activeResult] }] } as any);
+  const tOut = mooniswapQuoteProgram.decode({ programInput: tsInput, initialResults: quoteResults(987654321n),
+    dependentEvidence: [{ results: [activeResult] }] } as any);
+  assert.equal(dOut.amountOut, tOut.amountOut);
+  const { governance: _tsGovernance, ...tsEvidenceRest } = tOut.evidence as any;
+  assert.deepEqual(dOut.evidence, tsEvidenceRest);
+  assert.equal(tsEvidenceRest.governance, undefined);
+});
+
+raw("exact rejects unavailable/inactive/foreign results", () => {
+  const route = routes.find(r => r.tokenIn === token0)!;
+  const input = { descriptor, route, amountIn: 123456789123456789n, source, executor, runtimeEvidence: [] };
+  const dMethod = plugin.exact.methods(input as any).filter((m: any) => m.kind === "request-program")[0];
+  for (const [label, results] of [
+    ["zero output", quoteResultsDeclarative(0n)],
+    ["output exceeds inventory", quoteResultsDeclarative(10n, 5n)],
+    ["zero input balance", quoteResultsDeclarative(10n, 100n, 0n)],
+    ["changed token0", quoteResultsDeclarative(10n).map(r => r.id === "token0" ? ok("token0", POOL.encodeFunctionResult("token0", [token1])) : r)],
+  ] as const) {
+    assert.throws(() => dMethod.program.decode({ programInput: input, initialResults: results,
+      dependentEvidence: [{ stepId: "governance", results: [activeResult] }] } as any), undefined, label);
+  }
+  assert.throws(() => dMethod.program.decode({ programInput: input, initialResults: quoteResultsDeclarative(10n),
+    dependentEvidence: [{ stepId: "governance", results: [ok("active", GOVERNANCE.encodeFunctionResult("isActive", [false]))] }] } as any));
+  assert.throws(() => dMethod.program.decode({ programInput: input, initialResults: quoteResultsDeclarative(10n),
+    dependentEvidence: [{ stepId: "governance", results: [{ ...activeResult, source: { ...source, generation: 2 } }] }] } as any));
+});
+
+console.log("ALL BASIC CHECKS PASSED");
+
+// ================= identity =================
+function buildSyntheticCode(co0: string, co1: string): string {
+  const bytes = new Uint8Array(21340);
+  const put = (offsets: number[], value: string) => {
+    const raw = ethers.getBytes(ethers.zeroPadValue(value, 32));
+    for (const offset of offsets) {
+      bytes[offset - 1] = 0x7f;             // PUSH32 opcode, 1-based check
+      bytes.set(raw, offset);                // 0-based operand start
+    }
+  };
+  put([4225, 5120, 5751, 6518, 6647, 7479, 9248, 12611], co0);
+  put([5157, 5799, 6573, 6782, 7516, 9326, 9903, 12672], co1);
+  return ethers.hexlify(bytes);
+}
+function maskOf(code: string): string {
+  const ranges = [[4225, 32],[5120, 32],[5751, 32],[6518, 32],[6647, 32],[7479, 32],[9248, 32],[12611, 32],
+                  [5157, 32],[5799, 32],[6573, 32],[6782, 32],[7516, 32],[9326, 32],[9903, 32],[12672, 32]];
+  let mutated = code;
+  for (const [offset, size] of ranges) {
+    mutated = mutated.slice(0, 2 + offset * 2) + "0".repeat(size * 2) + mutated.slice(2 + (offset + size) * 2);
+  }
+  return ethers.keccak256(mutated);
+}
+const syntheticCode = buildSyntheticCode(token0, token1);
+const syntheticBinding = { pool: pool.toLowerCase(), token0: token0.toLowerCase(), token1: token1.toLowerCase(),
+  codeHash: ethers.keccak256(syntheticCode) };
+const syntheticMask = maskOf(syntheticCode);
+const syntheticDefinition = JSON.parse(JSON.stringify(definition));
+syntheticDefinition.standard.constants.normalizedRuntimeHash = syntheticMask;
+const syntheticPlugin = defineSwapFamily(createDeclarativeSwapRuntime(syntheticDefinition as any, []).definition as any);
+const candidate = { candidateKind: "mooniswap", pool };
+
+function identityWalk(pluginAny: any, code: string, tokens = [token0, token1], decimals = [18n, 18n]) {
+  const variant = pluginAny.identity.variants[0];
+  const initial = { candidate, evidence: undefined, step: 0 };
+  const d0 = variant.decide(initial as never);
+  assert.equal(d0.status, "continue");
+  const r0 = variant.buildRequests(initial as never);
+  assert.equal(r0.length, 3);
+  const ev0 = variant.decode({ step: initial, results: [
+    ok("code", code),
+    ok("token0", POOL.encodeFunctionResult("token0", [tokens[0]])),
+    ok("token1", POOL.encodeFunctionResult("token1", [tokens[1]])),
+  ] } as never);
+  const step1 = { candidate, evidence: ev0, step: 1 };
+  const d1 = variant.decide(step1 as never);
+  if (d1.status !== "continue") return { decision: d1, ev0, ev1: undefined, r1: [] as any[] };
+  const r1 = variant.buildRequests(step1 as never);
+  const ev1 = variant.decode({ step: step1, results: [
+    ok("token0-code", "0x60006000"),
+    ok("token1-code", "0x60006000"),
+    ok("decimals0", TOKEN.encodeFunctionResult("decimals", [decimals[0]])),
+    ok("decimals1", TOKEN.encodeFunctionResult("decimals", [decimals[1]])),
+  ] } as never);
+  const d2 = variant.decide({ candidate, evidence: ev1, step: 2 } as never);
+  return { decision: d2, ev0, ev1, r1 };
+}
+
+raw("identity verifies synthetic standalone runtime and builds the handwritten descriptor", () => {
+  const walked = identityWalk(syntheticPlugin, syntheticCode);
+  assert.equal(walked.decision.status, "verified");
+  const identity: any = walked.decision.identity;
+  assert.equal(identity.subject, pool.toLowerCase());
+  assert.deepEqual(identity.facts, syntheticBinding);
+  assert.equal(identity.provenance.length, 1);
+  assert.equal(identity.provenance[0].kind, "mooniswap-runtime-immutable-pair");
+  assert.equal(identity.provenance[0].evidenceHash, hashCanonical({ binding: syntheticBinding, source }));
+  const draft = syntheticPlugin.instance.compileDraft(identity);
+  assert.equal(draft.instanceKey, pool.toLowerCase());
+  assert.equal(draft.token0, token0.toLowerCase());
+  assert.deepEqual(draft.runtimeRequirements, [{ kind: "source-state", freshness: "pinned-block" }]);
+});
+
+raw("identity rejects wrong runtime/length/immutables/order/decimals", () => {
+  for (const [label, code, tokens, decimals] of [
+    ["short code", syntheticCode.slice(0, 1000), [token0, token1], [18n, 18n]],
+    ["wrong token operand", buildSyntheticCode(token1, token1), [token0, token1], [18n, 18n]],
+    ["unsorted tokens", syntheticCode, [token1, token0], [18n, 18n]],
+    ["tampered push opcode", (() => { const b = Uint8Array.from(ethers.getBytes(syntheticCode)); b[4224] = 0; return ethers.hexlify(b); })(), [token0, token1], [18n, 18n]],
+    ["bad decimals", syntheticCode, [token0, token1], [78n, 18n]],
+  ] as const) {
+    const walked = identityWalk(syntheticPlugin, code as string, tokens as any, decimals as any);
+    assert.equal(walked.decision.status, "chain-proven-rejected", label);
+    assert.equal(walked.decision.reasonCode, "unsupported-mooniswap-runtime-or-token", label);
+    assert.equal(walked.decision.evidenceRequestIds.length, 4, label);
+  }
+});
+
+// ================= execution =================
+const getReturnSel = POOL.getFunction("getReturn")!.selector.toLowerCase();
+const balanceOfSel = TOKEN.getFunction("balanceOf")!.selector.toLowerCase();
+const swapForSel = POOL.getFunction("swapFor")!.selector.toLowerCase();
+const allowanceSel = TOKEN.getFunction("approve")!.selector.toLowerCase();
+
+interface LegState {
+  executorIn: bigint; executorOut: bigint; recipientIn: bigint; recipientOut: bigint;
+  poolIn: bigint; poolOut: bigint; quoted: bigint; swapAmount: bigint | null; swapReceiver: string | null;
+  ratio: { num: bigint; den: bigint };
+}
+function defaultState(ratio = { num: 997n, den: 1000n }): LegState {
+  return { executorIn: 10n ** 24n, executorOut: 12345n, recipientIn: 500_000n, recipientOut: 0n,
+    poolIn: 10n ** 25n, poolOut: 20_000_000n * 10n ** 18n, quoted: 0n, swapAmount: null, swapReceiver: null, ratio };
+}
+function runLeg(program: string, amountIn: bigint, state: LegState, recipient: string, owner: string) {
+  const calls: any[] = [], allowances: any[] = [];
+  const balance = (token: string, account: string): bigint => {
+    const t = token.toLowerCase(), a = account.toLowerCase();
+    if (t === token0.toLowerCase() && a === owner.toLowerCase()) return state.executorIn;
+    if (t === token0.toLowerCase() && a === recipient.toLowerCase()) return state.recipientIn;
+    if (t === token0.toLowerCase() && a === pool.toLowerCase()) return state.poolIn;
+    if (t === token1.toLowerCase() && a === owner.toLowerCase()) return state.executorOut;
+    if (t === token1.toLowerCase() && a === recipient.toLowerCase()) return state.recipientOut;
+    if (t === token1.toLowerCase() && a === pool.toLowerCase()) return state.poolOut;
+    throw new Error("unexpected balance owner " + token + " " + account);
+  };
+  const result = inspectRuntime(program, amountIn, {
+    call(call: any) {
+      calls.push(call);
+      const selector = call.data.slice(0, 10).toLowerCase();
+      if (selector === getReturnSel) {
+        const args = POOL.decodeFunctionData("getReturn", call.data);
+        state.quoted = (BigInt(args[2]) * state.ratio.num) / state.ratio.den;
+        return POOL.encodeFunctionResult("getReturn", [state.quoted]);
+      }
+      if (selector === balanceOfSel) {
+        const [account] = TOKEN.decodeFunctionData("balanceOf", call.data);
+        return TOKEN.encodeFunctionResult("balanceOf", [balance(call.target, account)]);
+      }
+      if (selector === swapForSel) {
+        const args = POOL.decodeFunctionData("swapFor", call.data);
+        state.swapAmount = BigInt(args[2]); state.swapReceiver = String(args[5]);
+        const amount = BigInt(args[2]);
+        state.executorIn -= amount;
+        state.poolIn += amount;
+        if (recipient.toLowerCase() === owner.toLowerCase()) state.executorOut += state.quoted;
+        else state.recipientOut += state.quoted;
+        state.poolOut -= state.quoted;
+        return POOL.encodeFunctionResult("swapFor", [state.quoted]);
+      }
+      throw new Error("unexpected call " + call.target + " " + selector);
+    },
+    allowance(grant: any) { allowances.push(grant); },
+    nativeBalance() { return 0n; },
+  });
+  return { result, calls, allowances };
+}
+const exactEvidence = (() => {
+  const route = routes.find(r => r.tokenIn === token0)!;
+  const method = plugin.exact.methods({ descriptor, route, amountIn: 123456789123456789n, source, executor, runtimeEvidence: [] } as any)
+    .filter((m: any) => m.kind === "request-program")[0];
+  return method.program.decode({ programInput: { descriptor, route, amountIn: 123456789123456789n, source, executor, runtimeEvidence: [] },
+    initialResults: quoteResultsDeclarative(987654321n), dependentEvidence: [{ stepId: "governance", results: [activeResult] }] } as any);
+})();
+
+raw("quoted fragment builds one swapFor with requested amount/minimum and standing allowance", () => {
+  const route = routes.find(r => r.tokenIn === token0)!;
+  const fragment = plugin.execution.buildFragment({ descriptor, route, amountIn: 123456789123456789n,
+    quotedAmountOut: exactEvidence.amountOut, minAmountOut: exactEvidence.amountOut, exactEvidence: exactEvidence.evidence, executor } as any);
+  const program = fragment.nodes[0].params.runtimeAmountProgram;
+  const state = defaultState();
+  const run = runLeg(program, 123456789123456789n, state, executor, executor);
+  assert.equal(state.swapAmount, 123456789123456789n);
+  assert.equal(state.swapReceiver, executor);
+  const swap = run.calls.find(c => c.data.slice(0, 10).toLowerCase() === swapForSel)!;
+  const args = POOL.decodeFunctionData("swapFor", swap.data);
+  assert.equal(String(args[5]).toLowerCase(), executor.toLowerCase());
+  assert.equal(String(args[4]).toLowerCase(), ethers.ZeroAddress.toLowerCase());
+  assert.equal(BigInt(args[3]), exactEvidence.amountOut);
+  assert.deepEqual(run.allowances, [{ token: token0, spender: pool, minimum: 123456789123456789n, grant: MAX_UINT }]);
+});
+
+for (const settlement of [undefined, { kind: "quote-output" }, { kind: "direct-output", recipient: executor }] as const) {
+  const label = settlement?.kind ?? "default-quoted";
+  raw(`runtime leg ${label} matches handwritten settlement and call semantics`, () => {
+    const route = routes.find(r => r.tokenIn === token0)!;
+    const tsRoute = (mooniswapRoutes.project({ descriptor } as any) as any[]).find(r => r.tokenIn === token0)!;
+    const dLeg: any = plugin.execution.buildRuntimeLeg!({ source, descriptor, route, executor, runtimeEvidence: [], settlement } as any);
+    const tLeg: any = mooniswapExecution.buildRuntimeLeg!({ source, descriptor, route: tsRoute, executor, runtimeEvidence: [], settlement } as any);
+    assert.equal(dLeg.actionAdapterId, ACTION);
+    assert.equal(tLeg.actionAdapterId, ACTION);
+    assert.deepEqual(dLeg.settlement, tLeg.settlement, label);
+    const dState = defaultState(), tState = defaultState();
+    const dRun = runLeg(dLeg.program, 123456789123456789n, dState, executor, executor);
+    const tRun = runLeg(tLeg.program, 123456789123456789n, tState, executor, executor);
+    assert.equal(dState.quoted, tState.quoted, label);
+    assert.equal(dState.swapAmount, tState.swapAmount, label);
+    assert.equal(JSON.stringify(dRun.allowances), JSON.stringify(tRun.allowances), label);
+    assert.equal(dRun.result.registers[0], tRun.result.registers[0], label);
+    const dSelectors = dRun.calls.map(c => c.data.slice(0, 10).toLowerCase());
+    const tSelectors = tRun.calls.map(c => c.data.slice(0, 10).toLowerCase());
+    if (settlement?.kind === "quote-output") {
+      assert.deepEqual(dSelectors, tSelectors, "quote-output calls");
+    } else if (settlement === undefined) {
+      assert.deepEqual(dSelectors, tSelectors, "quoted calls");
+      assert.equal(dRun.calls.filter(c => c.data.slice(0, 10).toLowerCase() === swapForSel).length, 1);
+    } else {
+      assert.equal(dRun.calls.filter(c => c.data.slice(0, 10).toLowerCase() === swapForSel).length, 1);
+      assert.equal(tRun.calls.filter(c => c.data.slice(0, 10).toLowerCase() === swapForSel).length, 1);
+      const dSwap = POOL.decodeFunctionData("swapFor", dRun.calls.find(c => c.data.slice(0, 10).toLowerCase() === swapForSel)!.data);
+      const tSwap = POOL.decodeFunctionData("swapFor", tRun.calls.find(c => c.data.slice(0, 10).toLowerCase() === swapForSel)!.data);
+      assert.equal(String(dSwap[2]), String(tSwap[2]));
+      assert.equal(String(dSwap[3]), String(tSwap[3]));
+      assert.equal(String(dSwap[4]).toLowerCase(), String(tSwap[4]).toLowerCase());
+      assert.equal(String(dSwap[5]).toLowerCase(), String(tSwap[5]).toLowerCase());
+    }
+  });
+}
+
+raw("direct-output rejects short receipt and over-debit in both implementations", () => {
+  const route = routes.find(r => r.tokenIn === token0)!;
+  const tsRoute = (mooniswapRoutes.project({ descriptor } as any) as any[]).find(r => r.tokenIn === token0)!;
+  const dLeg: any = plugin.execution.buildRuntimeLeg!({ source, descriptor, route, executor, runtimeEvidence: [], settlement: { kind: "direct-output", recipient: executor } } as any);
+  const tLeg: any = mooniswapExecution.buildRuntimeLeg!({ source, descriptor, route: tsRoute, executor, runtimeEvidence: [], settlement: { kind: "direct-output", recipient: executor } } as any);
+  // Simulate a pool that reports a better quote than it pays: swapFor is a lie.
+  const liar = (program: string) => {
+    const state = defaultState();
+    const calls: any[] = [];
+    const run = inspectRuntime(program, 123456789123456789n, {
+      call(call: any) {
+        const selector = call.data.slice(0, 10).toLowerCase();
+        if (selector === getReturnSel) { const q = 987654321n; state.quoted = q; return POOL.encodeFunctionResult("getReturn", [q]); }
+        if (selector === balanceOfSel) {
+          const [account] = TOKEN.decodeFunctionData("balanceOf", call.data);
+          if (call.target.toLowerCase() === token0.toLowerCase() && account.toLowerCase() === executor.toLowerCase()) return TOKEN.encodeFunctionResult("balanceOf", [1_000_000n]);
+          if (call.target.toLowerCase() === token0.toLowerCase() && account.toLowerCase() === pool.toLowerCase()) return TOKEN.encodeFunctionResult("balanceOf", [10_000_000n]);
+          if (call.target.toLowerCase() === token1.toLowerCase() && account.toLowerCase() === pool.toLowerCase()) return TOKEN.encodeFunctionResult("balanceOf", [20_000_000_000n]);
+          return TOKEN.encodeFunctionResult("balanceOf", [900n]);
+        }
+        if (selector === swapForSel) { const args = POOL.decodeFunctionData("swapFor", call.data); calls.push(args); return POOL.encodeFunctionResult("swapFor", [0n]); }
+        throw new Error("unexpected call");
+      },
+      allowance() {},
+      nativeBalance() { return 0n; },
+    });
+    return run;
+  };
+  assert.throws(() => liar(dLeg.program));
+  assert.throws(() => liar(tLeg.program));
+});
+
+console.log("ALL EXTENDED CHECKS PASSED");

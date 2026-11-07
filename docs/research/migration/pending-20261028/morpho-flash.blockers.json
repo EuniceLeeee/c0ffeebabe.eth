@@ -1,0 +1,267 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:26:37Z",
+  "family": "flash-loan:morpho",
+  "domain": "funding",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "summary": "At 104ff465 the v2 declarative JSON compiler accepts only the protocol, swap and credit domains. Funding is a separate strict plugin domain: it has defineFundingFamily, its own capability-slot table and a separate funding runtime, but there is no declarative-funding compiler, no funding module catalogue and no JSON-to-FundingFamilyPlugin path. The only production JSON format that currently accepts production.domain='funding' is bindings-v1, which merely imports the existing TypeScript morphoFlashManifest/morphoFlashDiscovery/morphoFlashFunding/morphoFlashFamilyOwnedAction objects; it declares no semantics and is not a declarative cutover. Therefore a faithful declarative Funding JSON cannot be authored under the no-public-TS/no-tests constraint. The handwritten listener/src/searcher/venues/production-families/morpho-flash.production.ts remains authoritative.",
+  "baseline": {
+    "workspace": "work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "head": "c5a3ea1add4e54b344beb5d8a29a0582cc273fb6",
+    "familyRuntimeBaseline": "104ff465",
+    "workingTreeAtStart": "dirty with concurrent unrelated work (modified declarative-math-models.ts; untracked aqua/peapods/vault-spot/fluid/few-wrapped files); all left untouched",
+    "generatorRun": false,
+    "publicTsOrTestChanges": false
+  },
+  "reference": {
+    "implementationRow": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md:24",
+    "implRowNote": "The IMPL list has no standalone flash-loan:morpho row. The scope audit explicitly lists it in globalCatalogOutsideMappedImpl (docs/research/reports/family-impl-scope-audit-20261016.json:983-987). Morpho flash appears only as the funding leg of other family rows.",
+    "implRowsMentioningMorphoFlash": [
+      {
+        "line": 15,
+        "familyRow": "Few/Vault",
+        "tx": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+        "N": 26182689,
+        "B": 26182688,
+        "quote": "Morpho 仅为闪贷资金入口，不算兑换腿。",
+        "use": "funding-only mention; not a Morpho-family acceptance sample"
+      },
+      {
+        "line": 24,
+        "familyRow": "eUSD PSV",
+        "tx": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+        "N": 26152596,
+        "txIndex": 256,
+        "B": 26152595,
+        "quote": "USDC → PSV eUSD → Uniswap V4 USDC；Morpho 闪借全额归还。",
+        "use": "primary reference: the repo replay report records naturalFunding with adapterId morpho-flash"
+      },
+      {
+        "line": 25,
+        "familyRow": "Yearn Auction + Curve LP",
+        "tx": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+        "N": 26152335,
+        "txIndex": 188,
+        "B": 26152334,
+        "quote": "Morpho闪借已全额归还。",
+        "use": "secondary evidence of the same funding leg"
+      },
+      {
+        "line": 52,
+        "familyRow": "Ammalgam (tx1)",
+        "tx": "0xe9ba98c7aaa166b4cf12b140f17cdc9a4b3f381b7db3bc3935c86a4482fd250c",
+        "N": 26245017,
+        "B": 26245016,
+        "quote": "原 TX Morpho flash 10,164,047,113,356,609 wei WETH",
+        "use": "explicit original-TX flash amount; the recorded replay itself used flash-loan:balancer-v2 as diagnostic funding, so it is not a Morpho-family replay sample"
+      }
+    ],
+    "tx": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+    "txBlock": 26152596,
+    "txIndex": 256,
+    "previousBlock": 26152595,
+    "NHash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb",
+    "familyId": "flash-loan:morpho",
+    "lineageId": "morpho-flash",
+    "envKey": "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED",
+    "defaultEnabled": true,
+    "target": "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
+    "liquidityHolder": "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
+    "repayment": "approve-pull",
+    "paramShape": "none",
+    "naturalFunding": {
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48": {
+        "amount": "117044307845911",
+        "adapterId": "morpho-flash",
+        "fundingProvider": "flash-loan:morpho"
+      },
+      "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": {
+        "amount": "16405167841579733228302",
+        "adapterId": "morpho-flash",
+        "fundingProvider": "flash-loan:morpho"
+      }
+    },
+    "existingEvidence": [
+      "docs/research/reports/psv-core-replay-20261011.json:5-7 (tx/N/B), :182-208 (selectedFamilies includes flash-loan:morpho; naturalFunding.morpho-flash for USDC and WETH)",
+      "/Users/eunice/src/MEV/logs/replay-history/1/0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8/20261011-psv-core-bb-yxrnju.json (same recorded naturalFunding)",
+      "docs/research/reports/family-impl-scope-audit-20261016.json:983-987 (flash-loan:morpho is globalCatalogOutsideMappedImpl)",
+      "docs/research/reports/family-settlement-gate-result-20261014.json:115-120 (Morpho funding settlement gate is still failed: callback authentication, approve-pull repayment, allowance cleanup and refusal evidence remain open; this predates and is independent of the JSON question)"
+    ]
+  },
+  "priorArtifactsSearch": {
+    "backupLocalRef": "backup-local-82bfc8fc (82bfc8fc inverse-auction: new declarative protocol family)",
+    "morphoFundingJsonDraft": "none",
+    "declarativeFundingCompiler": "none",
+    "morphoMathDraft": "none",
+    "pendingBlockersChecked": [
+      "HEAD docs/research/migration/pending-20261028 has no morpho/flash funding blocker or draft (only aqua, curve-lp, peapods-debond, vault-spot, yieldbasis-lt and handwritten entries).",
+      "backup-local-82bfc8fc docs/research/migration/pending-20261028 contains many swap/protocol/credit drafts but no funding JSON and no morpho JSON.",
+      "The backup branch's docs/research/design/erc4626-declarative-production-architecture-20261027.md:153 states explicitly that Funding still has its own domain interface but the current v2 JSON compiler accepts only the three routed domains."
+    ],
+    "filesFound": [
+      "listener/src/searcher/venues/funding/morpho-flash.ts (legacy FlashLoanAdapterFamily, unchanged since 104ff465)",
+      "listener/src/searcher/venues/funding/morpho-flash-family/* (config/capture/discovery/parts, unchanged since 104ff465)",
+      "listener/src/searcher/venues/funding/morpho-flash-family-plugin.ts (strict plugin, unchanged)",
+      "listener/src/searcher/venues/production-families/morpho-flash.production.ts (handwritten strict entry, unchanged)",
+      "listener/src/searcher/venues/funding/erc20-balance-family-plugin.ts and flash-loan-framework.ts (shared TS funding shell)"
+    ],
+    "commands": [
+      "git ls-tree -r --name-only 104ff465 -- listener/src/searcher/venues | grep -E 'declarative-(funding|swap|credit|protocol)'",
+      "git ls-tree -r --name-only 104ff465 -- listener/src/searcher/venues/funding | grep -i '\\.json$'",
+      "git ls-tree -r --name-only backup-local-82bfc8fc | grep -Ei 'funding|flash|morpho'",
+      "git diff --stat 104ff465..backup-local-82bfc8fc -- listener/src/searcher/venues/funding listener/src/searcher/venues/production-families/morpho-flash.production.ts",
+      "git grep -l 'flash-loan:morpho' backup-local-82bfc8fc -- '*.json'"
+    ],
+    "conclusion": "No earlier declarative funding JSON, math module or blocked draft exists to reuse. The backup branch carries the identical TypeScript funding family and handwritten production entry (empty diff against 104ff465); the only JSON hits are historical evidence/report files, not Family definitions."
+  },
+  "decisiveBlocker": {
+    "id": "no-v2-funding-domain-or-compiler",
+    "capability": "Compile a v2 Funding-domain JSON into the funding plugin shape (manifest, optional capture, discovery, liquidity sources/current-N read program, pure offer derivation, repayment/borrow plan fragments and family-owned action) without TypeScript bindings.",
+    "existingSource": [
+      {
+        "path": "listener/src/searcher/build-declarative-production.ts",
+        "lines": "117-120",
+        "fact": "renderDataFamilyEntry casts production.domain to protocol|swap|credit, throws 'unsupported declarative v2 domain' otherwise, and maps the constructor suffix with swap/credit/else-Protocol (funding falls through to Protocol)."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "106",
+        "fact": "createDeclarativeFamilyRuntime rejects any version-2 definition whose production.domain is not protocol, swap or credit: 'unsupported declarative Family version/domain'."
+      },
+      {
+        "path": "listener/src/searcher/build-declarative-production.ts",
+        "lines": "167,179",
+        "fact": "The v2 renderer resolves the compiler as src/searcher/venues/declarative-${domain}.ts and imports compileDeclarative${Suffix}; no listener/src/searcher/venues/declarative-funding.ts exists at 104ff465 (git ls-tree), so the funding path has no compiler at all."
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "lines": "1649-1666",
+        "fact": "FAMILY_CAPABILITY_APPLICABILITY.funding allows only manifest (required), capture (optional), discovery (required), actionAdapters (required) and funding (required); identity, instance, routes, pricing, exact, execution and sharedBindings are 'never'."
+      },
+      {
+        "path": "listener/src/searcher/build-declarative-production.ts",
+        "lines": "121-123",
+        "fact": "The v2 schema requires version, scope, production, manifest, discovery, identity, instance, routes, pricing, the domain block, standard, actionAdapters and variantFiles."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "840-849",
+        "fact": "The compiled definition always emits discovery, identity, instance, routes, pricing, exact and execution plus the domain block; that object shape cannot be passed to defineFundingFamily, whose table forbids those slots."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family-modules.ts",
+        "lines": "34-104",
+        "fact": "The v2 optional-module catalogue contains liveStateProjection, instanceEvidence, executionProjection, pricingProjection, quoteOutput, signedBlockEvidence, oracleVictim, math, executionMath, quoteFlow, pricingFlow and trialState only; there is no funding liquidity/read/offer/repayment module."
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+        "lines": "2107-2115,2635-2650",
+        "fact": "defineFundingFamily is only a thin defineFamily wrapper. validateFamilyPlugin branches on expectedDomain==='funding', validates discovery and validateFundingDomain, and never treats a data document as a plugin; it is not a JSON compiler."
+      },
+      {
+        "path": "docs/research/design/erc4626-declarative-production-architecture-20261027.md",
+        "lines": "153",
+        "fact": "Authored design statement: Funding still has its own domain interface, but the current v2 JSON compiler accepts only the three routed domains (Protocol/Swap/Credit); Funding must not be inferred to be JSON-ified."
+      }
+    ],
+    "frameworkLimitation": "The v2 data-JSON schema, runtime and production renderer are routed-family contracts. Funding has an independent strict plugin contract consumed by adapter-funding-runtime and the solver; it has discovery plus funding semantics but no identity/instance/routes/pricing/exact/execution slots. Adding a faithful Funding JSON would require a public framework extension, not a JSON-only migration. Relaxing the one domain check would still fail: the renderer would emit compileDeclarativeProtocol/defineProtocolFamily shape, and defineFundingFamily would reject the extra route slots.",
+    "probe": {
+      "location": "temporary tsx probe outside the tree (/tmp/morpho-funding-probe.ts and /tmp/morpho-funding-probe/, removed before this record)",
+      "v2Runtime": "createDeclarativeFamilyRuntime({version:2, production:{domain:'funding', activation:{...}}}) -> Error: unsupported declarative Family version/domain",
+      "v2ProductionRenderer": "renderDeclarativeProductionEntry(... funding v2 JSON ...) -> Error: unsupported declarative v2 domain",
+      "v1Bindings": "The same renderer accepted version 1 with format=bindings-v1, family=flash-loan:morpho, and generated imports of morphoFlashCapture, morphoFlashDiscovery, morphoFlashFunding, morphoFlashManifest and morphoFlashFamilyOwnedAction from the existing TypeScript modules; it rendered defineFundingFamily({...binding_*}) with no declarative semantics."
+    }
+  },
+  "secondaryBlockers": [
+    {
+      "id": "bindings-v1-is-not-a-declarative-cutover",
+      "path": "listener/src/searcher/build-declarative-production.ts",
+      "lines": "202-263",
+      "fact": "The v1 path accepts domain=funding and renders format=bindings-v1 by importing every manifest/discovery/funding/action binding from relative TypeScript modules (probe C). It adds JSON indirection around the existing TS family, not JSON declaration of its semantics; generating the entry would require the generator and a TS production entry, both outside this task."
+    },
+    {
+      "id": "funding-liquidity-semantics-exist-only-in-typescript",
+      "path": "listener/src/searcher/venues/funding/erc20-balance-family-plugin.ts",
+      "lines": "186-320",
+      "fact": "createErc20BalanceFundingSemantics derives one source per observed asset (200-220), builds a per-asset balanceOf(liquidityHolder) request program (221-257), derives fee-0/maxBorrow offers (258-279), and builds approve-pull repayment plus the nested borrow fragment (281-310). flash-loan-framework.ts:60-230 is the legacy duplicate of the same dynamic shell. No JSON module catalog block can declare these functions."
+    },
+    {
+      "id": "morpho-action-is-a-wrapper-with-field2-offset",
+      "path": "listener/src/adapters/morpho-flash.ts",
+      "lines": "7-33",
+      "fact": "The Morpho action is isWrapper:true with field2Offset=100, encodes flashLoan(address,uint256,bytes) and embeds the inner script as the bytes argument so Morpho can callback onMorphoFlashLoan. The declarative action compiler hardcodes isWrapper:false and field2Offset:null (listener/src/searcher/venues/declarative-execution.ts:1057). A JSON action declaration therefore cannot replace the wrapper action; only binding the existing TS action adapter preserves it."
+    },
+    {
+      "id": "no-funding-json-registration-in-loader",
+      "path": "listener/src/searcher/build-declarative-production.ts",
+      "lines": "415-437",
+      "fact": "The build-time scan only looks for <name>-family/<name>.json beside a *-family directory and feeds it to renderDeclarativeProductionEntry. listener/src/searcher/venues/funding/morpho-flash-family/ contains only TS files (no morpho-flash.json); adding one would reach the v2 domain rejection at 118. The active entry remains the handwritten production-families/morpho-flash.production.ts (generated-production-family-entries.generated.ts imports entry28 at lines 30 and 81)."
+    }
+  ],
+  "nonBlockingAnalysis": {
+    "note": "These are structural observations, not an implementation or acceptance claim.",
+    "expressibleIfAFundingSchemaExisted": [
+      "Discovery: the FlashLoan(address,address,uint256) topic, singleton emitter MORPHO, indexed token topic 2 and providerFromBlock 0 are data-shaped and could be declared; the existing discovery types already model logPatterns and singleton-indexed-address.",
+      "Liquidity: one source per observed asset, target/liquidityHolder both MORPHO, fee 0, maxBorrow from balanceOf(MORPHO), planningPriority 0 and liquidityPriority 1 are simple data/pure derivation.",
+      "Repayment: approve-pull is a static erc20-approve fragment with MAX_UINT spender=MORPHO and minimumAllowance=amount; the borrow fragment is morpho-flash with children assert-balance then erc20-approve.",
+      "Registration: manifest domain funding, ownedActionAdapterIds ['morpho-flash'], requiredInfraActionAdapterIds ['assert-balance','erc20-approve'], allowedTaxonomy [{slotKind:'flash'}], supportedLineages ['morpho-flash'] and the env key are all data."
+    ],
+    "missingContract": "What does not exist is a funding-domain JSON contract and compiler that turns those facts into the FundingDomainSemantics functions and a FamilyOwnedActionAdapter (including the wrapper/callback action). Until that exists, any JSON is either rejected (v2) or a pure TypeScript binding manifest (v1)."
+  },
+  "validation": {
+    "executed": [
+      {
+        "command": "npm run --silent searcher:funding-production-family-plugin",
+        "result": "PASS (source-bound balances, offer parity, pure repayment, ownership, isolation) - existing TypeScript morpho/balancer strict funding plugins"
+      },
+      {
+        "command": "npm run --silent searcher:funding-credit-family-plugin",
+        "result": "PASS (strict domains + repayment/risk + declared absence + loader/catalog)"
+      },
+      {
+        "command": "npm run --silent searcher:adapter-funding-runtime",
+        "result": "PASS (central work, source isolation, opaque issuer handles, TOCTOU, plan ownership)"
+      },
+      {
+        "command": "npm run --silent searcher:funding-token-discovery",
+        "result": "PASS (Morpho/Balancer FlashLoan topic and token decode)"
+      },
+      {
+        "command": "temporary tsx probe outside the tree (removed)",
+        "result": "v2 runtime and v2 production renderer both reject domain funding; v1 bindings renderer accepts only as bindings-v1 and imports the existing TS modules"
+      },
+      {
+        "command": "git ls-tree / git diff / git grep at 104ff465 and backup-local-82bfc8fc",
+        "result": "no declarative-funding.ts, no funding JSON, no morpho JSON, and no backup draft; funding TS and handwritten entry identical to 104ff465"
+      }
+    ],
+    "notExecuted": [
+      "No declarative Funding JSON was authored; there is no compileDeclarativeFunding to call and no funding v2 schema to validate.",
+      "No JSON-native defineFundingFamily invocation was attempted: defineFundingFamily accepts a plugin object, not a JSON document, and the only renderer path that accepts funding is bindings-v1 (TS bindings).",
+      "No temporary generated production entry was rendered or installed; the handwritten morpho-flash.production.ts was not modified or restored because it was never replaced.",
+      "No family-capability-manifest generator run and no build:live run for a cutover (the task pins NO generator run and no public TS/tests changes; there is no faithful cutover candidate).",
+      "No Ready/Graph/mid/effective/final-sim/performance run; this park makes no adaptation, opportunity or settlement claim. The recorded Morpho funding settlement gate remains failed independently (family-settlement-gate-result-20261014.json:115-120)."
+    ]
+  },
+  "files": {
+    "added": [
+      "docs/research/migration/pending-20261028/morpho-flash.blockers.json"
+    ],
+    "modified": [],
+    "handwrittenEntry": "listener/src/searcher/venues/production-families/morpho-flash.production.ts (unchanged, remains authoritative)",
+    "generatedArtifacts": "none",
+    "tempFilesRemoved": [
+      "/tmp/morpho-funding-probe.ts",
+      "/tmp/morpho-funding-probe/"
+    ]
+  },
+  "unblockRequirement": "A public framework change is required before any faithful flash-loan:morpho Funding JSON can exist: (1) admit domain='funding' in the v2 data-family runtime and production renderer; (2) add a declarative-funding compiler that emits the FundingFamilyPlugin shape (manifest, optional capture, discovery, funding semantics and actionAdapters) without importing TypeScript implementation; (3) add funding module catalogue blocks for dynamic per-asset sources, current-N read program, pure offer derivation, repayment and borrow fragments; (4) preserve or declare the Morpho wrapper action (isWrapper/field2Offset=100 and the onMorphoFlashLoan callback) or keep binding the existing action adapter; (5) register/load the generated funding entry and extend the funding tests plus build:live. This is out of scope for the JSON-only, no-public-TS task.",
+  "nextSteps": [
+    "Keep listener/src/searcher/venues/production-families/morpho-flash.production.ts and the funding TS modules unchanged.",
+    "Do not author a v1 bindings-only 'JSON cutover': it would not migrate semantics and would still need the generator plus a TypeScript entry.",
+    "Do not narrow the family to a route-shaped Protocol/Swap/Credit JSON; such a definition would fail the funding plugin contract and would not preserve funding discovery/liquidity/repayment behavior.",
+    "If the framework later gains a funding-domain JSON compiler and wrapper-action declaration, re-run this assessment and then author the JSON under the normal migration validation."
+  ]
+}

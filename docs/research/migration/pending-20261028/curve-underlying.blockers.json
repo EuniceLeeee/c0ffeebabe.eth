@@ -1,0 +1,367 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:32:45Z",
+  "family": "curve-underlying",
+  "domain": "swap",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "summary": "curve-underlying cannot be ported faithfully to declarative Swap JSON on the pinned 104ff465 framework. The decisive gap is per-direction value settlement: the native-alias variant derives directOutput per route from underlyingNativeAssets(direction) plus the independently proven direction.recipient flag (execution.ts:22-30), while declarative execution has one static settlement.directOutput boolean per variant (declarative-execution.ts:17-20,355; declarative-family.ts:165-166) and selects the variant only by descriptor (declarative-family.ts:240-247). A static true over-claims direct-output for native-alias ERC20-output directions whose receiver overload was not proven; a static false drops the verified native-output direct path (and native-output direct is not even advertised without quoteOutput.nativeBoundary, declarative-execution.ts:1016-1018); a contextChecks rejection throws instead of returning the family's null fallback (declarative-execution.ts:1026-1035). The family's own production test asserts both sides in one run (native-alias-contract.ts:1043-1067), so no boolean value can pass. A per-descriptor split cannot fix this because both proven and unproven directions share one instance/descriptor. Secondary gaps make the other lineages equally unsafe to claim: pricing.refreshPolicy is a per-variant enum (pricing.ts:45-50 vs declarative-family.ts:148-149,163) while the metaregistry lineage mixes on-touch plain pools with each-block classic-meta/legacy-plain pools, and splitting that lineage would compile and run a duplicate multi-stage identity per variant (declarative-family.ts:353-365, adapter-family-runtime.ts:3604-3612,3764-3780). No canonical JSON was authored and the handwritten production entry remains authoritative; narrowing the family or over-claiming settlement would be required.",
+  "baseline": {
+    "workspace": "work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "head": "c5a3ea1a",
+    "familyRuntimeBaseline": "104ff465",
+    "workingTreeAtStart": "dirty with concurrent unrelated changes (declarative-math-models.ts, few-wrapped/fluid ports, aqua/vault-spot/peapods/morpho parks); all left untouched",
+    "generatorRun": false,
+    "publicTsOrTestChanges": false
+  },
+  "reference": {
+    "implementationRow": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md:29",
+    "familyId": "curve-underlying",
+    "lineages": [
+      "curve-underlying:metaregistry-member",
+      "curve-underlying:legacy-factory-member",
+      "curve-underlying:factory-v1-member",
+      "curve-underlying:legacy-lending-lp-reverse"
+    ],
+    "envKey": "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED",
+    "defaultEnabled": true,
+    "tx": "0x2d91ec2d34e3626c391d76aae12253218a4a1a2dc76d392ab9fd80b6b5255532",
+    "txBlock": 26130201,
+    "sourceBlock": 26130200,
+    "txBlockHash": "not re-read for this port; the IMPL row records N=26130201 with S=26130200 block-end and E=26130200 and no prefix",
+    "type": "blockscan opportunity: original two-hop WBTC -> TBTC (Curve underlying) -> WBTC (UniV3), with the IMPL row's one-case 20% gross special exemption; not a family-adaptation acceptance and not replayed here",
+    "additionalSamples": [
+      "FRAX N14274089: USDC amountIn=500000000000, same-state quote/runtime out 499699329276493554552688 FRAX; the pre-fix Family quote differed by 7202349071903431547 raw",
+      "classic meta N26138094 pool 0xc270b3b858c335b6ba5d5b10e2da8a09976005ad, TX 0x73f75256979894103b5bcb045266cf802103e23d0d937c907e50b035663e48e4",
+      "native alias N26029240 pool 0xc15f285679a1ef2d25f53d4cbd0265e1d02f2a92, TX 0xcff958cfb929feddc72043ac41c0065774cd9ab0bae4d66e77b7aaf633e8d42c",
+      "seven-pool cohort: 4ebdf N26018980, 5426 N26019171, 053d N26041904, 6ec3 N26024481, 3211 N26036250, 7f86 N25969898, 8a4f N25981246",
+      "legacy plain sUSD, legacy-factory metapool, V1-factory BAC/USTP and lending dToken/yVault samples are recorded in the reports below"
+    ],
+    "existingEvidence": [
+      "docs/research/reports/curve-underlying-classic-meta-parity-20261008.json",
+      "docs/research/reports/curve-underlying-native-acceptance-20261012.json",
+      "docs/research/reports/curve-underlying-native-impl-update-20261012.json",
+      "docs/research/reports/curve-underlying-classic-recipient-correctness-20261015.json",
+      "docs/research/reports/curve-underlying-native-recipient-correctness-20261015.json",
+      "docs/research/reports/curve-underlying-frax-5f-correctness-20261014.json",
+      "docs/research/reports/family-settlement-interface-review-20261014.json (variants: classic meta rateSlot16/rateSlot10/generic update, nativeAlias full/clone, Snow/ USDX lending, legacyPlain sUSD)",
+      "docs/research/reports/impl-curve-ramp-update-20261013.json and impl-set-manual-update-20261013.json carry the IMPL row text with TX/N"
+    ]
+  },
+  "priorArtifactsSearch": {
+    "backupLocalRef": "backup-local-82bfc8fc (82bfc8fc inverse-auction: new declarative protocol family (validated, disabled))",
+    "curveUnderlyingJsonDraft": "none",
+    "curveUnderlyingMathDraft": "none",
+    "curveUnderlyingSpecificMigrationBlocker": "none",
+    "pendingBlockersChecked": [
+      "HEAD docs/research/migration/pending-20261028 contains curve-lp, yieldbasis-lt, aqua-swapvm, vault-spot, peapods and other parks; no curve-underlying draft or blocker.",
+      "backup-local-82bfc8fc docs/research/migration/pending-20261028 contains curve-lp only for Curve; no curve-underlying JSON, math or blocker.",
+      "No deleted curve-underlying JSON/math appears in docs/research/migration history."
+    ],
+    "filesFound": [
+      "listener/src/searcher/venues/swaps/curve-underlying-family/* (handwritten TS family, identical on HEAD and backup except the production entry)",
+      "listener/src/searcher/venues/swaps/curve-underlying-family-plugin.ts (handwritten strict plugin)",
+      "listener/src/searcher/venues/production-families/curve-underlying.production.ts (handwritten production entry)",
+      "listener/src/searcher/test/curve-underlying-family-plugin.ts and listener/src/searcher/venues/swaps/curve-underlying-family/test/*",
+      "docs/research/reports/curve-underlying-*.json and family-settlement-interface-review-20261014.json"
+    ],
+    "commands": [
+      "git ls-tree -r --name-only backup-local-82bfc8fc | grep -iE 'curve-underlying.*\\.(json|ts)$'",
+      "git ls-tree -r --name-only backup-local-82bfc8fc docs/research/migration | grep -i curve",
+      "git log --all --diff-filter=D --name-only --pretty=format: -- docs/research/migration | grep -i curve",
+      "git diff HEAD backup-local-82bfc8fc -- listener/src/searcher/venues/swaps/curve-underlying-family",
+      "grep -rn 'curve-underlying' docs/research/design docs/research/reports --include='*.md' --include='*.json'"
+    ],
+    "conclusion": "No earlier declarative JSON or family math exists to reuse. The backup branch carries the identical handwritten family (one-line production-entry difference) and no curve-underlying pending draft; only recorded TS, settlement and acceptance evidence exists."
+  },
+  "decisiveBlocker": {
+    "id": "curve-underlying-per-direction-direct-output",
+    "capability": "direct-output raw-receiver settlement is per route/direction: native-alias pools support direct output when the output is native (to the executor) or when the direction's receiver overload was independently execution-proven; classic-meta pools support direct output per bound implementation; plain/legacy-plain/lending have no direct output",
+    "existingSource": [
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/execution.ts",
+        "lines": "22-30",
+        "fact": "buildRuntimeLeg computes directOutput as d.nativeAlias ? assets?.output === 'native' || direction?.recipient === true : !d.lending && !d.legacyPlain && supportsClassicUnderlyingRecipient(d.quoteModel), and returns null for a direct-output request when that per-route value is false."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native.ts",
+        "lines": "17-51",
+        "fact": "underlyingNativeAssets maps one direction's i/j to input/output native vs ERC20; the native alias program rejects an external recipient for native output (nativeOut requires recipient == actor) while allowing it for ERC20 output."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/native-identity.ts",
+        "lines": "73-77,139-141,155-161",
+        "fact": "Identity issues a separate recipient-execution probe only for non-native outputs and records recipient:true per direction; facts.verifiedDirections carries that flag into the descriptor."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/recipient-proof.ts",
+        "lines": "13-46",
+        "fact": "The receiver overload is proven by a dedicated executor-program simulation against UNDERLYING_PROBE_RECEIVER and decoded per direction; native output is explicitly excluded ('raw native output belongs to executor')."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/native-alias-contract.ts",
+        "lines": "1043-1067",
+        "fact": "Production test asserts the passed (recipient-proven) instance builds direct legs with settlement.directOutput=true for every route, while the baseline (unproven) instance builds a direct leg only where route.executionAssets.output === 'native'. Both cases run in one test for the same family. No static directOutput value can satisfy the unproven ERC20-output route and the proven/native-output route at the same time."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-update.ts",
+        "lines": "116-124",
+        "fact": "Classic-meta contract test expects a direct leg with settlement {directOutput:true} and a null deferred-input leg for every one of its twelve directions."
+      }
+    ],
+    "frameworkLimitation": [
+      {
+        "path": "listener/src/searcher/venues/declarative-execution.ts",
+        "lines": "17-20,354-357,934-935",
+        "fact": "SharedConversionExecution.settlement.directOutput is a single boolean; compile/validation reject any non-boolean non-static value."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "146-166",
+        "fact": "Each variant requires settlement.directOutput to be a boolean at registration."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "240-247,353-365",
+        "fact": "Variant selection is per descriptor (match expression) and each declarative variant compiles its own identity; there is no per-route/per-direction variant or shared identity. Two variants cannot split the directions of one descriptor."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-execution.ts",
+        "lines": "993-1003",
+        "fact": "supportsDeclarativeSettlement for direct-output checks only the static directOutput boolean, quote-asset support, and (for native output) recipient == executor; it never consults a descriptor direction flag such as verifiedDirections[].recipient."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-execution.ts",
+        "lines": "1011-1024",
+        "fact": "declarativeSettlementCapabilities advertises directOutput only when the static boolean is true and, for native output, quoteOutput.nativeBoundary === true. The family's native-output direct path has no quoteOutput module, so a JSON variant would not advertise that verified capability without adding a quote program that changes the execution call set."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-execution.ts",
+        "lines": "1026-1035",
+        "fact": "buildDeclarativeRuntimeLeg returns null only when the static settlement support check fails; once a direct-output request is accepted it always builds. There is no declared per-route predicate that can return the family's null fallback for an unproven direction."
+      }
+    ],
+    "probe": {
+      "method": "Temporary tsx probe (listener/tmp-cu-direct-probe.mts, removed) built one synthetic native-alias descriptor with three directions (WETH->USDC unproven, USDC->WETH native output, DAI->USDC recipient-proven), projected the real family routes, and compared curveUnderlyingExecution.buildRuntimeLeg against supportsDeclarativeSettlement/declarativeSettlementCapabilities for one static directOutput=true execution declaration.",
+      "family": [
+        {"i": 0, "j": 1, "outputNative": false, "recipientProven": false, "familyLeg": false, "familyDirectCapability": false},
+        {"i": 1, "j": 0, "outputNative": true, "recipientProven": false, "familyLeg": true, "familyDirectCapability": true},
+        {"i": 2, "j": 1, "outputNative": false, "recipientProven": true, "familyLeg": true, "familyDirectCapability": true}
+      ],
+      "declarativeStaticTrue": [
+        {"i": 0, "j": 1, "outputNative": false, "directAccepted": true, "advertised": {"directOutput": true}},
+        {"i": 1, "j": 0, "outputNative": true, "directAccepted": true, "advertised": {}},
+        {"i": 2, "j": 1, "outputNative": false, "directAccepted": true, "advertised": {"directOutput": true}}
+      ],
+      "consequence": "Static true over-claims the unproven WETH->USDC direction (accepted and advertised instead of the family's null) and still fails to advertise the family's native-output direct capability; static false would reject the proven directions. This reproduces the production test's contradictory expectations at native-alias-contract.ts:1056-1059."
+    },
+    "whyPartialCutoverIsNotAcceptable": "Choosing static true routes output/recipient authority for directions that were never proven and changes the central null fallback into a real leg; choosing static false drops the verified native-output and receiver-proved direct paths (a settlement capability loss). Rejecting at execution time throws instead of returning null. Splitting the native-alias descriptor into multiple variants cannot help because the mixed directions live in one instance and variant selection is descriptor-level. There is no JSON-only way to state the family's per-direction direct capability."
+  },
+  "additionalBlockers": [
+    {
+      "id": "curve-underlying-per-instance-refresh-policy",
+      "severity": "decisive-for-metaregistry-lineage",
+      "capability": "each-block vs on-touch pricing is per descriptor, not per lineage",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-underlying-family/pricing.ts",
+          "lines": "45-50",
+          "fact": "refreshPolicyForInstance returns each-block for nativeAlias/quoteModel/lending and on-touch otherwise."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-quote.ts",
+          "lines": "226-233",
+          "fact": "Contract test asserts each-block for quoteModel and on-touch for the same descriptor with quoteModel removed."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-family.ts",
+          "lines": "148-149,163,483",
+          "fact": "pricing.refreshPolicy is a closed enum literal per variant and refreshPolicyForInstance returns select(descriptor).document.pricing.refreshPolicy; it cannot read a descriptor field such as quoteModel/legacyPlain."
+        }
+      ],
+      "consequence": "The metaregistry variant must choose each-block (over-refresh every plain pool) or on-touch (miss A/meta-rate ramp updates for classic-meta/legacy-plain pools). Either is a behavior change and one side is a pricing-correctness gap."
+    },
+    {
+      "id": "curve-underlying-variant-identity-duplication",
+      "severity": "structural",
+      "capability": "splitting the metaregistry lineage by refresh/direct-output without duplicating the full staged identity",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-underlying-family/identity.ts",
+          "lines": "199-231,320-389",
+          "fact": "The metaregistry identity variant is one staged workflow with registry-surface reads, a per-direction behavior probe, optional scale probing and one final evidence hash; classic-meta and legacy-plain bindings are derived inside the same decode."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-family.ts",
+          "lines": "353-365",
+          "fact": "Only the primary variant may reuse document.identity.definition; every child variant compiles its own identity from its own abi/constants/expressions/programs/identity."
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-runtime.ts",
+          "lines": "3604-3612,3764-3780",
+          "fact": "All applicable identity variants run independently and are merged only by identity key; a duplicated metaregistry identity would run the full probe per candidate and produce extra evidence/provenance work."
+        }
+      ],
+      "consequence": "Splitting the metaregistry lineage by quoteModel/legacyPlain/plain to fix refresh or directOutput would require 2-3 copies of the same multi-stage identity; candidate cost and identity evidence would change, and the extra variants would alter the declared identity-variant ledger. This is not a faithful 1:1 encoding."
+    },
+    {
+      "id": "curve-underlying-mutation-group-split",
+      "severity": "behavioral",
+      "capability": "four mutation groups with distinct address sets/accept predicates (pool logs, base LP, base pool calls, legacy controls)",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-underlying-family/pricing.ts",
+          "lines": "266-290",
+          "fact": "compileAddressMutations builds separate logs/lp/calls/controls groups with different addresses and accept predicates, then unions affected keys."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-family.ts",
+          "lines": "593-609",
+          "fact": "Each variant declares one mutationAddresses expression, one optional mutationPredicate, and the root mutationKinds list; compileAddressMutations receives a single group per state key."
+        }
+      ],
+      "consequence": "A single union address list and predicate would over-refresh (e.g. USDT control logs on non-base pools, LP Transfers on every route) or drop the base-LP/USDT-control/legacy-control filtering. Affected state-key targeting is not equal."
+    },
+    {
+      "id": "curve-underlying-capture-reverse-binding",
+      "severity": "behavioral",
+      "capability": "retained-channel reverse binding by implementation code plus registry/factory/lending topology",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-underlying-family/discovery.ts",
+          "lines": "79-86",
+          "fact": "Discovery declares kind:'implementation' with reverseBindCurveUnderlying."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-underlying-family/reverse-binding.ts",
+          "lines": "25-170",
+          "fact": "The custom reverse binding re-reads code/storage/calls to prove MetaRegistry, legacy-factory, V1 or lending membership before nominating an address surface."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-discovery.ts",
+          "lines": "453-454",
+          "fact": "The mapped discovery format accepts only reverseBinding:'address-surface'; custom implementation reverse binding is not declarable."
+        }
+      ],
+      "consequence": "A JSON port would nominate address surfaces by fingerprint only and lose the registry/factory/lending pre-filter; identity would still reject non-members, but retained-channel nomination work and observation volume change."
+    },
+    {
+      "id": "curve-underlying-pricing-first-positive-fallback",
+      "severity": "latency/behavioral",
+      "capability": "current pricing stops after the first positive amount among candidate amounts and only queries later candidates when all earlier ones are zero",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-underlying-family/pricing.ts",
+          "lines": "154-217",
+          "fact": "buildDependentProgram emits candidate[0] first, then returns null when firstPositiveQuote is positive; otherwise emits the remaining candidates."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-read-flow.ts",
+          "lines": "100-108,180-190",
+          "fact": "Read-flow step `when` is evaluated before any evidence of that invocation and all active steps run; there is no result-dependent early stop or null-return from a dependent round."
+        }
+      ],
+      "consequence": "JSON would have to run every candidate quote for every pricing round (extra reads/latency) or pick a fixed candidate (different amount/quote behavior). It cannot reproduce the family's stop-after-first-positive schedule."
+    }
+  ],
+  "nonBlockingAnalysis": {
+    "note": "The above gaps are about faithful declaration, not about the prices/execution being impossible to calculate.",
+    "expressibleWithJsonPlusFamilyMath": [
+      "Registry-surface identity, behaviour probes over i/j and CURVE_BEHAVIOR_PROBE_AMOUNTS, verifiedDirections projection, and route projections can be written as JSON expressions plus registered family math.",
+      "Classic-meta binding/guard/quote math (code hashes, slots, 4096-byte forwarder normalization, base-pool mint/exchange) and legacy-plain invariant/fee math can be moved into family math models because JSON `model` calls may return arbitrary bigint/object results.",
+      "Native-alias execution/approval/native-boundary steps and lending raw effect-delta-simulation preCalls can be declared directly as AdapterRequest data; the declarative pseudo-request bridge is not the only possible request form.",
+      "Discovery events/calls, poolMaterialization and receiptEvent match/impact projections can express the swap observation; source-bound receiptReads (eth-call only) could re-read registry coins."
+    ],
+    "deviationsStillToReviewIfUnblocked": [
+      "Identity provenance/evidence hash will differ if the workflow or merge order changes; existing Ready/memo entries need selective revalidation.",
+      "routeKey can be declared with routes.key to match the legacy \\u001f-joined key, but bindingRef.fingerprint must reproduce curveUnderlyingStaticBindingProjection including recipient flags and variant projections; otherwise Ready/graph keys change.",
+      "The declarative route still injects target/direction/adapterId and hashes the full projected route, so any consumer that compares a handwritten route object by hash must be revalidated.",
+      "Receipt observation uses descriptor/source reads rather than the handwritten resolveBinding re-reads unless receiptReads is added; factory/lending control reads and error semantics need a separate review.",
+      "Exact/quote read-flow rounds cannot stop after the first positive candidate; latency and read counts need a timing review even if amounts match."
+    ]
+  },
+  "validation": {
+    "executed": [
+      {
+        "command": "node --import tsx --test src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-quote.ts",
+        "result": "39 tests, 39 pass, 0 fail (handwritten baseline green)"
+      },
+      {
+        "command": "node --import tsx --test src/searcher/venues/swaps/curve-underlying-family/test/classic-meta-update.ts",
+        "result": "7 tests, 7 pass, 0 fail (handwritten baseline green)"
+      },
+      {
+        "command": "node --import tsx --test src/searcher/venues/swaps/curve-underlying-family/test/legacy-plain-contract.ts",
+        "result": "7 tests, 7 pass, 0 fail (handwritten baseline green)"
+      },
+      {
+        "command": "node --import tsx --test src/searcher/venues/swaps/curve-underlying-family/test/legacy-factory-contract.ts",
+        "result": "9 tests, 9 pass, 0 fail (handwritten baseline green)"
+      },
+      {
+        "command": "node --import tsx --test src/searcher/venues/swaps/curve-underlying-family/test/v1-factory-contract.ts",
+        "result": "11 tests, 11 pass, 0 fail (handwritten baseline green)"
+      },
+      {
+        "command": "node --import tsx --test src/searcher/venues/swaps/curve-underlying-family/test/lending-contract.ts",
+        "result": "5 tests, 5 pass, 0 fail (handwritten baseline green)"
+      },
+      {
+        "command": "node --import tsx src/searcher/test/curve-underlying-family-plugin.ts",
+        "result": "fails before any port change at line 309: summary.suppliedActionAdapterIds is ['curve-exchange-underlying','curve-exchange-underlying-lending','curve-exchange-underlying-uint-native'] but the test expects ['curve-exchange-underlying']; this is a pre-existing stale assertion (blame e57ac81b), not a JSON gap"
+      },
+      {
+        "command": "node --import tsx --test src/searcher/venues/swaps/curve-underlying-family/test/native-alias-contract.ts",
+        "result": "blocked at module load by the concurrent deletion of listener/src/searcher/venues/production-families/fluid-credit.production.ts (imported by generated production-family-entries.generated.ts); not caused by this port and not fixed here"
+      },
+      {
+        "command": "npm run build:live",
+        "result": "exit 2, single TS2307 for the same concurrently missing fluid-credit.production.ts; no curve-underlying file was modified"
+      },
+      {
+        "command": "temporary tsx direct-output probe (listener/tmp-cu-direct-probe.mts, removed)",
+        "result": "family 0->1 (unproven ERC20 out) null/false, 1->0 (native out) leg/true, 2->1 (recipient proven) leg/true; declarative static directOutput=true accepted and advertised directOutput for 0->1, accepted 1->0 but advertised {}, accepted 2->1; see decisiveBlocker.probe"
+      },
+      {
+        "command": "git ls-tree / git grep / git log --diff-filter=D on backup-local-82bfc8fc; git diff HEAD backup-local-82bfc8fc -- listener/src/searcher/venues/swaps/curve-underlying-family",
+        "result": "no curve-underlying JSON/math/pending blocker; family TS identical except the production entry's one-line import/activation difference; concurrent unrelated changes left untouched"
+      }
+    ],
+    "notExecuted": [
+      "No curve-underlying JSON was authored or compiled; no compileDeclarativeSwap/defineSwapFamily run (no faithful definition to compile).",
+      "No temporary generated production entry rendered, no family test run against a JSON plugin, no generator run, no cutover.",
+      "No RPC/chain/EVM run, no Ready/Graph/mid/effective/price run, no performance run; this park makes no adaptation, replication or opportunity claim.",
+      "The full build:live/tsc result is environment-blocked by a concurrent unrelated deletion; after it is restored the build should be re-run for the shared tree, but it cannot validate this parked port because no JSON/TS was added."
+    ]
+  },
+  "files": {
+    "added": [
+      "docs/research/migration/pending-20261028/curve-underlying.blockers.json"
+    ],
+    "modified": [],
+    "handwrittenEntry": "listener/src/searcher/venues/production-families/curve-underlying.production.ts (unchanged, remains authoritative)",
+    "generatedArtifacts": "none",
+    "tempFilesRemoved": [
+      "listener/tmp-cu-direct-probe.mts (and its /tmp/cu-direct-probe.mts source)",
+      "logs under /tmp only; none in the repository"
+    ]
+  },
+  "unblockRequirement": "A public framework change is required before a faithful JSON cutover: (a) make execution settlement direct-output a declared value capability evaluated per invocation against descriptor/route/direction (or provide an equivalent per-route capability predicate) and allow native-output direct settlement without a quoteOutput.nativeBoundary module; (b) make pricing.refreshPolicy a descriptor expression (or provide a shared identity module so variants can split on quoteModel/legacyPlain without recompiling and rerunning the full staged identity). Optionally (c) allow grouped mutation address/predicate sets so the family's four mutation groups remain distinct. These are central/framework changes, outside this task's JSON + family math + append-only registry boundary.",
+  "nextSteps": [
+    "Apply the framework capability change under a separate public-TS/test task, with contract tests for per-direction direct-output, native-output direct without quoteOutput, per-descriptor refresh policy and grouped mutations.",
+    "Re-author curve-underlying JSON (including the native/classic-meta/legacy-plain/legacy-factory/V1/lending variants and family math) and compile via compileDeclarativeSwap/defineSwapFamily.",
+    "Render the production entry temporarily, run the family test suite and native/classic/lending/factory tests against the JSON plugin, then run tsc/build:live; restore the handwritten entry.",
+    "Selectively revalidate existing Ready/memo/route fingerprints before any cutover, because identity provenance and route/binding hashes may change even when amounts match."
+  ]
+}
