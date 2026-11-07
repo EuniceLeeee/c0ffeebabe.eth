@@ -1,3 +1,5 @@
+import type { MutationPricingEntry, UnifiedObservation } from "./adapter-family-plugin.js";
+import { compileKeyedAddressMutations, declarativeMutationEquality } from "./declarative-mutation-key.js";
 import { compileDeclarativeCreditDomain } from "./declarative-credit-domain.js";
 import { compileInstanceEvidence, executionProjection } from "./declarative-instance-evidence.js";
 import { compileDeclarativeSwap } from "./declarative-swap-domain.js";
@@ -602,12 +604,58 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
         });
         const byKey = new Map(indexed.map(entry => [entry.mutationKey, entry]));
         const indexKeys = new Map(indexed.map(entry => [entry.stateKey, entry.mutationKey]));
-        const index = compileAddressMutations(indexed, input => ({
-          addresses: uniqueAddresses(select(input.descriptor).values.evaluate(select(input.descriptor).document.pricing.mutationAddresses, environment(select(input.descriptor), input))), keys: [indexKeys.get(input.stateKey)!],
-        }), { kinds: document.pricing.mutationKinds });
-        return { dependencies: index.dependencies, affectedStateKeys: ({ observation }) =>
-          index.affectedStateKeys({ observation }).map(key => byKey.get(key)!)
-            .filter(entry => acceptsMutation({ ...entry, observation })).map(entry => entry.stateKey) };
+        const kinds = document.pricing.mutationKinds;
+        const affected = (keys: readonly string[], observation: UnifiedObservation) => keys
+          .map(key => byKey.get(key)!)
+          .filter(entry => acceptsMutation({ ...entry, observation })).map(entry => entry.stateKey);
+        const addressSelection = (variant: Variant, input: MutationPricingEntry<Data, Route>) => ({
+          addresses: uniqueAddresses(variant.values.evaluate(variant.document.pricing.mutationAddresses, environment(variant, input))),
+          keys: [indexKeys.get(input.stateKey!)!],
+        });
+        const addressOnly = () => {
+          const index = compileAddressMutations(indexed, input => addressSelection(select(input.descriptor), input), { kinds });
+          return { dependencies: index.dependencies,
+            affectedStateKeys: ({ observation }: { observation: UnifiedObservation }) =>
+              affected(index.affectedStateKeys({ observation }), observation) };
+        };
+        // Shared state keys must preserve the original representative selection.
+        if (indexKeys.size !== indexed.length) return addressOnly();
+        const groups = new Map<Variant, typeof indexed>();
+        for (const entry of indexed) {
+          const variant = select(entry.descriptor);
+          const group = groups.get(variant) ?? [];
+          group.push(entry);
+          groups.set(variant, group);
+        }
+        const rules = [...groups].map(([variant, group]) => ({
+          variant, group,
+          equality: variant.directMutationInput
+            ? declarativeMutationEquality(variant.document.pricing.mutationPredicate) : undefined,
+        }));
+        if (rules.every(rule => !rule.equality)) return addressOnly();
+        const indexes = rules.map(({ variant, group, equality }) => {
+          const selectMutation = (input: MutationPricingEntry<Data, Route>) => addressSelection(variant, input);
+          if (!equality) return compileAddressMutations(group, selectMutation, { kinds });
+          const prefix = equality.prefix && { op: "and", args: equality.prefix };
+          return compileKeyedAddressMutations(group, selectMutation, {
+            kinds,
+            entryKey: input => variant.values.evaluate(equality.entry, input),
+            observationKey: observation => {
+              const env = { observation };
+              if (prefix && !variant.values.evaluate(prefix, env)) return undefined;
+              return [variant.values.evaluate(equality.observation, env)];
+            },
+          });
+        });
+        const order = new Map(indexed.map((entry, position) => [entry.mutationKey, position]));
+        return {
+          dependencies: [...new Set(indexes.flatMap(index => index.dependencies))],
+          affectedStateKeys: ({ observation }) => affected(
+            [...new Set(indexes.flatMap(index => index.affectedStateKeys({ observation })))]
+              .sort((a, b) => order.get(a)! - order.get(b)!),
+            observation,
+          ),
+        };
       },
       affectedStateKeys(input) {
         const observation = input.observation;
