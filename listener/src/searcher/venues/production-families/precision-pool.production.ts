@@ -1,15 +1,11 @@
-import { defineSwapFamily } from "../adapter-family-plugin.js";
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/swaps/precision-pool-family/precision-pool.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
-import { action } from "../swaps/precision-pool-family/action.js";
-import { capture } from "../swaps/precision-pool-family/capture.js";
-import { discovery } from "../swaps/precision-pool-family/discovery.js";
-import { exact } from "../swaps/precision-pool-family/exact.js";
-import { execution } from "../swaps/precision-pool-family/execution.js";
-import { identity } from "../swaps/precision-pool-family/identity.js";
-import { instance } from "../swaps/precision-pool-family/instance.js";
-import { manifest } from "../swaps/precision-pool-family/manifest.js";
-import { pricing } from "../swaps/precision-pool-family/pricing.js";
-import { routes } from "../swaps/precision-pool-family/routes.js";
-import { swap } from "../swaps/precision-pool-family/swap.js";
-export const plugin = defineSwapFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, swap, capture, actionAdapters: [action] });
-export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_PRECISION_POOL_ENABLED" });
+import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { compileDeclarativeSwap } from "../declarative-swap.js";
+import definition from "../swaps/precision-pool-family/precision-pool.json";
+
+export const activation = defineFamilyActivation({"enabled":false,"envKey":"SEARCHER_FAMILY_PRECISION_POOL_ENABLED"});
+
+export const plugin = defineSwapFamily(compileDeclarativeSwap(definition, []));

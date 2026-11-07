@@ -1,0 +1,1489 @@
+{
+  "version": 1,
+  "id": "algebra-factory-child-cypher-quoter",
+  "lineageId": "algebra-integral:factory-child",
+  "identityKind": "factory-child",
+  "abi": {
+    "pool": [
+      "function swap(address recipient,bool zeroToOne,int256 amountRequired,uint160 limitSqrtPrice,bytes data) returns (int256 amount0,int256 amount1)",
+      "function factory() view returns(address)",
+      "function token0() view returns(address)",
+      "function token1() view returns(address)",
+      "function plugin() view returns(address)",
+      "function fee() view returns(uint16)",
+      "function tickSpacing() view returns(int24)",
+      "function liquidity() view returns(uint128)",
+      "function nextTickGlobal() view returns(int24)",
+      "function prevTickGlobal() view returns(int24)",
+      "function globalState() view returns(uint160 price,int24 tick,uint16 lastFee,uint8 pluginConfig,uint16 communityFee,bool unlocked)"
+    ],
+    "quoter": [
+      "function quoteExactInputSingle(address tokenIn,address tokenOut,address deployer,uint256 amountIn,uint160 limitSqrtPrice) returns(uint256 amountOut,uint16 fee)",
+      "function factory() view returns(address)",
+      "function poolDeployer() view returns(address)"
+    ]
+  },
+  "constants": {
+    "swap": "0x121cb44ee54098b1a04743c487e7460d8dd429b27f88b1f4d4767396e1a59f79",
+    "initialize": "0x98636036cb66a9c19a37435efc1e90142190214e8abeb821bdba3f2990dd4c95",
+    "mint": "0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde",
+    "burn": "0x932214d4a69c27c086643126ed97c32681da179064c678836c173f99bd13ca01",
+    "fee": "0x598b9f043c813aa6be3426ca60d1c65d17256312890be5118dab55b0775ebe2a",
+    "plugin": "0x27a3944eff2135a57675f17e72501038982b73620d01f794c72e93d61a3932a2",
+    "pluginConfig": "0x3a6271b36c1b44bd6a0a0d56230602dc6919b7c17af57254306fadf5fee69dc3",
+    "tickSpacing": "0x01413b1d5d4c359e9a0daa7909ecda165f6e8c51fe2ff529d74b22a5a7c02645",
+    "communityFee": "0x3647dccc990d4941b0b05b32527ef493a98d6187b20639ca2f9743f3b55ca5e1",
+    "factoryPool": "0x91ccaa7a278130b65168c3a0c8d3bcae84cf5e43704342bd3ec0b59e59c036db"
+  },
+  "expressions": {},
+  "programs": {},
+  "inputs": [],
+  "match": {
+    "op": "eq",
+    "args": [
+      {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "executedFee"
+            ]
+          },
+          "kind"
+        ]
+      },
+      "cypher-bound-quoter"
+    ]
+  },
+  "context": {},
+  "boundState": "$descriptor",
+  "identity": {
+    "applies": false,
+    "select": [
+      {
+        "return": "never"
+      }
+    ],
+    "stages": {
+      "never": {
+        "requirements": {
+          "transports": []
+        },
+        "requests": [],
+        "decode": [
+          {
+            "return": null
+          }
+        ]
+      }
+    },
+    "decide": [
+      {
+        "return": {
+          "status": "retryable",
+          "reasonCode": "unused-variant"
+        }
+      }
+    ]
+  },
+  "pricing": {
+    "refreshPolicy": "each-block",
+    "requirements": {
+      "transports": [
+        "eth-call",
+        "get-code"
+      ]
+    },
+    "dependencies": [
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      },
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "token0"
+        ]
+      },
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "token1"
+        ]
+      },
+      {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "factoryBinding"
+            ]
+          },
+          "factory"
+        ]
+      },
+      {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "executedFee"
+            ]
+          },
+          "plugin"
+        ]
+      }
+    ],
+    "mutationAddresses": [
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      }
+    ],
+    "mutationPredicate": {
+      "op": "or",
+      "args": [
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "topics"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "0x121cb44ee54098b1a04743c487e7460d8dd429b27f88b1f4d4767396e1a59f79"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "topics"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "0x98636036cb66a9c19a37435efc1e90142190214e8abeb821bdba3f2990dd4c95"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "topics"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "topics"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "0x932214d4a69c27c086643126ed97c32681da179064c678836c173f99bd13ca01"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "topics"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "0x598b9f043c813aa6be3426ca60d1c65d17256312890be5118dab55b0775ebe2a"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "topics"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "0x3a6271b36c1b44bd6a0a0d56230602dc6919b7c17af57254306fadf5fee69dc3"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "topics"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "0x27a3944eff2135a57675f17e72501038982b73620d01f794c72e93d61a3932a2"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "topics"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "0x01413b1d5d4c359e9a0daa7909ecda165f6e8c51fe2ff529d74b22a5a7c02645"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation",
+                        "topics"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "0x3647dccc990d4941b0b05b32527ef493a98d6187b20639ca2f9743f3b55ca5e1"
+          ]
+        }
+      ]
+    },
+    "classifyUnavailable": {
+      "op": "model",
+      "args": [
+        "unavailable",
+        {
+          "snapshot": "$snapshot",
+          "routes": "$routes"
+        }
+      ]
+    }
+  },
+  "exact": {
+    "methodId": "algebra-bound-quoter",
+    "requirements": {
+      "transports": [
+        "eth-call",
+        "get-code"
+      ]
+    },
+    "retainReadEvidence": true,
+    "checks": [
+      {
+        "condition": {
+          "op": "defined",
+          "args": [
+            "$transactionOrigin"
+          ]
+        },
+        "error": "algebra-integral Quoter requires the production transaction origin"
+      },
+      {
+        "condition": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$transactionOrigin",
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "error": "algebra-integral Quoter requires a distinct origin"
+      },
+      {
+        "condition": {
+          "op": "lt",
+          "args": [
+            "$amountIn",
+            {
+              "op": "uint",
+              "args": [
+                "57896044618658097711785492504343953926634992332820282019728792003956564819968"
+              ]
+            }
+          ]
+        },
+        "error": "algebra-integral Quoter amount does not fit int256"
+      },
+      {
+        "condition": {
+          "op": "or",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "direction"
+                  ]
+                },
+                "zero-for-one"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "direction"
+                  ]
+                },
+                "one-for-zero"
+              ]
+            }
+          ]
+        },
+        "error": "algebra-integral exact route direction"
+      },
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "tickSpacing"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "tickSpacing"
+              ]
+            }
+          ]
+        },
+        "error": "algebra-integral exact route tick spacing"
+      }
+    ],
+    "amountOut": {
+      "op": "get",
+      "args": [
+        "$quoteResult",
+        "amountOut"
+      ]
+    },
+    "evidence": {
+      "kind": "algebra-integral-bound-quoter",
+      "source": "$source",
+      "pool": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      },
+      "tokenIn": {
+        "op": "get",
+        "args": [
+          "$route",
+          "tokenIn"
+        ]
+      },
+      "tokenOut": {
+        "op": "get",
+        "args": [
+          "$route",
+          "tokenOut"
+        ]
+      },
+      "tickSpacing": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "tickSpacing"
+        ]
+      },
+      "binding": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "bindingRef"
+            ]
+          },
+          "fingerprint"
+        ]
+      },
+      "routeKey": {
+        "op": "get",
+        "args": [
+          "$route",
+          "routeKey"
+        ]
+      },
+      "executor": {
+        "op": "address",
+        "args": [
+          "$executor"
+        ]
+      },
+      "transactionOrigin": {
+        "op": "address",
+        "args": [
+          "$transactionOrigin"
+        ]
+      },
+      "quoter": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "executedFee"
+                ]
+              },
+              "quoterBinding"
+            ]
+          },
+          "quoter"
+        ]
+      },
+      "plugin": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "executedFee"
+            ]
+          },
+          "plugin"
+        ]
+      },
+      "amountIn": "$amountIn",
+      "amountOut": "$amountOut",
+      "reportedLastFee": {
+        "op": "get",
+        "args": [
+          "$quoteResult",
+          "reportedLastFee"
+        ]
+      },
+      "declinedReason": null
+    },
+    "zeroEvidence": {
+      "kind": "algebra-integral-bound-quoter",
+      "source": "$source",
+      "pool": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      },
+      "tokenIn": {
+        "op": "get",
+        "args": [
+          "$route",
+          "tokenIn"
+        ]
+      },
+      "tokenOut": {
+        "op": "get",
+        "args": [
+          "$route",
+          "tokenOut"
+        ]
+      },
+      "tickSpacing": {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "tickSpacing"
+        ]
+      },
+      "binding": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "bindingRef"
+            ]
+          },
+          "fingerprint"
+        ]
+      },
+      "routeKey": {
+        "op": "get",
+        "args": [
+          "$route",
+          "routeKey"
+        ]
+      },
+      "executor": {
+        "op": "address",
+        "args": [
+          "$executor"
+        ]
+      },
+      "transactionOrigin": {
+        "op": "address",
+        "args": [
+          "$transactionOrigin"
+        ]
+      },
+      "quoter": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "executedFee"
+                ]
+              },
+              "quoterBinding"
+            ]
+          },
+          "quoter"
+        ]
+      },
+      "plugin": {
+        "op": "get",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "executedFee"
+            ]
+          },
+          "plugin"
+        ]
+      },
+      "amountIn": "$amountIn",
+      "amountOut": "$amountOut",
+      "reportedLastFee": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "declinedReason": null
+    }
+  },
+  "readPrograms": {},
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": [
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      }
+    ],
+    "requireCanonicalSource": true,
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "token0"
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "token1"
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "algebra-integral runtime invalid execution addresses"
+      },
+      {
+        "condition": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "pool"
+                  ]
+                },
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "error": "algebra-integral runtime invalid execution addresses"
+      }
+    ],
+    "steps": [
+      {
+        "id": "swapZeroForOne",
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "direction"
+              ]
+            },
+            "zero-for-one"
+          ]
+        },
+        "frame": {
+          "call": {
+            "target": {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            },
+            "signature": "function swap(address recipient,bool zeroToOne,int256 amountRequired,uint160 limitSqrtPrice,bytes data)",
+            "args": [
+              "$recipient",
+              true,
+              {
+                "runtime": "amountIn"
+              },
+              "4295128740"
+            ],
+            "dataArgument": 4
+          },
+          "callback": {
+            "signature": "function algebraSwapCallback(int256 amount0Delta,int256 amount1Delta,bytes data)",
+            "dataArgument": 2,
+            "captures": {
+              "capital": {
+                "runtime": "amountIn"
+              }
+            },
+            "arguments": [
+              {
+                "index": 0,
+                "name": "debt",
+                "encoding": "positive",
+                "maximum": {
+                  "runtime": "capital"
+                }
+              },
+              {
+                "index": 1,
+                "name": "credit",
+                "encoding": "negative",
+                "minimum": 1
+              }
+            ],
+            "steps": [
+              {
+                "id": "pay",
+                "call": {
+                  "target": {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "token0"
+                    ]
+                  },
+                  "signature": "function transfer(address to,uint256 amount) returns(bool)",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    },
+                    {
+                      "runtime": "debt"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "swapOneForZero",
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "direction"
+              ]
+            },
+            "one-for-zero"
+          ]
+        },
+        "frame": {
+          "call": {
+            "target": {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            },
+            "signature": "function swap(address recipient,bool zeroToOne,int256 amountRequired,uint160 limitSqrtPrice,bytes data)",
+            "args": [
+              "$recipient",
+              false,
+              {
+                "runtime": "amountIn"
+              },
+              "1461446703485210103287273052203988822378723970341"
+            ],
+            "dataArgument": 4
+          },
+          "callback": {
+            "signature": "function algebraSwapCallback(int256 amount0Delta,int256 amount1Delta,bytes data)",
+            "dataArgument": 2,
+            "captures": {
+              "capital": {
+                "runtime": "amountIn"
+              }
+            },
+            "arguments": [
+              {
+                "index": 1,
+                "name": "debt",
+                "encoding": "positive",
+                "maximum": {
+                  "runtime": "capital"
+                }
+              },
+              {
+                "index": 0,
+                "name": "credit",
+                "encoding": "negative",
+                "minimum": 1
+              }
+            ],
+            "steps": [
+              {
+                "id": "pay",
+                "call": {
+                  "target": {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "token1"
+                    ]
+                  },
+                  "signature": "function transfer(address to,uint256 amount) returns(bool)",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    },
+                    {
+                      "runtime": "debt"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "$executor",
+        "maximum": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "$recipient"
+      }
+    ]
+  },
+  "modules": {
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "chainQuote": {
+        "version": 2,
+        "step": "quote",
+        "requestId": "exact-quoter",
+        "signature": "function quoteExactInputSingle(address tokenIn,address tokenOut,address deployer,uint256 amountIn,uint160 limitSqrtPrice) returns(uint256 amountOut,uint16 fee)",
+        "amountPath": [
+          3
+        ],
+        "outputPath": [
+          0
+        ],
+        "completion": "returned",
+        "requestBinding": {
+          "target": {
+            "op": "get",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "executedFee"
+                    ]
+                  },
+                  "quoterBinding"
+                ]
+              },
+              "quoter"
+            ]
+          },
+          "caller": {
+            "kind": "transaction-origin"
+          }
+        }
+      },
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {
+            "transports": [
+              "eth-call",
+              "get-code"
+            ],
+            "caller": "transaction-origin"
+          },
+          "requests": [
+            {
+              "id": "exact-quoter",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "executedFee"
+                        ]
+                      },
+                      "quoterBinding"
+                    ]
+                  },
+                  "quoter"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "quoter",
+                  "quoteExactInputSingle",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "tokenIn"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "tokenOut"
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000",
+                    "$amountIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "caller": {
+                "kind": "transaction-origin"
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "pool-plugin",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "pool"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pool",
+                  "plugin",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "plugin-code",
+              "kind": "get-code",
+              "address": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "executedFee"
+                    ]
+                  },
+                  "plugin"
+                ]
+              }
+            },
+            {
+              "id": "quoter-code",
+              "kind": "get-code",
+              "address": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "executedFee"
+                        ]
+                      },
+                      "quoterBinding"
+                    ]
+                  },
+                  "quoter"
+                ]
+              }
+            }
+          ],
+          "decode": [
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$results"
+                    ]
+                  },
+                  4
+                ]
+              },
+              "error": "algebra exact result count"
+            },
+            {
+              "assert": {
+                "op": "assertSource",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$results",
+                          1
+                        ]
+                      },
+                      "source"
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$results",
+                          0
+                        ]
+                      },
+                      "source"
+                    ]
+                  }
+                ]
+              },
+              "error": "algebra exact source mismatch"
+            },
+            {
+              "assert": {
+                "op": "assertSource",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$results",
+                          2
+                        ]
+                      },
+                      "source"
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$results",
+                          0
+                        ]
+                      },
+                      "source"
+                    ]
+                  }
+                ]
+              },
+              "error": "algebra exact source mismatch"
+            },
+            {
+              "assert": {
+                "op": "assertSource",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$results",
+                          3
+                        ]
+                      },
+                      "source"
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$results",
+                          0
+                        ]
+                      },
+                      "source"
+                    ]
+                  }
+                ]
+              },
+              "error": "algebra exact source mismatch"
+            },
+            {
+              "assert": {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "decode",
+                    "args": [
+                      "pool",
+                      "plugin",
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              "pool-plugin"
+                            ]
+                          },
+                          "data"
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "executedFee"
+                        ]
+                      },
+                      "plugin"
+                    ]
+                  }
+                ]
+              },
+              "error": "algebra current plugin differs from the admitted binding"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "plugin-code"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "executedFee"
+                                ]
+                              },
+                              "quoterBinding"
+                            ]
+                          },
+                          "pluginCodeHash"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "algebra plugin code binding changed"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "codeHash",
+                    "args": [
+                      {
+                        "op": "code",
+                        "args": [
+                          "quoter-code"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "executedFee"
+                                ]
+                              },
+                              "quoterBinding"
+                            ]
+                          },
+                          "quoterCodeHash"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "algebra Quoter code binding changed"
+            },
+            {
+              "return": {
+                "amountOut": {
+                  "op": "decode",
+                  "args": [
+                    "quoter",
+                    "quoteExactInputSingle",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "exact-quoter"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                },
+                "reportedLastFee": {
+                  "op": "decode",
+                  "args": [
+                    "quoter",
+                    "quoteExactInputSingle",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "exact-quoter"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    1
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.quote"
+    }
+  }
+}

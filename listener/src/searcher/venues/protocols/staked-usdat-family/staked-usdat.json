@@ -1,0 +1,5994 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "protocol:staked-usdat"
+  },
+  "production": {
+    "domain": "protocol",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_STAKED_USDAT_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "protocol:staked-usdat",
+    "domain": "protocol",
+    "ownedActionAdapterIds": [
+      "staked-usdat-deposit"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "protocol",
+        "protocolAction": "wrap"
+      }
+    ],
+    "supportedLineages": [
+      "staked-usdat:source-bound-deposit"
+    ],
+    "poolAdapterIds": [
+      "staked-usdat"
+    ],
+    "edgeAdapterIds": [
+      "staked-usdat-deposit"
+    ],
+    "requiresProtocolEdgesFlag": true
+  },
+  "discovery": {
+    "definition": {
+      "sources": [
+        "observed-call",
+        "landed-log",
+        "address-surface"
+      ],
+      "candidateSources": [
+        "dex-token-domain",
+        "observed-interaction"
+      ],
+      "candidate": {
+        "kind": "erc4626-vault",
+        "addressField": "vault"
+      },
+      "calls": [
+        {
+          "id": "erc4626-deposit-call",
+          "signature": "deposit(uint256,address)"
+        },
+        {
+          "id": "erc4626-redeem-call",
+          "signature": "redeem(uint256,address,address)"
+        }
+      ],
+      "events": [
+        {
+          "id": "erc4626-deposit-log",
+          "signature": "Deposit(address,address,uint256,uint256)"
+        },
+        {
+          "id": "erc4626-withdraw-log",
+          "signature": "Withdraw(address,address,address,uint256,uint256)"
+        }
+      ],
+      "surface": {
+        "id": "erc4626-standard-surface",
+        "fingerprint": "erc4626-standard-behavior-v1"
+      },
+      "labels": [
+        "staked-usdat",
+        "protocol:staked-usdat"
+      ]
+    }
+  },
+  "identity": {
+    "definition": {
+      "version": 1,
+      "abi": {
+        "vault": [
+          "function asset() view returns (address)",
+          "function totalAssets() view returns (uint256)",
+          "function totalSupply() view returns (uint256)",
+          "function convertToShares(uint256 assets) view returns (uint256)",
+          "function convertToAssets(uint256 shares) view returns (uint256)",
+          "function previewDeposit(uint256 assets) view returns (uint256)",
+          "function previewRedeem(uint256 shares) view returns (uint256)",
+          "function deposit(uint256 assets,address receiver) returns (uint256 shares)",
+          "function redeem(uint256 shares,address receiver,address owner) returns (uint256 assets)",
+          "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+          "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)"
+        ],
+        "token": [
+          "function balanceOf(address account) view returns (uint256)",
+          "function decimals() view returns (uint8)",
+          "function approve(address spender,uint256 amount) returns (bool)"
+        ],
+        "specialized": [
+          "function asset() view returns(address)",
+          "function getStrcOracle() view returns(address)",
+          "function getWithdrawalQueue() view returns(address)",
+          "function depositFeeBps() view returns(uint256)",
+          "function feeRecipient() view returns(address)",
+          "function paused() view returns(bool)",
+          "function isBlacklisted(address) view returns(bool)"
+        ]
+      },
+      "constants": {
+        "actor": "0x000000000000000000000000000000000000face",
+        "caller": {
+          "kind": "verified-actor",
+          "evidenceId": "erc4626-probe-actor"
+        },
+        "zero": "0x0000000000000000000000000000000000000000",
+        "samples": [
+          "1000000",
+          "1000000000000000000"
+        ],
+        "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+        "maskedCodePattern": "^0x[0-9a-fA-F]{2976}$",
+        "maskedAdminOffset": 16,
+        "maskedAdminSize": 32,
+        "sampleToleranceDivisor": "1000",
+        "sampleToleranceAddend": "2",
+        "getterProxyCode": "0x6080604052600a600c565b005b60186014601a565b6050565b565b5f604b7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc546001600160a01b031690565b905090565b365f5f375f5f365f845af43d5f5f3e8080156069573d5ff35b3d5ffdfea264697066735822122062ba703e4a09017c3a3f8e56bd964d252d36fcc1692ec264f7c15b6c0b89424064736f6c634300081e0033",
+        "getterImplementationHash": "0x555fcdfcc7e072b39cb27f6a0f4619c376a0d6b1f6d2b8d60216d5beaca8d2a2",
+        "maskedTemplateHash": "0x834029e91a0eb94f478b72d8f8d0924a57de0dc6046e828a543fc421bd6270d7",
+        "maskedImplementationHash": "0x51c008b264124ad667f58a8595b86745a657419baac327c1d1f335bc95b953a7",
+        "getterBindings": [
+          {
+            "offsets": [
+              11189,
+              11230,
+              11551
+            ]
+          },
+          {
+            "offsets": [
+              3508,
+              8461,
+              9878,
+              11665
+            ],
+            "getter": "getStrcOracle",
+            "requestId": "standard-staked-getStrcOracle"
+          },
+          {
+            "offsets": [
+              1439,
+              6190,
+              6667,
+              7579,
+              7646,
+              7723,
+              7813,
+              12524,
+              12584
+            ],
+            "getter": "getWithdrawalQueue",
+            "requestId": "standard-staked-getWithdrawalQueue"
+          }
+        ],
+        "maskedByteChecks": [
+          {
+            "offset": 15,
+            "size": 1,
+            "value": "0x7f"
+          }
+        ]
+      },
+      "expressions": {
+        "sampleTolerance": {
+          "op": "add",
+          "args": [
+            {
+              "op": "div",
+              "args": [
+                "$amount",
+                {
+                  "op": "uint",
+                  "args": [
+                    "$constants.sampleToleranceDivisor"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "$constants.sampleToleranceAddend"
+              ]
+            }
+          ]
+        },
+        "invalidBase": {
+          "phase": "base",
+          "vault": {
+            "op": "address",
+            "args": [
+              "$candidate.vault"
+            ]
+          },
+          "vaultCodeHash": {
+            "op": "codeHash",
+            "args": [
+              "$code"
+            ]
+          },
+          "asset": "$constants.zero",
+          "assetCodeHash": {
+            "op": "hash",
+            "args": [
+              {
+                "asset": "$constants.zero"
+              }
+            ]
+          },
+          "totalAssets": {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          },
+          "totalSupply": {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          },
+          "sampleAssets": {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          },
+          "sampleShares": {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          },
+          "previewDeposit": {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          },
+          "previewRedeem": {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          },
+          "baseValid": false,
+          "evidenceRequestIds": "$ids"
+        },
+        "depositProof": {
+          "op": "and",
+          "args": [
+            "$deposit.ok",
+            {
+              "op": "eq",
+              "args": [
+                "$deposit.completion",
+                "returned"
+              ]
+            },
+            {
+              "op": "gte",
+              "args": [
+                "$eventAssets",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$eventAssets",
+                "$base.sampleAssets"
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$roundTrip",
+                {
+                  "op": "add",
+                  "args": [
+                    "$base.sampleAssets",
+                    {
+                      "op": "expression",
+                      "args": [
+                        "sampleTolerance",
+                        {
+                          "amount": "$base.sampleAssets"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "coalesce",
+                  "args": [
+                    "$depositValue",
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "deposit",
+                        "$deposit.data",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "$base.previewDeposit"
+              ]
+            },
+            {
+              "op": "tokenDelta",
+              "args": [
+                {
+                  "result": "$deposit",
+                  "token": "$base.asset",
+                  "account": {
+                    "op": "address",
+                    "args": [
+                      "$constants.actor"
+                    ]
+                  },
+                  "direction": "decrease",
+                  "amount": "$base.sampleAssets"
+                }
+              ]
+            },
+            {
+              "op": "tokenDelta",
+              "args": [
+                {
+                  "result": "$deposit",
+                  "token": "$base.vault",
+                  "account": {
+                    "op": "address",
+                    "args": [
+                      "$constants.actor"
+                    ]
+                  },
+                  "direction": "increase",
+                  "amount": "$base.previewDeposit"
+                }
+              ]
+            },
+            {
+              "op": "supplyDelta",
+              "args": [
+                {
+                  "result": "$deposit",
+                  "token": "$base.vault",
+                  "direction": "increase",
+                  "amount": "$base.previewDeposit"
+                }
+              ]
+            },
+            {
+              "op": "event",
+              "args": [
+                {
+                  "abi": "vault",
+                  "result": "$deposit",
+                  "address": "$base.vault",
+                  "name": "Deposit",
+                  "fields": {
+                    "assets": "$eventAssets",
+                    "shares": "$base.previewDeposit"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "redeemProof": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                "$base.sampleShares",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            "$redeem.ok",
+            {
+              "op": "eq",
+              "args": [
+                "$redeem.completion",
+                "returned"
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$previewRedeem",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "decode",
+                  "args": [
+                    "vault",
+                    "redeem",
+                    "$redeem.data",
+                    0
+                  ]
+                },
+                "$previewRedeem"
+              ]
+            },
+            {
+              "op": "tokenDelta",
+              "args": [
+                {
+                  "result": "$redeem",
+                  "token": "$base.vault",
+                  "account": {
+                    "op": "address",
+                    "args": [
+                      "$constants.actor"
+                    ]
+                  },
+                  "direction": "decrease",
+                  "amount": "$base.sampleShares"
+                }
+              ]
+            },
+            {
+              "op": "tokenDelta",
+              "args": [
+                {
+                  "result": "$redeem",
+                  "token": "$base.asset",
+                  "account": {
+                    "op": "address",
+                    "args": [
+                      "$constants.actor"
+                    ]
+                  },
+                  "direction": "increase",
+                  "amount": "$previewRedeem"
+                }
+              ]
+            },
+            {
+              "op": "supplyDelta",
+              "args": [
+                {
+                  "result": "$redeem",
+                  "token": "$base.vault",
+                  "direction": "decrease",
+                  "amount": "$base.sampleShares"
+                }
+              ]
+            },
+            {
+              "op": "event",
+              "args": [
+                {
+                  "abi": "vault",
+                  "result": "$redeem",
+                  "address": "$base.vault",
+                  "name": "Withdraw",
+                  "fields": {
+                    "assets": "$previewRedeem",
+                    "shares": "$base.sampleShares"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "eventAssets": {
+          "op": "model",
+          "args": [
+            "stakedUsdatEventAssets",
+            {
+              "grossAssets": "$base.sampleAssets",
+              "depositFeeBps": "$evidence.feeWitness.depositFeeBps",
+              "feeRecipient": "$evidence.feeWitness.feeRecipient"
+            }
+          ]
+        },
+        "effectsEvidence": {
+          "op": "map",
+          "args": [
+            {
+              "op": "filter",
+              "args": [
+                "$results",
+                "r",
+                "$r.ok"
+              ]
+            },
+            "r",
+            {
+              "id": "$r.id",
+              "completion": "$r.completion",
+              "effects": {
+                "op": "effects",
+                "args": [
+                  "$r.effects"
+                ]
+              }
+            }
+          ]
+        },
+        "activeRequests": {
+          "op": "if",
+          "args": [
+            "$base.baseValid",
+            {
+              "op": "concat",
+              "args": [
+                [
+                  {
+                    "id": "active-asset-code",
+                    "kind": "get-code",
+                    "address": {
+                      "op": "address",
+                      "args": [
+                        "$base.asset"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "active-asset-balance",
+                    "kind": "eth-call",
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$base.asset"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "token",
+                        "balanceOf",
+                        [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$constants.actor"
+                            ]
+                          }
+                        ]
+                      ]
+                    },
+                    "completion": "return-or-revert-data",
+                    "required": false
+                  },
+                  {
+                    "id": "active-share-balance",
+                    "kind": "eth-call",
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$base.vault"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "token",
+                        "balanceOf",
+                        [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$constants.actor"
+                            ]
+                          }
+                        ]
+                      ]
+                    },
+                    "completion": "return-or-revert-data",
+                    "required": false
+                  },
+                  {
+                    "id": "active-roundtrip",
+                    "kind": "eth-call",
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$base.vault"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "vault",
+                        "previewRedeem",
+                        [
+                          "$base.previewDeposit"
+                        ]
+                      ]
+                    },
+                    "completion": "return-data"
+                  },
+                  {
+                    "id": "active-deposit",
+                    "required": false,
+                    "kind": "effect-delta-simulation",
+                    "call": {
+                      "caller": "$constants.caller",
+                      "to": {
+                        "op": "address",
+                        "args": [
+                          "$base.vault"
+                        ]
+                      },
+                      "data": {
+                        "op": "encode",
+                        "args": [
+                          "vault",
+                          "deposit",
+                          [
+                            "$base.sampleAssets",
+                            {
+                              "op": "address",
+                              "args": [
+                                "$constants.actor"
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    },
+                    "overrideIntent": {
+                      "caller": "$constants.caller",
+                      "tokenBalances": [
+                        {
+                          "token": "$base.asset",
+                          "amount": "$base.sampleAssets"
+                        }
+                      ]
+                    },
+                    "observeTokenBalances": [
+                      {
+                        "token": "$base.asset",
+                        "account": "$constants.caller"
+                      },
+                      {
+                        "token": "$base.vault",
+                        "account": "$constants.caller"
+                      }
+                    ],
+                    "observe": [
+                      "return-data",
+                      "revert-data",
+                      "token-delta",
+                      "total-supply-delta",
+                      "logs"
+                    ],
+                    "preCalls": [
+                      {
+                        "caller": "$constants.caller",
+                        "to": {
+                          "op": "address",
+                          "args": [
+                            "$base.asset"
+                          ]
+                        },
+                        "data": {
+                          "op": "encode",
+                          "args": [
+                            "token",
+                            "approve",
+                            [
+                              "$base.vault",
+                              "$base.sampleAssets"
+                            ]
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ],
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$base.sampleShares",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    [
+                      {
+                        "id": "active-preview-redeem",
+                        "kind": "eth-call",
+                        "to": {
+                          "op": "address",
+                          "args": [
+                            "$base.vault"
+                          ]
+                        },
+                        "data": {
+                          "op": "encode",
+                          "args": [
+                            "vault",
+                            "previewRedeem",
+                            [
+                              "$base.sampleShares"
+                            ]
+                          ]
+                        },
+                        "completion": "return-data"
+                      },
+                      {
+                        "id": "active-redeem",
+                        "required": false,
+                        "kind": "effect-delta-simulation",
+                        "call": {
+                          "caller": "$constants.caller",
+                          "to": {
+                            "op": "address",
+                            "args": [
+                              "$base.vault"
+                            ]
+                          },
+                          "data": {
+                            "op": "encode",
+                            "args": [
+                              "vault",
+                              "redeem",
+                              [
+                                "$base.sampleShares",
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$constants.actor"
+                                  ]
+                                },
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$constants.actor"
+                                  ]
+                                }
+                              ]
+                            ]
+                          }
+                        },
+                        "overrideIntent": {
+                          "caller": "$constants.caller",
+                          "tokenBalances": [
+                            {
+                              "token": "$base.vault",
+                              "amount": "$base.sampleShares"
+                            }
+                          ]
+                        },
+                        "observeTokenBalances": [
+                          {
+                            "token": "$base.asset",
+                            "account": "$constants.caller"
+                          },
+                          {
+                            "token": "$base.vault",
+                            "account": "$constants.caller"
+                          }
+                        ],
+                        "observe": [
+                          "return-data",
+                          "revert-data",
+                          "token-delta",
+                          "total-supply-delta",
+                          "logs"
+                        ]
+                      }
+                    ],
+                    []
+                  ]
+                }
+              ]
+            },
+            []
+          ]
+        }
+      },
+      "identity": {
+        "select": [
+          {
+            "return": "proxy",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "binding",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "proxy"
+              ]
+            }
+          },
+          {
+            "return": "base",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "binding"
+              ]
+            }
+          },
+          {
+            "return": "active",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "base"
+              ]
+            }
+          },
+          {
+            "return": "deposit-retry",
+            "when": {
+              "op": "defined",
+              "args": [
+                "$evidence.depositRetry"
+              ]
+            }
+          },
+          {
+            "return": "active"
+          }
+        ],
+        "stages": {
+          "base": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": {
+              "op": "concat",
+              "args": [
+                [
+                  {
+                    "id": "base-vault-code",
+                    "kind": "get-code",
+                    "address": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.vault"
+                      ]
+                    }
+                  },
+                  {
+                    "id": "base-asset",
+                    "kind": "eth-call",
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.vault"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "vault",
+                        "asset",
+                        []
+                      ]
+                    },
+                    "completion": "return-data"
+                  },
+                  {
+                    "id": "base-total-assets",
+                    "kind": "eth-call",
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.vault"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "vault",
+                        "totalAssets",
+                        []
+                      ]
+                    },
+                    "completion": "return-data"
+                  },
+                  {
+                    "id": "base-total-supply",
+                    "kind": "eth-call",
+                    "to": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.vault"
+                      ]
+                    },
+                    "data": {
+                      "op": "encode",
+                      "args": [
+                        "vault",
+                        "totalSupply",
+                        []
+                      ]
+                    },
+                    "completion": "return-data"
+                  }
+                ],
+                {
+                  "op": "flatMap",
+                  "args": [
+                    "$constants.samples",
+                    "sampleAmount",
+                    [
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "base-convert-shares",
+                              {
+                                "op": "string",
+                                "args": [
+                                  "$index"
+                                ]
+                              }
+                            ],
+                            ":"
+                          ]
+                        },
+                        "kind": "eth-call",
+                        "to": {
+                          "op": "address",
+                          "args": [
+                            "$candidate.vault"
+                          ]
+                        },
+                        "data": {
+                          "op": "encode",
+                          "args": [
+                            "vault",
+                            "convertToShares",
+                            [
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "$sampleAmount"
+                                ]
+                              }
+                            ]
+                          ]
+                        },
+                        "completion": "return-data"
+                      },
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "base-preview-deposit",
+                              {
+                                "op": "string",
+                                "args": [
+                                  "$index"
+                                ]
+                              }
+                            ],
+                            ":"
+                          ]
+                        },
+                        "kind": "eth-call",
+                        "to": {
+                          "op": "address",
+                          "args": [
+                            "$candidate.vault"
+                          ]
+                        },
+                        "data": {
+                          "op": "encode",
+                          "args": [
+                            "vault",
+                            "previewDeposit",
+                            [
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "$sampleAmount"
+                                ]
+                              }
+                            ]
+                          ]
+                        },
+                        "completion": "return-data"
+                      },
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "base-convert-assets",
+                              {
+                                "op": "string",
+                                "args": [
+                                  "$index"
+                                ]
+                              }
+                            ],
+                            ":"
+                          ]
+                        },
+                        "kind": "eth-call",
+                        "to": {
+                          "op": "address",
+                          "args": [
+                            "$candidate.vault"
+                          ]
+                        },
+                        "data": {
+                          "op": "encode",
+                          "args": [
+                            "vault",
+                            "convertToAssets",
+                            [
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "$sampleAmount"
+                                ]
+                              }
+                            ]
+                          ]
+                        },
+                        "completion": "return-data"
+                      },
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "base-preview-redeem",
+                              {
+                                "op": "string",
+                                "args": [
+                                  "$index"
+                                ]
+                              }
+                            ],
+                            ":"
+                          ]
+                        },
+                        "kind": "eth-call",
+                        "to": {
+                          "op": "address",
+                          "args": [
+                            "$candidate.vault"
+                          ]
+                        },
+                        "data": {
+                          "op": "encode",
+                          "args": [
+                            "vault",
+                            "previewRedeem",
+                            [
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "$sampleAmount"
+                                ]
+                              }
+                            ]
+                          ]
+                        },
+                        "completion": "return-data"
+                      }
+                    ]
+                  ]
+                }
+              ]
+            },
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$results",
+                        "r",
+                        "$r.ok"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "code",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "base-vault-code"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "expression",
+                  "args": [
+                    "invalidBase",
+                    {
+                      "ids": [
+                        "base-asset",
+                        "base-total-assets",
+                        "base-total-supply"
+                      ]
+                    }
+                  ]
+                },
+                "when": {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "shape",
+                      "args": [
+                        "base-asset"
+                      ]
+                    },
+                    "returned"
+                  ]
+                }
+              },
+              {
+                "let": "asset",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "asset",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "base-asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "expression",
+                  "args": [
+                    "invalidBase",
+                    {
+                      "ids": [
+                        "base-asset"
+                      ]
+                    }
+                  ]
+                },
+                "when": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$asset",
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$asset",
+                        "$candidate.vault"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "expression",
+                  "args": [
+                    "invalidBase",
+                    {
+                      "ids": [
+                        "base-total-assets",
+                        "base-total-supply"
+                      ]
+                    }
+                  ]
+                },
+                "when": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "ne",
+                      "args": [
+                        {
+                          "op": "shape",
+                          "args": [
+                            "base-total-assets"
+                          ]
+                        },
+                        "returned"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        {
+                          "op": "shape",
+                          "args": [
+                            "base-total-supply"
+                          ]
+                        },
+                        "returned"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "totalAssets",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "vault",
+                    "totalAssets",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "base-total-assets"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "totalSupply",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "vault",
+                    "totalSupply",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "base-total-supply"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "samples",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$constants.samples",
+                        "sampleAmount",
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "and",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        {
+                                          "op": "join",
+                                          "args": [
+                                            [
+                                              "base-convert-shares",
+                                              {
+                                                "op": "string",
+                                                "args": [
+                                                  "$index"
+                                                ]
+                                              }
+                                            ],
+                                            ":"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        {
+                                          "op": "join",
+                                          "args": [
+                                            [
+                                              "base-preview-deposit",
+                                              {
+                                                "op": "string",
+                                                "args": [
+                                                  "$index"
+                                                ]
+                                              }
+                                            ],
+                                            ":"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        {
+                                          "op": "join",
+                                          "args": [
+                                            [
+                                              "base-convert-assets",
+                                              {
+                                                "op": "string",
+                                                "args": [
+                                                  "$index"
+                                                ]
+                                              }
+                                            ],
+                                            ":"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        {
+                                          "op": "join",
+                                          "args": [
+                                            [
+                                              "base-preview-redeem",
+                                              {
+                                                "op": "string",
+                                                "args": [
+                                                  "$index"
+                                                ]
+                                              }
+                                            ],
+                                            ":"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "amount": {
+                                "op": "uint",
+                                "args": [
+                                  "$sampleAmount"
+                                ]
+                              },
+                              "shares": {
+                                "op": "decode",
+                                "args": [
+                                  "vault",
+                                  "convertToShares",
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "returned",
+                                        "args": [
+                                          {
+                                            "op": "join",
+                                            "args": [
+                                              [
+                                                "base-convert-shares",
+                                                {
+                                                  "op": "string",
+                                                  "args": [
+                                                    "$index"
+                                                  ]
+                                                }
+                                              ],
+                                              ":"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "data"
+                                    ]
+                                  },
+                                  0
+                                ]
+                              },
+                              "previewDeposit": {
+                                "op": "decode",
+                                "args": [
+                                  "vault",
+                                  "previewDeposit",
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "returned",
+                                        "args": [
+                                          {
+                                            "op": "join",
+                                            "args": [
+                                              [
+                                                "base-preview-deposit",
+                                                {
+                                                  "op": "string",
+                                                  "args": [
+                                                    "$index"
+                                                  ]
+                                                }
+                                              ],
+                                              ":"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "data"
+                                    ]
+                                  },
+                                  0
+                                ]
+                              },
+                              "assets": {
+                                "op": "decode",
+                                "args": [
+                                  "vault",
+                                  "convertToAssets",
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "returned",
+                                        "args": [
+                                          {
+                                            "op": "join",
+                                            "args": [
+                                              [
+                                                "base-convert-assets",
+                                                {
+                                                  "op": "string",
+                                                  "args": [
+                                                    "$index"
+                                                  ]
+                                                }
+                                              ],
+                                              ":"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "data"
+                                    ]
+                                  },
+                                  0
+                                ]
+                              },
+                              "previewRedeem": {
+                                "op": "decode",
+                                "args": [
+                                  "vault",
+                                  "previewRedeem",
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "returned",
+                                        "args": [
+                                          {
+                                            "op": "join",
+                                            "args": [
+                                              [
+                                                "base-preview-redeem",
+                                                {
+                                                  "op": "string",
+                                                  "args": [
+                                                    "$index"
+                                                  ]
+                                                }
+                                              ],
+                                              ":"
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      "data"
+                                    ]
+                                  },
+                                  0
+                                ]
+                              }
+                            },
+                            null
+                          ]
+                        }
+                      ]
+                    },
+                    "s",
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$s"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "depositSamples",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    "$samples",
+                    "s",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$s.shares",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$s.previewDeposit",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lte",
+                          "args": [
+                            "$s.previewDeposit",
+                            {
+                              "op": "add",
+                              "args": [
+                                "$s.shares",
+                                {
+                                  "op": "expression",
+                                  "args": [
+                                    "sampleTolerance",
+                                    {
+                                      "amount": "$s.shares"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "redeemSamples",
+                "value": {
+                  "op": "filter",
+                  "args": [
+                    "$samples",
+                    "s",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$s.assets",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$s.previewRedeem",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lte",
+                          "args": [
+                            "$s.previewRedeem",
+                            {
+                              "op": "add",
+                              "args": [
+                                "$s.assets",
+                                {
+                                  "op": "expression",
+                                  "args": [
+                                    "sampleTolerance",
+                                    {
+                                      "amount": "$s.assets"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "d",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$depositSamples",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "r",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$redeemSamples",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "alternate",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$depositSamples",
+                    1
+                  ]
+                }
+              },
+              {
+                "let": "assetCode",
+                "value": {
+                  "op": "result",
+                  "args": [
+                    "base-asset-code"
+                  ]
+                }
+              },
+              {
+                "let": "base",
+                "value": {
+                  "phase": "base",
+                  "vault": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.vault"
+                    ]
+                  },
+                  "vaultCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$code"
+                    ]
+                  },
+                  "asset": "$asset",
+                  "assetCodeHash": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "and",
+                        "args": [
+                          "$assetCode.ok",
+                          {
+                            "op": "eq",
+                            "args": [
+                              "$assetCode.completion",
+                              "returned"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "codeHash",
+                        "args": [
+                          "$assetCode.data"
+                        ]
+                      },
+                      {
+                        "op": "hash",
+                        "args": [
+                          {
+                            "asset": "$asset"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "totalAssets": "$totalAssets",
+                  "totalSupply": "$totalSupply",
+                  "sampleAssets": {
+                    "op": "coalesce",
+                    "args": [
+                      "$d.amount",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  "sampleShares": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "gt",
+                        "args": [
+                          "$totalSupply",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "1"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "min",
+                        "args": [
+                          {
+                            "op": "coalesce",
+                            "args": [
+                              "$r.amount",
+                              {
+                                "op": "div",
+                                "args": [
+                                  "$totalSupply",
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "2"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "div",
+                            "args": [
+                              "$totalSupply",
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "2"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  "previewDeposit": {
+                    "op": "coalesce",
+                    "args": [
+                      "$d.previewDeposit",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  "previewRedeem": {
+                    "op": "coalesce",
+                    "args": [
+                      "$r.previewRedeem",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  "alternateDepositSample": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "defined",
+                        "args": [
+                          "$alternate"
+                        ]
+                      },
+                      {
+                        "amount": "$alternate.amount",
+                        "preview": "$alternate.previewDeposit"
+                      },
+                      "$missing"
+                    ]
+                  },
+                  "baseValid": {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "defined",
+                        "args": [
+                          "$d"
+                        ]
+                      },
+                      {
+                        "op": "defined",
+                        "args": [
+                          "$r"
+                        ]
+                      }
+                    ]
+                  },
+                  "stakedUsdat": "$evidence.stakedUsdat",
+                  "feeWitness": "$evidence.feeWitness"
+                }
+              },
+              {
+                "return": "$base",
+                "when": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        "$base.baseValid"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$profile.excludeSpecialized",
+                        false
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$base",
+                    {
+                      "stakedUsdatCheck": {
+                        "source": "$source",
+                        "proxyCodeHash": "$base.vaultCodeHash"
+                      }
+                    }
+                  ]
+                },
+                "when": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        "$code"
+                      ]
+                    },
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        "$constants.getterProxyCode"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$base",
+                    {
+                      "custodianCheck": "slot",
+                      "custodianCheckSource": "$source"
+                    }
+                  ]
+                },
+                "when": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "matches",
+                      "args": [
+                        "$code",
+                        "$constants.maskedCodePattern"
+                      ]
+                    },
+                    {
+                      "op": "matches",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            "$code",
+                            "$constants.maskedAdminOffset",
+                            "$constants.maskedAdminSize"
+                          ]
+                        },
+                        "^0x0{24}[a-fA-F0-9]{40}$"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            "$code",
+                            "$constants.maskedAdminOffset",
+                            "$constants.maskedAdminSize"
+                          ]
+                        },
+                        "0x0000000000000000000000000000000000000000000000000000000000000000"
+                      ]
+                    },
+                    {
+                      "op": "every",
+                      "args": [
+                        "$constants.maskedByteChecks",
+                        "check",
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "bytes",
+                              "args": [
+                                "$code",
+                                "$check.offset",
+                                "$check.size"
+                              ]
+                            },
+                            "$check.value"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "maskHash",
+                          "args": [
+                            "$code",
+                            [
+                              [
+                                "$constants.maskedAdminOffset",
+                                "$constants.maskedAdminSize"
+                              ]
+                            ]
+                          ]
+                        },
+                        "$constants.maskedTemplateHash"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": "$base"
+              }
+            ]
+          },
+          "active": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call",
+                "effect-delta-simulation"
+              ],
+              "caller": "verified-actor",
+              "effects": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta",
+                "logs"
+              ]
+            },
+            "optionalFailures": [
+              "active-asset-balance",
+              "active-share-balance",
+              "active-deposit",
+              "active-redeem",
+              "fallback-deposit",
+              "fallback-roundtrip"
+            ],
+            "requests": {
+              "op": "expression",
+              "args": [
+                "activeRequests",
+                {
+                  "base": "$evidence"
+                }
+              ]
+            },
+            "decode": [
+              {
+                "let": "depositValue",
+                "value": "$missing"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$results",
+                        "r",
+                        "$r.ok"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "base",
+                "value": "$evidence"
+              },
+              {
+                "let": "assetCode",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "active-asset-code"
+                  ]
+                }
+              },
+              {
+                "let": "balanceSurfaces",
+                "value": [
+                  {
+                    "op": "wordSurface",
+                    "args": [
+                      "active-asset-balance"
+                    ]
+                  },
+                  {
+                    "op": "wordSurface",
+                    "args": [
+                      "active-share-balance"
+                    ]
+                  }
+                ]
+              },
+              {
+                "let": "erc20SurfacesValid",
+                "value": {
+                  "op": "every",
+                  "args": [
+                    "$balanceSurfaces",
+                    "s",
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$s.status",
+                        "valid"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "unresolvedSurface",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$balanceSurfaces",
+                        "s",
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$s.status",
+                            "unresolved"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "requestFailure",
+                  "args": [
+                    "$unresolvedSurface.result"
+                  ]
+                },
+                "when": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "some",
+                          "args": [
+                            "$balanceSurfaces",
+                            "s",
+                            {
+                              "op": "eq",
+                              "args": [
+                                "$s.status",
+                                "invalid"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$unresolvedSurface"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "roundTrip",
+                "value": {
+                  "op": "decode",
+                  "args": [
+                    "vault",
+                    "previewRedeem",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "active-roundtrip"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "deposit",
+                "value": {
+                  "op": "result",
+                  "args": [
+                    "active-deposit"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "defined",
+                  "args": [
+                    "$deposit"
+                  ]
+                },
+                "error": "ERC4626 active-deposit result is missing"
+              },
+              {
+                "let": "eventAssets",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "eventAssets",
+                    {}
+                  ]
+                }
+              },
+              {
+                "let": "depositVerified",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "depositProof",
+                    {}
+                  ]
+                }
+              },
+              {
+                "let": "redeem",
+                "value": {
+                  "op": "result",
+                  "args": [
+                    "active-redeem"
+                  ]
+                }
+              },
+              {
+                "let": "previewRedeem",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$base.sampleShares",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        "$redeem.ok"
+                      ]
+                    },
+                    {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "previewRedeem",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "active-preview-redeem"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "redeemVerified",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "redeemProof",
+                    {}
+                  ]
+                }
+              },
+              {
+                "let": "unresolvedDirections",
+                "value": {
+                  "op": "sortId",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        [
+                          "$deposit",
+                          "$redeem"
+                        ],
+                        "r",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "defined",
+                              "args": [
+                                "$r"
+                              ]
+                            },
+                            {
+                              "op": "not",
+                              "args": [
+                                "$r.ok"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "depositRetry",
+                "value": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        "$erc20SurfacesValid",
+                        "$deposit.ok",
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$deposit.completion",
+                            "reverted-as-declared"
+                          ]
+                        },
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$base.alternateDepositSample"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "merge",
+                      "args": [
+                        "$base.alternateDepositSample",
+                        {
+                          "source": "$source"
+                        }
+                      ]
+                    },
+                    "$missing"
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "requestFailure",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$unresolvedDirections",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "when": {
+                  "op": "and",
+                  "args": [
+                    "$erc20SurfacesValid",
+                    {
+                      "op": "not",
+                      "args": [
+                        "$depositVerified"
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        "$redeemVerified"
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        {
+                          "op": "length",
+                          "args": [
+                            "$unresolvedDirections"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$base",
+                    {
+                      "phase": "active",
+                      "assetCodeHash": {
+                        "op": "codeHash",
+                        "args": [
+                          "$assetCode"
+                        ]
+                      },
+                      "erc20SurfacesValid": "$erc20SurfacesValid",
+                      "depositVerified": "$depositVerified",
+                      "redeemVerified": "$redeemVerified",
+                      "depositRetry": "$depositRetry",
+                      "behaviorProofHash": {
+                        "op": "hash",
+                        "args": [
+                          {
+                            "vault": "$base.vault",
+                            "asset": "$base.asset",
+                            "roundTrip": "$roundTrip",
+                            "depositEventAssets": {
+                              "op": "if",
+                              "args": [
+                                "$profile.hasEventMath",
+                                "$eventAssets",
+                                "$missing"
+                              ]
+                            },
+                            "erc20SurfacesValid": "$erc20SurfacesValid",
+                            "depositVerified": "$depositVerified",
+                            "redeemVerified": "$redeemVerified",
+                            "directionOutcomes": {
+                              "op": "map",
+                              "args": [
+                                {
+                                  "op": "filter",
+                                  "args": [
+                                    "$results",
+                                    "r",
+                                    {
+                                      "op": "or",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            "$r.id",
+                                            "active-deposit"
+                                          ]
+                                        },
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            "$r.id",
+                                            "active-redeem"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "r",
+                                {
+                                  "id": "$r.id",
+                                  "status": {
+                                    "op": "if",
+                                    "args": [
+                                      "$r.ok",
+                                      "ok",
+                                      "failure"
+                                    ]
+                                  },
+                                  "outcome": {
+                                    "op": "if",
+                                    "args": [
+                                      "$r.ok",
+                                      "$r.completion",
+                                      "$r.failure"
+                                    ]
+                                  }
+                                }
+                              ]
+                            },
+                            "resultEffects": {
+                              "op": "expression",
+                              "args": [
+                                "effectsEvidence",
+                                {}
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "deposit-retry": {
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "effect-delta-simulation"
+              ],
+              "caller": "verified-actor",
+              "effects": [
+                "return-data",
+                "revert-data",
+                "token-delta",
+                "total-supply-delta",
+                "logs"
+              ]
+            },
+            "optionalFailures": [
+              "active-asset-balance",
+              "active-share-balance",
+              "active-deposit",
+              "active-redeem",
+              "fallback-deposit",
+              "fallback-roundtrip"
+            ],
+            "requests": {
+              "op": "map",
+              "args": [
+                {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "activeRequests",
+                        {
+                          "base": {
+                            "op": "merge",
+                            "args": [
+                              "$evidence",
+                              {
+                                "phase": "base",
+                                "sampleAssets": "$evidence.depositRetry.amount",
+                                "previewDeposit": "$evidence.depositRetry.preview"
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "r",
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$r.id",
+                            "active-deposit"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$r.id",
+                            "active-roundtrip"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "r",
+                {
+                  "op": "merge",
+                  "args": [
+                    "$r",
+                    {
+                      "id": {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              "$r.id",
+                              "active-deposit"
+                            ]
+                          },
+                          "fallback-deposit",
+                          "fallback-roundtrip"
+                        ]
+                      },
+                      "required": false
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$r.kind",
+                            "eth-call"
+                          ]
+                        },
+                        {
+                          "completion": "return-or-revert-data"
+                        },
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "decode": [
+              {
+                "let": "retry",
+                "value": "$evidence.depositRetry"
+              },
+              {
+                "assert": {
+                  "op": "defined",
+                  "args": [
+                    "$retry"
+                  ]
+                },
+                "error": "ERC4626 deposit retry evidence missing"
+              },
+              {
+                "evaluate": {
+                  "op": "map",
+                  "args": [
+                    "$results",
+                    "r",
+                    {
+                      "op": "assertSource",
+                      "args": [
+                        "$r.source",
+                        "$retry.source"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "deposit",
+                "value": {
+                  "op": "result",
+                  "args": [
+                    "fallback-deposit"
+                  ]
+                }
+              },
+              {
+                "let": "roundTripResult",
+                "value": {
+                  "op": "result",
+                  "args": [
+                    "fallback-roundtrip"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$deposit"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$roundTripResult"
+                      ]
+                    }
+                  ]
+                },
+                "error": "ERC4626 deposit retry result missing"
+              },
+              {
+                "let": "base",
+                "value": {
+                  "op": "merge",
+                  "args": [
+                    {
+                      "op": "omit",
+                      "args": [
+                        "$evidence",
+                        [
+                          "depositRetry",
+                          "alternateDepositSample"
+                        ]
+                      ]
+                    },
+                    {
+                      "sampleAssets": "$retry.amount",
+                      "previewDeposit": "$retry.preview"
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "eventAssets",
+                "value": {
+                  "op": "expression",
+                  "args": [
+                    "eventAssets",
+                    {}
+                  ]
+                }
+              },
+              {
+                "try": [
+                  {
+                    "let": "roundTrip",
+                    "value": {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "previewRedeem",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "fallback-roundtrip"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "when": {
+                      "op": "and",
+                      "args": [
+                        "$roundTripResult.ok",
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$roundTripResult.completion",
+                            "returned"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "let": "depositValue",
+                    "value": {
+                      "op": "decode",
+                      "args": [
+                        "vault",
+                        "deposit",
+                        "$deposit.data",
+                        0
+                      ]
+                    },
+                    "when": {
+                      "op": "and",
+                      "args": [
+                        "$deposit.ok",
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$deposit.completion",
+                            "returned"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "recoverWhen": "$evidence.redeemVerified"
+              },
+              {
+                "let": "depositVerified",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$roundTrip"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$depositValue"
+                      ]
+                    },
+                    {
+                      "op": "expression",
+                      "args": [
+                        "depositProof",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "unresolved",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$results",
+                        "r",
+                        {
+                          "op": "not",
+                          "args": [
+                            "$r.ok"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "evaluate": {
+                  "op": "requestFailure",
+                  "args": [
+                    "$unresolved"
+                  ]
+                },
+                "when": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        "$depositVerified"
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        "$evidence.redeemVerified"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$unresolved"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$base",
+                    {
+                      "depositVerified": "$depositVerified",
+                      "depositRetryCompleted": true,
+                      "behaviorProofHash": {
+                        "op": "hash",
+                        "args": [
+                          {
+                            "previous": "$evidence.behaviorProofHash",
+                            "sample": {
+                              "amount": "$retry.amount",
+                              "preview": "$retry.preview",
+                              "source": "$retry.source"
+                            },
+                            "depositEventAssets": {
+                              "op": "if",
+                              "args": [
+                                "$profile.hasEventMath",
+                                "$eventAssets",
+                                "$missing"
+                              ]
+                            },
+                            "results": {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "r",
+                                {
+                                  "id": "$r.id",
+                                  "completion": {
+                                    "op": "if",
+                                    "args": [
+                                      "$r.ok",
+                                      "$r.completion",
+                                      null
+                                    ]
+                                  },
+                                  "data": {
+                                    "op": "if",
+                                    "args": [
+                                      "$r.ok",
+                                      "$r.data",
+                                      null
+                                    ]
+                                  },
+                                  "effects": {
+                                    "op": "if",
+                                    "args": [
+                                      "$r.ok",
+                                      {
+                                        "op": "effects",
+                                        "args": [
+                                          "$r.effects"
+                                        ]
+                                      },
+                                      null
+                                    ]
+                                  },
+                                  "failure": {
+                                    "op": "if",
+                                    "args": [
+                                      "$r.ok",
+                                      null,
+                                      "$r.failure"
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "proxy": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "get-storage"
+              ]
+            },
+            "requests": [
+              {
+                "id": "proxy-vault-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                }
+              },
+              {
+                "id": "proxy-implementation",
+                "kind": "get-storage",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "slot": "$constants.implementationSlot"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$results",
+                        "r",
+                        "$r.ok"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "code",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "proxy-vault-code"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "rejected",
+                  "reasonCode": "staked_usdat_proxy_not_matched",
+                  "evidenceRequestIds": [
+                    "proxy-vault-code"
+                  ]
+                },
+                "when": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            "$code"
+                          ]
+                        },
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            "$constants.getterProxyCode"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "implementation",
+                "value": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "proxy-implementation"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    {
+                      "malformed": "StakedUSDat malformed address word",
+                      "zero": "StakedUSDat zero binding"
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "proxy",
+                  "source": "$source",
+                  "proxyCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$code"
+                    ]
+                  },
+                  "implementation": "$implementation"
+                }
+              }
+            ]
+          },
+          "binding": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "binding-implementation-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$evidence.implementation"
+                  ]
+                }
+              },
+              {
+                "id": "binding-asset",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "specialized",
+                    "asset",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-getStrcOracle",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "specialized",
+                    "getStrcOracle",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-getWithdrawalQueue",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "specialized",
+                    "getWithdrawalQueue",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-depositFeeBps",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "specialized",
+                    "depositFeeBps",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "binding-feeRecipient",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "specialized",
+                    "feeRecipient",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    {
+                      "op": "source",
+                      "args": [
+                        {
+                          "op": "filter",
+                          "args": [
+                            "$results",
+                            "r",
+                            "$r.ok"
+                          ]
+                        }
+                      ]
+                    },
+                    "$evidence.source"
+                  ]
+                }
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$results",
+                        "r",
+                        "$r.ok"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "code",
+                "value": {
+                  "op": "code",
+                  "args": [
+                    "binding-implementation-code"
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "rejected",
+                  "reasonCode": "staked_usdat_implementation_not_matched",
+                  "evidenceRequestIds": [
+                    "binding-implementation-code"
+                  ]
+                },
+                "when": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "codeHash",
+                          "args": [
+                            "$code"
+                          ]
+                        },
+                        "$constants.getterImplementationHash"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "selfOffsets",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$constants.getterBindings",
+                        0
+                      ]
+                    },
+                    "offsets"
+                  ]
+                }
+              },
+              {
+                "let": "selfWords",
+                "value": {
+                  "op": "map",
+                  "args": [
+                    "$selfOffsets",
+                    "offset",
+                    {
+                      "op": "addressWord",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            "$code",
+                            "$offset",
+                            32
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": [
+                    "$selfWords",
+                    "w",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$w",
+                        "$evidence.implementation"
+                      ]
+                    }
+                  ]
+                },
+                "error": "StakedUSDat UUPS implementation self mismatch"
+              },
+              {
+                "let": "oracleOffsets",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$constants.getterBindings",
+                        1
+                      ]
+                    },
+                    "offsets"
+                  ]
+                }
+              },
+              {
+                "let": "oracleWords",
+                "value": {
+                  "op": "map",
+                  "args": [
+                    "$oracleOffsets",
+                    "offset",
+                    {
+                      "op": "addressWord",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            "$code",
+                            "$offset",
+                            32
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": [
+                    "$oracleWords",
+                    "w",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$w",
+                        {
+                          "op": "at",
+                          "args": [
+                            "$oracleWords",
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "StakedUSDat immutable disagreement"
+              },
+              {
+                "let": "queueOffsets",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$constants.getterBindings",
+                        2
+                      ]
+                    },
+                    "offsets"
+                  ]
+                }
+              },
+              {
+                "let": "queueWords",
+                "value": {
+                  "op": "map",
+                  "args": [
+                    "$queueOffsets",
+                    "offset",
+                    {
+                      "op": "addressWord",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            "$code",
+                            "$offset",
+                            32
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": [
+                    "$queueWords",
+                    "w",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$w",
+                        {
+                          "op": "at",
+                          "args": [
+                            "$queueWords",
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "StakedUSDat immutable disagreement"
+              },
+              {
+                "let": "asset",
+                "value": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "binding-asset"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    {
+                      "malformed": "StakedUSDat malformed address word",
+                      "zero": "StakedUSDat zero binding"
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$asset",
+                        "$candidate.vault"
+                      ]
+                    }
+                  ]
+                },
+                "error": "StakedUSDat getter binding mismatch"
+              },
+              {
+                "let": "oracle",
+                "value": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "binding-getStrcOracle"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    {
+                      "malformed": "StakedUSDat malformed address word",
+                      "zero": "StakedUSDat zero binding"
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$oracle",
+                    {
+                      "op": "at",
+                      "args": [
+                        "$oracleWords",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "error": "StakedUSDat getter binding mismatch"
+              },
+              {
+                "let": "withdrawalQueue",
+                "value": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "binding-getWithdrawalQueue"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    {
+                      "malformed": "StakedUSDat malformed address word",
+                      "zero": "StakedUSDat zero binding"
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "sameAddress",
+                  "args": [
+                    "$withdrawalQueue",
+                    {
+                      "op": "at",
+                      "args": [
+                        "$queueWords",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "error": "StakedUSDat getter binding mismatch"
+              },
+              {
+                "let": "depositFeeBps",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "specialized",
+                        "depositFeeBps",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "binding-depositFeeBps"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$depositFeeBps",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "500"
+                      ]
+                    }
+                  ]
+                },
+                "error": "StakedUSDat deposit fee exceeds verified implementation bound"
+              },
+              {
+                "let": "feeRecipient",
+                "value": {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "specialized",
+                        "feeRecipient",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "binding-feeRecipient"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "binding",
+                  "stakedUsdat": {
+                    "proofSource": "$source",
+                    "proxyCodeHash": "$evidence.proxyCodeHash",
+                    "implementation": "$evidence.implementation",
+                    "implementationCodeHash": "$constants.getterImplementationHash",
+                    "asset": "$asset",
+                    "oracle": "$oracle",
+                    "withdrawalQueue": "$withdrawalQueue"
+                  },
+                  "feeWitness": {
+                    "source": "$source",
+                    "depositFeeBps": "$depositFeeBps",
+                    "feeRecipient": "$feeRecipient"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "$evidence.reasonCode",
+              "evidenceRequestIds": "$evidence.evidenceRequestIds"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "rejected"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "proxy"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "binding"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "if",
+              "args": [
+                "$evidence.baseValid",
+                {
+                  "status": "continue"
+                },
+                {
+                  "status": "chain-proven-rejected",
+                  "reasonCode": "erc4626_standard_views_failed",
+                  "evidenceRequestIds": {
+                    "op": "coalesce",
+                    "args": [
+                      "$evidence.evidenceRequestIds",
+                      [
+                        "base-asset",
+                        "base-total-assets",
+                        "base-total-supply"
+                      ]
+                    ]
+                  }
+                }
+              ]
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "base"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "erc4626_erc20_surfaces_failed",
+              "evidenceRequestIds": [
+                "base-asset"
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                "$evidence.erc20SurfacesValid"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "defined",
+              "args": [
+                "$evidence.depositRetry"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "erc4626_execution_surfaces_failed",
+              "evidenceRequestIds": {
+                "op": "concat",
+                "args": [
+                  [
+                    "active-deposit",
+                    "active-redeem"
+                  ],
+                  {
+                    "op": "if",
+                    "args": [
+                      "$evidence.depositRetryCompleted",
+                      [
+                        "fallback-deposit",
+                        "fallback-roundtrip"
+                      ],
+                      []
+                    ]
+                  }
+                ]
+              }
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "not",
+                  "args": [
+                    "$evidence.depositVerified"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    "$evidence.redeemVerified"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "retryable",
+              "reasonCode": "staked_usdat_deposit_unavailable"
+            },
+            "when": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "active"
+                  ]
+                },
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$evidence.stakedUsdat"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        "$evidence.depositVerified"
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$evidence.asset",
+                            "$evidence.stakedUsdat.asset"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.vault"
+                  ]
+                },
+                "provenance": {
+                  "op": "concat",
+                  "args": [
+                    [
+                      {
+                        "kind": "erc4626-standard-active-proof",
+                        "subject": {
+                          "op": "address",
+                          "args": [
+                            "$candidate.vault"
+                          ]
+                        },
+                        "evidenceHash": "$evidence.behaviorProofHash"
+                      }
+                    ],
+                    [
+                      {
+                        "kind": "staked-usdat-proxy-implementation-getter-proof",
+                        "subject": {
+                          "op": "address",
+                          "args": [
+                            "$candidate.vault"
+                          ]
+                        },
+                        "evidenceHash": {
+                          "op": "hash",
+                          "args": [
+                            "$evidence.stakedUsdat"
+                          ]
+                        }
+                      },
+                      {
+                        "kind": "staked-usdat-source-fee-event-proof",
+                        "subject": {
+                          "op": "address",
+                          "args": [
+                            "$candidate.vault"
+                          ]
+                        },
+                        "evidenceHash": {
+                          "op": "hash",
+                          "args": [
+                            "$evidence.feeWitness"
+                          ]
+                        }
+                      }
+                    ]
+                  ]
+                },
+                "asset": "$evidence.asset",
+                "verifiedDirections": {
+                  "deposit": true,
+                  "redeem": false
+                },
+                "stakedUsdat": "$evidence.stakedUsdat"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "familyId": "$identity.familyId",
+      "lineageId": "$identity.lineageId",
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
+      "provenance": "$identity.provenance",
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "vault": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "asset": {
+        "op": "address",
+        "args": [
+          "$identity.asset"
+        ]
+      },
+      "share": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "stakedUsdat": "$identity.stakedUsdat",
+      "verifiedDirections": "$identity.verifiedDirections"
+    },
+    "bindingProjection": {
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "share": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.share"
+            ]
+          }
+        ]
+      },
+      "stakedUsdat": "$descriptor.stakedUsdat",
+      "verifiedDirections": "$descriptor.verifiedDirections",
+      "standardPayout": "asset()"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.vault",
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.vault"
+          ]
+        }
+      ]
+    },
+    "directions": [
+      {
+        "id": "deposit",
+        "enabled": "$descriptor.verifiedDirections.deposit",
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.share",
+        "adapterId": "staked-usdat-deposit",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "wrap"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      },
+      {
+        "kind": "total-supply-delta",
+        "token": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "deposit"
+              ]
+            },
+            "$route.tokenOut",
+            "$route.tokenIn"
+          ]
+        },
+        "direction": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "deposit"
+              ]
+            },
+            "increase",
+            "decrease"
+          ]
+        }
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "familyId": "$descriptor.familyId",
+      "lineageId": "$descriptor.lineageId",
+      "instanceKey": "$descriptor.instanceKey",
+      "vault": "$descriptor.vault",
+      "asset": "$descriptor.asset",
+      "share": "$descriptor.share",
+      "stakedUsdat": "$descriptor.stakedUsdat",
+      "verifiedDirections": "$descriptor.verifiedDirections",
+      "runtimeRequirements": "$descriptor.runtimeRequirements",
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "standard": {
+        "vault": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.vault"
+              ]
+            }
+          ]
+        },
+        "asset": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.asset"
+              ]
+            }
+          ]
+        },
+        "share": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.share"
+              ]
+            }
+          ]
+        },
+        "custodian": "$descriptor.custodian",
+        "infinifi": "$descriptor.infinifi",
+        "directions": {
+          "op": "map",
+          "args": [
+            "$routes",
+            "route",
+            "$route.direction"
+          ]
+        }
+      },
+      "stakedUsdat": {
+        "proofSource": {
+          "op": "get",
+          "args": [
+            "$descriptor.stakedUsdat",
+            "proofSource"
+          ]
+        },
+        "proxyCodeHash": {
+          "op": "get",
+          "args": [
+            "$descriptor.stakedUsdat",
+            "proxyCodeHash"
+          ]
+        },
+        "implementation": {
+          "op": "get",
+          "args": [
+            "$descriptor.stakedUsdat",
+            "implementation"
+          ]
+        },
+        "implementationCodeHash": {
+          "op": "get",
+          "args": [
+            "$descriptor.stakedUsdat",
+            "implementationCodeHash"
+          ]
+        },
+        "asset": {
+          "op": "get",
+          "args": [
+            "$descriptor.stakedUsdat",
+            "asset"
+          ]
+        }
+      }
+    },
+    "static": {
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$draft.vault",
+        "$draft.asset",
+        "$draft.share"
+      ],
+      "requests": [
+        {
+          "id": "static-asset-decimals",
+          "kind": "eth-call",
+          "to": "$draft.asset",
+          "data": {
+            "op": "encode",
+            "args": [
+              "token",
+              "decimals",
+              []
+            ]
+          },
+          "completion": "return-data"
+        },
+        {
+          "id": "static-share-decimals",
+          "kind": "eth-call",
+          "to": "$draft.share",
+          "data": {
+            "op": "encode",
+            "args": [
+              "token",
+              "decimals",
+              []
+            ]
+          },
+          "completion": "return-data"
+        }
+      ],
+      "decode": {
+        "fields": [
+          {
+            "name": "assetDecimals",
+            "value": {
+              "op": "word",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "static-asset-decimals"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            },
+            "checks": [
+              {
+                "condition": {
+                  "op": "lte",
+                  "args": [
+                    "$assetDecimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "77"
+                      ]
+                    }
+                  ]
+                },
+                "error": "protocol token decimals exceed uint256 scale"
+              }
+            ]
+          },
+          {
+            "name": "shareDecimals",
+            "value": {
+              "op": "word",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "static-share-decimals"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            },
+            "checks": [
+              {
+                "condition": {
+                  "op": "lte",
+                  "args": [
+                    "$shareDecimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "77"
+                      ]
+                    }
+                  ]
+                },
+                "error": "protocol token decimals exceed uint256 scale"
+              }
+            ]
+          }
+        ],
+        "output": {
+          "oneAsset": {
+            "op": "pow",
+            "args": [
+              "10",
+              "$assetDecimals"
+            ]
+          },
+          "oneShare": {
+            "op": "pow",
+            "args": [
+              "10",
+              "$shareDecimals"
+            ]
+          }
+        }
+      }
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": "$descriptor.oneAsset",
+    "exactCompatibility": {
+      "vault": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "asset": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "share": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.share"
+            ]
+          }
+        ]
+      },
+      "direction": "$route.direction",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": [
+      "log"
+    ]
+  },
+  "protocol": {
+    "candidateKinds": [
+      "observed-call",
+      "address-surface",
+      "standalone-contract"
+    ],
+    "activeBehaviorProof": "required"
+  },
+  "standard": {
+    "id": "source-bound-staked-usdat-deposit",
+    "lineageId": "staked-usdat:source-bound-deposit",
+    "abi": {
+      "vault": [
+        "function asset() view returns (address)",
+        "function totalAssets() view returns (uint256)",
+        "function totalSupply() view returns (uint256)",
+        "function convertToShares(uint256 assets) view returns (uint256)",
+        "function convertToAssets(uint256 shares) view returns (uint256)",
+        "function previewDeposit(uint256 assets) view returns (uint256)",
+        "function previewRedeem(uint256 shares) view returns (uint256)",
+        "function deposit(uint256 assets,address receiver) returns (uint256 shares)",
+        "function redeem(uint256 shares,address receiver,address owner) returns (uint256 assets)",
+        "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+        "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)"
+      ],
+      "token": [
+        "function balanceOf(address account) view returns (uint256)",
+        "function decimals() view returns (uint8)",
+        "function approve(address spender,uint256 amount) returns (bool)",
+        "function allowance(address,address) view returns(uint256)",
+        "function totalSupply() view returns(uint256)"
+      ],
+      "specialized": [
+        "function asset() view returns(address)",
+        "function getStrcOracle() view returns(address)",
+        "function getWithdrawalQueue() view returns(address)",
+        "function depositFeeBps() view returns(uint256)",
+        "function feeRecipient() view returns(address)",
+        "function paused() view returns(bool)",
+        "function isBlacklisted(address) view returns(bool)"
+      ]
+    },
+    "constants": {
+      "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
+      "selfOffsets": [
+        11189,
+        11230,
+        11551
+      ],
+      "oracleOffsets": [
+        3508,
+        8461,
+        9878,
+        11665
+      ],
+      "queueOffsets": [
+        1439,
+        6190,
+        6667,
+        7579,
+        7646,
+        7723,
+        7813,
+        12524,
+        12584
+      ],
+      "zero": "0x0000000000000000000000000000000000000000"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {
+      "vault": "$descriptor.vault"
+    },
+    "boundState": "$descriptor",
+    "identityParameters": {
+      "excludeSpecialized": false,
+      "hasEventMath": true
+    },
+    "assertions": [
+      {
+        "assert": {
+          "op": "defined",
+          "args": [
+            "$descriptor.stakedUsdat"
+          ]
+        },
+        "error": "StakedUSDat deposit binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$descriptor.asset",
+            "$descriptor.stakedUsdat.asset"
+          ]
+        },
+        "error": "StakedUSDat deposit binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.direction",
+            "deposit"
+          ]
+        },
+        "error": "StakedUSDat deposit binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            "$descriptor.verifiedDirections.redeem"
+          ]
+        },
+        "error": "StakedUSDat deposit binding mismatch"
+      }
+    ],
+    "pricing": {
+      "mutationAddresses": [
+        "$descriptor.vault",
+        "$descriptor.asset",
+        "$descriptor.stakedUsdat.implementation",
+        "$descriptor.stakedUsdat.oracle",
+        "$descriptor.stakedUsdat.withdrawalQueue"
+      ],
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "get-code",
+          "get-storage",
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.vault",
+        "$descriptor.asset",
+        "$descriptor.share",
+        "$descriptor.stakedUsdat.implementation",
+        "$descriptor.stakedUsdat.oracle",
+        "$descriptor.stakedUsdat.withdrawalQueue"
+      ],
+      "guardProgram": "pricingGuard"
+    },
+    "exact": {
+      "methodId": "erc4626-preview",
+      "requirements": {
+        "transports": [
+          "get-code",
+          "get-storage",
+          "eth-call"
+        ]
+      },
+      "guardProgram": "exactGuard",
+      "evidence": {
+        "kind": "erc4626-preview",
+        "source": "$source",
+        "vault": "$descriptor.vault",
+        "direction": "$route.direction",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "readPrograms": {
+      "quote": {
+        "requests": [
+          {
+            "id": "$requestId",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "vault",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$direction",
+                        "deposit"
+                      ]
+                    },
+                    "previewDeposit",
+                    "previewRedeem"
+                  ]
+                },
+                [
+                  "$amountIn"
+                ]
+              ]
+            },
+            "completion": "return-data"
+          }
+        ],
+        "result": {
+          "op": "uint",
+          "args": [
+            {
+              "op": "decode",
+              "args": [
+                "vault",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$direction",
+                        "deposit"
+                      ]
+                    },
+                    "previewDeposit",
+                    "previewRedeem"
+                  ]
+                },
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "$requestId"
+                      ]
+                    },
+                    "data"
+                  ]
+                },
+                0
+              ]
+            }
+          ]
+        }
+      },
+      "pricingGuard": {
+        "requests": [
+          {
+            "id": "pricing-guard-proxy",
+            "kind": "get-code",
+            "address": "$descriptor.vault"
+          },
+          {
+            "id": "pricing-guard-slot",
+            "kind": "get-storage",
+            "address": "$descriptor.vault",
+            "slot": "$constants.implementationSlot"
+          },
+          {
+            "id": "pricing-guard-code",
+            "kind": "get-code",
+            "address": {
+              "op": "address",
+              "args": [
+                "$descriptor.stakedUsdat.implementation"
+              ]
+            }
+          },
+          {
+            "id": "pricing-guard-asset",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "specialized",
+                "asset",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "pricing-guard-oracle",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "specialized",
+                "getStrcOracle",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "pricing-guard-queue",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "specialized",
+                "getWithdrawalQueue",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "pricing-guard-paused",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "specialized",
+                "paused",
+                []
+              ]
+            },
+            "completion": "return-data"
+          }
+        ],
+        "decode": [
+          {
+            "evaluate": {
+              "op": "source",
+              "args": [
+                {
+                  "op": "filter",
+                  "args": [
+                    "$results",
+                    "r",
+                    "$r.ok"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "proxy",
+            "value": {
+              "op": "code",
+              "args": [
+                "pricing-guard-proxy"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "codeHash",
+                  "args": [
+                    "$proxy"
+                  ]
+                },
+                "$descriptor.stakedUsdat.proxyCodeHash"
+              ]
+            },
+            "error": "staked_usdat_proxy_changed"
+          },
+          {
+            "let": "implementation",
+            "value": {
+              "op": "addressWord",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "pricing-guard-slot"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$implementation",
+                "$descriptor.stakedUsdat.implementation"
+              ]
+            },
+            "error": "staked_usdat_implementation_changed"
+          },
+          {
+            "let": "code",
+            "value": {
+              "op": "code",
+              "args": [
+                "pricing-guard-code"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "codeHash",
+                  "args": [
+                    "$code"
+                  ]
+                },
+                "$descriptor.stakedUsdat.implementationCodeHash"
+              ]
+            },
+            "error": "staked_usdat_implementation_changed"
+          },
+          {
+            "let": "selfWords",
+            "value": {
+              "op": "map",
+              "args": [
+                "$constants.selfOffsets",
+                "offset",
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        "$offset",
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "every",
+              "args": [
+                "$selfWords",
+                "w",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$w",
+                    "$implementation"
+                  ]
+                }
+              ]
+            },
+            "error": "staked_usdat_immutable_disagreement"
+          },
+          {
+            "let": "oracleWords",
+            "value": {
+              "op": "map",
+              "args": [
+                "$constants.oracleOffsets",
+                "offset",
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        "$offset",
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "every",
+              "args": [
+                "$oracleWords",
+                "w",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$w",
+                    "$descriptor.stakedUsdat.oracle"
+                  ]
+                }
+              ]
+            },
+            "error": "staked_usdat_immutable_disagreement"
+          },
+          {
+            "let": "queueWords",
+            "value": {
+              "op": "map",
+              "args": [
+                "$constants.queueOffsets",
+                "offset",
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        "$offset",
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "every",
+              "args": [
+                "$queueWords",
+                "w",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$w",
+                    "$descriptor.stakedUsdat.withdrawalQueue"
+                  ]
+                }
+              ]
+            },
+            "error": "staked_usdat_immutable_disagreement"
+          },
+          {
+            "let": "asset",
+            "value": {
+              "op": "addressWord",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "pricing-guard-asset"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$asset",
+                "$descriptor.stakedUsdat.asset"
+              ]
+            },
+            "error": "staked_usdat_getter_binding_mismatch"
+          },
+          {
+            "let": "oracle",
+            "value": {
+              "op": "addressWord",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "pricing-guard-oracle"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$oracle",
+                "$descriptor.stakedUsdat.oracle"
+              ]
+            },
+            "error": "staked_usdat_getter_binding_mismatch"
+          },
+          {
+            "let": "queue",
+            "value": {
+              "op": "addressWord",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "pricing-guard-queue"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$queue",
+                "$descriptor.stakedUsdat.withdrawalQueue"
+              ]
+            },
+            "error": "staked_usdat_getter_binding_mismatch"
+          },
+          {
+            "assert": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "bool",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pricing-guard-paused"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "staked_usdat_paused"
+          },
+          {
+            "return": true
+          }
+        ]
+      },
+      "exactGuard": {
+        "requests": [
+          {
+            "id": "exact-guard-proxy",
+            "kind": "get-code",
+            "address": "$descriptor.vault"
+          },
+          {
+            "id": "exact-guard-slot",
+            "kind": "get-storage",
+            "address": "$descriptor.vault",
+            "slot": "$constants.implementationSlot"
+          },
+          {
+            "id": "exact-guard-code",
+            "kind": "get-code",
+            "address": {
+              "op": "address",
+              "args": [
+                "$descriptor.stakedUsdat.implementation"
+              ]
+            }
+          },
+          {
+            "id": "exact-guard-asset",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "specialized",
+                "asset",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "exact-guard-oracle",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "specialized",
+                "getStrcOracle",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "exact-guard-queue",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "specialized",
+                "getWithdrawalQueue",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "exact-guard-paused",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "specialized",
+                "paused",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "exact-guard-blacklisted",
+            "kind": "eth-call",
+            "to": "$descriptor.vault",
+            "data": {
+              "op": "encode",
+              "args": [
+                "specialized",
+                "isBlacklisted",
+                [
+                  "$executor"
+                ]
+              ]
+            },
+            "completion": "return-data"
+          }
+        ],
+        "decode": [
+          {
+            "evaluate": {
+              "op": "source",
+              "args": [
+                {
+                  "op": "filter",
+                  "args": [
+                    "$results",
+                    "r",
+                    "$r.ok"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "proxy",
+            "value": {
+              "op": "code",
+              "args": [
+                "exact-guard-proxy"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "codeHash",
+                  "args": [
+                    "$proxy"
+                  ]
+                },
+                "$descriptor.stakedUsdat.proxyCodeHash"
+              ]
+            },
+            "error": "staked_usdat_proxy_changed"
+          },
+          {
+            "let": "implementation",
+            "value": {
+              "op": "addressWord",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "exact-guard-slot"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$implementation",
+                "$descriptor.stakedUsdat.implementation"
+              ]
+            },
+            "error": "staked_usdat_implementation_changed"
+          },
+          {
+            "let": "code",
+            "value": {
+              "op": "code",
+              "args": [
+                "exact-guard-code"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "codeHash",
+                  "args": [
+                    "$code"
+                  ]
+                },
+                "$descriptor.stakedUsdat.implementationCodeHash"
+              ]
+            },
+            "error": "staked_usdat_implementation_changed"
+          },
+          {
+            "let": "selfWords",
+            "value": {
+              "op": "map",
+              "args": [
+                "$constants.selfOffsets",
+                "offset",
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        "$offset",
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "every",
+              "args": [
+                "$selfWords",
+                "w",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$w",
+                    "$implementation"
+                  ]
+                }
+              ]
+            },
+            "error": "staked_usdat_immutable_disagreement"
+          },
+          {
+            "let": "oracleWords",
+            "value": {
+              "op": "map",
+              "args": [
+                "$constants.oracleOffsets",
+                "offset",
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        "$offset",
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "every",
+              "args": [
+                "$oracleWords",
+                "w",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$w",
+                    "$descriptor.stakedUsdat.oracle"
+                  ]
+                }
+              ]
+            },
+            "error": "staked_usdat_immutable_disagreement"
+          },
+          {
+            "let": "queueWords",
+            "value": {
+              "op": "map",
+              "args": [
+                "$constants.queueOffsets",
+                "offset",
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        "$offset",
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "every",
+              "args": [
+                "$queueWords",
+                "w",
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$w",
+                    "$descriptor.stakedUsdat.withdrawalQueue"
+                  ]
+                }
+              ]
+            },
+            "error": "staked_usdat_immutable_disagreement"
+          },
+          {
+            "let": "asset",
+            "value": {
+              "op": "addressWord",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "exact-guard-asset"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$asset",
+                "$descriptor.stakedUsdat.asset"
+              ]
+            },
+            "error": "staked_usdat_getter_binding_mismatch"
+          },
+          {
+            "let": "oracle",
+            "value": {
+              "op": "addressWord",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "exact-guard-oracle"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$oracle",
+                "$descriptor.stakedUsdat.oracle"
+              ]
+            },
+            "error": "staked_usdat_getter_binding_mismatch"
+          },
+          {
+            "let": "queue",
+            "value": {
+              "op": "addressWord",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "exact-guard-queue"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$queue",
+                "$descriptor.stakedUsdat.withdrawalQueue"
+              ]
+            },
+            "error": "staked_usdat_getter_binding_mismatch"
+          },
+          {
+            "assert": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "bool",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "exact-guard-paused"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "staked_usdat_paused"
+          },
+          {
+            "assert": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "bool",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "exact-guard-blacklisted"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "staked_usdat_actor_blacklisted"
+          },
+          {
+            "return": true
+          }
+        ]
+      }
+    },
+    "execution": {
+      "version": 1,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.vault",
+        "$descriptor.share",
+        "$descriptor.asset"
+      ],
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.vault",
+        "mode": "ensure",
+        "when": {
+          "op": "eq",
+          "args": [
+            "$direction",
+            "deposit"
+          ]
+        }
+      },
+      "call": {
+        "target": "$descriptor.vault",
+        "signature": "function deposit(uint256,address) returns(uint256)",
+        "args": [
+          {
+            "runtime": "amountIn"
+          },
+          "$recipient"
+        ],
+        "save": {
+          "output": 0
+        }
+      },
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "output"
+          },
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-native",
+          "when": "$directSettlement"
+        }
+      ],
+      "contextChecks": [
+        {
+          "error": "conversion direction unsupported",
+          "condition": {
+            "op": "eq",
+            "args": [
+              "$direction",
+              "deposit"
+            ]
+          }
+        }
+      ],
+      "requireCanonicalSource": true,
+      "rejectRuntimeEvidence": true,
+      "preflight": [
+        {
+          "target": "$descriptor.vault",
+          "signature": "function asset() view returns(address)",
+          "args": [],
+          "save": {
+            "guardAsset": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "guardAsset"
+              },
+              "operator": "eq",
+              "right": "$descriptor.asset"
+            }
+          ]
+        },
+        {
+          "target": "$descriptor.vault",
+          "signature": "function getStrcOracle() view returns(address)",
+          "args": [],
+          "save": {
+            "guardOracle": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "guardOracle"
+              },
+              "operator": "eq",
+              "right": "$descriptor.stakedUsdat.oracle"
+            }
+          ]
+        },
+        {
+          "target": "$descriptor.vault",
+          "signature": "function getWithdrawalQueue() view returns(address)",
+          "args": [],
+          "save": {
+            "guardQueue": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "guardQueue"
+              },
+              "operator": "eq",
+              "right": "$descriptor.stakedUsdat.withdrawalQueue"
+            }
+          ]
+        }
+      ]
+    },
+    "identityKind": "standalone-contract"
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "staked-usdat-deposit",
+        "lineage": "erc4626",
+        "edgeKind": "protocol",
+        "action": "deposit",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function deposit(uint256,address)"
+        }
+      ]
+    }
+  ],
+  "types": {
+    "version": 1,
+    "definitions": {
+      "StakedUsdatCandidate": {
+        "type": "object",
+        "extends": [
+          "FamilyCandidate"
+        ],
+        "fields": {
+          "candidateKind": {
+            "literal": "erc4626-vault"
+          },
+          "vault": {
+            "type": "string"
+          }
+        }
+      },
+      "StakedUsdatBinding": {
+        "type": "object",
+        "fields": {
+          "proofSource": {
+            "ref": "CanonicalSource"
+          },
+          "proxyCodeHash": {
+            "type": "string"
+          },
+          "implementation": {
+            "type": "string"
+          },
+          "implementationCodeHash": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "oracle": {
+            "type": "string"
+          },
+          "withdrawalQueue": {
+            "type": "string"
+          }
+        }
+      },
+      "StakedUsdatVerifiedDirections": {
+        "type": "object",
+        "fields": {
+          "deposit": {
+            "type": "boolean"
+          },
+          "redeem": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StakedUsdatIdentity": {
+        "type": "object",
+        "extends": [
+          "VerifiedIdentity"
+        ],
+        "fields": {
+          "asset": {
+            "type": "string"
+          },
+          "stakedUsdat": {
+            "ref": "StakedUsdatBinding"
+          },
+          "verifiedDirections": {
+            "ref": "StakedUsdatVerifiedDirections"
+          }
+        }
+      },
+      "StakedUsdatDescriptor": {
+        "type": "object",
+        "extends": [
+          "CompiledInstanceDescriptor"
+        ],
+        "fields": {
+          "vault": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "stakedUsdat": {
+            "ref": "StakedUsdatBinding"
+          },
+          "verifiedDirections": {
+            "ref": "StakedUsdatVerifiedDirections"
+          }
+        }
+      },
+      "StakedUsdatRoute": {
+        "type": "object",
+        "extends": [
+          "FamilyRouteDescriptor"
+        ],
+        "fields": {
+          "target": {
+            "type": "string"
+          },
+          "direction": {
+            "literal": "deposit"
+          },
+          "adapterId": {
+            "literal": "staked-usdat-deposit"
+          }
+        }
+      },
+      "StakedUsdatPricingDraft": {
+        "type": "object",
+        "fields": {
+          "instanceKey": {
+            "ref": "InstanceKey"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "stakedUsdat": {
+            "ref": "StakedUsdatBinding"
+          },
+          "routes": {
+            "array": {
+              "ref": "StakedUsdatRoute"
+            }
+          }
+        }
+      },
+      "StakedUsdatPricingStatic": {
+        "type": "object",
+        "fields": {
+          "oneAsset": {
+            "type": "bigint"
+          },
+          "oneShare": {
+            "type": "bigint"
+          }
+        }
+      },
+      "StakedUsdatPricingDescriptor": {
+        "type": "object",
+        "extends": [
+          "StakedUsdatPricingDraft",
+          "StakedUsdatPricingStatic"
+        ],
+        "fields": {}
+      },
+      "StakedUsdatExactEvidence": {
+        "type": "object",
+        "fields": {
+          "kind": {
+            "literal": "erc4626-preview"
+          },
+          "executor": {
+            "type": "string"
+          },
+          "source": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "direction": {
+            "literal": "deposit"
+          },
+          "amountIn": {
+            "type": "bigint"
+          },
+          "amountOut": {
+            "type": "bigint"
+          },
+          "bindingFingerprint": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "contracts": {
+      "candidate": "StakedUsdatCandidate",
+      "identity": "StakedUsdatIdentity",
+      "descriptor": "StakedUsdatDescriptor",
+      "route": "StakedUsdatRoute",
+      "pricingDraft": "StakedUsdatPricingDraft",
+      "pricingDescriptor": "StakedUsdatPricingDescriptor",
+      "pricingStatic": "StakedUsdatPricingStatic",
+      "exactEvidence": "StakedUsdatExactEvidence"
+    }
+  },
+  "modules": {
+    "math": {
+      "version": 1,
+      "entries": {
+        "stakedUsdatEventAssets": {
+          "model": "staked-usdat:event-assets",
+          "version": 1
+        }
+      }
+    }
+  }
+}
