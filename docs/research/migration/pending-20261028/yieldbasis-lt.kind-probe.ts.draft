@@ -1,0 +1,31 @@
+// Compile-time probes: can one declarative variant declare BOTH a view proof
+// (withdraw) and an execution-receipt proof (deposit)?
+import definition from "../venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json";
+import { createDeclarativeProtocolRuntime } from "../venues/declarative-protocol.js";
+
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+const op = (o: string, ...args: any[]) => ({ op: o, args });
+const base = clone(definition as any);
+base.standard.match = true;
+const viewProof = clone(base.modules.quoteFlow.chainQuote);
+const effectProof = { step: "quote", requestId: "deposit-receipt" };
+const isDeposit = op("expression", "isDeposit", {});
+const isWithdraw = op("expression", "isWithdraw", {});
+
+function attempt(label: string, kind: "view" | "effect-simulation", choices: any[]) {
+  const doc = clone(base);
+  doc.modules.quoteFlow = { ...doc.modules.quoteFlow, sourceKind: kind,
+    chainQuote: { version: 2, choices } };
+  try {
+    createDeclarativeProtocolRuntime(doc, []);
+    console.log(`${label}: COMPILED`);
+  } catch (error) {
+    console.log(`${label}: REFUSED ${(error as Error).message}`);
+  }
+}
+attempt("view-kind, per-direction choices [view, effect]", "view",
+  [{ when: isWithdraw, proof: viewProof }, { when: isDeposit, proof: effectProof }]);
+attempt("effect-kind, per-direction choices [view, effect]", "effect-simulation",
+  [{ when: isWithdraw, proof: viewProof }, { when: isDeposit, proof: effectProof }]);
+attempt("view-kind, two view choices (control)", "view",
+  [{ when: isWithdraw, proof: viewProof }, { when: isDeposit, proof: viewProof }]);

@@ -1,0 +1,22 @@
+import type { RuntimeMathModel } from "./declarative-runtime-math.js";
+
+/**
+ * Yield Basis LT in-transaction deposit debt. The LT pulls the stablecoin leg
+ * from its own AMM; the debt follows the bound two-coin pool's reserve ratio
+ * (`assets * balances(0) / balances(1)`), never an off-chain price or a quoted
+ * value. Inputs are the actual runtime amount and the reserves read in the same
+ * program; the VM performs the checked uint256 mul/div. No transport, ABI,
+ * state or settlement work belongs here.
+ */
+const depositDebtOperations: RuntimeMathModel["operations"] = Object.freeze([
+  { name: "product", op: "mul", left: { input: "amountIn" }, right: { input: "stable" } },
+  { name: "debt", op: "div", left: { local: "product" }, right: { input: "asset" } },
+]);
+
+export const yieldBasisLtDepositDebtMathModel: RuntimeMathModel = Object.freeze({
+  id: "yieldbasis-lt:deposit-debt",
+  version: 1,
+  inputs: Object.freeze(["amountIn", "stable", "asset"]),
+  outputs: Object.freeze(["debt"]),
+  operations: depositDebtOperations,
+});
