@@ -39,7 +39,7 @@ import {
 import {
   resolveBlockScanSolverSearchConfig,
 } from "./blockscan-solver-search-config.js";
-import { readBlockTouchedStateKeys, type BlockTouchedProvider } from "./blockscan-touched-state.js";
+import { readBlockTouchedStateKeys, readRetainedBlockTouchedStateKeys, type BlockTouchedProvider } from "./blockscan-touched-state.js";
 import { StartupActivityCollector, collectIndexedStartupActivity, startupCatchupSource, type ActivityRangeControl } from "./blockscan-startup-catchup.js";
 import { getBigQueryActivityCutoff, readBigQueryTouchedRange, type BigQueryActivityConfig } from "./blockscan-bigquery-activity.js";
 import { collectReorgActivity } from "./blockscan-reorg-activity.js";
@@ -3104,8 +3104,8 @@ async function main(): Promise<void> {
         readHeaderByHash: async hash => requireStartupCoverage(await readBlockScanObservedHeader(
           config.rpcUrl, blockScanChainId, hash, range).catch(activityReadFailed)),
         readTouched: (n, anchor, control) => blockScanActivityProvider.withBlockActivity(anchor.hash,
-          () => readBlockTouchedStateKeys(blockScanActivityProvider, n, ADDR.UNISWAP_V4_POOL_MANAGER,
-            anchor, undefined, strictRuntimeRoot.resolveBlockTouchedStateKeys), control),
+          () => readRetainedBlockTouchedStateKeys(blockScanActivityProvider, n, ADDR.UNISWAP_V4_POOL_MANAGER,
+            anchor, strictRuntimeRoot.resolveBlockTouchedStateKeys, control), control),
       });
     },
     ...(restoredContinuation ? { liveContinuation: {
