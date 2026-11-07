@@ -1,3 +1,7 @@
+// JSON↔TS parity harness for protocol:yieldbasis-lt (run at 104ff465).
+// Copy to listener/src/searcher/test/yb-harness.ts with the parked draft mounted as
+// src/searcher/venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json and the
+// executionMath model registered; run: node --import tsx src/searcher/test/yb-harness.ts
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { renderDeclarativeProductionEntry } from "../build-declarative-production.js";
@@ -13,7 +17,6 @@ import {
 } from "../venues/protocols/yieldbasis-lt-family/test/fixtures.js";
 
 const root = process.cwd();
-(definition as any).standard.match = true;
 const definitionFile = `${root}/src/searcher/venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json`;
 const rendered = renderDeclarativeProductionEntry({ rootDirectory: root, definitionFile, document: definition });
 const runtime = createDeclarativeProtocolRuntime(definition as any, []);

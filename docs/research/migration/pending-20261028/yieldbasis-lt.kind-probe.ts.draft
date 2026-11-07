@@ -1,5 +1,7 @@
-// Compile-time probes: can one declarative variant declare BOTH a view proof
-// (withdraw) and an execution-receipt proof (deposit)?
+// Compile-time probe for mixed quote-proof kinds (run at 104ff465). Mount the
+// parked draft as src/searcher/venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json,
+// copy to listener/src/searcher/test/yb-kind-scratch.ts and run:
+//   node --import tsx src/searcher/test/yb-kind-scratch.ts
 import definition from "../venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json";
 import { createDeclarativeProtocolRuntime } from "../venues/declarative-protocol.js";
 

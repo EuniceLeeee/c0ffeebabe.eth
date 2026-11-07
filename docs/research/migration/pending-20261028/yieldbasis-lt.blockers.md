@@ -1,8 +1,8 @@
 # `protocol:yieldbasis-lt` — parked declarative draft and blocker (port to 104ff465)
 
-Status: **blocked / not migrated.** Baseline `104ff465` (`codex/json-all-20261107`;
-this checkout's HEAD `284afb49` only adds the JSON cutover and other families' park
-docs on top of it). The Family keeps its handwritten TypeScript entry.
+Status: **blocked / not migrated.** Baseline `104ff465`; ported and parked on `codex/json-all-20261107`
+(`284afb49` JSON cutover plus this park commit). The Family keeps its handwritten
+TypeScript entry.
 
 The draft compiles and is behaviourally equal to the handwritten Family in every
 module a declarative variant can serve — identity (with/without the deposit
@@ -103,8 +103,8 @@ The declarative engine cannot carry that per-direction split:
    with `{ descriptor }` only and requires exactly one match. Routes, exact,
    pricing and execution all resolve through that one `select(descriptor)`:
    `declarative-family.ts:273` (`projectRoutes`), `:383` (`routes.project`),
-   `:644` (`exact.methods`), `:702-709` (exact requests), `:739-741` (exact
-   decode), `:806-811` (runtime leg). A second variant cannot take over one
+   `:644` (`exact.methods`), `:709-710` (exact requests), `:742-744` (exact
+   decode), `:799-806` (runtime leg). A second variant cannot take over one
    direction; two matching variants are rejected, one matching variant must serve
    both directions.
 2. **That one variant declares one quote-flow source kind.**
@@ -131,7 +131,7 @@ The declarative engine cannot carry that per-direction split:
    reads the issuer-observed requests/results bound per evaluation
    (`declarative-values.ts:131-140`, sealed from `env.requests`/`env.results` at
    `:279-282`); the legacy exact decode environment carries `results` but no
-   `requests` (`declarative-family.ts:739-741`), so a deposit receipt cannot be
+   `requests` (`declarative-family.ts:742-744`), so a deposit receipt cannot be
    decoded outside a read flow. It also would not set `chainAmountQuote` /
    the withdraw proof the Family tests require.
 
@@ -159,7 +159,7 @@ Let the exact quote's proof/step program be selected per direction, e.g.:
 
 1. `exact.quoteFlows: { withdraw: <read-flow>, deposit: <read-flow> }` (or
    `modules.quoteFlow.directions`), selected by `$route.direction` where the
-   current code reads `v.quoteFlow` (`declarative-family.ts:702-709/739-741/763`);
+   current code reads `v.quoteFlow` (`declarative-family.ts:709-710/742-744/763`);
    **or**
 2. allow `chainQuote`/`sourceKind` to be a per-direction map resolved by
    `quoteProofGroups`/`verifyDeclarativeQuoteChain`
@@ -177,7 +177,7 @@ suite (`family-suite-ts-entry.log`), so the three failures are declarative-only:
 
 1. `deposit-production.test.ts:47` — `m.program.buildDependentProgram` is
    `undefined` in TS, always a function for flow-backed exact methods in the
-   current engine (`declarative-family.ts:715-725`). The deposit Exact also fails
+   current engine (`declarative-family.ts:711-725`). The deposit Exact also fails
    earlier in this draft because of G-YB5.
 2. `recipient.test.ts:27` ("withdraw keeps default and quoted bytes") — the
    declarative runtime program captures balances/effects differently from the

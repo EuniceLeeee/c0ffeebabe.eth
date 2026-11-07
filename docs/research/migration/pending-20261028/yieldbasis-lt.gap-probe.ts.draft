@@ -1,4 +1,7 @@
-// Re-run of the G-YB5 gap probe on the current engine (104ff465).
+// G-YB5 isolation probe (run at 104ff465). Mount the parked draft as
+// src/searcher/venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json, copy this
+// file to listener/src/searcher/test/yb-gap-scratch.ts and run:
+//   node --import tsx src/searcher/test/yb-gap-scratch.ts
 import definition from "../venues/protocols/yieldbasis-lt-family/yieldbasis-lt.json";
 import { createDeclarativeProtocolRuntime } from "../venues/declarative-protocol.js";
 import { answerFor, CANDIDATE, EXECUTOR, SOURCE } from "../venues/protocols/yieldbasis-lt-family/test/fixtures.js";
