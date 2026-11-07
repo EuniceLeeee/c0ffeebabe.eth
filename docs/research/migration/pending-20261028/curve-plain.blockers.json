@@ -1,0 +1,439 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:38:29Z",
+  "family": "curve-plain",
+  "domain": "swap",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "summary": "curve-plain cannot be expressed faithfully as declarative Swap JSON on the pinned 104ff465 framework. Its identity is an execution-proof admission gate: for every positive quote it probes each execution mode through a trusted executor program and requires four exact token deltas (executor debit/credit plus pool debit/credit), plus an independently observed receiver row for receiver modes and a native-input receiver probe with separately funded native ETH. The declarative identity bridge builds one variant execution program and observes only executor token balances (declarative-simulation.ts:66-80), rejects any external recipient/settlement (declarative-simulation.ts:60-62), and its receipt decoder rejects pool/receiver rows (declarative-simulation.ts:114-148). Raw effect-delta-simulation requests cannot carry a native value (adapter-request-program.ts:97-104,1377-1380; a probe value is rejected as 'unsupported field value' at adapter-request-program.ts:1817-1820), so the family's separately funded native-recipient probe cannot be reconstructed; the default native-input path is only expressible through the executor-only boundary simulation, not with the family's pool/receiver evidence. The family contract and native contract enforce those exact probe shapes (curve-plain-family/test/contract.ts:53-127 and test/native-contract.ts:237-305; test/identity-probe.ts:9-26), so a JSON cutover would either fail the unchanged family tests or silently narrow per-mode/per-direction native and recipient capability. Independent gaps also block a faithful cutover: tx-evidence nomination has no receipt-height anchor (future receipt accepted; contract.ts:486-503), declarative reverse binding never performs the MetaRegistry handler lookup (probe: verified with 0 registry calls; contract.ts:475-483), and declarative quoted fragments/actions carry no approve/transfer-to-pool requirement and only a runtimeAmountProgram node instead of the family's exchange calldata (declarative-execution.ts:1041-1044,1060-1065; contract.ts:443-465). No JSON, math registration, temporary production entry or generator run was produced; the handwritten family remains authoritative.",
+  "baseline": {
+    "workspace": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "head": "c5a3ea1add4e54b344beb5d8a29a0582cc273fb6",
+    "familyRuntimeBaseline": "104ff465",
+    "workingTreeAtStart": "dirty with concurrent unrelated changes (declarative-math-models.ts and untracked aqua/vault-spot/fluid/peapods/few-wrapped/balancer/curve-underlying pending files); all left untouched",
+    "familyProductionEntry": "listener/src/searcher/venues/production-families/curve-plain.production.ts (handwritten, unchanged)",
+    "generatorRun": false,
+    "publicTsOrTestChanges": false
+  },
+  "reference": {
+    "implementationRow": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md:23",
+    "implementationRowSha256": "862dd44cf83e8d572329ce93a08ddfd7b1410a9552c0ba0c76daa307ceb3abea",
+    "tx": "0x5b6114b5b77e1ae4c1c2d402d82f0bca86db27e2deccb1ef0a978e01e768e663",
+    "txBlock": 26152607,
+    "txBlockHash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369",
+    "txIndex": 55,
+    "previousBlock": 26152606,
+    "route": "WETH -> weETH -> native ETH -> USDT -> USDC -> WETH; the Curve first hop is plain, not underlying",
+    "curveLeg": {
+      "pool": "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5",
+      "poolKind": "Curve StableSwapNG direct-coin pool",
+      "selector": "0x3df02124",
+      "selectorName": "exchange(int128,int128,uint256,uint256); native-input variant is the payable form with the same selector",
+      "originalOutput": "680948927573948064",
+      "originalOutputUnit": "weETH raw",
+      "direction": "native ETH -> weETH (pool coin domain is native sentinel -> weETH)",
+      "inputAmount": "not recorded in the local prefix report; only leg target/selector/originalOutput are available locally"
+    },
+    "familyId": "curve-plain",
+    "lineageId": "curve-plain:registry-direct-coin-behavior",
+    "existingEvidence": [
+      "docs/research/reports/native-fivehop-prefix-progress-20261011.json (leg 1 target/selector/original output)",
+      "docs/research/reports/native-asset-rounding-acceptance-20261010.json (N/block hash/pool)",
+      "docs/research/reports/impl-v4-nohook-native-20261010.json and native-fivehop-prefix-impl-row-20261011.patch (IMPL row text)",
+      "docs/research/reports/curve-plain-refresh-independent-20261016.json (N26152607 raw runtime, refresh evidence)",
+      "docs/research/reports/curve-plain-native-steth-acceptance-20261013.json (native/stETH behavior)",
+      "docs/research/reports/curve-plain-recipient-correctness-20261015.json (recipient behavior)"
+    ],
+    "activation": {
+      "sourceEnabled": true,
+      "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED",
+      "liveRunConfigInImplRow": "the 2026-10-19 42-family run temporarily disabled Curve plain for attribution; this is not the source default and no live activation is claimed"
+    }
+  },
+  "priorArtifactsSearch": {
+    "backupLocalRef": "backup-local-82bfc8fc (82bfc8fc inverse-auction: new declarative protocol family (validated, disabled))",
+    "curvePlainJsonDraft": "none",
+    "curvePlainMathDraft": "none",
+    "curvePlainSpecificMigrationBlocker": "none",
+    "pendingBlockersChecked": [
+      "HEAD docs/research/migration/pending-20261028 contains curve-lp (park plus draft/math), yieldbasis-lt, peapods-debond, aqua-swapvm and vault-spot artifacts; no curve-plain blocker, draft or math.",
+      "backup-local-82bfc8fc docs/research/migration/pending-20261028 has many family blockers but none for curve-plain; its only Curve pending artifact is curve-lp.blockers.md, curve-lp.draft.json and curve-lp-math.ts.draft.",
+      "The backup curve-lp park is a Protocol-domain LP mint/redeem draft; its math draft is the v0.3.1 StableSwap invariant/mintQuote. curve-plain quotes direct-coin swaps through on-chain get_dy and needs no LP math; the draft structure is not reusable.",
+      "The pending README candidateSources:[] import blocker is already fixed on 104ff465: declarative-discovery.ts:100 omits the empty candidateSources field, so it is not a current blocker."
+    ],
+    "filesFound": [
+      "listener/src/searcher/venues/swaps/curve-plain-family/* (handwritten TS, unchanged)",
+      "listener/src/searcher/venues/production-families/curve-plain.production.ts (handwritten entry, unchanged)",
+      "docs/research/reports/curve-plain-* and native-* (recorded acceptance/settlement/native evidence)"
+    ],
+    "commands": [
+      "git ls-tree -r --name-only backup-local-82bfc8fc | grep -i 'curve-plain'",
+      "git grep -l '\"curve-plain\"' backup-local-82bfc8fc -- '*.json'",
+      "git log --all --oneline --name-only --diff-filter=A -- '*curve-plain*.json' '*curve-plain*draft*'",
+      "git ls-tree -r --name-only backup-local-82bfc8fc -- docs/research/migration/pending-20261028 | grep -i blockers",
+      "git show backup-local-82bfc8fc:docs/research/migration/pending-20261028/curve-lp.blockers.md"
+    ],
+    "conclusion": "No earlier curve-plain declarative JSON, family math or family-specific blocker exists on HEAD or backup-local-82bfc8fc. The backup branch carries the same handwritten curve-plain family and only the Protocol-domain curve-lp park, which is not reusable for this Swap family."
+  },
+  "decisiveBlocker": {
+    "id": "curve-plain-identity-execution-proof-scope",
+    "capability": "identity must prove, per direction and per execution mode, the trusted executor debit and receipt, the pool input/output inventory delta, the exact or 0/1-tolerance output, and the optional external/native recipient, with the same executor-program authority used by production",
+    "existingSource": [
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "lines": "84-90",
+        "fact": "The quotes stage issues nativeExecutionProbe + nativeRecipientProbe for native pools and one executionProbe per ERC20 mode plus the receiver mode; every probe is optional so unknown alternatives cannot erase a complete proof."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "lines": "161-172",
+        "fact": "Per positive quote it selects the first proved mode and independently proves the optional recipient mode; the direction records executionMode and recipientMode per direction."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "lines": "274-296",
+        "fact": "executionProbe builds one executor-program transaction containing approve/transfer + exchange and observes executor, pool and PROBE_RECEIVER rows."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "lines": "297-317",
+        "fact": "provesExecution requires exactly four token deltas: pool +amountIn, pool -amountOut, executor -amountIn, and output +amountOut to PROBE_RECEIVER for receiver modes, with the return word equal to amountOut."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+        "lines": "337-350",
+        "fact": "provesNativeRecipient requires four observed token rows (actor + PROBE_RECEIVER), exactly one native delta equal to -amountIn on the actor, and the output row on PROBE_RECEIVER."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+        "lines": "46-62",
+        "fact": "nativeExecutionProbe uses executor-program with executionAssetBoundary and WETH token funding; nativeRecipientProbe (106-119) uses separately funded nativeBalanceWei and four recipient/actor observations."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+        "lines": "53-127",
+        "fact": "The contract fixture asserts probe-executor shape, then decodes every execution simulation through erc20ProbeCalls: exactly two CALL instructions, setup approve/transfer followed by one exchange, minDy equal to the quote output."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/identity-probe.ts",
+        "lines": "9-26",
+        "fact": "erc20ProbeCalls requires executionMode executor-program, no preCalls, exactly two ordinary CALLs and one setup + one exchange; other request shapes throw."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+        "lines": "237-305",
+        "fact": "nativeIdentity requires executor-program probes, executionAssetBoundary undefined for receiver probes, overrideIntent.nativeBalanceWei equal to amountIn and exactly four receiver/actor token rows."
+      },
+      {
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+        "lines": "512-518",
+        "fact": "The native contract expects per-direction native-exchange-receiver capability only for the native-input direction and no recipient mode for the reverse direction."
+      }
+    ],
+    "frameworkLimitation": [
+      {
+        "path": "listener/src/searcher/venues/declarative-simulation.ts",
+        "lines": "60-62",
+        "fact": "buildDeclarativeExecutionSimulation rejects every settlement object and every recipient different from the executor: 'execution simulation requires default executor receipt'."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-simulation.ts",
+        "lines": "66-80",
+        "fact": "It hardcodes observeTokenBalances to tokenIn/tokenOut/protectedTokens with account = symbolic executor, funds exactly one tokenIn row and, for native routes, adds the central executionAssetBoundary. It cannot observe the pool or an external recipient."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-simulation.ts",
+        "lines": "114-148",
+        "fact": "decodeDeclarativeExecutionSimulationReceipt requires executor-program, no preCalls, symbolic executor-only observations, exactly one delta per observed token, positive output and zero native delta; a four-row executor+pool+receiver receipt fails with 'executor-program receipt token scope mismatch'."
+      },
+      {
+        "path": "listener/src/searcher/venues/declarative-family.ts",
+        "lines": "322-345",
+        "fact": "Identity requests of kind declarative-execution-simulation are materialized through buildDeclarativeExecutionSimulation with the one selected variant execution definition and a JSON context; there is no per-probe recipient, target observation or native funding hook."
+      },
+      {
+        "path": "listener/src/searcher/venues/adapter-request-program.ts",
+        "lines": "97-104,1377-1380",
+        "fact": "The effect-delta-simulation call shape is exactly caller/executionMode/to/data; there is no value field and executor-program requires centrally trusted executor code and rejects preCalls."
+      }
+    ],
+    "probe": {
+      "method": "Temporary tsx probe (listener/tmp-curve-plain-probe.ts, removed) using the exported declarative-simulation, declarative-execution and declarative-discovery compilers on the 104ff465 sources.",
+      "observations": [
+        "buildDeclarativeExecutionSimulation with recipient=PROBE_RECEIVER: 'execution simulation requires default executor receipt'.",
+        "declarative simulation request observeTokenBalances: only tokenIn and tokenOut, both account={kind:'executor'}.",
+        "decodeDeclarativeExecutionSimulationReceipt with a family-style four-row executor+pool+receiver receipt: 'executor-program receipt token scope mismatch'.",
+        "Raw effect-delta-simulation with call.value=17: declareRequestProgram threw 'raw-native simulation call contains unsupported field value' at adapter-request-program.ts:1819 (call shape validation at :1377-1380).",
+        "buildDeclarativeQuotedFragment: requirements=[] and node params=['runtimeAmountProgram']; there is no approve/transfer-to-pool requirement or direct curve calldata node.",
+        "Declarative reverseBinding verified a getCode-only address surface with 0 provider.call invocations; there is no MetaRegistry membership read.",
+        "createTxEvidenceNomination (used by declarative tx-evidence discovery) returned 1 observation for a receipt whose blockNumber = source.number + 1; the family contract requires 0 with no trace fallback."
+      ],
+      "consequence": "A JSON identity can either use the sanctioned execution simulation (executor-only, default recipient, one variant execution definition) or hand-owned raw simulation requests (no native value, no executor-program, different caller mode). Neither reproduces the family's four-row/per-mode proof, native-input proof or native/Erc20 recipient proof. The unchanged family contract and native contract reject the resulting requests, and the production simulator/plan would have to narrow real mode or recipient capability."
+    },
+    "consequence": "A JSON identity can either use the sanctioned execution simulation (executor-only, default recipient, one variant execution definition, minAmountOut fixed to 1) or hand-owned raw simulation requests (no native value, no executor-program, different caller mode). Neither reproduces the family's four-row/per-mode proof or the native/ERC20 recipient probe. The unchanged family contract and native contract reject the resulting requests; the default native-input path can be approximated by the executor-only boundary simulation, but it still drops the family's receiver probe and cannot satisfy native-contract.ts:512-518."
+  },
+  "additionalBlockers": [
+    {
+      "id": "curve-plain-tx-evidence-receipt-height",
+      "severity": "behavior + family-contract failure",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/discovery.ts",
+          "lines": "87-98",
+          "fact": "The handwritten nomination wraps getTransactionReceipt and returns null unless receipt.blockNumber is a safe nonnegative integer <= source.number; future and unanchored receipts cannot fall through to trace."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+          "lines": "486-503",
+          "fact": "The contract requires 1 observation at/before N and 0 for blockNumber N+1, undefined, NaN, -1 or a fractional block, with traceCalls===0."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/tx-evidence-nomination.ts",
+          "lines": "51-74",
+          "fact": "The shared tx-evidence nomination reads the receipt and emits every matching log/call; it never checks receipt.blockNumber against the source and has no opaque block filter."
+        },
+        {
+          "path": "listener/src/searcher/venues/declarative-discovery.ts",
+          "lines": "354-356",
+          "fact": "nominationReadFlow is rejected unless nomination === 'address-surface', so the handwritten receipt-reading nominate cannot be reconstructed in JSON."
+        }
+      ],
+      "probe": {
+        "method": "createTxEvidenceNomination with a future receipt (blockNumber = source.number + 1), one matching log and no trace calls.",
+        "actual": "1 observation returned; contract.ts:486-503 requires 0.",
+        "consequence": "Startup nomination can admit observations from a future/unanchored receipt that the family deliberately rejects; the family contract cannot pass unchanged."
+      }
+    },
+    {
+      "id": "curve-plain-native-recipient-proof",
+      "severity": "capability + family-contract failure",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/native.ts",
+          "lines": "103-119",
+          "fact": "nativeRecipientProbe proves the optional native-input receiver ABI with a separately funded native call, executor-program calldata and four observed token rows on actor and PROBE_RECEIVER; overrideIntent.nativeBalanceWei carries the native funding."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/identity.ts",
+          "lines": "168-172",
+          "fact": "Only after provesNativeRecipient succeeds does the direction declare recipientMode native-exchange-receiver; otherwise the default mode remains without a receiver."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/native-contract.ts",
+          "lines": "512-518",
+          "fact": "The native contract expects the native-input direction to carry native-exchange-receiver for the valid receiver case and the reverse direction to carry no recipientMode."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-simulation.ts",
+          "lines": "60-62",
+          "fact": "The sanctioned execution simulation rejects any recipient different from the executor, so it cannot produce the native recipient probe even though it can fund native input through executionAssetBoundary."
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-request-program.ts",
+          "lines": "97-104,1377-1380",
+          "fact": "A raw simulation call has no value field, so a hand-owned raw native-value probe cannot send the input ETH to the pool."
+        }
+      ],
+      "probe": {
+        "method": "buildDeclarativeExecutionSimulation with recipient=PROBE_RECEIVER and a native route.",
+        "actual": "'execution simulation requires default executor receipt'; raw call with value rejected as unsupported field.",
+        "consequence": "JSON can keep the default native-exchange mode but cannot prove or admit the per-direction native receiver capability. Keeping it would over-claim; dropping it narrows a verified capability and fails native-contract.ts:512-518."
+      }
+    },
+    {
+      "id": "curve-plain-reverse-binding-membership",
+      "severity": "evidence-scope + family-contract failure",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/nomination.ts",
+          "lines": "20-32",
+          "fact": "Reverse binding reads getCode and MetaRegistry.get_registry_handlers_from_pool and verifies a nonempty handler array before emitting the address-surface observation."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+          "lines": "475-483",
+          "fact": "A provider with getCode 0x6000 and empty handlers must produce status 'failed'; a registered handler produces 'verified'."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-discovery.ts",
+          "lines": "478-495",
+          "fact": "Declarative reverse binding delegates to createAddressSurfaceNomination and a fingerprint decode; it performs only getCode/EIP-1967 storage reads and never calls a registry."
+        },
+        {
+          "path": "listener/src/searcher/venues/address-surface-nomination.ts",
+          "lines": "44-70",
+          "fact": "The shared address-surface nomination reads code, the EIP-1967 implementation word and an optional opaque resolver; it never verifies MetaRegistry handler membership."
+        }
+      ],
+      "probe": {
+        "method": "Declarative address-surface reverse binding with getCode='0x6000', getStorage=zero, provider.call counter.",
+        "actual": "status='verified', registry calls=0; contract.ts:481-483 requires 'failed' for empty handlers.",
+        "consequence": "A JSON reverse binding accepts any code-bearing nominated address; identity later sees the lack of registry membership, but the nomination evidence and the contract's rejection behavior are not preserved."
+      }
+    },
+    {
+      "id": "curve-plain-quoted-fragment-and-action-shape",
+      "severity": "solver plan/action contract + family-contract failure",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+          "lines": "54-65",
+          "fact": "buildFragment emits an approve requirement for pullsInput modes and a transfer-to-pool requirement for received modes, plus a node whose params carry i/j/minDy/receiver and whose action encodes the exact exchange calldata."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/action.ts",
+          "lines": "10-53",
+          "fact": "Each owned action validates indices/amount/minDy/receiver and calls the curve adapter or nativeExchangeProgram; foreign receivers and invalid params throw."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+          "lines": "443-465",
+          "fact": "The contract asserts requirements[0].kind is approve or transfer-to-pool, action.encode produces the pool CALL frame with exact selector/minDy/receiver, and foreign receiver encode throws."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-execution.ts",
+          "lines": "1041-1044",
+          "fact": "buildDeclarativeQuotedFragment always returns requirements: [] and one node whose params are only {runtimeAmountProgram}."
+        },
+        {
+          "path": "listener/src/searcher/venues/declarative-execution.ts",
+          "lines": "1060-1065",
+          "fact": "Declarative owned actions ignore the family's i/j/minDy/receiver params and encode a runtimeAmountProgram node; they cannot reproduce the exact curve exchange calldata or the receiver validation."
+        }
+      ],
+      "consequence": "A JSON fragment changes the plan requirement set and the action payload shape. Even if the runtime program executes the same call, the family contract's requirement/calldata assertions fail and the solver sees a different fragment contract."
+    },
+    {
+      "id": "curve-plain-per-direction-direct-output",
+      "severity": "capability parity (contract; behavior would need fail-closed route checks)",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/execution.ts",
+          "lines": "12-30",
+          "fact": "directMode is computed per route from executionMode/native input/recipientMode; buildRuntimeLeg returns null for a direct-output request when the route has no recipient mode."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/routes.ts",
+          "lines": "31,40-45",
+          "fact": "recipientMode is a per-direction route field and the route assertion checks it against the descriptor direction."
+        },
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/test/contract.ts",
+          "lines": "153-173",
+          "fact": "The contract expects recipientMode on a proved direction, buildRuntimeLeg(direct-output) on that route, and null on the older route without recipientMode."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-execution.ts",
+          "lines": "993-1003",
+          "fact": "supportsDeclarativeSettlement gates direct-output on the variant-level definition.settlement.directOutput and native output recipient; it has no route-level recipient capability gate and cannot return null for one route while returning a leg for another."
+        },
+        {
+          "path": "listener/src/searcher/venues/declarative-execution.ts",
+          "lines": "1011-1024",
+          "fact": "declarativeSettlementCapabilities advertises directOutput from the definition, not from route recipientMode; JSON could fail closed with contextChecks but cannot reproduce the null/route-scoped capability."
+        }
+      ],
+      "consequence": "A pool whose directions do not all prove recipientMode cannot faithfully expose directOutput. The JSON either drops external recipient settlement (capability narrowing) or over-advertises it for unproved directions; the family contract's route-scoped null expectation cannot be met unchanged."
+    },
+    {
+      "id": "curve-plain-exact-steth-transfer-projection",
+      "severity": "quote evidence deviation (report separately; not a live execution blocker)",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/curve-plain-family/native-transfer-quote.ts",
+          "lines": "28-44",
+          "fact": "For native -> stETH, the exact amountOut is floor(floor(get_dy * totalShares / totalPooledEther) * totalPooledEther / totalShares) and carries a transferQuote; exact.ts:31-36 uses that projected amountOut."
+        }
+      ],
+      "frameworkLimitation": [
+        {
+          "path": "listener/src/searcher/venues/declarative-quote-proof.ts",
+          "lines": "272-278,358-365",
+          "fact": "The final chain-quote receipt must equal amountOut exactly; a projected stETH amountOut cannot be the final view receipt."
+        }
+      ],
+      "consequence": "The JSON exact can keep the projected amountOut only by omitting chainQuote (weaker framework evidence) or keep chainQuote and report the nominal get_dy (wrong output for native->stETH). This is a quote-evidence deviation that needs a sanctioned projected-output proof, not a silent replacement."
+    }
+  ],
+  "nonBlockingAnalysis": {
+    "note": "Structural observations only; no JSON was authored or compiled end-to-end. These are not migration or acceptance claims.",
+    "expressibleWithJsonPlusFamilyMath": [
+      "Manifest/activation: familyId curve-plain, swap domain, supported lineage curve-plain:registry-direct-coin-behavior, 7 owned action ids, required infra erc20-approve/erc20-transfer, allowed swap taxonomy.",
+      "Discovery: TokenExchange int128/uint256/NG event decoders (canonical ABI re-encode), call selectors for the five unique exchange/received surfaces, bounded 0..7 indices and i!=j/amount>0 predicates, pool candidate key, hinted i/j optional fields, landed-log/observed-call sources and txSeedNominations/labels.",
+      "Identity structure: the registry -> structure -> quotes -> execution four-round shape, get-code/eth-call request arrays, source assertions, amplification/fee/coin/balance/decimals reads, dual coins/balances getter-ABI selection with ambiguity rejection and canonical scalar decoding, probeAmount (10^decimals capped at balance/1e6), probe-executor authority observation, get_dy pair probes, stETH totalShares/totalPooledEther reads and per-quote execution proof selection are all expressible as declarative stages/expressions, except for the execution-proof scope blocker above.",
+      "Routes: per-direction i/j/tokenIn/tokenOut/executionMode/recipientMode/quoteAbi fields, routeKey family:pool:i:j:mode, address-pool graph venue, per-mode adapter ids, executionAssets/native boundary.",
+      "Pricing: two-round pricingFlow (A, fee, balances, get_dy, stETH rates, refresh guards), descriptor-derived stateKey, sampleAmount with the 1e-6 cap, quotedPoolMid-equivalent pricingProjection, refreshPolicyForInstance per descriptor, dependency/mutation address expressions and classifyUnavailable; per-instance refresh policy would need code-hash-based variant splitting.",
+      "Exact: get_dy request with guards, zero method, exact evidence (binding/routeKey/amountIn/amountOut/quoteAbi) and source checks; stETH projection only under the deviation above.",
+      "Execution: v2 runtime steps for approve/transfer, received-mode balance measurement and patched dx, minDy, receiver, native value/effects and direct-output programs; byte-level equality with the handwritten program is not guaranteed.",
+      "Swap observation: landed event payloads, receiptReads get_coins token binding, poolMaterialization, detect-only victim support, capture via route materialization.",
+      "Default native-input execution can still be simulated through the central executionAssetBoundary (WETH funding + boundary unwrap/wrap); only the separate native-recipient probe and external-recipient observation are missing."
+    ],
+    "deviationsStillToReviewIfUnblocked": [
+      "The declarative route adds target/direction/adapterId and uses a canonical route key; route hashes will not be byte-identical to the handwritten route object.",
+      "The declarative runtime program instruction sequence is not expected to be byte-identical to the handwritten executor programs, which matters for any exact calldata equality assertion.",
+      "The candidate shape can carry hinted i/j as optional/nullable fields, but the handwritten candidateKind/hint semantics and instance key must be preserved by expression fields.",
+      "The handwritten identity treats an unknown alternative for one direction as unresolved for that direction only; a JSON decode would need a static optionalFailures list covering all possible dynamic execution ids and must keep the same per-direction isolation."
+    ]
+  },
+  "validation": {
+    "executed": [
+      {
+        "command": "npm run searcher:curve-plain-family",
+        "result": "pass: 18 plugin-local contract groups plus the identity-execution check (handwritten baseline green)"
+      },
+      {
+        "command": "npm run searcher:curve-plain-native-contract",
+        "result": "pass: 15 tests, 15 pass, 0 fail (handwritten baseline green)"
+      },
+      {
+        "command": "npm run build:live",
+        "result": "exit 0 (production tsc --noEmit)"
+      },
+      {
+        "command": "npx tsc -p tsconfig.json --noEmit",
+        "result": "exit 2 with pre-existing unrelated errors in univ4-fee-hook-family/test/tiered-exact.ts, vault-spot-family/test/*.ts and token-transfer-semantics/test/contract.ts; no curve-plain or framework file was modified by this assessment"
+      },
+      {
+        "command": "temporary tsx probe listener/tmp-curve-plain-probe.ts (removed)",
+        "result": "external-recipient-simulation: 'execution simulation requires default executor receipt'; family-4-row-receipt: 'executor-program receipt token scope mismatch'; simulation observe rows: only tokenIn/tokenOut with symbolic executor account; raw-native value: 'raw-native simulation call contains unsupported field value'; fragment requirements: []; fragment node params: ['runtimeAmountProgram']; reverse binding: verified with 0 registry calls; future receipt: 1 observation (family contract requires 0)"
+      },
+      {
+        "command": "git ls-tree / git grep / git log on backup-local-82bfc8fc and docs/research/migration",
+        "result": "no curve-plain JSON/math/blocker on backup or HEAD; only the Protocol-domain curve-lp park; concurrent unrelated pending files left untouched"
+      }
+    ],
+    "notExecuted": [
+      "No curve-plain JSON was authored or compiled (no faithful definition to compile).",
+      "No temporary generated production entry was rendered or restored, no family test was run against a JSON plugin, no generator/capability-manifest run, and no cutover.",
+      "No Ready/Graph/mid/effective/price, historical EVM, double-interface execution, settlement review, Opportunity replay, live or performance run; this park makes no adaptation, replication or opportunity claim."
+    ]
+  },
+  "files": {
+    "added": [
+      "docs/research/migration/pending-20261028/curve-plain.blockers.json"
+    ],
+    "modified": [],
+    "handwrittenEntry": "listener/src/searcher/venues/production-families/curve-plain.production.ts (unchanged, remains authoritative)",
+    "generatedArtifacts": "none",
+    "tempFilesRemoved": [
+      "listener/tmp-curve-plain-probe.ts"
+    ]
+  },
+  "unblockRequirement": "A public framework change is required before a faithful cutover: (a) identity execution simulations must accept declared observed (token, account) rows including the pool and an external recipient, and must either accept a declared native value/recipient or expose a JSON executor-program request builder with the same executor authority; (b) per-direction settlement/directOutput capability must be expressible (route-scoped null/true rather than one variant boolean); (c) tx-evidence nomination must support receipt-height/token filters or a receipt-capable nomination read flow; (d) reverse binding must support a declared registry membership read (MetaRegistry handlers) or an equivalent hook; (e) quoted fragments/actions must express approve/transfer-to-pool requirements and the family exchange calldata, or the family contract must be allowed to consume the declarative program-node contract; (f) a projected (stETH) exact output needs a sanctioned chain-proof form. These are shared TS/test-surface changes outside this JSON + family math + append-only registry scope, and the result must still satisfy the unchanged curve-plain contract, native-contract and dual-interface evidence shapes.",
+  "nextSteps": [
+    "Keep the handwritten curve-plain entry, its enabled activation, its mode/recipient/native capability and all recorded acceptance evidence unchanged.",
+    "Do not author or cut over a curve-plain JSON that drops pool/receiver observation, native-input receiver proof, per-direction direct-output or MetaRegistry reverse membership.",
+    "Re-run this assessment when the declarative identity simulation, per-direction settlement, nomination and reverse-binding capabilities above exist; then author JSON plus family math and validate compile/defineSwapFamily, family tests, a temporary generated entry, tsc and build:live."
+  ]
+}

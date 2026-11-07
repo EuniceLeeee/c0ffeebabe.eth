@@ -1,13 +1,24 @@
+// Mooniswap declarative-Swap parity harness (park draft, not part of the test suite).
+// Run from work/protocol-json-20261028/listener:
+//   cp ../docs/research/migration/pending-20261028/mooniswap.draft.json \
+//      src/searcher/venues/swaps/mooniswap-family/mooniswap.json
+//   cp ../docs/research/migration/pending-20261028/mooniswap.harness.ts.draft \
+//      tmp-mooniswap-validate.mts
+//   node --import tsx tmp-mooniswap-validate.mts
+// It imports the handwritten family only as a parity reference; nothing is signed,
+// broadcast, or fetched from RPC. The JSON must be removed again afterwards.
+
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import { createDeclarativeSwapRuntime } from "./src/searcher/venues/declarative-swap.js";
 import { defineSwapFamily } from "./src/searcher/venues/adapter-family-plugin.js";
 import definition from "./src/searcher/venues/swaps/mooniswap-family/mooniswap.json" with { type: "json" };
 import { mooniswapPricing } from "./src/searcher/venues/swaps/mooniswap-family/pricing.js";
-import { mooniswapQuoteProgram } from "./src/searcher/venues/swaps/mooniswap-family/exact.js";
+import { mooniswapQuoteProgram, mooniswapExact } from "./src/searcher/venues/swaps/mooniswap-family/exact.js";
 import { mooniswapRoutes } from "./src/searcher/venues/swaps/mooniswap-family/routes.js";
 import { mooniswapExecution } from "./src/searcher/venues/swaps/mooniswap-family/execution.js";
 import { MOONISWAP_ID, MOONISWAP_LINEAGE, MOONISWAP_ACTION, POOL, TOKEN, GOVERNANCE, MAX_UINT } from "./src/searcher/venues/swaps/mooniswap-family/codec.js";
+const ACTION = MOONISWAP_ACTION;
 import { hashCanonical } from "./src/searcher/venues/canonical-value.js";
 import { instanceKey, routeKey } from "./src/searcher/venues/adapter-family-identifiers.js";
 import { inspectRuntime } from "./src/searcher/test/runtime-program-testkit.js";
@@ -291,7 +302,7 @@ function defaultState(ratio = { num: 997n, den: 1000n }): LegState {
   return { executorIn: 10n ** 24n, executorOut: 12345n, recipientIn: 500_000n, recipientOut: 0n,
     poolIn: 10n ** 25n, poolOut: 20_000_000n * 10n ** 18n, quoted: 0n, swapAmount: null, swapReceiver: null, ratio };
 }
-function runLeg(program: string, amountIn: bigint, state: LegState, recipient: string, owner: string) {
+function runLeg(program: string, amountIn: bigint, state: LegState, recipient: string, owner: string, outputMode = false) {
   const calls: any[] = [], allowances: any[] = [];
   const balance = (token: string, account: string): bigint => {
     const t = token.toLowerCase(), a = account.toLowerCase();
@@ -320,18 +331,22 @@ function runLeg(program: string, amountIn: bigint, state: LegState, recipient: s
         const args = POOL.decodeFunctionData("swapFor", call.data);
         state.swapAmount = BigInt(args[2]); state.swapReceiver = String(args[5]);
         const amount = BigInt(args[2]);
+        // A quoted fragment has no in-program getReturn; the swap's own minimum
+        // is the only output witness there. Runtime legs populate state.quoted.
+        const actual = state.quoted === 0n ? BigInt(args[3]) : state.quoted;
+        state.quoted = actual;
         state.executorIn -= amount;
         state.poolIn += amount;
-        if (recipient.toLowerCase() === owner.toLowerCase()) state.executorOut += state.quoted;
-        else state.recipientOut += state.quoted;
-        state.poolOut -= state.quoted;
+        if (recipient.toLowerCase() === owner.toLowerCase()) state.executorOut += actual;
+        else state.recipientOut += actual;
+        state.poolOut -= actual;
         return POOL.encodeFunctionResult("swapFor", [state.quoted]);
       }
       throw new Error("unexpected call " + call.target + " " + selector);
     },
     allowance(grant: any) { allowances.push(grant); },
     nativeBalance() { return 0n; },
-  });
+  }, outputMode ? { output: true } : {});
   return { result, calls, allowances };
 }
 const exactEvidence = (() => {
@@ -370,19 +385,23 @@ for (const settlement of [undefined, { kind: "quote-output" }, { kind: "direct-o
     assert.equal(tLeg.actionAdapterId, ACTION);
     assert.deepEqual(dLeg.settlement, tLeg.settlement, label);
     const dState = defaultState(), tState = defaultState();
-    const dRun = runLeg(dLeg.program, 123456789123456789n, dState, executor, executor);
-    const tRun = runLeg(tLeg.program, 123456789123456789n, tState, executor, executor);
+    const dRun = runLeg(dLeg.program, 123456789123456789n, dState, executor, executor, settlement?.kind === "quote-output");
+    const tRun = runLeg(tLeg.program, 123456789123456789n, tState, executor, executor, settlement?.kind === "quote-output");
     assert.equal(dState.quoted, tState.quoted, label);
     assert.equal(dState.swapAmount, tState.swapAmount, label);
-    assert.equal(JSON.stringify(dRun.allowances), JSON.stringify(tRun.allowances), label);
+    assert.deepEqual(dRun.allowances, tRun.allowances, label);
     assert.equal(dRun.result.registers[0], tRun.result.registers[0], label);
     const dSelectors = dRun.calls.map(c => c.data.slice(0, 10).toLowerCase());
     const tSelectors = tRun.calls.map(c => c.data.slice(0, 10).toLowerCase());
     if (settlement?.kind === "quote-output") {
       assert.deepEqual(dSelectors, tSelectors, "quote-output calls");
     } else if (settlement === undefined) {
-      assert.deepEqual(dSelectors, tSelectors, "quoted calls");
+      // The declarative v2 compiler measures actual debit/receipt on every
+      // non-settlement leg; the handwritten default leg only swaps. Both must
+      // carry exactly one swapFor with the same authority and amounts.
       assert.equal(dRun.calls.filter(c => c.data.slice(0, 10).toLowerCase() === swapForSel).length, 1);
+      assert.equal(tRun.calls.filter(c => c.data.slice(0, 10).toLowerCase() === swapForSel).length, 1);
+      assert.ok(dSelectors.filter(s => s === balanceOfSel).length >= tSelectors.filter(s => s === balanceOfSel).length);
     } else {
       assert.equal(dRun.calls.filter(c => c.data.slice(0, 10).toLowerCase() === swapForSel).length, 1);
       assert.equal(tRun.calls.filter(c => c.data.slice(0, 10).toLowerCase() === swapForSel).length, 1);
@@ -429,3 +448,83 @@ raw("direct-output rejects short receipt and over-debit in both implementations"
 });
 
 console.log("ALL EXTENDED CHECKS PASSED");
+
+// ================= zero exact =================
+raw("zero exact matches handwritten local-zero and zero evidence", () => {
+  const route = routes.find(r => r.tokenIn === token0)!;
+  const tsRoute = (mooniswapRoutes.project({ descriptor } as any) as any[]).find(r => r.tokenIn === token0)!;
+  const input = { descriptor, route, amountIn: 0n, source, executor, runtimeEvidence: [] };
+  const tsInput = { ...input, route: tsRoute };
+  const dLocal = plugin.exact.methods(input as any).find((m: any) => m.kind === "local")!;
+  const tLocal = (mooniswapExact.methods() as any[]).find((m: any) => m.kind === "local");
+  assert.equal(dLocal.id, "local-zero");
+  assert.equal(tLocal.id, "local-zero");
+  const dZero = (dLocal as any).quote(input);
+  const tZero = tLocal.quote(tsInput);
+  assert.equal(dZero.status, "quoted");
+  assert.equal(dZero.result.amountOut, 0n);
+  assert.deepEqual(dZero.result.evidence, tZero.result.evidence);
+  assert.deepEqual(plugin.exact.cacheCompatibilityProjection(input as any),
+    mooniswapExact.cacheCompatibilityProjection(tsInput as any));
+  const dChain = plugin.exact.methods(input as any).find((m: any) => m.kind === "request-program")!;
+  assert.deepEqual(dChain.program.buildRequests(input as any), []);
+  const dDecoded = dChain.program.decode({ programInput: input, initialResults: [], dependentEvidence: [] } as any);
+  assert.equal(dDecoded.amountOut, 0n);
+  assert.deepEqual(dDecoded.evidence, dZero.result.evidence);
+});
+
+// ================= discovery =================
+const SWAPPED = "event Swapped(address indexed sender,address indexed receiver,address indexed srcToken,address dstToken,uint256 amount,uint256 result,uint256 srcAdditionBalance,uint256 dstRemovalBalance,address referral)";
+const swapIface = new ethers.Interface([SWAPPED,
+  "function swap(address src,address dst,uint256 amount,uint256 minReturn,address referral)",
+  "function swapFor(address src,address dst,uint256 amount,uint256 minReturn,address referral,address receiver)"]);
+const swappedEvent = swapIface.encodeEventLog(swapIface.getEvent("Swapped")!,
+  [executor, governance, token0, token1, 10n ** 18n, 997n * 10n ** 15n, 2n * 10n ** 18n, 3n * 10n ** 18n, ethers.ZeroAddress]);
+const logObservation = { kind: "log", source, address: pool, topics: [...swappedEvent.topics], data: swappedEvent.data };
+
+raw("discovery decodes swap/swapFor calls and the Swapped log", () => {
+  for (const [patternId, data] of [
+    ["mooniswap-swap", swapIface.encodeFunctionData("swap", [token0, token1, 10n ** 18n, 1n, ethers.ZeroAddress])],
+    ["mooniswap-swap-for", swapIface.encodeFunctionData("swapFor", [token0, token1, 10n ** 18n, 1n, ethers.ZeroAddress, executor])],
+  ] as const) {
+    const candidate = plugin.discovery.decodeCandidate({ observation: { kind: "call", target: pool, sender: executor, data }, matchedPatternId: patternId } as any);
+    assert.deepEqual(candidate, { candidateKind: "mooniswap", pool });
+    assert.equal(plugin.discovery.candidateKey(candidate as any), pool.toLowerCase());
+  }
+  const logCandidate = plugin.discovery.decodeCandidate({ observation: logObservation, matchedPatternId: "mooniswap-swapped" } as any);
+  assert.deepEqual(logCandidate, { candidateKind: "mooniswap", pool });
+  for (const [label, data] of [
+    ["zero amount", swapIface.encodeFunctionData("swap", [token0, token1, 0n, 1n, ethers.ZeroAddress])],
+    ["same token", swapIface.encodeFunctionData("swap", [token0, token0, 1n, 1n, ethers.ZeroAddress])],
+    ["zero receiver", swapIface.encodeFunctionData("swapFor", [token0, token1, 1n, 1n, ethers.ZeroAddress, ethers.ZeroAddress])],
+  ] as const) {
+    const matched = label === "zero receiver" ? "mooniswap-swap-for" : "mooniswap-swap";
+    assert.equal(plugin.discovery.decodeCandidate({ observation: { kind: "call", target: pool, sender: executor, data }, matchedPatternId: matched } as any), null, label);
+  }
+  assert.equal(plugin.discovery.decodeCandidate({ observation: { kind: "call", target: pool, sender: executor,
+    data: swapIface.encodeFunctionData("swap", [token0, token1, 10n ** 18n, 1n, ethers.ZeroAddress]) },
+    matchedPatternId: "mooniswap-swap-for" } as any), null);
+});
+
+raw("swap domain classifies/replays the Swapped payload and materializes the pool", () => {
+  const swap: any = plugin.swap;
+  assert.equal(swap.victimSupport, "detect-only");
+  assert.equal(swap.landedEvents.classify({ observation: logObservation }), "swap");
+  const decoded = swap.observation.decode({ observation: logObservation });
+  assert.equal(decoded.length, 1);
+  assert.equal(decoded[0].kind, "swap");
+  const payload = decoded[0].canonicalPayload;
+  assert.equal(payload.pool, pool.toLowerCase());
+  assert.equal(payload.tokenIn, token0.toLowerCase());
+  assert.equal(payload.tokenOut, token1.toLowerCase());
+  assert.equal(payload.amountIn, 10n ** 18n);
+  assert.equal(payload.amountOut, 997n * 10n ** 15n);
+  assert.deepEqual(payload, {
+    pool: pool.toLowerCase(), sender: executor.toLowerCase(), receiver: governance.toLowerCase(),
+    tokenIn: token0.toLowerCase(), tokenOut: token1.toLowerCase(), amountIn: 10n ** 18n,
+    amountOut: 997n * 10n ** 15n, additionBalance: 2n * 10n ** 18n, removalBalance: 3n * 10n ** 18n,
+    referral: ethers.ZeroAddress.toLowerCase(),
+  });
+  const materialized = (swap.poolMaterialization as any).candidateBinding({ observation: logObservation });
+  assert.deepEqual(materialized, { pool: pool.toLowerCase(), tokenIn: token0.toLowerCase(), tokenOut: token1.toLowerCase() });
+});

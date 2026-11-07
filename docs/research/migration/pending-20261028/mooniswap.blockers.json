@@ -1,0 +1,156 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:45:00Z",
+  "family": "mooniswap",
+  "domain": "swap",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "semanticJsonPossible": true,
+  "summary": "A complete declarative Swap JSON draft exists and is behaviourally equivalent to the handwritten family on synthetic same-source state: identity (runtime template/immutables/token codes/decimals), both discovery call patterns and the Swapped event, pricing reads and virtual-balance mids/unavailable classification, chain getReturn Exact with the same-source isActive round, quoted/direct-output runtime legs and zero-amount Exact all match the handwritten modules in a 15-check harness. It cannot be delivered in place under this task: (1) the family's own contract test asserts a static plugin.pricing.refreshPolicy === 'each-block' (test/contract.ts:53), but the declarative runtime exposes only refreshPolicyForInstance (declarative-family.ts:483), so rendering the generated entry makes the contract suite 12/13 instead of 13/13; fixing that requires a public TS change (or a test change), both out of scope; (2) a JSON in the family directory cannot be left without the prohibited generator run: build-family-capability-manifest.ts --check fails with 'declarative production entry is missing or stale' (build-declarative-production.ts:497) unless the generated entry and the whole family-capability-shadow.generated.json are regenerated. Minor shape deviations (bindingRef.bindingKey, Exact evidence governance field, extra v2 effect/native measurement) are listed below; they are not protocol-semantics losses but separately prevent byte/evidence-identical replacement. No production entry, public framework TS/test, generated catalog artifact, or live state was changed; the handwritten production entry is restored. A concurrent commit cae1c860 accidentally captured an intermediate copy of this draft at listener/src/searcher/venues/swaps/mooniswap-family/mooniswap.json plus tmp-mooniswap-*.mts harness files; that intermediate copy is invalid (it has standard.identity instead of the required top-level identity.definition and the unfixed poolMaterialization address slice) and this park removes it in favour of the validated draft here.",
+  "baseline": {
+    "workspace": "work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "headAtStart": "c5a3ea1a",
+    "headDuringWork": "cae1c860 (concurrent unrelated commit; it accidentally included an intermediate mooniswap draft and tmp harness files)",
+    "familyRuntimeBaseline": "104ff465",
+    "workingTreeAtStart": "dirty with concurrent unrelated changes; left untouched",
+    "generatorRun": false,
+    "publicTsOrTestChanges": false
+  },
+  "reference": {
+    "implementationRow": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live \u67b6\u6784\u590d\u5199/IMPL\u914d\u7f6e\u5217\u8868.md:43",
+    "implementationRowText": "Curve Tricrypto\uff0bMooniswap\uff1b\u539fTX 0x03d2dc...\uff1bB=26030090\u672b\u72b6\u6001\uff0bN=26030091\u524d255\u7b14\uff0cE=N\uff1b\u672c\u8f6e Mooniswap N26030091 \u5757\u672b\u590d\u7528\u539f\u81ea\u7136 Ready \u526f\u672c\u5e76\u7531\u5f53\u524d\u751f\u4ea7\u91cd\u9a8c\uff0c69\u5b9e\u4f8b/138\u8fb9",
+    "tx": "0x03d2dc13a13e6a71bcf21c1f3134c4167eb29cd20bb96ad7853249d1816a2dd8",
+    "txBlock": 26030091,
+    "txBlockHash": "0x589ef7d0d24a9dc2cbccd0c24fe6857794ead5e47e79aad0b8dd875e8e861f53",
+    "targetPool": "0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21",
+    "sampleSource": "listener/src/searcher/venues/swaps/mooniswap-family/test/historical-dual.ts:38-41 (N, HASH, TX, TARGET); original receipt is a single Mooniswap Swapped leg; N-end is not the original pre-call state",
+    "existingEvidence": [
+      "docs/research/reports/current-interface-mooniswap-20261016.json",
+      "docs/research/reports/mooniswap-recipient-correctness-20261014.json",
+      "docs/research/reports/mooniswap-retained-current-behavior-20261016.json",
+      "docs/research/reports/mooniswap-retained-current-compatibility-20261016.json",
+      "docs/research/reports/mooniswap-settlement-gate-20261014.json"
+    ]
+  },
+  "priorArtifactsSearch": {
+    "backupLocalRef": "backup-local-82bfc8fc (82bfc8fc inverse-auction: new declarative protocol family)",
+    "mooniswapJsonDraft": "none on the backup ref",
+    "mooniswapMathDraft": "none; the only math is the handwritten TS family (pricing.ts/exact.ts/runtime-execution.ts) which was reused as the parity reference",
+    "mooniswapSpecificMigrationBlocker": "none on the backup ref; docs/research/design/swap-credit-json-framework-20261030.md:13 records that Mooniswap was previously closed and not migrated/re-enabled",
+    "filesFound": [
+      "listener/src/searcher/venues/swaps/mooniswap-family/* (handwritten TS family, unchanged)",
+      "docs/research/reports/mooniswap-* (settlement/identity/retained evidence)",
+      "docs/research/migration/pending-20261028/ has no mooniswap entry on the backup ref"
+    ],
+    "commands": [
+      "git ls-tree -r --name-only backup-local-82bfc8fc | grep -i mooniswap",
+      "git grep -n -i mooniswap backup-local-82bfc8fc -- docs/research/migration",
+      "git log --all --oneline --grep=mooniswap -i",
+      "git log --all --diff-filter=A --name-only --pretty=format: | grep -i 'mooniswap.*json'"
+    ],
+    "conclusion": "No earlier declarative JSON, family math draft or migration blocker exists to reuse; only the handwritten TS family and its recorded acceptance/settlement evidence."
+  },
+  "decisiveBlockers": [
+    {
+      "id": "mooniswap-static-refresh-policy-contract",
+      "capability": "the installed family's contract test must stay green after the generated declarative entry replaces the handwritten one",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/venues/swaps/mooniswap-family/test/contract.ts",
+          "lines": "51-54",
+          "fact": "asserts Reflect.get(family.plugin, 'pricing').refreshPolicy === 'each-block' on the catalog-installed plugin"
+        },
+        {
+          "path": "listener/src/searcher/venues/declarative-family.ts",
+          "lines": "478-484",
+          "fact": "the declarative pricing object exposes refreshPolicyForInstance but no static refreshPolicy member"
+        },
+        {
+          "path": "listener/src/searcher/venues/adapter-family-plugin.ts",
+          "lines": "836-841, 3973-3978",
+          "fact": "the static refreshPolicy member is optional in the strict contract and validated only when present"
+        }
+      ],
+      "frameworkLimitation": "With the JSON entry rendered, `node --import tsx --test src/searcher/venues/swaps/mooniswap-family/test/contract.ts` returns 12 pass / 1 fail at contract.ts:53 (actual undefined, expected 'each-block'). No JSON field reaches the static pricing object. Fixing it needs a public TS change in declarative-family.ts (or the test), which this task excludes.",
+      "impact": "The family cannot be cut over to the declarative entry without narrowing its contract test or widening the public pricing contract."
+    },
+    {
+      "id": "mooniswap-generated-catalog-gate",
+      "capability": "a declarative definition in a *-family directory must have a generated production entry and regenerated capability catalog",
+      "existingSource": [
+        {
+          "path": "listener/src/searcher/build-declarative-production.ts",
+          "lines": "483-520",
+          "fact": "check mode rejects a definition without its generated entry ('declarative production entry is missing or stale') and stale generated types"
+        },
+        {
+          "path": "listener/src/searcher/generated/production-family-entries.generated.ts",
+          "lines": "1-80",
+          "fact": "the production composition root is a build-time generated static import list; mooniswap currently imports the handwritten entry"
+        },
+        {
+          "path": "listener/src/searcher/generated/family-capability-shadow.generated.json",
+          "fact": "the full catalog manifest is generated and would change by thousands of lines"
+        }
+      ],
+      "frameworkLimitation": "Keeping mooniswap.json under listener/src/searcher/venues/swaps/mooniswap-family/ makes `node --import tsx src/searcher/build-family-capability-manifest.ts --check` exit 1 with 'declarative production entry is missing or stale'. Satisfying it requires the prohibited generator run and a large generated-catalog diff, which this task excludes.",
+      "impact": "The JSON cannot be registered in place without the generator; parking the draft avoids leaving a failing repository gate."
+    }
+  ],
+  "nonDecisiveGaps": [
+    {
+      "id": "binding-key-shape",
+      "fact": "handwritten routes set bindingRef.bindingKey to the per-route routeIdentity string (codec.ts:77-87, routes.ts:9-12); declarative routes take one family-level routes.bindingKey (declarative-family.ts:280) and the projected routeKey is preserved exactly, so bindingKey becomes the lower pool address. Both bindingRef.fingerprint values and both routeKeys match (harness)."
+    },
+    {
+      "id": "exact-evidence-governance-field",
+      "fact": "handwritten Exact evidence records the mutable governance address (exact.ts:11-15,44-48) and execution requires it (execution.ts:14-16); declarative evidence is evaluated again for the execution fragment without flow evidence (declarative-family.ts:787-798), so a flow-only governance field would make the evidence hash unrecomputable. The draft keeps the same-source isActive round and all other evidence fields but omits `governance`. Using exact.retainReadEvidence would keep it at the cost of carrying readProof instead."
+    },
+    {
+      "id": "stricter-declarative-execution",
+      "fact": "declarative v2 measures the debit/credit deltas on every funded leg and appends an unchanged-native row for ERC20 routes (declarative-execution.ts:463-464); the handwritten default runtime leg is a bare allowance+swapFor (runtime-execution.ts:20-50). This is a stricter check, not a capability loss; quote-output and direct-output capabilities/amounts/receiver/allowance match in the harness."
+    },
+    {
+      "id": "fee-projection-precision",
+      "fact": "pricing rows use feePpm = fee / 1e12 (<=0.01 bp truncation) because declarative feeBps rows are integers; mid/depth/reserve values match the handwritten pricing on the synthetic snapshot within that bound."
+    }
+  ],
+  "validation": {
+    "draftJson": "docs/research/migration/pending-20261028/mooniswap.draft.json (96 KB; compiled by createDeclarativeSwapRuntime and defineSwapFamily)",
+    "harness": "docs/research/migration/pending-20261028/mooniswap.harness.ts.draft (15/15 PASS when copied to listener/ and run with `node --import tsx`; the JSON must be at listener/src/searcher/venues/swaps/mooniswap-family/mooniswap.json for the run)",
+    "harnessChecks": [
+      "routes projection (routeKey/direction/tokenIn/tokenOut/binding fingerprint) equals handheld routes",
+      "pricing current requests/ids, dependent governance round, snapshot and mids compare equal; unavailable classification matches for shutdown/empty real/empty virtual balances",
+      "Exact chain quote requests/decode and every evidence field except `governance` equal the handwritten getReturn program; rejects zero output, inventory excess, empty input, changed tokens, inactive governance and foreign source",
+      "zero-amount local-zero result and zeroEvidence deep-equal the handwritten local-zero",
+      "quoted fragment emits one swapFor with amountIn, quoted minimum, zero referral and executor receiver plus the standing MAX_UINT ensure allowance",
+      "default/quote-output/direct-output runtime legs match handwritten settlement capabilities, quote result, swap args and allowances; direct-output rejects a short receipt in both implementations",
+      "identity verifies a synthetic 21340-byte runtime with all 16 immutable slots and mask hash; rejects short code, wrong operands, unsorted tokens, a tampered PUSH32 opcode and decimals>77 with the same reason code",
+      "discovery decodes both swap/swapFor calls and the Swapped log and rejects zero/same-token/zero-receiver inputs",
+      "swap domain classifies/payload-decodes the Swapped log and materializes {pool, tokenIn, tokenOut}"
+    ],
+    "commandResults": [
+      "temp rendered entry via renderDeclarativeProductionEntry: format swap-json-v2, family mooniswap, 0 children",
+      "generated entry import: plugin manifest mooniswap/swap, activation SEARCHER_FAMILY_MOONISWAP_ENABLED, 2 routes, action mooniswap-swap-for",
+      "`npm run build:live` with the temp entry: PASS (exit 0); after restoring the handwritten entry: PASS (exit 0)",
+      "`npx tsc -p tsconfig.json --noEmit`: 1233 pre-existing test-file errors; no error mentions mooniswap or the new JSON/temp entry",
+      "`npm run test:family-json` with the temp entry: 711 tests, 710 pass, 1 skip, 0 fail",
+      "handwritten family contract test after restore: 13/13 PASS; with the temp declarative entry: 12/13, failure at test/contract.ts:53 (static pricing.refreshPolicy)",
+      "`node --import tsx src/searcher/build-family-capability-manifest.ts --check` with the JSON in the family dir: exit 1, 'declarative production entry is missing or stale'",
+      "NOT RUN: generator, historical Ready/Graph, RPC/REVM dual-execution, latency. No chain evidence was re-read for this park; the reference numbers above are stored acceptance anchors."
+    ]
+  },
+  "deliverables": {
+    "draft": "docs/research/migration/pending-20261028/mooniswap.draft.json",
+    "blockers": "docs/research/migration/pending-20261028/mooniswap.blockers.json",
+    "harnessDraft": "docs/research/migration/pending-20261028/mooniswap.harness.ts.draft",
+    "cleanupNote": "The concurrent commit cae1c860 captured an intermediate mooniswap.json and listener/tmp-mooniswap-*.mts files; the park removes them from the working tree so the handwritten production entry stays authoritative. The parent should commit that cleanup (or re-add the validated draft and run the generator after resolving the two blockers)."
+  },
+  "revivalSteps": [
+    "Authorize one of: (a) expose pricing.refreshPolicy on the declarative pricing object in declarative-family.ts, or (b) update mooniswap contract.ts:53 to use refreshPolicyForInstance. Re-run the family contract suite to 13/13.",
+    "Copy the draft to listener/src/searcher/venues/swaps/mooniswap-family/mooniswap.json and run npm run family-capability-manifest:generate (generated entry + capability shadow + types).",
+    "Re-run the pending harness (15/15), npm run build:live, npm run test:family-json and the mooniswap contract suite.",
+    "Run the normal current-production historical single-block Ready/Graph/mid/effective checks at N26030091 and the RPC/REVM dual-execution check; this park makes no chain claim."
+  ]
+}

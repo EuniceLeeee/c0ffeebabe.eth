@@ -1,0 +1,5607 @@
+{
+ "version": 2,
+ "scope": {
+  "family": "mooniswap"
+ },
+ "production": {
+  "domain": "swap",
+  "activation": {
+   "enabled": true,
+   "envKey": "SEARCHER_FAMILY_MOONISWAP_ENABLED"
+  }
+ },
+ "manifest": {
+  "familyId": "mooniswap",
+  "domain": "swap",
+  "ownedActionAdapterIds": [
+   "mooniswap-swap-for"
+  ],
+  "requiredInfraActionAdapterIds": [
+   "erc20-approve"
+  ],
+  "allowedTaxonomy": [
+   {
+    "slotKind": "swap"
+   }
+  ],
+  "supportedLineages": [
+   "mooniswap:verified-v2-runtime"
+  ],
+  "poolAdapterIds": [
+   "mooniswap"
+  ],
+  "edgeAdapterIds": [
+   "mooniswap-swap-for"
+  ],
+  "requiresProtocolEdgesFlag": false
+ },
+ "discovery": {
+  "definition": {
+   "version": 2,
+   "sources": [
+    "observed-call",
+    "landed-log"
+   ],
+   "candidateSources": [
+    "observed-interaction"
+   ],
+   "candidate": {
+    "kind": "mooniswap",
+    "addressField": "pool",
+    "fields": {
+     "pool": "address"
+    },
+    "key": [
+     "pool"
+    ]
+   },
+   "calls": [
+    {
+     "id": "mooniswap-swap",
+     "signature": "function swap(address src,address dst,uint256 amount,uint256 minReturn,address referral) payable returns(uint256)",
+     "fields": {
+      "pool": {
+       "from": "target"
+      }
+     },
+     "predicates": [
+      {
+       "op": "gt",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          2
+         ]
+        },
+        0
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            0
+           ]
+          },
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            1
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            0
+           ]
+          },
+          "0x0000000000000000000000000000000000000000"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            1
+           ]
+          },
+          "0x0000000000000000000000000000000000000000"
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "mooniswap-swap-for",
+     "signature": "function swapFor(address src,address dst,uint256 amount,uint256 minReturn,address referral,address receiver) payable returns(uint256)",
+     "fields": {
+      "pool": {
+       "from": "target"
+      }
+     },
+     "predicates": [
+      {
+       "op": "gt",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          2
+         ]
+        },
+        0
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            0
+           ]
+          },
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            1
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            0
+           ]
+          },
+          "0x0000000000000000000000000000000000000000"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            1
+           ]
+          },
+          "0x0000000000000000000000000000000000000000"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            5
+           ]
+          },
+          "0x0000000000000000000000000000000000000000"
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "events": [
+    {
+     "id": "mooniswap-swapped",
+     "signature": "event Swapped(address indexed sender,address indexed receiver,address indexed srcToken,address dstToken,uint256 amount,uint256 result,uint256 srcAdditionBalance,uint256 dstRemovalBalance,address referral)",
+     "fields": {
+      "pool": {
+       "from": "emitter"
+      }
+     },
+     "predicates": [
+      {
+       "op": "gt",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          4
+         ]
+        },
+        0
+       ]
+      },
+      {
+       "op": "gt",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          5
+         ]
+        },
+        0
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            2
+           ]
+          },
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            3
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "labels": [
+    "mooniswap"
+   ],
+   "nomination": "tx-evidence",
+   "txSeedNominations": true
+  }
+ },
+ "identity": {
+  "key": {
+   "op": "lower",
+   "args": [
+    {
+     "op": "address",
+     "args": [
+      {
+       "op": "get",
+       "args": [
+        "$identity",
+        "subject"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "definition": {
+   "version": 1,
+   "identity": {
+    "applies": {
+     "op": "eq",
+     "args": [
+      {
+       "op": "get",
+       "args": [
+        "$candidate",
+        "candidateKind"
+       ]
+      },
+      "mooniswap"
+     ]
+    },
+    "select": [
+     {
+      "assert": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$candidate",
+          "candidateKind"
+         ]
+        },
+        "mooniswap"
+       ]
+      },
+      "error": "mooniswap wrong candidate kind"
+     },
+     {
+      "return": "runtime",
+      "when": {
+       "op": "not",
+       "args": [
+        {
+         "op": "defined",
+         "args": [
+          "$evidence"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "return": "tokens",
+      "when": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "phase"
+         ]
+        },
+        "runtime"
+       ]
+      }
+     },
+     {
+      "return": "tokens"
+     }
+    ],
+    "stages": {
+     "runtime": {
+      "requirements": {
+       "transports": [
+        "get-code",
+        "eth-call"
+       ],
+       "caller": "executor"
+      },
+      "requests": [
+       {
+        "id": "code",
+        "kind": "get-code",
+        "address": "$candidate.pool"
+       },
+       {
+        "id": "token0",
+        "kind": "eth-call",
+        "to": "$candidate.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "token0",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "caller": {
+         "kind": "executor"
+        }
+       },
+       {
+        "id": "token1",
+        "kind": "eth-call",
+        "to": "$candidate.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "token1",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "caller": {
+         "kind": "executor"
+        }
+       }
+      ],
+      "decode": [
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$requests"
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap missing/extra identity results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            {
+             "op": "unique",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "op": "get",
+                 "args": [
+                  "$row",
+                  "id"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap duplicate identity results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": {
+                  "op": "get",
+                  "args": [
+                   "$row",
+                   "id"
+                  ]
+                 }
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$requests",
+                "row",
+                {
+                 "id": {
+                  "op": "get",
+                  "args": [
+                   "$row",
+                   "id"
+                  ]
+                 }
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap unexpected identity results"
+       },
+       {
+        "let": "source",
+        "value": {
+         "op": "source",
+         "args": [
+          "$results"
+         ]
+        }
+       },
+       {
+        "let": "token0Raw",
+        "value": {
+         "op": "get",
+         "args": [
+          {
+           "op": "returned",
+           "args": [
+            "token0"
+           ]
+          },
+          "data"
+         ]
+        }
+       },
+       {
+        "let": "token1Raw",
+        "value": {
+         "op": "get",
+         "args": [
+          {
+           "op": "returned",
+           "args": [
+            "token1"
+           ]
+          },
+          "data"
+         ]
+        }
+       },
+       {
+        "assert": {
+         "op": "matches",
+         "args": [
+          "$token0Raw",
+          "^0x0{24}[0-9a-fA-F]{40}$"
+         ]
+        },
+        "error": "mooniswap noncanonical token0 word"
+       },
+       {
+        "assert": {
+         "op": "matches",
+         "args": [
+          "$token1Raw",
+          "^0x0{24}[0-9a-fA-F]{40}$"
+         ]
+        },
+        "error": "mooniswap noncanonical token1 word"
+       },
+       {
+        "let": "token0",
+        "value": {
+         "op": "address",
+         "args": [
+          {
+           "op": "bytes",
+           "args": [
+            "$token0Raw",
+            12,
+            20
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "token1",
+        "value": {
+         "op": "address",
+         "args": [
+          {
+           "op": "bytes",
+           "args": [
+            "$token1Raw",
+            12,
+            20
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "pool",
+        "value": {
+         "op": "lower",
+         "args": [
+          {
+           "op": "address",
+           "args": [
+            {
+             "op": "get",
+             "args": [
+              "$candidate",
+              "pool"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "code",
+        "value": {
+         "op": "code",
+         "args": [
+          "code"
+         ]
+        }
+       },
+       {
+        "let": "binding",
+        "value": {
+         "pool": "$pool",
+         "token0": "$token0",
+         "token1": "$token1",
+         "codeHash": {
+          "op": "codeHash",
+          "args": [
+           "$code"
+          ]
+         }
+        }
+       },
+       {
+        "let": "valid",
+        "value": {
+         "op": "expression",
+         "args": [
+          "runtimeValid",
+          {}
+         ]
+        }
+       },
+       {
+        "return": {
+         "phase": "runtime",
+         "source": "$source",
+         "valid": "$valid",
+         "binding": "$binding",
+         "ids": {
+          "op": "map",
+          "args": [
+           "$requests",
+           "request",
+           {
+            "op": "get",
+            "args": [
+             "$request",
+             "id"
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ]
+     },
+     "tokens": {
+      "requirements": {
+       "transports": [
+        "get-code",
+        "eth-call"
+       ],
+       "caller": "executor"
+      },
+      "requests": [
+       {
+        "id": "token0-code",
+        "kind": "get-code",
+        "address": "$evidence.binding.token0"
+       },
+       {
+        "id": "token1-code",
+        "kind": "get-code",
+        "address": "$evidence.binding.token1"
+       },
+       {
+        "id": "decimals0",
+        "kind": "eth-call",
+        "to": "$evidence.binding.token0",
+        "data": {
+         "op": "encode",
+         "args": [
+          "token",
+          "decimals",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "caller": {
+         "kind": "executor"
+        }
+       },
+       {
+        "id": "decimals1",
+        "kind": "eth-call",
+        "to": "$evidence.binding.token1",
+        "data": {
+         "op": "encode",
+         "args": [
+          "token",
+          "decimals",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "caller": {
+         "kind": "executor"
+        }
+       }
+      ],
+      "decode": [
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$requests"
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap missing/extra identity results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            {
+             "op": "unique",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "op": "get",
+                 "args": [
+                  "$row",
+                  "id"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap duplicate identity results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": {
+                  "op": "get",
+                  "args": [
+                   "$row",
+                   "id"
+                  ]
+                 }
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$requests",
+                "row",
+                {
+                 "id": {
+                  "op": "get",
+                  "args": [
+                   "$row",
+                   "id"
+                  ]
+                 }
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap unexpected identity results"
+       },
+       {
+        "let": "source",
+        "value": {
+         "op": "source",
+         "args": [
+          "$results"
+         ]
+        }
+       },
+       {
+        "let": "code0",
+        "value": {
+         "op": "code",
+         "args": [
+          "token0-code"
+         ]
+        }
+       },
+       {
+        "let": "code1",
+        "value": {
+         "op": "code",
+         "args": [
+          "token1-code"
+         ]
+        }
+       },
+       {
+        "assert": {
+         "op": "matches",
+         "args": [
+          "$code0",
+          "^0x(?:[0-9a-fA-F]{2})+$"
+         ]
+        },
+        "error": "mooniswap token0 has no runtime code"
+       },
+       {
+        "assert": {
+         "op": "matches",
+         "args": [
+          "$code1",
+          "^0x(?:[0-9a-fA-F]{2})+$"
+         ]
+        },
+        "error": "mooniswap token1 has no runtime code"
+       },
+       {
+        "let": "decimals0",
+        "value": {
+         "op": "decodeCanonical",
+         "args": [
+          "token",
+          "decimals",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "decimals0"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "let": "decimals1",
+        "value": {
+         "op": "decodeCanonical",
+         "args": [
+          "token",
+          "decimals",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "decimals1"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "let": "valid",
+        "value": {
+         "op": "and",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$evidence",
+            "valid"
+           ]
+          },
+          {
+           "op": "lte",
+           "args": [
+            {
+             "op": "uint",
+             "args": [
+              "$decimals0"
+             ]
+            },
+            77
+           ]
+          },
+          {
+           "op": "lte",
+           "args": [
+            {
+             "op": "uint",
+             "args": [
+              "$decimals1"
+             ]
+            },
+            77
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "tokens",
+           "source": "$source",
+           "valid": "$valid",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             {
+              "op": "get",
+              "args": [
+               "$request",
+               "id"
+              ]
+             }
+            ]
+           }
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    "decide": [
+     {
+      "return": {
+       "status": "continue"
+      },
+      "when": {
+       "op": "not",
+       "args": [
+        {
+         "op": "defined",
+         "args": [
+          "$evidence"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "return": {
+       "status": "continue"
+      },
+      "when": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "phase"
+         ]
+        },
+        "runtime"
+       ]
+      }
+     },
+     {
+      "return": {
+       "status": "chain-proven-rejected",
+       "reasonCode": "unsupported-mooniswap-runtime-or-token",
+       "evidenceRequestIds": {
+        "op": "get",
+        "args": [
+         "$evidence",
+         "ids"
+        ]
+       }
+      },
+      "when": {
+       "op": "not",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "valid"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "assert": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "phase"
+         ]
+        },
+        "tokens"
+       ]
+      },
+      "error": "mooniswap identity evidence phase is invalid"
+     },
+     {
+      "return": {
+       "status": "verified",
+       "identity": {
+        "familyId": "mooniswap",
+        "lineageId": "mooniswap:verified-v2-runtime",
+        "subject": {
+         "op": "get",
+         "args": [
+          "$evidence.binding",
+          "pool"
+         ]
+        },
+        "provenance": [
+         {
+          "kind": "mooniswap-runtime-immutable-pair",
+          "subject": {
+           "op": "get",
+           "args": [
+            "$evidence.binding",
+            "pool"
+           ]
+          },
+          "evidenceHash": {
+           "op": "hash",
+           "args": [
+            {
+             "binding": "$evidence.binding",
+             "source": "$evidence.source"
+            }
+           ]
+          }
+         }
+        ],
+        "facts": {
+         "pool": {
+          "op": "get",
+          "args": [
+           "$evidence.binding",
+           "pool"
+          ]
+         },
+         "token0": {
+          "op": "get",
+          "args": [
+           "$evidence.binding",
+           "token0"
+          ]
+         },
+         "token1": {
+          "op": "get",
+          "args": [
+           "$evidence.binding",
+           "token1"
+          ]
+         },
+         "codeHash": {
+          "op": "get",
+          "args": [
+           "$evidence.binding",
+           "codeHash"
+          ]
+         }
+        }
+       }
+      }
+     }
+    ]
+   }
+  }
+ },
+ "instance": {
+  "key": {
+   "op": "lower",
+   "args": [
+    {
+     "op": "address",
+     "args": [
+      {
+       "op": "get",
+       "args": [
+        "$identity",
+        "subject"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "draft": {
+   "op": "merge",
+   "args": [
+    {
+     "familyId": {
+      "op": "get",
+      "args": [
+       "$identity",
+       "familyId"
+      ]
+     },
+     "lineageId": {
+      "op": "get",
+      "args": [
+       "$identity",
+       "lineageId"
+      ]
+     },
+     "instanceKey": {
+      "op": "lower",
+      "args": [
+       {
+        "op": "address",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           "$identity",
+           "subject"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "provenance": {
+      "op": "get",
+      "args": [
+       "$identity",
+       "provenance"
+      ]
+     },
+     "runtimeRequirements": [
+      {
+       "kind": "source-state",
+       "freshness": "pinned-block"
+      }
+     ]
+    },
+    {
+     "op": "get",
+     "args": [
+      "$identity",
+      "facts"
+     ]
+    }
+   ]
+  },
+  "bindingProjection": {
+   "pool": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "token0": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "token0"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "token1": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "token1"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "codeHash": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "get",
+      "args": [
+       "$descriptor",
+       "codeHash"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "routes": {
+  "target": {
+   "op": "get",
+   "args": [
+    "$descriptor",
+    "pool"
+   ]
+  },
+  "bindingKey": {
+   "op": "lower",
+   "args": [
+    {
+     "op": "address",
+     "args": [
+      {
+       "op": "get",
+       "args": [
+        "$descriptor",
+        "pool"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "directions": [
+   {
+    "id": "token0-to-token1",
+    "enabled": true,
+    "tokenIn": {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "token0"
+     ]
+    },
+    "tokenOut": {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "token1"
+     ]
+    },
+    "adapterId": "mooniswap-swap-for",
+    "taxonomy": {
+     "slotKind": "swap"
+    },
+    "fields": {
+     "pool": {
+      "op": "get",
+      "args": [
+       "$descriptor",
+       "pool"
+      ]
+     }
+    }
+   },
+   {
+    "id": "token1-to-token0",
+    "enabled": true,
+    "tokenIn": {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "token1"
+     ]
+    },
+    "tokenOut": {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "token0"
+     ]
+    },
+    "adapterId": "mooniswap-swap-for",
+    "taxonomy": {
+     "slotKind": "swap"
+    },
+    "fields": {
+     "pool": {
+      "op": "get",
+      "args": [
+       "$descriptor",
+       "pool"
+      ]
+     }
+    }
+   }
+  ],
+  "key": {
+   "op": "join",
+   "args": [
+    [
+     {
+      "op": "get",
+      "args": [
+       "$descriptor",
+       "familyId"
+      ]
+     },
+     ":",
+     {
+      "op": "lower",
+      "args": [
+       {
+        "op": "address",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           "$descriptor",
+           "pool"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     ":",
+     {
+      "op": "lower",
+      "args": [
+       {
+        "op": "address",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           "$route",
+           "tokenIn"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     ">",
+     {
+      "op": "lower",
+      "args": [
+       {
+        "op": "address",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           "$route",
+           "tokenOut"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    ""
+   ]
+  },
+  "graphVenue": {
+   "kind": "address-pool",
+   "pool": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "effects": [
+   {
+    "kind": "token-delta",
+    "token": {
+     "op": "get",
+     "args": [
+      "$route",
+      "tokenIn"
+     ]
+    },
+    "account": "executor",
+    "direction": "decrease"
+   },
+   {
+    "kind": "token-delta",
+    "token": {
+     "op": "get",
+     "args": [
+      "$route",
+      "tokenIn"
+     ]
+    },
+    "account": "route-target",
+    "direction": "increase"
+   },
+   {
+    "kind": "token-delta",
+    "token": {
+     "op": "get",
+     "args": [
+      "$route",
+      "tokenOut"
+     ]
+    },
+    "account": "route-target",
+    "direction": "decrease"
+   },
+   {
+    "kind": "token-delta",
+    "token": {
+     "op": "get",
+     "args": [
+      "$route",
+      "tokenOut"
+     ]
+    },
+    "account": "executor",
+    "direction": "increase"
+   }
+  ],
+  "descriptorChecks": [
+   {
+    "assert": {
+     "op": "and",
+     "args": [
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$descriptor",
+          "familyId"
+         ]
+        },
+        "mooniswap"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$descriptor",
+          "lineageId"
+         ]
+        },
+        "mooniswap:verified-v2-runtime"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$descriptor",
+          "instanceKey"
+         ]
+        },
+        {
+         "op": "lower",
+         "args": [
+          {
+           "op": "address",
+           "args": [
+            {
+             "op": "get",
+             "args": [
+              "$descriptor",
+              "pool"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "lt",
+       "args": [
+        {
+         "op": "uint",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token0"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token1"
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "matches",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$descriptor",
+          "codeHash"
+         ]
+        },
+        "^0x[0-9a-fA-F]{64}$"
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token0"
+           ]
+          },
+          "0x0000000000000000000000000000000000000000"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token1"
+           ]
+          },
+          "0x0000000000000000000000000000000000000000"
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    "error": "mooniswap descriptor binding is invalid"
+   }
+  ],
+  "assertions": [
+   {
+    "assert": {
+     "op": "or",
+     "args": [
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "tokenIn"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token0"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "tokenOut"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token1"
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "and",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "tokenIn"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token1"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "tokenOut"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token0"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    "error": "mooniswap route tokens are not the pool pair"
+   },
+   {
+    "assert": {
+     "op": "not",
+     "args": [
+      {
+       "op": "sameAddress",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$route",
+          "tokenIn"
+         ]
+        },
+        {
+         "op": "get",
+         "args": [
+          "$route",
+          "tokenOut"
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    "error": "mooniswap route tokens must differ"
+   },
+   {
+    "assert": {
+     "op": "eq",
+     "args": [
+      {
+       "op": "get",
+       "args": [
+        "$route",
+        "adapterId"
+       ]
+      },
+      "mooniswap-swap-for"
+     ]
+    },
+    "error": "mooniswap route adapter is invalid"
+   },
+   {
+    "assert": {
+     "op": "eq",
+     "args": [
+      {
+       "op": "get",
+       "args": [
+        "$route.taxonomy",
+        "slotKind"
+       ]
+      },
+      "swap"
+     ]
+    },
+    "error": "mooniswap route taxonomy is invalid"
+   }
+  ]
+ },
+ "pricing": {
+  "draft": {
+   "op": "merge",
+   "args": [
+    "$descriptor",
+    {
+     "routes": "$routes"
+    }
+   ]
+  },
+  "compatibility": {
+   "pool": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "token0": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "token0"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "token1": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "token1"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "codeHash": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "get",
+      "args": [
+       "$descriptor",
+       "codeHash"
+      ]
+     }
+    ]
+   }
+  },
+  "static": {
+   "requirements": {
+    "transports": []
+   },
+   "dependencies": [],
+   "requests": [],
+   "decode": [
+    {
+     "return": {}
+    }
+   ]
+  },
+  "finalize": "$draft",
+  "sampleAmount": {
+   "op": "uint",
+   "args": [
+    "1"
+   ]
+  },
+  "exactCompatibility": {
+   "binding": {
+    "op": "get",
+    "args": [
+     {
+      "op": "get",
+      "args": [
+       "$route",
+       "bindingRef"
+      ]
+     },
+     "fingerprint"
+    ]
+   },
+   "routeKey": {
+    "op": "get",
+    "args": [
+     "$route",
+     "routeKey"
+    ]
+   },
+   "executor": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       "$executor"
+      ]
+     }
+    ]
+   }
+  },
+  "stateKey": "$route.instanceKey",
+  "mutationKinds": [
+   "log",
+   "call"
+  ],
+  "bindingProjection": {
+   "pool": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "token0": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "token0"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "token1": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "token1"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "codeHash": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "get",
+      "args": [
+       "$descriptor",
+       "codeHash"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "swap": {
+  "version": 1,
+  "events": [
+   {
+    "id": "mooniswap-swapped",
+    "signature": "event Swapped(address indexed sender,address indexed receiver,address indexed srcToken,address dstToken,uint256 amount,uint256 result,uint256 srcAdditionBalance,uint256 dstRemovalBalance,address referral)",
+    "classification": "swap",
+    "pool": {
+     "op": "lower",
+     "args": [
+      {
+       "op": "address",
+       "args": [
+        "$log.address"
+       ]
+      }
+     ]
+    },
+    "payload": {
+     "pool": {
+      "op": "lower",
+      "args": [
+       {
+        "op": "address",
+        "args": [
+         "$log.address"
+        ]
+       }
+      ]
+     },
+     "sender": {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$args",
+         "sender"
+        ]
+       }
+      ]
+     },
+     "receiver": {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$args",
+         "receiver"
+        ]
+       }
+      ]
+     },
+     "tokenIn": {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$args",
+         "srcToken"
+        ]
+       }
+      ]
+     },
+     "tokenOut": {
+      "op": "address",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$args",
+         "dstToken"
+        ]
+       }
+      ]
+     },
+     "amountIn": {
+      "op": "get",
+      "args": [
+       "$args",
+       "amount"
+      ]
+     },
+     "amountOut": {
+      "op": "get",
+      "args": [
+       "$args",
+       "result"
+      ]
+     },
+     "additionBalance": {
+      "op": "get",
+      "args": [
+       "$args",
+       "srcAdditionBalance"
+      ]
+     },
+     "removalBalance": {
+      "op": "get",
+      "args": [
+       "$args",
+       "dstRemovalBalance"
+      ]
+     },
+     "referral": {
+      "op": "lower",
+      "args": [
+       {
+        "op": "address",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           "$args",
+           "referral"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    },
+    "valid": {
+     "op": "and",
+     "args": [
+      {
+       "op": "gt",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$args",
+          "amount"
+         ]
+        },
+        0
+       ]
+      },
+      {
+       "op": "gt",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$args",
+          "result"
+         ]
+        },
+        0
+       ]
+      },
+      {
+       "op": "not",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$args",
+            "srcToken"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$args",
+            "dstToken"
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    "match": {
+     "op": "and",
+     "args": [
+      {
+       "op": "sameAddress",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$edge",
+          "target"
+         ]
+        },
+        "$pool"
+       ]
+      },
+      {
+       "op": "sameAddress",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$edge",
+          "tokenIn"
+         ]
+        },
+        {
+         "op": "get",
+         "args": [
+          "$payload",
+          "tokenIn"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "sameAddress",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$edge",
+          "tokenOut"
+         ]
+        },
+        {
+         "op": "get",
+         "args": [
+          "$payload",
+          "tokenOut"
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    "impact": {
+     "pool": "$pool",
+     "tokenIn": {
+      "op": "get",
+      "args": [
+       "$payload",
+       "tokenIn"
+      ]
+     },
+     "tokenOut": {
+      "op": "get",
+      "args": [
+       "$payload",
+       "tokenOut"
+      ]
+     },
+     "amountIn": {
+      "op": "get",
+      "args": [
+       "$payload",
+       "amountIn"
+      ]
+     },
+     "amountOut": {
+      "op": "get",
+      "args": [
+       "$payload",
+       "amountOut"
+      ]
+     },
+     "matchedAdapterId": "mooniswap-swap-for"
+    }
+   }
+  ],
+  "canonicalIntakeTargets": [],
+  "victimSupport": "detect-only",
+  "poolMaterialization": {
+   "patternIds": [
+    "mooniswap-swapped"
+   ],
+   "result": {
+    "pool": {
+     "op": "lower",
+     "args": [
+      {
+       "op": "address",
+       "args": [
+        "$observation.address"
+       ]
+      }
+     ]
+    },
+    "tokenIn": {
+     "op": "address",
+     "args": [
+      {
+       "op": "bytes",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$observation.topics",
+          3
+         ]
+        },
+        12,
+        20
+       ]
+      }
+     ]
+    },
+    "tokenOut": {
+     "op": "address",
+     "args": [
+      {
+       "op": "bytes",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$observation",
+          "data"
+         ]
+        },
+        12,
+        20
+       ]
+      }
+     ]
+    }
+   }
+  }
+ },
+ "standard": {
+  "id": "verified-erc20-runtime",
+  "lineageId": "mooniswap:verified-v2-runtime",
+  "identityKind": "standalone-contract",
+  "abi": {
+   "pool": [
+    "function token0() view returns(address)",
+    "function token1() view returns(address)",
+    "function mooniswapFactoryGovernance() view returns(address)",
+    "function getReturn(address src,address dst,uint256 amount) view returns(uint256)",
+    "function getBalanceForAddition(address token) view returns(uint256)",
+    "function getBalanceForRemoval(address token) view returns(uint256)",
+    "function fee() view returns(uint256)",
+    "function slippageFee() view returns(uint256)",
+    "function swap(address src,address dst,uint256 amount,uint256 minReturn,address referral) payable returns(uint256)",
+    "function swapFor(address src,address dst,uint256 amount,uint256 minReturn,address referral,address receiver) payable returns(uint256)",
+    "event Swapped(address indexed sender,address indexed receiver,address indexed srcToken,address dstToken,uint256 amount,uint256 result,uint256 srcAdditionBalance,uint256 dstRemovalBalance,address referral)"
+   ],
+   "governance": [
+    "function isActive() view returns(bool)"
+   ],
+   "token": [
+    "function balanceOf(address) view returns(uint256)",
+    "function approve(address,uint256) returns(bool)",
+    "function decimals() view returns(uint8)"
+   ]
+  },
+  "constants": {
+   "zero": "0x0000000000000000000000000000000000000000",
+   "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+   "feeDenominator": "1000000000000000000",
+   "runtimeLength": 21340,
+   "normalizedRuntimeHash": "0x0f88c1b9bd3506a4f0659e1c75cba5d797d0e04d462f79da7eebd58cc51a6f90",
+   "runtimeMask": [
+    [
+     4225,
+     32
+    ],
+    [
+     5120,
+     32
+    ],
+    [
+     5751,
+     32
+    ],
+    [
+     6518,
+     32
+    ],
+    [
+     6647,
+     32
+    ],
+    [
+     7479,
+     32
+    ],
+    [
+     9248,
+     32
+    ],
+    [
+     12611,
+     32
+    ],
+    [
+     5157,
+     32
+    ],
+    [
+     5799,
+     32
+    ],
+    [
+     6573,
+     32
+    ],
+    [
+     6782,
+     32
+    ],
+    [
+     7516,
+     32
+    ],
+    [
+     9326,
+     32
+    ],
+    [
+     9903,
+     32
+    ],
+    [
+     12672,
+     32
+    ]
+   ]
+  },
+  "expressions": {
+   "runtimeValid": {
+    "op": "and",
+    "args": [
+     {
+      "op": "matches",
+      "args": [
+       "$code",
+       "^0x[0-9a-fA-F]{42680}$"
+      ]
+     },
+     {
+      "op": "lt",
+      "args": [
+       {
+        "op": "uint",
+        "args": [
+         "$token0"
+        ]
+       },
+       {
+        "op": "uint",
+        "args": [
+         "$token1"
+        ]
+       }
+      ]
+     },
+     {
+      "op": "every",
+      "args": [
+       [
+        4225,
+        5120,
+        5751,
+        6518,
+        6647,
+        7479,
+        9248,
+        12611
+       ],
+       "offset",
+       {
+        "op": "and",
+        "args": [
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "bytes",
+            "args": [
+             "$code",
+             {
+              "op": "sub",
+              "args": [
+               "$offset",
+               1
+              ]
+             },
+             1
+            ]
+           },
+           "0x7f"
+          ]
+         },
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "uint",
+            "args": [
+             {
+              "op": "bytes",
+              "args": [
+               "$code",
+               "$offset",
+               32
+              ]
+             }
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "$token0"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "every",
+      "args": [
+       [
+        5157,
+        5799,
+        6573,
+        6782,
+        7516,
+        9326,
+        9903,
+        12672
+       ],
+       "offset",
+       {
+        "op": "and",
+        "args": [
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "bytes",
+            "args": [
+             "$code",
+             {
+              "op": "sub",
+              "args": [
+               "$offset",
+               1
+              ]
+             },
+             1
+            ]
+           },
+           "0x7f"
+          ]
+         },
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "uint",
+            "args": [
+             {
+              "op": "bytes",
+              "args": [
+               "$code",
+               "$offset",
+               32
+              ]
+             }
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "$token1"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "op": "eq",
+      "args": [
+       {
+        "op": "maskHash",
+        "args": [
+         "$code",
+         "$constants.runtimeMask"
+        ]
+       },
+       "$constants.normalizedRuntimeHash"
+      ]
+     }
+    ]
+   }
+  },
+  "readPrograms": {},
+  "match": true,
+  "context": {},
+  "boundState": "$descriptor",
+  "pricing": {
+   "refreshPolicy": "each-block",
+   "requirements": {
+    "transports": [
+     "eth-call"
+    ],
+    "caller": "executor"
+   },
+   "dependencies": [
+    {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "pool"
+     ]
+    },
+    {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "token0"
+     ]
+    },
+    {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "token1"
+     ]
+    }
+   ],
+   "mutationAddresses": [
+    {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "pool"
+     ]
+    },
+    {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "token0"
+     ]
+    },
+    {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "token1"
+     ]
+    }
+   ],
+   "classifyUnavailable": {
+    "op": "map",
+    "args": [
+     {
+      "op": "filter",
+      "args": [
+       "$routes",
+       "route",
+       {
+        "op": "not",
+        "args": [
+         {
+          "op": "and",
+          "args": [
+           {
+            "op": "eq",
+            "args": [
+             {
+              "op": "get",
+              "args": [
+               "$snapshot",
+               "active"
+              ]
+             },
+             true
+            ]
+           },
+           {
+            "op": "ne",
+            "args": [
+             {
+              "op": "get",
+              "args": [
+               "$snapshot",
+               "balance0"
+              ]
+             },
+             {
+              "op": "uint",
+              "args": [
+               "0"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "ne",
+            "args": [
+             {
+              "op": "get",
+              "args": [
+               "$snapshot",
+               "balance1"
+              ]
+             },
+             {
+              "op": "uint",
+              "args": [
+               "0"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "ne",
+            "args": [
+             {
+              "op": "if",
+              "args": [
+               {
+                "op": "sameAddress",
+                "args": [
+                 {
+                  "op": "get",
+                  "args": [
+                   "$route",
+                   "tokenIn"
+                  ]
+                 },
+                 {
+                  "op": "get",
+                  "args": [
+                   "$descriptor",
+                   "token0"
+                  ]
+                 }
+                ]
+               },
+               {
+                "op": "get",
+                "args": [
+                 "$snapshot",
+                 "addition0"
+                ]
+               },
+               {
+                "op": "get",
+                "args": [
+                 "$snapshot",
+                 "addition1"
+                ]
+               }
+              ]
+             },
+             {
+              "op": "uint",
+              "args": [
+               "0"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "ne",
+            "args": [
+             {
+              "op": "if",
+              "args": [
+               {
+                "op": "sameAddress",
+                "args": [
+                 {
+                  "op": "get",
+                  "args": [
+                   "$route",
+                   "tokenIn"
+                  ]
+                 },
+                 {
+                  "op": "get",
+                  "args": [
+                   "$descriptor",
+                   "token0"
+                  ]
+                 }
+                ]
+               },
+               {
+                "op": "get",
+                "args": [
+                 "$snapshot",
+                 "removal1"
+                ]
+               },
+               {
+                "op": "get",
+                "args": [
+                 "$snapshot",
+                 "removal0"
+                ]
+               }
+              ]
+             },
+             {
+              "op": "uint",
+              "args": [
+               "0"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "route",
+     [
+      {
+       "op": "get",
+       "args": [
+        "$route",
+        "routeKey"
+       ]
+      },
+      {
+       "op": "if",
+       "args": [
+        {
+         "op": "not",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$snapshot",
+            "active"
+           ]
+          }
+         ]
+        },
+        "mooniswap-factory-shutdown",
+        {
+         "op": "if",
+         "args": [
+          {
+           "op": "or",
+           "args": [
+            {
+             "op": "eq",
+             "args": [
+              {
+               "op": "get",
+               "args": [
+                "$snapshot",
+                "balance0"
+               ]
+              },
+              {
+               "op": "uint",
+               "args": [
+                "0"
+               ]
+              }
+             ]
+            },
+            {
+             "op": "eq",
+             "args": [
+              {
+               "op": "get",
+               "args": [
+                "$snapshot",
+                "balance1"
+               ]
+              },
+              {
+               "op": "uint",
+               "args": [
+                "0"
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          "mooniswap-empty-real-balance",
+          {
+           "op": "if",
+           "args": [
+            {
+             "op": "or",
+             "args": [
+              {
+               "op": "eq",
+               "args": [
+                {
+                 "op": "if",
+                 "args": [
+                  {
+                   "op": "sameAddress",
+                   "args": [
+                    {
+                     "op": "get",
+                     "args": [
+                      "$route",
+                      "tokenIn"
+                     ]
+                    },
+                    {
+                     "op": "get",
+                     "args": [
+                      "$descriptor",
+                      "token0"
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "get",
+                   "args": [
+                    "$snapshot",
+                    "addition0"
+                   ]
+                  },
+                  {
+                   "op": "get",
+                   "args": [
+                    "$snapshot",
+                    "addition1"
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "uint",
+                 "args": [
+                  "0"
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "eq",
+               "args": [
+                {
+                 "op": "if",
+                 "args": [
+                  {
+                   "op": "sameAddress",
+                   "args": [
+                    {
+                     "op": "get",
+                     "args": [
+                      "$route",
+                      "tokenIn"
+                     ]
+                    },
+                    {
+                     "op": "get",
+                     "args": [
+                      "$descriptor",
+                      "token0"
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "op": "get",
+                   "args": [
+                    "$snapshot",
+                    "removal1"
+                   ]
+                  },
+                  {
+                   "op": "get",
+                   "args": [
+                    "$snapshot",
+                    "removal0"
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "uint",
+                 "args": [
+                  "0"
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            "mooniswap-empty-virtual-balance",
+            null
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    ]
+   }
+  },
+  "exact": {
+   "methodId": "mooniswap-get-return",
+   "requirements": {
+    "transports": [
+     "eth-call"
+    ],
+    "caller": "executor"
+   },
+   "checks": [
+    {
+     "assert": {
+      "op": "and",
+      "args": [
+       {
+        "op": "gte",
+        "args": [
+         "$amountIn",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "lte",
+        "args": [
+         "$amountIn",
+         {
+          "op": "uint",
+          "args": [
+           "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "error": "mooniswap exact amountIn must be uint256"
+    },
+    {
+     "assert": {
+      "op": "not",
+      "args": [
+       {
+        "op": "sameAddress",
+        "args": [
+         "$executor",
+         "0x0000000000000000000000000000000000000000"
+        ]
+       }
+      ]
+     },
+     "error": "mooniswap exact executor cannot be zero"
+    },
+    {
+     "assert": {
+      "op": "not",
+      "args": [
+       {
+        "op": "sameAddress",
+        "args": [
+         "$executor",
+         {
+          "op": "get",
+          "args": [
+           "$descriptor",
+           "pool"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "error": "mooniswap executor equals pool"
+    }
+   ],
+   "amountOut": {
+    "op": "get",
+    "args": [
+     "$quoteResult",
+     "amountOut"
+    ]
+   },
+   "evidence": {
+    "op": "merge",
+    "args": [
+     {
+      "kind": "mooniswap-get-return",
+      "source": "$source",
+      "routeKey": {
+       "op": "get",
+       "args": [
+        "$route",
+        "routeKey"
+       ]
+      },
+      "binding": {
+       "op": "get",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$route",
+          "bindingRef"
+         ]
+        },
+        "fingerprint"
+       ]
+      },
+      "executor": {
+       "op": "lower",
+       "args": [
+        {
+         "op": "address",
+         "args": [
+          "$executor"
+         ]
+        }
+       ]
+      },
+      "amountIn": "$amountIn",
+      "amountOut": "$amountOut"
+     },
+     {
+      "op": "if",
+      "args": [
+       {
+        "op": "eq",
+        "args": [
+         "$amountOut",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       {
+        "unavailableReason": "mooniswap-no-positive-get-return"
+       },
+       {}
+      ]
+     }
+    ]
+   },
+   "zeroEvidence": {
+    "kind": "mooniswap-get-return",
+    "source": "$source",
+    "routeKey": {
+     "op": "get",
+     "args": [
+      "$route",
+      "routeKey"
+     ]
+    },
+    "binding": {
+     "op": "get",
+     "args": [
+      {
+       "op": "get",
+       "args": [
+        "$route",
+        "bindingRef"
+       ]
+      },
+      "fingerprint"
+     ]
+    },
+    "executor": {
+     "op": "lower",
+     "args": [
+      {
+       "op": "address",
+       "args": [
+        "$executor"
+       ]
+      }
+     ]
+    },
+    "amountIn": "$amountIn",
+    "amountOut": "$amountOut"
+   },
+   "protectedAddresses": [
+    {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "pool"
+     ]
+    }
+   ]
+  },
+  "execution": {
+   "version": 2,
+   "settlement": {
+    "directOutput": true
+   },
+   "protectedAddresses": [
+    {
+     "op": "get",
+     "args": [
+      "$descriptor",
+      "pool"
+     ]
+    },
+    {
+     "op": "get",
+     "args": [
+      "$route",
+      "tokenIn"
+     ]
+    },
+    {
+     "op": "get",
+     "args": [
+      "$route",
+      "tokenOut"
+     ]
+    }
+   ],
+   "contextChecks": [
+    {
+     "condition": {
+      "op": "not",
+      "args": [
+       {
+        "op": "sameAddress",
+        "args": [
+         "$executor",
+         "0x0000000000000000000000000000000000000000"
+        ]
+       }
+      ]
+     },
+     "error": "mooniswap runtime executor cannot be zero"
+    },
+    {
+     "condition": {
+      "op": "not",
+      "args": [
+       {
+        "op": "sameAddress",
+        "args": [
+         "$executor",
+         {
+          "op": "get",
+          "args": [
+           "$descriptor",
+           "pool"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "error": "mooniswap runtime executor equals pool"
+    }
+   ],
+   "steps": [
+    {
+     "id": "swap",
+     "approval": {
+      "mode": "ensure",
+      "token": {
+       "op": "get",
+       "args": [
+        "$route",
+        "tokenIn"
+       ]
+      },
+      "spender": {
+       "op": "get",
+       "args": [
+        "$descriptor",
+        "pool"
+       ]
+      }
+     },
+     "call": {
+      "target": {
+       "op": "get",
+       "args": [
+        "$descriptor",
+        "pool"
+       ]
+      },
+      "signature": "function swapFor(address src,address dst,uint256 amount,uint256 minReturn,address referral,address receiver) payable returns(uint256)",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$route",
+         "tokenIn"
+        ]
+       },
+       {
+        "op": "get",
+        "args": [
+         "$route",
+         "tokenOut"
+        ]
+       },
+       {
+        "runtime": "amountIn"
+       },
+       "$minAmountOut",
+       "0x0000000000000000000000000000000000000000",
+       "$recipient"
+      ]
+     }
+    }
+   ],
+   "effects": [
+    {
+     "kind": "debit",
+     "token": {
+      "op": "get",
+      "args": [
+       "$route",
+       "tokenIn"
+      ]
+     },
+     "account": "$executor",
+     "equals": {
+      "runtime": "amountIn"
+     }
+    },
+    {
+     "kind": "credit",
+     "token": {
+      "op": "get",
+      "args": [
+       "$route",
+       "tokenOut"
+      ]
+     },
+     "account": "$recipient"
+    },
+    {
+     "kind": "unchanged-token",
+     "token": {
+      "op": "get",
+      "args": [
+       "$route",
+       "tokenOut"
+      ]
+     },
+     "account": "$executor",
+     "when": "$externalRecipient"
+    },
+    {
+     "kind": "unchanged-token",
+     "token": {
+      "op": "get",
+      "args": [
+       "$route",
+       "tokenIn"
+      ]
+     },
+     "account": "$recipient",
+     "when": "$externalRecipient"
+    }
+   ]
+  }
+ },
+ "modules": {
+  "pricingFlow": {
+   "version": 1,
+   "steps": [
+    {
+     "id": "current",
+     "requirements": {
+      "transports": [
+       "eth-call"
+      ],
+      "caller": "executor"
+     },
+     "requests": [
+      {
+       "id": "governance",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "mooniswapFactoryGovernance",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "token0",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "token0",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "token1",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "token1",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "balance0",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "token0"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "token",
+         "balanceOf",
+         [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "pool"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "balance1",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "token1"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "token",
+         "balanceOf",
+         [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "pool"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "addition0",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "getBalanceForAddition",
+         [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token0"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "addition1",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "getBalanceForAddition",
+         [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token1"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "removal0",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "getBalanceForRemoval",
+         [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token0"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "removal1",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "getBalanceForRemoval",
+         [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token1"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "fee",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "fee",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "slippageFee",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "slippageFee",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      }
+     ],
+     "decode": [
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "length",
+          "args": [
+           "$results"
+          ]
+         },
+         {
+          "op": "length",
+          "args": [
+           "$requests"
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap missing/extra identity results"
+      },
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "length",
+          "args": [
+           {
+            "op": "unique",
+            "args": [
+             {
+              "op": "map",
+              "args": [
+               "$results",
+               "row",
+               {
+                "op": "get",
+                "args": [
+                 "$row",
+                 "id"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "length",
+          "args": [
+           "$results"
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap duplicate identity results"
+      },
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "hash",
+          "args": [
+           {
+            "op": "sortId",
+            "args": [
+             {
+              "op": "map",
+              "args": [
+               "$results",
+               "row",
+               {
+                "id": {
+                 "op": "get",
+                 "args": [
+                  "$row",
+                  "id"
+                 ]
+                }
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "hash",
+          "args": [
+           {
+            "op": "sortId",
+            "args": [
+             {
+              "op": "map",
+              "args": [
+               "$requests",
+               "row",
+               {
+                "id": {
+                 "op": "get",
+                 "args": [
+                  "$row",
+                  "id"
+                 ]
+                }
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap unexpected identity results"
+      },
+      {
+       "let": "source",
+       "value": {
+        "op": "source",
+        "args": [
+         "$results"
+        ]
+       }
+      },
+      {
+       "let": "onchainToken0",
+       "value": {
+        "op": "decodeCanonical",
+        "args": [
+         "pool",
+         "token0",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "token0"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "let": "onchainToken1",
+       "value": {
+        "op": "decodeCanonical",
+        "args": [
+         "pool",
+         "token1",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "token1"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "and",
+        "args": [
+         {
+          "op": "sameAddress",
+          "args": [
+           "$onchainToken0",
+           {
+            "op": "get",
+            "args": [
+             "$descriptor",
+             "token0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "sameAddress",
+          "args": [
+           "$onchainToken1",
+           {
+            "op": "get",
+            "args": [
+             "$descriptor",
+             "token1"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap current binding changed"
+      },
+      {
+       "let": "governance",
+       "value": {
+        "op": "decodeCanonical",
+        "args": [
+         "pool",
+         "mooniswapFactoryGovernance",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "governance"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "not",
+        "args": [
+         {
+          "op": "sameAddress",
+          "args": [
+           "$governance",
+           "0x0000000000000000000000000000000000000000"
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap governance is zero"
+      },
+      {
+       "let": "balance0",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "balance0"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "balance1",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "balance1"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "addition0",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "addition0"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "addition1",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "addition1"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "removal0",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "removal0"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "removal1",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "removal1"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "fee",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "fee"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "slippageFee",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "slippageFee"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "and",
+        "args": [
+         {
+          "op": "gte",
+          "args": [
+           "$addition0",
+           "$balance0"
+          ]
+         },
+         {
+          "op": "gte",
+          "args": [
+           "$addition1",
+           "$balance1"
+          ]
+         },
+         {
+          "op": "lte",
+          "args": [
+           "$removal0",
+           "$balance0"
+          ]
+         },
+         {
+          "op": "lte",
+          "args": [
+           "$removal1",
+           "$balance1"
+          ]
+         },
+         {
+          "op": "lt",
+          "args": [
+           "$fee",
+           {
+            "op": "uint",
+            "args": [
+             "1000000000000000000"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "lte",
+          "args": [
+           "$slippageFee",
+           {
+            "op": "uint",
+            "args": [
+             "1000000000000000000"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap invalid current virtual balances/fees"
+      },
+      {
+       "return": {
+        "source": "$source",
+        "governance": "$governance",
+        "balance0": "$balance0",
+        "balance1": "$balance1",
+        "addition0": "$addition0",
+        "addition1": "$addition1",
+        "removal0": "$removal0",
+        "removal1": "$removal1",
+        "fee": "$fee",
+        "slippageFee": "$slippageFee"
+       }
+      }
+     ]
+    },
+    {
+     "id": "governance",
+     "requirements": {
+      "transports": [
+       "eth-call"
+      ],
+      "caller": "executor"
+     },
+     "requests": [
+      {
+       "id": "active",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$steps.current",
+         "governance"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "governance",
+         "isActive",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      }
+     ],
+     "decode": [
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "length",
+          "args": [
+           "$results"
+          ]
+         },
+         1
+        ]
+       },
+       "error": "mooniswap missing governance round"
+      },
+      {
+       "let": "activeWord",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "active"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "lte",
+        "args": [
+         "$activeWord",
+         1
+        ]
+       },
+       "error": "mooniswap invalid governance response"
+      },
+      {
+       "return": {
+        "op": "merge",
+        "args": [
+         "$steps.current",
+         {
+          "source": {
+           "op": "source",
+           "args": [
+            "$results"
+           ]
+          },
+          "active": {
+           "op": "eq",
+           "args": [
+            "$activeWord",
+            {
+             "op": "uint",
+             "args": [
+              "1"
+             ]
+            }
+           ]
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "result": "$steps.governance"
+  },
+  "pricingProjection": {
+   "version": 1,
+   "checks": [],
+   "rows": {
+    "op": "map",
+    "args": [
+     {
+      "op": "filter",
+      "args": [
+       "$routes",
+       "route",
+       {
+        "op": "and",
+        "args": [
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "get",
+            "args": [
+             "$snapshot",
+             "active"
+            ]
+           },
+           true
+          ]
+         },
+         {
+          "op": "ne",
+          "args": [
+           {
+            "op": "get",
+            "args": [
+             "$snapshot",
+             "balance0"
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "ne",
+          "args": [
+           {
+            "op": "get",
+            "args": [
+             "$snapshot",
+             "balance1"
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "ne",
+          "args": [
+           {
+            "op": "if",
+            "args": [
+             {
+              "op": "sameAddress",
+              "args": [
+               {
+                "op": "get",
+                "args": [
+                 "$route",
+                 "tokenIn"
+                ]
+               },
+               {
+                "op": "get",
+                "args": [
+                 "$descriptor",
+                 "token0"
+                ]
+               }
+              ]
+             },
+             {
+              "op": "get",
+              "args": [
+               "$snapshot",
+               "addition0"
+              ]
+             },
+             {
+              "op": "get",
+              "args": [
+               "$snapshot",
+               "addition1"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "ne",
+          "args": [
+           {
+            "op": "if",
+            "args": [
+             {
+              "op": "sameAddress",
+              "args": [
+               {
+                "op": "get",
+                "args": [
+                 "$route",
+                 "tokenIn"
+                ]
+               },
+               {
+                "op": "get",
+                "args": [
+                 "$descriptor",
+                 "token0"
+                ]
+               }
+              ]
+             },
+             {
+              "op": "get",
+              "args": [
+               "$snapshot",
+               "removal1"
+              ]
+             },
+             {
+              "op": "get",
+              "args": [
+               "$snapshot",
+               "removal0"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "route",
+     {
+      "routeKey": {
+       "op": "get",
+       "args": [
+        "$route",
+        "routeKey"
+       ]
+      },
+      "numerator": {
+       "op": "mul",
+       "args": [
+        {
+         "op": "if",
+         "args": [
+          {
+           "op": "sameAddress",
+           "args": [
+            {
+             "op": "get",
+             "args": [
+              "$route",
+              "tokenIn"
+             ]
+            },
+            {
+             "op": "get",
+             "args": [
+              "$descriptor",
+              "token0"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$snapshot",
+            "removal1"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$snapshot",
+            "removal0"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "sub",
+         "args": [
+          {
+           "op": "uint",
+           "args": [
+            "1000000000000000000"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$snapshot",
+            "fee"
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      "denominator": {
+       "op": "mul",
+       "args": [
+        {
+         "op": "if",
+         "args": [
+          {
+           "op": "sameAddress",
+           "args": [
+            {
+             "op": "get",
+             "args": [
+              "$route",
+              "tokenIn"
+             ]
+            },
+            {
+             "op": "get",
+             "args": [
+              "$descriptor",
+              "token0"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$snapshot",
+            "addition0"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$snapshot",
+            "addition1"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          "1000000000000000000"
+         ]
+        }
+       ]
+      },
+      "depth": {
+       "op": "min",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$snapshot",
+          "balance0"
+         ]
+        },
+        {
+         "op": "get",
+         "args": [
+          "$snapshot",
+          "balance1"
+         ]
+        }
+       ]
+      },
+      "reserveA": {
+       "op": "if",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "tokenIn"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token0"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "get",
+         "args": [
+          "$snapshot",
+          "balance0"
+         ]
+        },
+        {
+         "op": "get",
+         "args": [
+          "$snapshot",
+          "balance1"
+         ]
+        }
+       ]
+      },
+      "reserveB": {
+       "op": "if",
+       "args": [
+        {
+         "op": "sameAddress",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "tokenIn"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "token0"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "get",
+         "args": [
+          "$snapshot",
+          "balance1"
+         ]
+        },
+        {
+         "op": "get",
+         "args": [
+          "$snapshot",
+          "balance0"
+         ]
+        }
+       ]
+      },
+      "feePpm": {
+       "op": "div",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$snapshot",
+          "fee"
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          "1000000000000"
+         ]
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "quoteFlow": {
+   "version": 1,
+   "sourceKind": "view",
+   "chainQuote": {
+    "version": 2,
+    "step": "quote",
+    "requestId": "get-return",
+    "signature": "function getReturn(address src,address dst,uint256 amount) view returns(uint256)",
+    "amountPath": [
+     2
+    ],
+    "outputPath": [
+     0
+    ],
+    "requestBinding": {
+     "target": {
+      "op": "get",
+      "args": [
+       "$descriptor",
+       "pool"
+      ]
+     },
+     "caller": {
+      "kind": "executor"
+     }
+    }
+   },
+   "steps": [
+    {
+     "id": "quote",
+     "requirements": {
+      "transports": [
+       "eth-call"
+      ],
+      "caller": "executor"
+     },
+     "requests": [
+      {
+       "id": "get-return",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "getReturn",
+         [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "tokenIn"
+           ]
+          },
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "tokenOut"
+           ]
+          },
+          "$amountIn"
+         ]
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "output-balance",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$route",
+         "tokenOut"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "token",
+         "balanceOf",
+         [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "pool"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "input-balance",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$route",
+         "tokenIn"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "token",
+         "balanceOf",
+         [
+          {
+           "op": "get",
+           "args": [
+            "$descriptor",
+            "pool"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "governance",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "mooniswapFactoryGovernance",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "token0",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "token0",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      },
+      {
+       "id": "token1",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "token1",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      }
+     ],
+     "decode": [
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "length",
+          "args": [
+           "$results"
+          ]
+         },
+         {
+          "op": "length",
+          "args": [
+           "$requests"
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap missing/extra identity results"
+      },
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "length",
+          "args": [
+           {
+            "op": "unique",
+            "args": [
+             {
+              "op": "map",
+              "args": [
+               "$results",
+               "row",
+               {
+                "op": "get",
+                "args": [
+                 "$row",
+                 "id"
+                ]
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "length",
+          "args": [
+           "$results"
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap duplicate identity results"
+      },
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "hash",
+          "args": [
+           {
+            "op": "sortId",
+            "args": [
+             {
+              "op": "map",
+              "args": [
+               "$results",
+               "row",
+               {
+                "id": {
+                 "op": "get",
+                 "args": [
+                  "$row",
+                  "id"
+                 ]
+                }
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         },
+         {
+          "op": "hash",
+          "args": [
+           {
+            "op": "sortId",
+            "args": [
+             {
+              "op": "map",
+              "args": [
+               "$requests",
+               "row",
+               {
+                "id": {
+                 "op": "get",
+                 "args": [
+                  "$row",
+                  "id"
+                 ]
+                }
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap unexpected identity results"
+      },
+      {
+       "let": "source",
+       "value": {
+        "op": "source",
+        "args": [
+         "$results"
+        ]
+       }
+      },
+      {
+       "let": "onchainToken0",
+       "value": {
+        "op": "decodeCanonical",
+        "args": [
+         "pool",
+         "token0",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "token0"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "let": "onchainToken1",
+       "value": {
+        "op": "decodeCanonical",
+        "args": [
+         "pool",
+         "token1",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "token1"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "and",
+        "args": [
+         {
+          "op": "sameAddress",
+          "args": [
+           "$onchainToken0",
+           {
+            "op": "get",
+            "args": [
+             "$descriptor",
+             "token0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "sameAddress",
+          "args": [
+           "$onchainToken1",
+           {
+            "op": "get",
+            "args": [
+             "$descriptor",
+             "token1"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap current binding changed"
+      },
+      {
+       "let": "governance",
+       "value": {
+        "op": "decodeCanonical",
+        "args": [
+         "pool",
+         "mooniswapFactoryGovernance",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "governance"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "not",
+        "args": [
+         {
+          "op": "sameAddress",
+          "args": [
+           "$governance",
+           "0x0000000000000000000000000000000000000000"
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap governance is zero"
+      },
+      {
+       "let": "amountOut",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "get-return"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "outputBalance",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "output-balance"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "inputBalance",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "input-balance"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "gt",
+        "args": [
+         "$inputBalance",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap input unavailable"
+      },
+      {
+       "assert": {
+        "op": "gt",
+        "args": [
+         "$amountOut",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap output unavailable"
+      },
+      {
+       "assert": {
+        "op": "lte",
+        "args": [
+         "$amountOut",
+         "$outputBalance"
+        ]
+       },
+       "error": "mooniswap output exceeds inventory"
+      },
+      {
+       "return": {
+        "source": "$source",
+        "amountOut": "$amountOut",
+        "governance": "$governance"
+       }
+      }
+     ]
+    },
+    {
+     "id": "governance",
+     "requirements": {
+      "transports": [
+       "eth-call"
+      ],
+      "caller": "executor"
+     },
+     "requests": [
+      {
+       "id": "active",
+       "kind": "eth-call",
+       "to": {
+        "op": "get",
+        "args": [
+         "$steps.quote",
+         "governance"
+        ]
+       },
+       "data": {
+        "op": "encode",
+        "args": [
+         "governance",
+         "isActive",
+         []
+        ]
+       },
+       "completion": "return-data",
+       "caller": {
+        "kind": "executor"
+       }
+      }
+     ],
+     "decode": [
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "length",
+          "args": [
+           "$results"
+          ]
+         },
+         1
+        ]
+       },
+       "error": "mooniswap missing governance round"
+      },
+      {
+       "let": "activeWord",
+       "value": {
+        "op": "word",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "active"
+            ]
+           },
+           "data"
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "lte",
+        "args": [
+         "$activeWord",
+         1
+        ]
+       },
+       "error": "mooniswap invalid governance response"
+      },
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         "$activeWord",
+         {
+          "op": "uint",
+          "args": [
+           "1"
+          ]
+         }
+        ]
+       },
+       "error": "mooniswap inactive governance"
+      },
+      {
+       "return": {
+        "op": "merge",
+        "args": [
+         "$steps.quote",
+         {
+          "amountOut": {
+           "op": "get",
+           "args": [
+            "$steps.quote",
+            "amountOut"
+           ]
+          },
+          "governance": {
+           "op": "get",
+           "args": [
+            "$steps.quote",
+            "governance"
+           ]
+          },
+          "source": {
+           "op": "source",
+           "args": [
+            "$results"
+           ]
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "result": "$steps.governance"
+  },
+  "quoteOutput": {
+   "version": 1,
+   "steps": [
+    {
+     "id": "quote",
+     "static": true,
+     "call": {
+      "target": {
+       "op": "get",
+       "args": [
+        "$descriptor",
+        "pool"
+       ]
+      },
+      "signature": "function getReturn(address src,address dst,uint256 amount) view returns(uint256)",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$route",
+         "tokenIn"
+        ]
+       },
+       {
+        "op": "get",
+        "args": [
+         "$route",
+         "tokenOut"
+        ]
+       },
+       {
+        "runtime": "amountIn"
+       }
+      ],
+      "save": {
+       "quotedAmountOut": 0
+      }
+     }
+    },
+    {
+     "id": "inputBalance",
+     "static": true,
+     "call": {
+      "target": {
+       "op": "get",
+       "args": [
+        "$route",
+        "tokenIn"
+       ]
+      },
+      "signature": "function balanceOf(address) view returns(uint256)",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       }
+      ],
+      "save": {
+       "inputBalance": 0
+      },
+      "checks": [
+       {
+        "left": {
+         "runtime": "inputBalance"
+        },
+        "operator": "gte",
+        "right": 1
+       }
+      ]
+     }
+    },
+    {
+     "id": "outputBalance",
+     "static": true,
+     "call": {
+      "target": {
+       "op": "get",
+       "args": [
+        "$route",
+        "tokenOut"
+       ]
+      },
+      "signature": "function balanceOf(address) view returns(uint256)",
+      "args": [
+       {
+        "op": "get",
+        "args": [
+         "$descriptor",
+         "pool"
+        ]
+       }
+      ],
+      "save": {
+       "outputBalance": 0
+      },
+      "checks": [
+       {
+        "left": {
+         "runtime": "outputBalance"
+        },
+        "operator": "gte",
+        "right": {
+         "runtime": "quotedAmountOut"
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "result": {
+    "runtime": "quotedAmountOut"
+   }
+  }
+ },
+ "variantFiles": [],
+ "actionAdapters": [
+  {
+   "descriptor": {
+    "adapterId": "mooniswap-swap-for",
+    "lineage": "custom-swap:mooniswap",
+    "edgeKind": "swap",
+    "action": "swap",
+    "canSendValue": false,
+    "leavesStandingPositionDefault": false
+   },
+   "traces": [
+    {
+     "signature": "function swapFor(address,address,uint256,uint256,address,address)"
+    }
+   ]
+  }
+ ]
+}

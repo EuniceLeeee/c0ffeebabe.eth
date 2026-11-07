@@ -1,0 +1,204 @@
+{
+  "schema": "protocol-json-family-park/v1",
+  "recordedAt": "2026-11-07T02:45:41Z",
+  "family": "protocol:set-redemption",
+  "domain": "protocol",
+  "status": "parked",
+  "faithfulJsonPossible": false,
+  "summary": "At family-runtime 104ff465 / HEAD cae1c860 the v2 declarative compiler has gained bounded ordinary-ERC20 multi-output effects and an address-surface reverse-binding declaration, but a faithful set-redemption JSON is still impossible. The Basic action and fragment contract cannot be expressed: declarative fragments are always exactly one runtime-program node, while the family contract requires one direct redeem(set,amount,recipient) calldata node plus one assert-balance node per positive basket output. Basket execution is still a single flat register program, not the family's nested execSubscript chunking, so the 9+-component baskets (the family supports 187) and the external-recipient direct-settlement path fail the declarative register budget. Discovery still selects exactly one nomination channel, while the family combines address-surface binding with receipt-log fallback and uses a custom reverse-binding provider. Both lineages and all three owned actions therefore remain on the handwritten TypeScript production entry.",
+  "baseline": {
+    "workspace": "/Users/eunice/Documents/deepseek-harness/default-workspace/work/protocol-json-20261028",
+    "branch": "codex/json-all-20261107",
+    "head": "cae1c860c96dc1563f42db04a671a2d4a11274ea",
+    "familyRuntimeBaseline": "104ff465e0550dd62246610df1257a5faba37bb0",
+    "familyRuntimeBaselineIsAncestor": true,
+    "workingTreeAtStart": "Pre-existing unrelated worker changes were present in listener/src/searcher/venues/production-families/mooniswap.production.ts, listener/src/searcher/venues/swaps/mooniswap-family/mooniswap.json, listener/tmp-mooniswap-validate.mts and untracked mooniswap/probe files. This task did not touch them.",
+    "headBeforeTask": "HEAD cae1c860; no set-redemption artifacts existed under docs/research/migration/pending-20261028 at HEAD."
+  },
+  "reference": {
+    "implDocument": "/Users/eunice/Documents/Obsidian Vault/MEV Searcher Live 架构复写/IMPL配置列表.md",
+    "implRow": "IMPL list lines 30-31 (Set BasicIssuance and Set Core legacy rows)",
+    "implRowNote": "Line 30 is Set Redemption (BasicIssuance), reference TX 0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e at N=26130046. Line 31 is Set Core legacy, reference TX 0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375 at N=26132613. These are the implementation row's reference transactions, not a new replay target.",
+    "referenceTx": "0xfd33fc62a9dc08834cce2d17204ca9c619eaa5a52c855a477a9f3590ea866f9e",
+    "referenceBlock": 26130046,
+    "legacyReferenceTx": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
+    "legacyReferenceBlock": 26132613,
+    "newChainReplay": false
+  },
+  "priorArtifactsSearch": {
+    "headGlob": "docs/research/migration/pending-20261028/set-redemption*",
+    "headMatches": [],
+    "backupLocalRef": "backup-local-82bfc8fc",
+    "foundOnBackup": [
+      "docs/research/migration/pending-20261028/set-redemption.blockers.md (149 lines; verdict blocked on framework 6876fef0)",
+      "docs/research/migration/pending-20261028/set-redemption.draft.json (1865 lines; explicitly non-deliverable; contains only the expressible discovery/instance/routes shape, identity/pricing/exact/execution are shape notes, not a compiling v2 document; its _reassessed header records a 2026-10-30 reassessment at HEAD 845ad35d / framework 570dde12, still blocked G1-G3)"
+    ],
+    "historyCommits": [
+      "bde0ec06 (2026-10-29) protocol-json: migrate 21/33 families to declarative JSON (framework 6876fef0); park 12 blockers",
+      "1fc6d361 (2026-10-30) metronome-synth: declarative JSON with oracleVictim module (contains the reassessed set-redemption.draft.json)"
+    ],
+    "currentBranchContainsBackup": false,
+    "priorVerdict": "blocked; prior gaps G1 multi-asset execution fan-out and nested runtime programs, G2 direct-calldata Basic action, G3 dual nomination channels and reverse binding, plus an event re-encode residual.",
+    "priorReassessment": "The 2026-10-30 draft header records another reassessment at HEAD 845ad35d / framework 570dde12; it still lists G1, G2 and G3 as open. The current HEAD is later and has closed canonical call/event re-encode checks (declarative-discovery.ts:303 and :337-339) and added bounded multi-output effects plus an address-surface reverse-binding declaration, but the decisive gaps below remain."
+  },
+  "frameworkDeltaSincePriorAttempt": {
+    "nowPresent": [
+      "Effects may be declared as bounded map/concat projections and expanded at compile time; up to 64 concrete effects (declarative-execution.ts:295-310).",
+      "Ordinary ERC20 multi-output effects are accepted: one debit, one route-output credit and additional side-output credits, each with an explicit minimum/equals (declarative-execution.ts:450-502).",
+      "Address-surface reverse binding can be declared when nomination is address-surface (declarative-discovery.ts:74, :453-454, :478-496).",
+      "Canonical call and event re-encode comparisons now exist for mapped discovery (declarative-discovery.ts:303 and :337-339)."
+    ],
+    "stillAbsent": [
+      "No JSON action declaration for direct ABI calldata; actionAdapters remain descriptor+traces only and encode only runtimeAmountProgram nodes.",
+      "No way for a declarative fragment builder to emit more than one node; no per-output assert-balance nodes.",
+      "No nested runtime-program composition or execSubscript equivalent; all declarative execution compiles to one flat RuntimeAmountProgram.",
+      "No composition of address-surface and tx/receipt nomination providers in one discovery declaration.",
+      "No legacy multi-component 7-chunk redemption / direct-settlement program parity."
+    ],
+    "newlyObservedLimit": "The multi-output implementation captures before and after balances for every effect in one register frame. A Basic-like declaration with a debit, a supply effect and N component credits compiles up to 8 components with recipient == executor, then throws 'declared execution exceeds register budget' at 9 components. With an external recipient the same 4-component declaration already throws because the engine auto-adds unchanged-token guards for each credit and for tokenIn."
+  },
+  "decisiveBlockers": [
+    {
+      "id": "G1-basic-direct-action-and-fragment-node-parity",
+      "capability": "The Basic payment action must remain a direct redeem(set,amount,recipient) calldata node, and its quoted fragment must carry one assert-balance node per positive basket output.",
+      "existingSource": [
+        "listener/src/searcher/venues/protocols/set-redemption-family/action.ts:8-17 — set-basic-redeem rejects any non-empty params and returns direct MODULE.redeem(set,amount,recipient) calldata.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/execution.ts:131-136 — Basic buildFragment returns the ACTION node with params:{} plus one assert-balance node for every positive output.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/test/contract.ts:80-87 — the contract asserts exactly 5 nodes for the 4-component sample (1 ACTION + 4 assert-balance), direct redeem bytes, and 6 expected effects."
+      ],
+      "frameworkLimitation": [
+        "listener/src/searcher/venues/declarative-family.ts:833-835 and listener/src/searcher/venues/declarative-execution.ts:1042-1044 — both declarative fragment builders always return exactly one node whose only params key is runtimeAmountProgram.",
+        "listener/src/searcher/venues/declarative-execution.ts:1060-1065 — the declarative action adapter requires Object.keys(node.params).length === 1 and calls encodeRuntimeAmountNode; a JSON action cannot encode direct ABI calldata.",
+        "listener/src/searcher/build-declarative-production.ts:150-158 and listener/src/searcher/venues/declarative-family.ts:839 — actionAdapters accept only descriptor+traces; no direct-call/calldata declaration exists."
+      ],
+      "probe": "createDeclarativeProgramAction(...).encode({params:{},...}) threw 'declared quoted node adapter mismatch'. A Basic-like buildDeclarativeQuotedFragment with four components returned nodes.length=1 and params=['runtimeAmountProgram'].",
+      "consequence": "Even the 4-component reference route cannot satisfy the existing family contract without changing tests or reintroducing TypeScript action/fragment code. That is a public TS/test change, which this task forbids, and it would not be a declarative cutover anyway."
+    },
+    {
+      "id": "G2-nested-basket-programs-and-direct-settlement",
+      "capability": "Basic and legacy multiple-output execution must guard every basket receipt across arbitrary basket sizes and preserve side outputs during explicit direct settlement, including baskets larger than one 8/7-component chunk.",
+      "existingSource": [
+        "listener/src/searcher/venues/protocols/set-redemption-family/execution.ts:74-110 — Basic loops over components in chunks of 8 and nests execSubscript for every earlier chunk; :111-117 chooses setBasketDirectProgram/setDirectProgram.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/execution.ts:16-42 — legacy redemption loops in chunks of 7 with the same nested execSubscript pattern and redeemAndWithdrawTo.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/direct.ts:27-64 — preserveComponents and setBasketDirectProgram nest executor-only execSubscript frames to preserve every side output around the handoff.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/test/runtime.ts:127-156 — family tests cover 8, 9, 17 and 187 components; the 187-component program is 65313 bytes.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/test/basic-recipient.test.ts:108-113 — external-recipient tests cover 9, 17 and 33 components."
+      ],
+      "frameworkLimitation": [
+        "listener/src/adapters/runtime-amount-program.ts:13 — a RuntimeAmountProgram is bounded at 128 instructions; the family's chunking exists to stay under that and the 8-receipt register budget.",
+        "listener/src/searcher/venues/declarative-execution.ts:697-699 — the declarative emitter allocates one register per named capture and throws 'declared execution exceeds register budget' when r1..r13 are exhausted.",
+        "listener/src/searcher/venues/declarative-execution.ts:455-457 — multi-output effects are refused whenever the definition has deferred, framedSettlement or frame steps; the declarative callback-frame machinery is a settlement-callback frame, not a general nested self-call program.",
+        "There is no declarative escape hatch for execSubscript/runtimeProgramScript in listener/src/searcher/venues/declarative-execution.ts or declarative-family.ts; the execution builder returns one flat program."
+      ],
+      "probe": [
+        "Basic-like declaration (1 debit + 1 supply + N credits, recipient == executor): components=4 OK, components=8 OK, components=9 ERR 'declared execution exceeds register budget'.",
+        "Basic-like declaration with external recipient: components=4 ERR 'declared execution exceeds register budget' (the engine auto-adds unchanged-token guards for each credit and tokenIn).",
+        "The family reference basket is 4 components, and its recipient test path requires external-recipient support; both are inside the family contract."
+      ],
+      "consequence": "A faithful JSON cannot preserve the family's 187-component ceiling, its 9+-component nested execution, or its external-recipient direct-settlement behavior. Narrowing any of those is prohibited by the migration policy."
+    },
+    {
+      "id": "G3-dual-nomination-channels-and-reverse-binding",
+      "capability": "One discovery must combine address-surface binding (code-hash + getModules) with a receipt-log fallback for legacy Core candidates and expose the family's implemented reverse-binding channel.",
+      "existingSource": [
+        "listener/src/searcher/venues/protocols/set-redemption-family/discovery.ts:6-11 — sources include landed-log, observed-call and address-surface; call and log patterns cover Basic and legacy.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/discovery.ts:36-41 — nominate is the custom nomination, and reverseBinding is an implementation that calls bindingObservation.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/nomination.ts:22-49 — the nomination combines observable address-surface binding with receipt-log fallback; legacy candidates deliberately skip the Basic getModules binding."
+      ],
+      "frameworkLimitation": [
+        "listener/src/searcher/venues/declarative-discovery.ts:69 and :141 — nomination is a single value, exactly 'tx-evidence' or 'address-surface'.",
+        "listener/src/searcher/venues/declarative-discovery.ts:446-451 — exactly one base nomination provider is constructed for the whole declaration.",
+        "listener/src/searcher/venues/declarative-discovery.ts:453-454 — reverseBinding is allowed only when nomination === 'address-surface' and a surface is declared; a tx-evidence declaration gets explicitReverseBindingUnsupported.",
+        "listener/src/searcher/venues/declarative-discovery.ts:478-496 — the reverse-binding implementation is only the address-surface provider path; there is no JSON hook for a receipt-log/bindingObservation fallback."
+      ],
+      "probe": [
+        "Mapped discovery with nomination='tx-evidence' compiled but reverseBinding.kind was 'explicitly-unsupported'.",
+        "Mapped discovery with nomination='tx-evidence' and reverseBinding='address-surface' threw 'reverse binding requires a declared address-surface nomination'.",
+        "Mapped discovery with nomination=['address-surface','tx-evidence'] threw 'invalid discovery candidate or nomination kind'."
+      ],
+      "consequence": "Choosing tx-evidence drops the address-surface/reverse-binding path; choosing address-surface drops the receipt-log fallback for cold legacy Core candidates. Either choice is capability narrowing."
+    },
+    {
+      "id": "G4-legacy-lineages-and-three-action-parity",
+      "capability": "Both lineages (set-redemption:basic-issuance-0.7.6 and set-redemption:legacy-core-0.5.7) and all three owned actions (set-basic-redeem, set-legacy-core-redeem, set-legacy-core-issue) must continue to work.",
+      "existingSource": [
+        "listener/src/searcher/venues/protocols/set-redemption-family/manifest.ts:4-13 — two lineages, three owned actions, assert-balance infrastructure.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/execution.ts:16-42 — legacy redemption chunks of 7 with redeemAndWithdrawTo and nested execSubscript.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/issuance.ts:12-51 — legacy issuance builds an exact-out program with dynamic quantity, entryFee/feeRecipient, Vault-credit, allowance cleanup and receipt checks.",
+        "listener/src/searcher/venues/protocols/set-redemption-family/direct.ts:6-64 — explicit direct settlement for both unary and basket paths."
+      ],
+      "frameworkLimitation": [
+        "The same G1 single-node/program-only action model applies to the legacy actions; the JSON action adapter cannot declare the family's direct or legacy-specific encode functions.",
+        "The same G2 flat-program/register-bound model applies to the legacy 7-chunk redemption and direct settlement.",
+        "The declarative execution schema has no nested-program composition; legacy issuance's exact-out VM program cannot be declared as a JSON step list without losing its dynamic checks."
+      ],
+      "probe": "The capability probes above are independent of lineage; the 9-component and external-recipient failures occur in the shared declarative execution compiler, and the direct-action probe uses the Basic action descriptor.",
+      "consequence": "A JSON cutover would either drop a lineage/action or replace its exact runtime-program semantics with a weaker generic plan. Both are prohibited."
+    }
+  ],
+  "secondaryFindings": [
+    {
+      "id": "fragment-assert-balance-node-interface",
+      "fact": "The declarative fragment builder has no JSON field for extra nodes. listener/src/searcher/venues/declarative-family.ts:833-835 always constructs one node; the family contract expects 5 for its 4-component sample (test/contract.ts:81)."
+    },
+    {
+      "id": "expected-effects-can-project-but-do-not-fix-execution",
+      "fact": "routes.effects can project over $descriptor.components and can produce the family's 6 expectedEffects rows, but expectedEffects is observability metadata (declarative-family.ts:837). It does not create the standalone assert-balance adapters, the direct action call, or the nested program, so it cannot close G1/G2."
+    },
+    {
+      "id": "quote-output-is-single-result",
+      "fact": "declarative-execution.ts:32-39 — DeclarativeQuoteOutput.result is one runtime value; it cannot encode the family's per-component output array for a Basic basket."
+    },
+    {
+      "id": "trial-state-and-prefix",
+      "fact": "The handwritten exact path explicitly rejects prefix (set-redemption-family/exact.ts check()) and declares trialState unsupportedReason. A declarative JSON would need to keep that fail-closed behavior; this is not the primary blocker but must not be lost in any future migration."
+    }
+  ],
+  "probes": {
+    "method": "Temporary scripts outside the repository (node --import tsx with absolute imports into listener/src) exercised the current framework compiler; no repository file was edited for the probes.",
+    "basicBasketRegisterBudget": [
+      "1 debit + 1 supply + 4 component credits, recipient == executor: OK",
+      "1 debit + 1 supply + 8 component credits, recipient == executor: OK",
+      "1 debit + 1 supply + 9 component credits, recipient == executor: ERR declared execution exceeds register budget",
+      "1 debit + 1 supply + 4 component credits, recipient != executor: ERR declared execution exceeds register budget"
+    ],
+    "basicFragmentShape": "buildDeclarativeQuotedFragment on the 4-component-like definition returned nodes.length=1 with params=['runtimeAmountProgram'].",
+    "basicAction": "createDeclarativeProgramAction(...).encode(node with params={}) threw 'declared quoted node adapter mismatch'.",
+    "discovery": [
+      "nomination=tx-evidence: compile OK, reverseBinding.kind='explicitly-unsupported'",
+      "nomination=tx-evidence + reverseBinding=address-surface: ERR reverse binding requires a declared address-surface nomination",
+      "nomination=[address-surface,tx-evidence]: ERR invalid discovery candidate or nomination kind"
+    ],
+    "notProbed": "A complete deliverable v2 JSON was not authored: the decisive G1/G2 failures are structural and independent of identity/pricing/exact authoring. No generator, production entry, or live/Ready state was touched."
+  },
+  "validation": {
+    "executed": [
+      "node --import tsx --test listener/src/searcher/venues/protocols/set-redemption-family/test/contract.ts listener/src/searcher/venues/protocols/set-redemption-family/test/runtime.ts: 16 tests, 16 pass, 0 fail (2026-11-07).",
+      "node --import tsx --test listener/src/searcher/venues/protocols/set-redemption-family/test/legacy-contract.ts listener/src/searcher/venues/protocols/set-redemption-family/test/basic-recipient.test.ts listener/src/searcher/venues/protocols/set-redemption-family/test/recipient-contract.ts: 19 tests, 19 pass, 0 fail (2026-11-07).",
+      "Capability probes listed above."
+    ],
+    "notExecuted": [
+      "No deliverable JSON was authored, so renderDeclarativeProductionEntry / createDeclarativeProtocolRuntime / defineProtocolFamily were not run for set-redemption.",
+      "No temp rendered production entry was installed or restored.",
+      "tsc and npm run build:live were not run because this park changes only documentation; no production TS, JSON, registry or generated artifact was modified. The baseline set-redemption tests above were run directly."
+    ],
+    "workingTree": "Only docs/research/migration/pending-20261028/set-redemption.blockers.json is added by this task. The pre-existing mooniswap worker changes remain untouched."
+  },
+  "files": {
+    "added": [
+      "docs/research/migration/pending-20261028/set-redemption.blockers.json"
+    ],
+    "modified": [],
+    "productionEntry": "listener/src/searcher/venues/production-families/set-redemption.production.ts remains the handwritten TypeScript entry and was not modified.",
+    "familyTs": "listener/src/searcher/venues/protocols/set-redemption-family/* remains unchanged.",
+    "generatedArtifacts": "No generator run; listener/src/searcher/generated/* unchanged.",
+    "priorArtifacts": "The prior set-redemption.blockers.md and set-redemption.draft.json remain available only on backup-local-82bfc8fc / codex/protocol-json-20261029; they were not copied into this branch because the draft is non-deliverable and targeted an older framework."
+  },
+  "unblockRequirement": "A public framework change is required before a faithful set-redemption JSON can exist: (1) add a direct-ABI action declaration with a runtime amount patch and preserve the family action encode/matchTrace semantics; (2) let a quoted fragment declare one action node plus per-basket-output assert-balance nodes, or provide an equivalent JSON node-list declaration; (3) provide a nested runtime-program execution composition (execSubscript/run equivalent) with the existing 16-register/128-instruction/64KiB bounds, including direct-settlement side-output preservation; (4) allow one discovery declaration to compose address-surface nomination + receipt-log fallback + the implemented reverse-binding provider; (5) preserve both lineages and all three actions. Alternatively the family contract/tests could be changed to accept a single runtime-program fragment and a weaker fragment node shape, but public TS/tests are out of scope and that would not preserve the current interface.",
+  "nextSteps": [
+    "Keep listener/src/searcher/venues/production-families/set-redemption.production.ts and the set-redemption-family TS modules authoritative.",
+    "Do not copy the old non-deliverable set-redemption.draft.json into the family directory and do not render a production entry from it.",
+    "Do not narrow the family to a 4-component, same-recipient, single-nomination prototype; that would drop the 187-component, external-recipient and legacy-lineage support.",
+    "Re-evaluate when the direct-action, fragment-node-list, nested-program and multi-channel nomination hooks above are available at the family-runtime baseline."
+  ]
+}

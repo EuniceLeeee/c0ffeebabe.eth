@@ -330,6 +330,891 @@
      ]
     }
    ]
+  },
+  "definition": {
+   "version": 1,
+   "identity": {
+    "applies": {
+     "op": "eq",
+     "args": [
+      {
+       "op": "get",
+       "args": [
+        "$candidate",
+        "candidateKind"
+       ]
+      },
+      "mooniswap"
+     ]
+    },
+    "select": [
+     {
+      "assert": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$candidate",
+          "candidateKind"
+         ]
+        },
+        "mooniswap"
+       ]
+      },
+      "error": "mooniswap wrong candidate kind"
+     },
+     {
+      "return": "runtime",
+      "when": {
+       "op": "not",
+       "args": [
+        {
+         "op": "defined",
+         "args": [
+          "$evidence"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "return": "tokens",
+      "when": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "phase"
+         ]
+        },
+        "runtime"
+       ]
+      }
+     },
+     {
+      "return": "tokens"
+     }
+    ],
+    "stages": {
+     "runtime": {
+      "requirements": {
+       "transports": [
+        "get-code",
+        "eth-call"
+       ],
+       "caller": "executor"
+      },
+      "requests": [
+       {
+        "id": "code",
+        "kind": "get-code",
+        "address": "$candidate.pool"
+       },
+       {
+        "id": "token0",
+        "kind": "eth-call",
+        "to": "$candidate.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "token0",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "caller": {
+         "kind": "executor"
+        }
+       },
+       {
+        "id": "token1",
+        "kind": "eth-call",
+        "to": "$candidate.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "token1",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "caller": {
+         "kind": "executor"
+        }
+       }
+      ],
+      "decode": [
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$requests"
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap missing/extra identity results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            {
+             "op": "unique",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "op": "get",
+                 "args": [
+                  "$row",
+                  "id"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap duplicate identity results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": {
+                  "op": "get",
+                  "args": [
+                   "$row",
+                   "id"
+                  ]
+                 }
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$requests",
+                "row",
+                {
+                 "id": {
+                  "op": "get",
+                  "args": [
+                   "$row",
+                   "id"
+                  ]
+                 }
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap unexpected identity results"
+       },
+       {
+        "let": "source",
+        "value": {
+         "op": "source",
+         "args": [
+          "$results"
+         ]
+        }
+       },
+       {
+        "let": "token0Raw",
+        "value": {
+         "op": "get",
+         "args": [
+          {
+           "op": "returned",
+           "args": [
+            "token0"
+           ]
+          },
+          "data"
+         ]
+        }
+       },
+       {
+        "let": "token1Raw",
+        "value": {
+         "op": "get",
+         "args": [
+          {
+           "op": "returned",
+           "args": [
+            "token1"
+           ]
+          },
+          "data"
+         ]
+        }
+       },
+       {
+        "assert": {
+         "op": "matches",
+         "args": [
+          "$token0Raw",
+          "^0x0{24}[0-9a-fA-F]{40}$"
+         ]
+        },
+        "error": "mooniswap noncanonical token0 word"
+       },
+       {
+        "assert": {
+         "op": "matches",
+         "args": [
+          "$token1Raw",
+          "^0x0{24}[0-9a-fA-F]{40}$"
+         ]
+        },
+        "error": "mooniswap noncanonical token1 word"
+       },
+       {
+        "let": "token0",
+        "value": {
+         "op": "address",
+         "args": [
+          {
+           "op": "bytes",
+           "args": [
+            "$token0Raw",
+            12,
+            20
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "token1",
+        "value": {
+         "op": "address",
+         "args": [
+          {
+           "op": "bytes",
+           "args": [
+            "$token1Raw",
+            12,
+            20
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "pool",
+        "value": {
+         "op": "lower",
+         "args": [
+          {
+           "op": "address",
+           "args": [
+            {
+             "op": "get",
+             "args": [
+              "$candidate",
+              "pool"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "code",
+        "value": {
+         "op": "code",
+         "args": [
+          "code"
+         ]
+        }
+       },
+       {
+        "let": "binding",
+        "value": {
+         "pool": "$pool",
+         "token0": "$token0",
+         "token1": "$token1",
+         "codeHash": {
+          "op": "codeHash",
+          "args": [
+           "$code"
+          ]
+         }
+        }
+       },
+       {
+        "let": "valid",
+        "value": {
+         "op": "expression",
+         "args": [
+          "runtimeValid",
+          {}
+         ]
+        }
+       },
+       {
+        "return": {
+         "phase": "runtime",
+         "source": "$source",
+         "valid": "$valid",
+         "binding": "$binding",
+         "ids": {
+          "op": "map",
+          "args": [
+           "$requests",
+           "request",
+           {
+            "op": "get",
+            "args": [
+             "$request",
+             "id"
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ]
+     },
+     "tokens": {
+      "requirements": {
+       "transports": [
+        "get-code",
+        "eth-call"
+       ],
+       "caller": "executor"
+      },
+      "requests": [
+       {
+        "id": "token0-code",
+        "kind": "get-code",
+        "address": "$evidence.binding.token0"
+       },
+       {
+        "id": "token1-code",
+        "kind": "get-code",
+        "address": "$evidence.binding.token1"
+       },
+       {
+        "id": "decimals0",
+        "kind": "eth-call",
+        "to": "$evidence.binding.token0",
+        "data": {
+         "op": "encode",
+         "args": [
+          "token",
+          "decimals",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "caller": {
+         "kind": "executor"
+        }
+       },
+       {
+        "id": "decimals1",
+        "kind": "eth-call",
+        "to": "$evidence.binding.token1",
+        "data": {
+         "op": "encode",
+         "args": [
+          "token",
+          "decimals",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "caller": {
+         "kind": "executor"
+        }
+       }
+      ],
+      "decode": [
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$requests"
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap missing/extra identity results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            {
+             "op": "unique",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "op": "get",
+                 "args": [
+                  "$row",
+                  "id"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap duplicate identity results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": {
+                  "op": "get",
+                  "args": [
+                   "$row",
+                   "id"
+                  ]
+                 }
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$requests",
+                "row",
+                {
+                 "id": {
+                  "op": "get",
+                  "args": [
+                   "$row",
+                   "id"
+                  ]
+                 }
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "error": "mooniswap unexpected identity results"
+       },
+       {
+        "let": "source",
+        "value": {
+         "op": "source",
+         "args": [
+          "$results"
+         ]
+        }
+       },
+       {
+        "let": "code0",
+        "value": {
+         "op": "code",
+         "args": [
+          "token0-code"
+         ]
+        }
+       },
+       {
+        "let": "code1",
+        "value": {
+         "op": "code",
+         "args": [
+          "token1-code"
+         ]
+        }
+       },
+       {
+        "assert": {
+         "op": "matches",
+         "args": [
+          "$code0",
+          "^0x(?:[0-9a-fA-F]{2})+$"
+         ]
+        },
+        "error": "mooniswap token0 has no runtime code"
+       },
+       {
+        "assert": {
+         "op": "matches",
+         "args": [
+          "$code1",
+          "^0x(?:[0-9a-fA-F]{2})+$"
+         ]
+        },
+        "error": "mooniswap token1 has no runtime code"
+       },
+       {
+        "let": "decimals0",
+        "value": {
+         "op": "decodeCanonical",
+         "args": [
+          "token",
+          "decimals",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "decimals0"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "let": "decimals1",
+        "value": {
+         "op": "decodeCanonical",
+         "args": [
+          "token",
+          "decimals",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "decimals1"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "let": "valid",
+        "value": {
+         "op": "and",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$evidence",
+            "valid"
+           ]
+          },
+          {
+           "op": "lte",
+           "args": [
+            {
+             "op": "uint",
+             "args": [
+              "$decimals0"
+             ]
+            },
+            77
+           ]
+          },
+          {
+           "op": "lte",
+           "args": [
+            {
+             "op": "uint",
+             "args": [
+              "$decimals1"
+             ]
+            },
+            77
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "tokens",
+           "source": "$source",
+           "valid": "$valid",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             {
+              "op": "get",
+              "args": [
+               "$request",
+               "id"
+              ]
+             }
+            ]
+           }
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    "decide": [
+     {
+      "return": {
+       "status": "continue"
+      },
+      "when": {
+       "op": "not",
+       "args": [
+        {
+         "op": "defined",
+         "args": [
+          "$evidence"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "return": {
+       "status": "continue"
+      },
+      "when": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "phase"
+         ]
+        },
+        "runtime"
+       ]
+      }
+     },
+     {
+      "return": {
+       "status": "chain-proven-rejected",
+       "reasonCode": "unsupported-mooniswap-runtime-or-token",
+       "evidenceRequestIds": {
+        "op": "get",
+        "args": [
+         "$evidence",
+         "ids"
+        ]
+       }
+      },
+      "when": {
+       "op": "not",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "valid"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "assert": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "phase"
+         ]
+        },
+        "tokens"
+       ]
+      },
+      "error": "mooniswap identity evidence phase is invalid"
+     },
+     {
+      "return": {
+       "status": "verified",
+       "identity": {
+        "familyId": "mooniswap",
+        "lineageId": "mooniswap:verified-v2-runtime",
+        "subject": {
+         "op": "get",
+         "args": [
+          "$evidence.binding",
+          "pool"
+         ]
+        },
+        "provenance": [
+         {
+          "kind": "mooniswap-runtime-immutable-pair",
+          "subject": {
+           "op": "get",
+           "args": [
+            "$evidence.binding",
+            "pool"
+           ]
+          },
+          "evidenceHash": {
+           "op": "hash",
+           "args": [
+            {
+             "binding": "$evidence.binding",
+             "source": "$evidence.source"
+            }
+           ]
+          }
+         }
+        ],
+        "facts": {
+         "pool": {
+          "op": "get",
+          "args": [
+           "$evidence.binding",
+           "pool"
+          ]
+         },
+         "token0": {
+          "op": "get",
+          "args": [
+           "$evidence.binding",
+           "token0"
+          ]
+         },
+         "token1": {
+          "op": "get",
+          "args": [
+           "$evidence.binding",
+           "token1"
+          ]
+         },
+         "codeHash": {
+          "op": "get",
+          "args": [
+           "$evidence.binding",
+           "codeHash"
+          ]
+         }
+        }
+       }
+      }
+     }
+    ]
+   }
   }
  },
  "instance": {
@@ -1518,8 +2403,8 @@
           "data"
          ]
         },
-        0,
-        32
+        12,
+        20
        ]
       }
      ]
@@ -2578,888 +3463,6 @@
      },
      "account": "$recipient",
      "when": "$externalRecipient"
-    }
-   ]
-  },
-  "identity": {
-   "applies": {
-    "op": "eq",
-    "args": [
-     {
-      "op": "get",
-      "args": [
-       "$candidate",
-       "candidateKind"
-      ]
-     },
-     "mooniswap"
-    ]
-   },
-   "select": [
-    {
-     "assert": {
-      "op": "eq",
-      "args": [
-       {
-        "op": "get",
-        "args": [
-         "$candidate",
-         "candidateKind"
-        ]
-       },
-       "mooniswap"
-      ]
-     },
-     "error": "mooniswap wrong candidate kind"
-    },
-    {
-     "return": "runtime",
-     "when": {
-      "op": "not",
-      "args": [
-       {
-        "op": "defined",
-        "args": [
-         "$evidence"
-        ]
-       }
-      ]
-     }
-    },
-    {
-     "return": "tokens",
-     "when": {
-      "op": "eq",
-      "args": [
-       {
-        "op": "get",
-        "args": [
-         "$evidence",
-         "phase"
-        ]
-       },
-       "runtime"
-      ]
-     }
-    },
-    {
-     "return": "tokens"
-    }
-   ],
-   "stages": {
-    "runtime": {
-     "requirements": {
-      "transports": [
-       "get-code",
-       "eth-call"
-      ],
-      "caller": "executor"
-     },
-     "requests": [
-      {
-       "id": "code",
-       "kind": "get-code",
-       "address": "$candidate.pool"
-      },
-      {
-       "id": "token0",
-       "kind": "eth-call",
-       "to": "$candidate.pool",
-       "data": {
-        "op": "encode",
-        "args": [
-         "pool",
-         "token0",
-         []
-        ]
-       },
-       "completion": "return-data",
-       "caller": {
-        "kind": "executor"
-       }
-      },
-      {
-       "id": "token1",
-       "kind": "eth-call",
-       "to": "$candidate.pool",
-       "data": {
-        "op": "encode",
-        "args": [
-         "pool",
-         "token1",
-         []
-        ]
-       },
-       "completion": "return-data",
-       "caller": {
-        "kind": "executor"
-       }
-      }
-     ],
-     "decode": [
-      {
-       "assert": {
-        "op": "eq",
-        "args": [
-         {
-          "op": "length",
-          "args": [
-           "$results"
-          ]
-         },
-         {
-          "op": "length",
-          "args": [
-           "$requests"
-          ]
-         }
-        ]
-       },
-       "error": "mooniswap missing/extra identity results"
-      },
-      {
-       "assert": {
-        "op": "eq",
-        "args": [
-         {
-          "op": "length",
-          "args": [
-           {
-            "op": "unique",
-            "args": [
-             {
-              "op": "map",
-              "args": [
-               "$results",
-               "row",
-               {
-                "op": "get",
-                "args": [
-                 "$row",
-                 "id"
-                ]
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         },
-         {
-          "op": "length",
-          "args": [
-           "$results"
-          ]
-         }
-        ]
-       },
-       "error": "mooniswap duplicate identity results"
-      },
-      {
-       "assert": {
-        "op": "eq",
-        "args": [
-         {
-          "op": "hash",
-          "args": [
-           {
-            "op": "sortId",
-            "args": [
-             {
-              "op": "map",
-              "args": [
-               "$results",
-               "row",
-               {
-                "id": {
-                 "op": "get",
-                 "args": [
-                  "$row",
-                  "id"
-                 ]
-                }
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         },
-         {
-          "op": "hash",
-          "args": [
-           {
-            "op": "sortId",
-            "args": [
-             {
-              "op": "map",
-              "args": [
-               "$requests",
-               "row",
-               {
-                "id": {
-                 "op": "get",
-                 "args": [
-                  "$row",
-                  "id"
-                 ]
-                }
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       "error": "mooniswap unexpected identity results"
-      },
-      {
-       "let": "source",
-       "value": {
-        "op": "source",
-        "args": [
-         "$results"
-        ]
-       }
-      },
-      {
-       "let": "token0Raw",
-       "value": {
-        "op": "get",
-        "args": [
-         {
-          "op": "returned",
-          "args": [
-           "token0"
-          ]
-         },
-         "data"
-        ]
-       }
-      },
-      {
-       "let": "token1Raw",
-       "value": {
-        "op": "get",
-        "args": [
-         {
-          "op": "returned",
-          "args": [
-           "token1"
-          ]
-         },
-         "data"
-        ]
-       }
-      },
-      {
-       "assert": {
-        "op": "matches",
-        "args": [
-         "$token0Raw",
-         "^0x0{24}[0-9a-fA-F]{40}$"
-        ]
-       },
-       "error": "mooniswap noncanonical token0 word"
-      },
-      {
-       "assert": {
-        "op": "matches",
-        "args": [
-         "$token1Raw",
-         "^0x0{24}[0-9a-fA-F]{40}$"
-        ]
-       },
-       "error": "mooniswap noncanonical token1 word"
-      },
-      {
-       "let": "token0",
-       "value": {
-        "op": "address",
-        "args": [
-         {
-          "op": "bytes",
-          "args": [
-           "$token0Raw",
-           12,
-           20
-          ]
-         }
-        ]
-       }
-      },
-      {
-       "let": "token1",
-       "value": {
-        "op": "address",
-        "args": [
-         {
-          "op": "bytes",
-          "args": [
-           "$token1Raw",
-           12,
-           20
-          ]
-         }
-        ]
-       }
-      },
-      {
-       "let": "pool",
-       "value": {
-        "op": "lower",
-        "args": [
-         {
-          "op": "address",
-          "args": [
-           {
-            "op": "get",
-            "args": [
-             "$candidate",
-             "pool"
-            ]
-           }
-          ]
-         }
-        ]
-       }
-      },
-      {
-       "let": "code",
-       "value": {
-        "op": "code",
-        "args": [
-         "code"
-        ]
-       }
-      },
-      {
-       "let": "binding",
-       "value": {
-        "pool": "$pool",
-        "token0": "$token0",
-        "token1": "$token1",
-        "codeHash": {
-         "op": "codeHash",
-         "args": [
-          "$code"
-         ]
-        }
-       }
-      },
-      {
-       "let": "valid",
-       "value": {
-        "op": "expression",
-        "args": [
-         "runtimeValid",
-         {}
-        ]
-       }
-      },
-      {
-       "return": {
-        "phase": "runtime",
-        "source": "$source",
-        "valid": "$valid",
-        "binding": "$binding",
-        "ids": {
-         "op": "map",
-         "args": [
-          "$requests",
-          "request",
-          {
-           "op": "get",
-           "args": [
-            "$request",
-            "id"
-           ]
-          }
-         ]
-        }
-       }
-      }
-     ]
-    },
-    "tokens": {
-     "requirements": {
-      "transports": [
-       "get-code",
-       "eth-call"
-      ],
-      "caller": "executor"
-     },
-     "requests": [
-      {
-       "id": "token0-code",
-       "kind": "get-code",
-       "address": "$evidence.binding.token0"
-      },
-      {
-       "id": "token1-code",
-       "kind": "get-code",
-       "address": "$evidence.binding.token1"
-      },
-      {
-       "id": "decimals0",
-       "kind": "eth-call",
-       "to": "$evidence.binding.token0",
-       "data": {
-        "op": "encode",
-        "args": [
-         "token",
-         "decimals",
-         []
-        ]
-       },
-       "completion": "return-data",
-       "caller": {
-        "kind": "executor"
-       }
-      },
-      {
-       "id": "decimals1",
-       "kind": "eth-call",
-       "to": "$evidence.binding.token1",
-       "data": {
-        "op": "encode",
-        "args": [
-         "token",
-         "decimals",
-         []
-        ]
-       },
-       "completion": "return-data",
-       "caller": {
-        "kind": "executor"
-       }
-      }
-     ],
-     "decode": [
-      {
-       "assert": {
-        "op": "eq",
-        "args": [
-         {
-          "op": "length",
-          "args": [
-           "$results"
-          ]
-         },
-         {
-          "op": "length",
-          "args": [
-           "$requests"
-          ]
-         }
-        ]
-       },
-       "error": "mooniswap missing/extra identity results"
-      },
-      {
-       "assert": {
-        "op": "eq",
-        "args": [
-         {
-          "op": "length",
-          "args": [
-           {
-            "op": "unique",
-            "args": [
-             {
-              "op": "map",
-              "args": [
-               "$results",
-               "row",
-               {
-                "op": "get",
-                "args": [
-                 "$row",
-                 "id"
-                ]
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         },
-         {
-          "op": "length",
-          "args": [
-           "$results"
-          ]
-         }
-        ]
-       },
-       "error": "mooniswap duplicate identity results"
-      },
-      {
-       "assert": {
-        "op": "eq",
-        "args": [
-         {
-          "op": "hash",
-          "args": [
-           {
-            "op": "sortId",
-            "args": [
-             {
-              "op": "map",
-              "args": [
-               "$results",
-               "row",
-               {
-                "id": {
-                 "op": "get",
-                 "args": [
-                  "$row",
-                  "id"
-                 ]
-                }
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         },
-         {
-          "op": "hash",
-          "args": [
-           {
-            "op": "sortId",
-            "args": [
-             {
-              "op": "map",
-              "args": [
-               "$requests",
-               "row",
-               {
-                "id": {
-                 "op": "get",
-                 "args": [
-                  "$row",
-                  "id"
-                 ]
-                }
-               }
-              ]
-             }
-            ]
-           }
-          ]
-         }
-        ]
-       },
-       "error": "mooniswap unexpected identity results"
-      },
-      {
-       "let": "source",
-       "value": {
-        "op": "source",
-        "args": [
-         "$results"
-        ]
-       }
-      },
-      {
-       "let": "code0",
-       "value": {
-        "op": "code",
-        "args": [
-         "token0-code"
-        ]
-       }
-      },
-      {
-       "let": "code1",
-       "value": {
-        "op": "code",
-        "args": [
-         "token1-code"
-        ]
-       }
-      },
-      {
-       "assert": {
-        "op": "matches",
-        "args": [
-         "$code0",
-         "^0x(?:[0-9a-fA-F]{2})+$"
-        ]
-       },
-       "error": "mooniswap token0 has no runtime code"
-      },
-      {
-       "assert": {
-        "op": "matches",
-        "args": [
-         "$code1",
-         "^0x(?:[0-9a-fA-F]{2})+$"
-        ]
-       },
-       "error": "mooniswap token1 has no runtime code"
-      },
-      {
-       "let": "decimals0",
-       "value": {
-        "op": "decodeCanonical",
-        "args": [
-         "token",
-         "decimals",
-         {
-          "op": "get",
-          "args": [
-           {
-            "op": "returned",
-            "args": [
-             "decimals0"
-            ]
-           },
-           "data"
-          ]
-         },
-         0
-        ]
-       }
-      },
-      {
-       "let": "decimals1",
-       "value": {
-        "op": "decodeCanonical",
-        "args": [
-         "token",
-         "decimals",
-         {
-          "op": "get",
-          "args": [
-           {
-            "op": "returned",
-            "args": [
-             "decimals1"
-            ]
-           },
-           "data"
-          ]
-         },
-         0
-        ]
-       }
-      },
-      {
-       "let": "valid",
-       "value": {
-        "op": "and",
-        "args": [
-         {
-          "op": "get",
-          "args": [
-           "$evidence",
-           "valid"
-          ]
-         },
-         {
-          "op": "lte",
-          "args": [
-           {
-            "op": "uint",
-            "args": [
-             "$decimals0"
-            ]
-           },
-           77
-          ]
-         },
-         {
-          "op": "lte",
-          "args": [
-           {
-            "op": "uint",
-            "args": [
-             "$decimals1"
-            ]
-           },
-           77
-          ]
-         }
-        ]
-       }
-      },
-      {
-       "return": {
-        "op": "merge",
-        "args": [
-         "$evidence",
-         {
-          "phase": "tokens",
-          "source": "$source",
-          "valid": "$valid",
-          "ids": {
-           "op": "map",
-           "args": [
-            "$requests",
-            "request",
-            {
-             "op": "get",
-             "args": [
-              "$request",
-              "id"
-             ]
-            }
-           ]
-          }
-         }
-        ]
-       }
-      }
-     ]
-    }
-   },
-   "decide": [
-    {
-     "return": {
-      "status": "continue"
-     },
-     "when": {
-      "op": "not",
-      "args": [
-       {
-        "op": "defined",
-        "args": [
-         "$evidence"
-        ]
-       }
-      ]
-     }
-    },
-    {
-     "return": {
-      "status": "continue"
-     },
-     "when": {
-      "op": "eq",
-      "args": [
-       {
-        "op": "get",
-        "args": [
-         "$evidence",
-         "phase"
-        ]
-       },
-       "runtime"
-      ]
-     }
-    },
-    {
-     "return": {
-      "status": "chain-proven-rejected",
-      "reasonCode": "unsupported-mooniswap-runtime-or-token",
-      "evidenceRequestIds": {
-       "op": "get",
-       "args": [
-        "$evidence",
-        "ids"
-       ]
-      }
-     },
-     "when": {
-      "op": "not",
-      "args": [
-       {
-        "op": "get",
-        "args": [
-         "$evidence",
-         "valid"
-        ]
-       }
-      ]
-     }
-    },
-    {
-     "assert": {
-      "op": "eq",
-      "args": [
-       {
-        "op": "get",
-        "args": [
-         "$evidence",
-         "phase"
-        ]
-       },
-       "tokens"
-      ]
-     },
-     "error": "mooniswap identity evidence phase is invalid"
-    },
-    {
-     "return": {
-      "status": "verified",
-      "identity": {
-       "familyId": "mooniswap",
-       "lineageId": "mooniswap:verified-v2-runtime",
-       "subject": {
-        "op": "get",
-        "args": [
-         "$evidence.binding",
-         "pool"
-        ]
-       },
-       "provenance": [
-        {
-         "kind": "mooniswap-runtime-immutable-pair",
-         "subject": {
-          "op": "get",
-          "args": [
-           "$evidence.binding",
-           "pool"
-          ]
-         },
-         "evidenceHash": {
-          "op": "hash",
-          "args": [
-           {
-            "binding": "$evidence.binding",
-            "source": "$evidence.source"
-           }
-          ]
-         }
-        }
-       ],
-       "facts": {
-        "pool": {
-         "op": "get",
-         "args": [
-          "$evidence.binding",
-          "pool"
-         ]
-        },
-        "token0": {
-         "op": "get",
-         "args": [
-          "$evidence.binding",
-          "token0"
-         ]
-        },
-        "token1": {
-         "op": "get",
-         "args": [
-          "$evidence.binding",
-          "token1"
-         ]
-        },
-        "codeHash": {
-         "op": "get",
-         "args": [
-          "$evidence.binding",
-          "codeHash"
-         ]
-        }
-       }
-      }
-     }
     }
    ]
   }
