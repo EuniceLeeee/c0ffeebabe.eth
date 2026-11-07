@@ -1,0 +1,46 @@
+{
+  "learning_case_id": "tooling-family-json-negative-guard-20261107",
+  "status": "applied",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [],
+  "trigger": "bundle_not_included",
+  "comparable": false,
+  "primary_gap": "sim_failed",
+  "gap_detail": "Offline regression-tool defect found during the dry-run latency investigation; this is not a diagnosis of a landed or rejected economic opportunity.",
+  "evidence": {
+    "scope": "shared JSON execution testkit, no chain execution or broadcast",
+    "baseline": "104ff465e0550dd62246610df1257a5faba37bb0",
+    "independent_review": "legacy_callers read-only in-memory mutation of opcode 3: removing equality left legacy under/over-debit assert.throws passing via the test postcondition; typed VM rejection assertion fails correctly.",
+    "positive_control": "Original nine balance/native fault controls continue to reject; malformed program, host errors and impossible native balance fixtures cannot supply VM guard evidence.",
+    "shared_suite": {
+      "tests": 736,
+      "pass": 735,
+      "fail": 0,
+      "skip": 1
+    },
+    "tool_selection_capabilities": [
+      "family",
+      "json",
+      "verification"
+    ],
+    "selected_tool": "listener:test:family-json",
+    "manifest_sha256": "9f24b78356c25ab550451818e4ecc319a9e3d44ee81af749b130d2e2c1127255",
+    "test_round_families": 20,
+    "historical_case_inputs": 34,
+    "historical_execution": "not-run; missing per-case bindings kept incomplete"
+  },
+  "tooling_defect": {
+    "tool": "listener/src/searcher/test/declarative-execution-assets.test.ts",
+    "issue": "Unqualified assert.throws around execution plus postcondition assertions treats a test assertion failure as a successful VM rejection.",
+    "evidence": "Independent removal of the equality instruction distinguishes the runtime guard error from the later balance assertion, but the old negative test accepted both.",
+    "codify_target": "Typed equality/uint256-range errors in the independent test interpreter, exact-code negative assertions, missing-guard controls and all-installed-JSON regression rounds.",
+    "codify_commit": "4c0b6e1563301fef13e04073ad661502c4dd98d6",
+    "status": "codified"
+  },
+  "replay_gate": {
+    "command": "cd listener && npm run test:family-json",
+    "expected_transition": "Removing equality must fail debit negatives; ordinary VM guards still pass, and unrelated host/fixture failures are not rejection evidence."
+  },
+  "created_at": "2026-11-07T07:03:18.424686+00:00",
+  "updated_at": "2026-11-07T07:03:18.424686+00:00"
+}
