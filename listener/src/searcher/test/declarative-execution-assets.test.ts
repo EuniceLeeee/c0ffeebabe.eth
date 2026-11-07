@@ -5,7 +5,7 @@ import { buildDeclarativeExecutionProgram, buildDeclarativeQuotedFragment, build
   type DeclarativeConversionExecution } from "../venues/declarative-execution.js";
 import { compileDeclarativeValues } from "../venues/declarative-values.js";
 import { encodeDeclarativeCall } from "../venues/declarative-call-codec.js";
-import { inspectRuntime } from "./runtime-program-testkit.js";
+import { inspectRuntime, assertRuntimeGuardRejects, type RuntimeProgramGuardCode } from "./runtime-program-testkit.js";
 
 // Synthetic receipt hosts exercise the production compiler and independent VM
 // interpreter. These are framework safety facts, not historical EVM acceptance.
@@ -73,10 +73,15 @@ for (const external of [false, true]) test(`declared collection protects every f
   // retains its own seven-unit threshold and never becomes next-hop output.
   run(hexlify(buildDeclarativeExecutionProgram(d, { ...input, minAmountOut: 100n }, values).bytes()), 77n, external);
 });
-for (const fault of ["zero-debit", "under-debit", "over-debit", "route-short", "side-short", "side-zero", "side-inventory", "wrong-recipient", "native"] as const)
+const rejectionCodes: Record<Fault, RuntimeProgramGuardCode> = {
+  "zero-debit": "uint256-range", "under-debit": "equality", "over-debit": "equality",
+  "route-short": "uint256-range", "side-short": "uint256-range", "side-zero": "uint256-range",
+  "side-inventory": "equality", "wrong-recipient": "uint256-range", native: "equality",
+};
+for (const fault of Object.keys(rejectionCodes) as Fault[])
   test(`multiple outputs reject ${fault}`, () => {
     const program = buildDeclarativeRuntimeLeg(definition(), context(true), values)!.program;
-    assert.throws(() => run(program, 77n, true, fault));
+    assertRuntimeGuardRejects(() => run(program, 77n, true, fault), rejectionCodes[fault]);
   });
 test("multi-output declarations reject ambiguous routes, duplicate assets and omitted side bounds", () => {
   for (const mutate of [
