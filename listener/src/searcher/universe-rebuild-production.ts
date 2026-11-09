@@ -38,8 +38,10 @@ import { attestPoolIdentitiesStrict } from "./strict-identity-attestation.js";
 import { createMinimalIdentityRuntime } from "./strict-identity-attestation.js";
 import { createStrictCentralAdapterRuntime } from
   "./strict-central-adapter-runtime.js";
-import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "./revm-sim-client.js";
-import { createRevmStrictSourceSimulation } from "./revm-strict-source-simulation.js";
+import { RevmFatalError, type RevmFatalReason } from "./revm-sim-client.js";
+import { createNodeStrictSourceSimulation } from "./node-strict-source-simulation.js";
+import { createNodeFundingCache } from "./simulator/node-input-funding.js";
+import { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { logRevmFault } from "./revm-fault-diagnostics.js";
 import { PRODUCTION_STRICT_VERIFIED_ACTORS } from
   "./venues/production-verified-actors.js";
@@ -908,16 +910,13 @@ export function createProbeWiring(
     );
   }
   // Runtime capability is generic; each Family declares its own programs.
-  const revmBin = input?.readyThrottle
-    ? process.env.SEARCHER_READY_REVM_SIM_BIN ?? (process.env.SEARCHER_REVM_SIM_BIN
-      ? resolve(import.meta.dirname, "../../revm-sim/target/release/revm-sim-ready") : undefined)
-    : process.env.SEARCHER_REVM_SIM_BIN;
+  const fundingCache = createNodeFundingCache();
+  const simulationScheduler = new RethTransportScheduler({ capacity: 4, producerReserved: 1 });
   const executionIdentity = input?.executionIdentity === undefined
     ? undefined : Object.freeze({ ...input.executionIdentity });
   const executor = executionIdentity?.executor ?? process.env.BOTVM_ADDRESS;
   const transactionOrigin = executionIdentity?.transactionOrigin ?? process.env.BOTVM_OWNER;
-  const canSimulate = revmBin !== undefined && revmBin.trim() !== "" &&
-    executor !== undefined && executor.trim() !== "";
+  const canSimulate = executor !== undefined && executor.trim() !== "";
   if (canSimulate) {
     // Standalone startup/probe use the same public identity as live. Fail
     // before discovery if a launcher omitted the origin; do not turn a
@@ -931,7 +930,7 @@ export function createProbeWiring(
   const probeController = new AbortController();
   let fatal: RevmFatalError | undefined;
   let chainId: Promise<number> | undefined;
-  const simulations = new Set<ReturnType<typeof createRevmStrictSourceSimulation>>();
+  const simulations = new Set<ReturnType<typeof createNodeStrictSourceSimulation>>();
   const assertOpen = (): void => { if (fatal) throw fatal; input?.readyThrottle?.assertOpen(); };
   const read = async <T>(operation: () => Promise<T>): Promise<T> => {
     assertOpen();
@@ -983,15 +982,16 @@ export function createProbeWiring(
     let diagnosticCandidateKey: string | undefined;
     try { diagnosticCandidateKey = rebuildFamilyCandidateKey(candidate); } catch { /* Observability only. */ }
     const failAttempt = input?.readyThrottle?.captureFailure();
-    const readyBatch = input?.readyThrottle?.inAttempt ? input.readyThrottle.batchMaxCount : undefined;
-    const simulation = networkChainId === undefined ? undefined : createRevmStrictSourceSimulation({
+    const sourceCode = networkChainId === undefined ? undefined : await strictProvider.getCode(executor!, source.number);
+    const executorRuntimeCode = sourceCode && sourceCode !== "0x"
+      ? { code: sourceCode, keccak256: ethers.keccak256(sourceCode) } : undefined;
+    const simulation = networkChainId === undefined ? undefined : createNodeStrictSourceSimulation({
       identity: { source, rpcUrl, chainId: networkChainId },
       control: { signal: probeController.signal },
       // Preserve the engine's existing DEFAULT_GAS_LIMIT; make it explicit at
       // the transport boundary rather than relying on an unbound wire default.
       executionGasLimit: 0x1000000,
-      createClient: ({ onFatal }) => new RevmSimClient({ executablePath: revmBin, timeoutMs, onFatal, diagnosticCandidateKey,
-        ...(readyBatch === undefined ? {} : { readyRpcBatchMaxCount: readyBatch }) }),
+      timeoutMs, executor, executorRuntimeCode, scheduler: simulationScheduler, lane: "discovery", fundingCache,
       onFatal(reason) {
         const ownedAttempt = failAttempt?.(reason);
         if (ownedAttempt && input?.readyThrottle?.isTemporary(reason)) return;

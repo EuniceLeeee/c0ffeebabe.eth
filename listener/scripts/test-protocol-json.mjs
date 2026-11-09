@@ -12,7 +12,7 @@ const shared = readdirSync(new URL("../src/searcher/test/", import.meta.url))
   .map(name => `${directory}/${name}`);
 // The all-domain installed-family fixture audit remains a separate existing
 // audit. It also covers swaps, credit and disabled entries outside this suite.
-const preserved = ["erc4626-declarative-pipeline.ts",
+const preserved = ["node-rpc-simulation.ts", "erc4626-declarative-pipeline.ts",
   "settlement-registrar-evidence.test.ts", "family-settlement-review-contract.ts", "adapter-credit-runtime.ts", "capability-content-hash.ts", "declarative-callback-frames.ts"];
 const files = [...shared, ...preserved.map(name => `${directory}/${name}`)];
 const result = spawnSync(process.execPath,

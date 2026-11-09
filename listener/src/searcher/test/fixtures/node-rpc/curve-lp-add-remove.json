@@ -1,0 +1,26 @@
+{
+  "format": "node-rpc-family-component-case-v1",
+  "familyId": "curve-plain-lp",
+  "source": {
+    "number": 26373823,
+    "hash": "0xeac119cb4a64681b2d79b5028a6f353ae1d7e23b3c8af80d986941e63140b251",
+    "generation": 0
+  },
+  "executor": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+  "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+  "executorCodeHash": "0xaa678ef6a03701bac0255d4fd9d0ce93f680752776f97dac4ee4415550e1c57b",
+  "candidate": {
+    "candidateKind": "curve-plain-lp-pool",
+    "pool": "0x635EF0056A597D13863B73825CcA297236578595"
+  },
+  "direction": "1:0",
+  "amountIn": "13841602413681833810310",
+  "expectedAmountOut": "13800279483077820555379",
+  "protectedTokens": [
+    "0x635EF0056A597D13863B73825CcA297236578595"
+  ],
+  "referenceTransaction": "0x818167c4c61e14c0a9f86512a52ab1fb37b4d026e47216c833a1f251b498a5c2",
+  "referenceTransactionBlock": 26373824,
+  "referenceTransactionIndex": 46,
+  "scope": "same-state component correctness at parent block end, not transaction prefix replay"
+}

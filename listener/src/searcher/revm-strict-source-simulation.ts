@@ -12,6 +12,7 @@ export function createRevmStrictSourceSimulation(input: {
   readonly control?: RevmRequestControl;
   readonly executionGasLimit: number;
   readonly executorRuntimeCode?: ExecutorRuntimeCode;
+  readonly preserveExecutorCode?: boolean;
   readonly createClient: ConstructorParameters<typeof RevmStrictSourceOwner>[0]["createClient"];
   readonly onFatal: (reason: RevmFatalReason) => void;
 }) {
@@ -33,6 +34,7 @@ export function createRevmStrictSourceSimulation(input: {
   const owner = new RevmStrictSourceOwner({ createClient: input.createClient, onFatal: reportFatal });
   const transport = createRevmStrictSimulationTransport({
     rpcUrl: identity.rpcUrl,
+    ...(input.preserveExecutorCode === undefined ? {} : { preserveExecutorCode: input.preserveExecutorCode }),
     executionGasLimit: input.executionGasLimit,
     ...(input.executorRuntimeCode === undefined ? {} : { executorRuntimeCode: input.executorRuntimeCode }),
     onFatal: reportFatal,

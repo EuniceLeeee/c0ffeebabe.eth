@@ -129,6 +129,8 @@ const CURATED: Record<string, Curated> = {
   "listener:searcher:planner": meta("test", ["planner", "path", "replay"], "zero-cu", "Planner and replay regression suite.", 80),
   "listener:searcher:protocol-legs": meta("test", ["protocol", "adapter", "execution"], "zero-cu", "Protocol-leg regression suite.", 80),
   "listener:searcher:taxonomy": meta("test", ["classification", "taxonomy"], "zero-cu", "Strategy/edge taxonomy regression suite.", 80),
+  "listener:searcher:node-rpc-simulation": meta("test", ["node", "rpc", "simulation", "verification"], "zero-cu", "Offline node simulation safety and source/funding regressions; no local EVM or archive calls.", 90),
+  "listener:searcher:node-rpc-family-case": meta("analysis", ["node", "rpc", "simulation", "component-execution"], "archive-rpc", "Pinned node-only Family quote, dual execution and rollback facts; no Ready/search, signing or broadcast; not a latency verdict.", 90),
   "listener:benchmark:effective-update": meta("analysis", ["benchmark", "stage-timing", "effective-update"], "archive-rpc", "Time isolated per-head production effective updates, excluding predecessor table setup; not live acceptance.", 90),
   "listener:benchmark:sim-amount": meta("analysis", ["benchmark", "stage-timing", "sim-sizing"], "archive-rpc", "Time the actual live planner/sim-sizing stage and drain after natural enumeration; read-only historical RPC, no signing or broadcast.", 90),
   "listener:benchmark:live-enumeration": meta("analysis", ["benchmark", "stage-timing", "live-enumeration"], "archive-rpc", "Time enumeration through the actual live head scheduler using reusable historical prerequisite inputs; no sizing, signing or broadcast.", 90),

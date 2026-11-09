@@ -50,7 +50,8 @@ export async function inspectAcceptanceEntry(family: { sourceFile: string; defin
 export interface ProtocolJsonAcceptanceContextInput {
   readonly readyPath: string;
   readonly rpcFile: string;
-  readonly revmBin: string;
+  readonly revmBin?: string; // Accepted legacy CLI option; never executed.
+  readonly allowExecutorCodeOverride?: boolean;
   readonly familyId: string;
   readonly domain?: AcceptanceFamilyDomain;
   readonly instanceKey: string;
@@ -66,8 +67,9 @@ export interface ProtocolJsonAcceptanceContextInput {
 
 export function validateAcceptanceContextInput(input: ProtocolJsonAcceptanceContextInput): void {
   assert(input && typeof input === "object", "acceptance context input required");
-  for (const path of [input.readyPath, input.rpcFile, input.revmBin, ...(input.inputPaths ?? [])])
+  for (const path of [input.readyPath, input.rpcFile, ...(input.inputPaths ?? [])])
     assert(typeof path === "string" && isAbsolute(path), "acceptance input paths must be absolute");
+  assert(input.allowExecutorCodeOverride === undefined || typeof input.allowExecutorCodeOverride === "boolean", "invalid executor code mode");
   acceptanceFamilyDomain(input.familyId, input.domain);
   assert(typeof input.instanceKey === "string" && input.instanceKey.trim() === input.instanceKey && input.instanceKey.length > 0, "instance required");
   assert(input.source && Number.isSafeInteger(input.source.number) && input.source.number >= 0 && bytes32(input.source.hash), "invalid source anchor");
@@ -91,7 +93,7 @@ export function assertAcceptanceReceipt(receipt: any, transactionHash: string, s
 }
 
 /** No state overrides or mutating RPC methods can enter this context's provider.
- * REVM owns its own pinned archive reads; these limits count direct reads only. */
+ * Node simulation owns its bounded RPC transport; these limits count direct reads only. */
 export function assertAcceptanceReadOnlyRpc(method: string, params: readonly unknown[], source: { readonly number: number; readonly hash: string }): void {
   assert(Array.isArray(params), "RPC parameters must be an array");
   if (method === "eth_chainId") { assert.equal(params.length, 0); return; }
@@ -160,7 +162,7 @@ export function createAcceptanceReadOnlyRpc(input: {
       throw Object.assign(new Error(message), { code: (error as any)?.code });
     }
   };
-  return { request, counters: () => ({ directRpcReads: reads, failures: failures.map(failure => ({ ...failure })), revmInternalRpcReads: "not counted" as const }) };
+  return { request, counters: () => ({ directRpcReads: reads, failures: failures.map(failure => ({ ...failure })), nodeSimulationRpcReads: "not counted by direct provider" as const }) };
 }
 
 export function acceptanceSourceFingerprint(root: string): string {
@@ -195,8 +197,8 @@ export class ProtocolJsonAcceptanceContextError extends Error {
 }
 
 /** Reuses admitted Ready, never creates it or substitutes a hand-built descriptor.
- * Local REVM is lazy: the existing transport starts it only when a caller runs a
- * quote/simulation. The context does not perform protocol acceptance by itself. */
+ * Simulation and input funding execute on the configured node. The context
+ * does not perform protocol acceptance by itself. */
 export async function openProtocolJsonAcceptanceContext(input: ProtocolJsonAcceptanceContextInput) {
   validateAcceptanceContextInput(input);
   input = Object.freeze({ ...input, source: Object.freeze({ ...input.source }), inputPaths: Object.freeze([...(input.inputPaths ?? [])]) });
@@ -208,24 +210,24 @@ export async function openProtocolJsonAcceptanceContext(input: ProtocolJsonAccep
   const evidence: Record<string, any> = {}, simulationErrors: string[] = [];
   const redact = (value: unknown) => String(value instanceof Error ? value.message : value).split(url || "\0").join("[REDACTED]").replace(/https?:\/\/[^\s"<>]+/g, "[REDACTED_URL]");
   try {
-    const readyPath = realpathSync(input.readyPath), rpcFile = realpathSync(input.rpcFile), revmBin = realpathSync(input.revmBin);
+    const readyPath = realpathSync(input.readyPath), rpcFile = realpathSync(input.rpcFile);
     const artifactPath = resolve(ROOT, "out/BotVM.sol/BotVM.json"), artifactBytes = readFileSync(artifactPath);
-    const pins = [...new Set([readyPath, rpcFile, revmBin, artifactPath, fileURLToPath(import.meta.url), ...(input.inputPaths ?? []).map(path => realpathSync(path))])].map(path => {
+    const pins = [...new Set([readyPath, rpcFile, artifactPath, fileURLToPath(import.meta.url), ...(input.inputPaths ?? []).map(path => realpathSync(path))])].map(path => {
       assert(statSync(path).isFile(), "acceptance input must be a file"); return { path, sha256: hash(readFileSync(path)) };
     });
     const sourceFiles = verifyAcceptanceBotVmArtifact(ROOT, artifactBytes);
     const sourceTreeSha256 = acceptanceSourceFingerprint(ROOT);
     evidence.inputs = pins; evidence.code = { sourceTreeSha256, executorSources: sourceFiles };
-    evidence.revmSha256 = hash(readFileSync(revmBin)); evidence.executorArtifactSha256 = hash(artifactBytes);
+    evidence.simulator = "node-rpc"; evidence.executorArtifactSha256 = hash(artifactBytes);
     const executor = ethers.getAddress(input.executor), owner = ethers.getAddress(input.owner);
     const runtimeCode = loadBotVmRuntimeCode(owner); evidence.executorCodeHash = runtimeCode.keccak256; evidence.actors = { executor, owner };
     stage = "ready";
     // Validators/unused contexts do not initialize production catalogues or
     // require unrelated runtime data. Actual acceptance uses those exact modules.
-    const [{ createStrictCentralAdapterRuntime }, { createRevmStrictSourceSimulation }, { RevmSimClient },
+    const [{ createStrictCentralAdapterRuntime }, { createRevmStrictSourceSimulation }, { NodeStrictClient },
       { resolveStrictReadyRuntime }, { UniverseRebuildCheckpointStore, activeReadyMemos }, { createRebuildWiring },
       { assertIssuedPreparedFamilyInstance }, { asPricedFamily }, { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog }] = await Promise.all([
-      import("../strict-central-adapter-runtime.js"), import("../revm-strict-source-simulation.js"), import("../revm-sim-client.js"),
+      import("../strict-central-adapter-runtime.js"), import("../revm-strict-source-simulation.js"), import("../simulator/node-strict-client.js"),
       import("../strict-ready-runtime.js"), import("../universe-rebuild-checkpoint.js"), import("../universe-rebuild-production.js"),
       import("../venues/adapter-family-runtime.js"), import("../venues/family-capability-catalog.js"), import("../venues/production-family-composition.js"),
     ]);
@@ -270,14 +272,14 @@ export async function openProtocolJsonAcceptanceContext(input: ProtocolJsonAccep
     }
     const pin = { blockHash: source.hash, requireCanonical: true };
     const executorCode = await request("eth_getCode", [executor, pin]), ownerCode = await request("eth_getCode", [owner, pin]);
-    assert(ethers.isHexString(executorCode, true) && (executorCode === "0x" || same(executorCode, runtimeCode.code)), "refuse replacing unrelated actor code");
+    assert(ethers.isHexString(executorCode, true) && (same(executorCode, runtimeCode.code) || input.allowExecutorCodeOverride === true && executorCode === "0x"), "deployed executor code mismatch; counterfactual mode must be explicit");
     assert(ownerCode === "0x" || /^0xef0100[0-9a-f]{40}$/i.test(ownerCode), "origin must be empty or exact EIP-7702 designator");
     evidence.executorProvisioning = { historicalCodeHash: ethers.keccak256(executorCode), runtimeCodeHash: runtimeCode.keccak256,
       actorOnlyCodeOverlay: executorCode === "0x", protocolOverrides: false, signing: false, broadcast: false };
     stage = "runtime";
     simulation = createRevmStrictSourceSimulation({ identity: { source, rpcUrl: url, chainId, stateRoot: header.stateRoot }, executorRuntimeCode: runtimeCode,
-      control, executionGasLimit: 0x1000000, createClient: ({ onFatal }) => {
-        const client = new RevmSimClient({ executablePath: revmBin, timeoutMs: 60_000, onFatal });
+      control, executionGasLimit: 0x1000000, preserveExecutorCode: !input.allowExecutorCodeOverride, createClient: () => {
+        const client = new NodeStrictClient({ executor, executorRuntimeCode: runtimeCode, timeoutMs: 60_000, allowExecutorCodeOverride: input.allowExecutorCodeOverride });
         const strict = client.strictSimulate.bind(client);
         client.strictSimulate = async (...args) => { try { return await strict(...args); } catch (error) { simulationErrors.push(redact(error)); throw error; } };
         return client;
