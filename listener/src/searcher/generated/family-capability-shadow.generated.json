@@ -4286,7 +4286,7 @@
         "familyId": "curve-plain-lp",
         "capability": "capture",
         "contractVersion": "s1-capture-v1",
-        "contentHash": "8037712324e792653f0f35aa7619616aef00684edce47d7c464b541498a13297",
+        "contentHash": "9fe455fc7aae2021c41c7f25298e85307a3ec9052aa90fa9720053ba0cf97b73",
         "semanticDependencies": [
           "contract:adapter-family/capture@s1-capture-v1",
           "package:ethers@6.16.0",
@@ -4463,7 +4463,7 @@
         "familyId": "curve-plain-lp",
         "capability": "discovery",
         "contractVersion": "s1-discovery-v1",
-        "contentHash": "d86c57233e123b31e0b96726fd056dff0d243cd52b1415d34f32857413fd9e98",
+        "contentHash": "39da601d59eab145a44c87464bdb47e1f23c5da5fc0d02ffeed1c0de3c3c98aa",
         "semanticDependencies": [
           "contract:adapter-family/discovery@s1-discovery-v1",
           "package:ethers@6.16.0",
@@ -4620,7 +4620,7 @@
         "familyId": "curve-plain-lp",
         "capability": "exact",
         "contractVersion": "s1-exact-v2",
-        "contentHash": "e5cab0634843ee0a5c7707061de2a4c3457468efc5d733c258a8ee88161f8890",
+        "contentHash": "6f7d26334b74e7b8eb93789aecf164c7efa2352a0a01402923e8b981a26d5299",
         "semanticDependencies": [
           "contract:adapter-family/exact@s1-exact-v2",
           "package:ethers@6.16.0",
@@ -4777,7 +4777,7 @@
         "familyId": "curve-plain-lp",
         "capability": "execution",
         "contractVersion": "s1-execution-v2",
-        "contentHash": "4f0596296e0f92fc17796e7c8ec2d045d58054007c24bea0809df1f72371d441",
+        "contentHash": "d872faf2efc091ec7b3ebdc88adc9747202b99b40134b9c595b53b3ff227e1f9",
         "semanticDependencies": [
           "contract:action-adapter@s1-action-adapter-v1",
           "contract:adapter-family/execution@s1-execution-v2",
@@ -4955,7 +4955,7 @@
         "familyId": "curve-plain-lp",
         "capability": "identity",
         "contractVersion": "s1-identity-v1",
-        "contentHash": "ac03c1116195fd4bc48ee3e7c4827dc1fb62c93c81e7183d2c8f69dc0494f5ed",
+        "contentHash": "e1b4a3b9b2efa8791bb8fb7003a1a06c1354f5ab78dfd9035ede3ea8395ae911",
         "semanticDependencies": [
           "contract:adapter-family/identity@s1-identity-v1",
           "package:ethers@6.16.0",
@@ -5112,7 +5112,7 @@
         "familyId": "curve-plain-lp",
         "capability": "instance",
         "contractVersion": "s1-instance-v1",
-        "contentHash": "10562ed749dc3bd6be76162590ec3dc5e32ebc42ca9c8f87fc131c443cf737e4",
+        "contentHash": "51603006d39565ead850e535f7e84d42d415b79f753876c887304e15c934089c",
         "semanticDependencies": [
           "contract:adapter-family/instance@s1-instance-v1",
           "package:ethers@6.16.0",
@@ -5269,7 +5269,7 @@
         "familyId": "curve-plain-lp",
         "capability": "pricing",
         "contractVersion": "s1-pricing-v1",
-        "contentHash": "e439562b0fe730e68f8d6e3a398202d8c5e39a3532496758a2d38d16c65bd5fe",
+        "contentHash": "42828c164166c169b234033a9cfaee24fbff9d27f9168d0c809a137bc7a0998e",
         "semanticDependencies": [
           "contract:adapter-family/pricing@s1-pricing-v1",
           "package:ethers@6.16.0",
@@ -5426,7 +5426,7 @@
         "familyId": "curve-plain-lp",
         "capability": "routes",
         "contractVersion": "s1-routes-v2",
-        "contentHash": "ad1f98e40bf4b76e2e45be8337a2088f736fd2397756238625064670af5e9157",
+        "contentHash": "45274b33fec2ea23650efa0b43c817d8f74be603687eb795d6f4f78f46accdf7",
         "semanticDependencies": [
           "contract:adapter-family/routes@s1-routes-v2",
           "package:ethers@6.16.0",
@@ -5583,7 +5583,7 @@
         "familyId": "curve-plain-lp",
         "capability": "victim",
         "contractVersion": "s1-victim-v2",
-        "contentHash": "cf992cb18d5e5d6693d950f7b50211faa1eb0845cfff0ca0f66e550a3518498a",
+        "contentHash": "8904d799fee90873d4821d596a241c1b22b9ae8c05194c4c56a751904f665653",
         "semanticDependencies": [
           "contract:adapter-family/victim@s1-victim-v2",
           "package:ethers@6.16.0",
@@ -52855,5 +52855,5 @@
   "legacy": [],
   "issues": [],
   "complete": true,
-  "artifactHash": "109972658a98f24745662431348041fb064da01917b763d65835f0c561d6dc08"
+  "artifactHash": "8e8a6448f6da46e29299900e14d149e291be6717229e4e36678570d91da1cb73"
 }

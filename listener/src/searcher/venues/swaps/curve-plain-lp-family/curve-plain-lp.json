@@ -3647,10 +3647,17 @@
    }
   },
   "exact": {
-   "methodId": "curve-plain-lp-calc-chain",
+   "methodId": "curve-plain-lp-executor-receipt",
    "requirements": {
     "transports": [
-     "eth-call"
+     "effect-delta-simulation"
+    ],
+    "caller": "executor",
+    "effects": [
+     "return-data",
+     "revert-data",
+     "token-delta",
+     "native-delta"
     ]
    },
    "protectedAddresses": {
@@ -3750,10 +3757,91 @@
       ]
      },
      "error": "curve-plain-lp unsupported executor"
+    },
+    {
+     "assert": {
+      "op": "or",
+      "args": [
+       {
+        "op": "eq",
+        "args": [
+         "$amountIn",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "defined",
+        "args": [
+         "$transactionOrigin"
+        ]
+       }
+      ]
+     },
+     "error": "curve-plain-lp executor quote requires a bound transaction origin"
+    },
+    {
+     "assert": {
+      "op": "or",
+      "args": [
+       {
+        "op": "eq",
+        "args": [
+         "$amountIn",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "and",
+        "args": [
+         {
+          "op": "defined",
+          "args": [
+           "$transactionOrigin"
+          ]
+         },
+         {
+          "op": "not",
+          "args": [
+           {
+            "op": "sameAddress",
+            "args": [
+             "$transactionOrigin",
+             "$executor"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "not",
+          "args": [
+           {
+            "op": "sameAddress",
+            "args": [
+             "$transactionOrigin",
+             "0x0000000000000000000000000000000000000000"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "error": "curve-plain-lp executor quote requires a distinct non-zero transaction origin"
     }
    ],
    "evidence": {
-    "kind": "curve-plain-lp-calc-chain",
+    "kind": "curve-plain-lp-executor-receipt",
     "source": "$source",
     "executor": {
      "op": "lower",
@@ -3770,6 +3858,13 @@
     "routeKey": "$route.routeKey",
     "amountIn": "$amountIn",
     "amountOut": "$amountOut"
+   },
+   "amountOut": {
+    "op": "get",
+    "args": [
+     "$quoteResult",
+     "amountOut"
+    ]
    }
   },
   "readPrograms": {},
@@ -4471,211 +4566,355 @@
   },
   "quoteFlow": {
    "version": 1,
-   "sourceKind": "view",
+   "sourceKind": "effect-simulation",
    "chainQuote": {
-    "version": 2,
-    "choices": [
-     {
-      "when": {
-       "op": "eq",
-       "args": [
-        "$route.direction",
-        "0:1"
-       ]
-      },
-      "proof": {
-       "steps": [
-        {
-         "version": 2,
-         "step": "lp",
-         "requestId": "exact-lp",
-         "signature": "function calc_token_amount(uint256[],bool) view returns(uint256)",
-         "amountPath": [
-          0,
-          0
-         ],
-         "outputPath": [
-          0
-         ],
-         "completion": "returned",
-         "requestBinding": {
-          "target": "$descriptor.pool",
-          "caller": {
-           "kind": "none"
-          }
-         }
-        },
-        {
-         "version": 2,
-         "step": "out",
-         "requestId": "exact-out",
-         "signature": "function calc_withdraw_one_coin(uint256,int128) view returns(uint256)",
-         "amountPath": [
-          0
-         ],
-         "outputPath": [
-          0
-         ],
-         "completion": "returned",
-         "requestBinding": {
-          "target": "$descriptor.pool",
-          "caller": {
-           "kind": "none"
-          }
-         }
-        }
-       ]
-      }
-     },
-     {
-      "when": {
-       "op": "eq",
-       "args": [
-        "$route.direction",
-        "1:0"
-       ]
-      },
-      "proof": {
-       "steps": [
-        {
-         "version": 2,
-         "step": "lp",
-         "requestId": "exact-lp",
-         "signature": "function calc_token_amount(uint256[],bool) view returns(uint256)",
-         "amountPath": [
-          0,
-          1
-         ],
-         "outputPath": [
-          0
-         ],
-         "completion": "returned",
-         "requestBinding": {
-          "target": "$descriptor.pool",
-          "caller": {
-           "kind": "none"
-          }
-         }
-        },
-        {
-         "version": 2,
-         "step": "out",
-         "requestId": "exact-out",
-         "signature": "function calc_withdraw_one_coin(uint256,int128) view returns(uint256)",
-         "amountPath": [
-          0
-         ],
-         "outputPath": [
-          0
-         ],
-         "completion": "returned",
-         "requestBinding": {
-          "target": "$descriptor.pool",
-          "caller": {
-           "kind": "none"
-          }
-         }
-        }
-       ]
-      }
-     }
-    ]
+    "step": "execution",
+    "requestId": "exact-cycle-simulation"
    },
    "steps": [
     {
-     "id": "lp",
+     "id": "execution",
      "requirements": {
       "transports": [
-       "eth-call"
+       "effect-delta-simulation"
+      ],
+      "caller": "executor",
+      "effects": [
+       "return-data",
+       "revert-data",
+       "token-delta",
+       "native-delta"
       ]
      },
      "requests": [
       {
-       "id": "exact-lp",
-       "kind": "eth-call",
-       "to": "$descriptor.pool",
-       "data": {
-        "op": "encode",
+       "id": "exact-cycle-simulation",
+       "kind": "declarative-execution-simulation",
+       "amountIn": "$amountIn",
+       "observe": [
+        "token-delta",
+        "native-delta"
+       ],
+       "protectedTokens": [
+        "$descriptor.lpToken"
+       ],
+       "required": true
+      }
+     ],
+     "decode": [
+      {
+       "assert": {
+        "op": "eq",
         "args": [
-         "pool",
-         "calc_token_amount",
-         [
-          [
+         {
+          "op": "get",
+          "args": [
            {
-            "op": "if",
+            "op": "returned",
+            "args": [
+             "exact-cycle-simulation"
+            ]
+           },
+           "completion"
+          ]
+         },
+         "returned"
+        ]
+       },
+       "error": "curve-plain-lp execution quote completion"
+      },
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "exact-cycle-simulation"
+            ]
+           },
+           "data"
+          ]
+         },
+         "0x"
+        ]
+       },
+       "error": "curve-plain-lp executor returned unexpected data"
+      },
+      {
+       "let": "inRows",
+       "value": {
+        "op": "filter",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "effects",
             "args": [
              {
-              "op": "eq",
+              "op": "get",
               "args": [
-               "$route.i",
-               0
-              ]
-             },
-             "$amountIn",
-             {
-              "op": "uint",
-              "args": [
-               "0"
+               {
+                "op": "returned",
+                "args": [
+                 "exact-cycle-simulation"
+                ]
+               },
+               "effects"
               ]
              }
             ]
            },
+           "tokenDeltas"
+          ]
+         },
+         "row",
+         {
+          "op": "and",
+          "args": [
            {
-            "op": "if",
+            "op": "sameAddress",
             "args": [
              {
-              "op": "eq",
+              "op": "get",
               "args": [
-               "$route.i",
-               1
+               "$row",
+               "token"
               ]
              },
-             "$amountIn",
+             "$route.tokenIn"
+            ]
+           },
+           {
+            "op": "sameAddress",
+            "args": [
              {
-              "op": "uint",
+              "op": "get",
               "args": [
-               "0"
+               "$row",
+               "account"
               ]
-             }
+             },
+             "$executor"
             ]
            }
-          ],
-          true
-         ]
+          ]
+         }
         ]
-       },
-       "completion": "return-data"
-      }
-     ],
-     "decode": [
+       }
+      },
       {
-       "let": "lp",
+       "let": "outRows",
        "value": {
-        "op": "decodeCanonical",
+        "op": "filter",
         "args": [
-         "pool",
-         "calc_token_amount",
          {
           "op": "get",
           "args": [
            {
-            "op": "returned",
+            "op": "effects",
             "args": [
-             "exact-lp"
+             {
+              "op": "get",
+              "args": [
+               {
+                "op": "returned",
+                "args": [
+                 "exact-cycle-simulation"
+                ]
+               },
+               "effects"
+              ]
+             }
             ]
            },
-           "data"
+           "tokenDeltas"
           ]
          },
-         0
+         "row",
+         {
+          "op": "and",
+          "args": [
+           {
+            "op": "sameAddress",
+            "args": [
+             {
+              "op": "get",
+              "args": [
+               "$row",
+               "token"
+              ]
+             },
+             "$route.tokenOut"
+            ]
+           },
+           {
+            "op": "sameAddress",
+            "args": [
+             {
+              "op": "get",
+              "args": [
+               "$row",
+               "account"
+              ]
+             },
+             "$executor"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      },
+      {
+       "let": "lpRows",
+       "value": {
+        "op": "filter",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "effects",
+            "args": [
+             {
+              "op": "get",
+              "args": [
+               {
+                "op": "returned",
+                "args": [
+                 "exact-cycle-simulation"
+                ]
+               },
+               "effects"
+              ]
+             }
+            ]
+           },
+           "tokenDeltas"
+          ]
+         },
+         "row",
+         {
+          "op": "and",
+          "args": [
+           {
+            "op": "sameAddress",
+            "args": [
+             {
+              "op": "get",
+              "args": [
+               "$row",
+               "token"
+              ]
+             },
+             "$descriptor.lpToken"
+            ]
+           },
+           {
+            "op": "sameAddress",
+            "args": [
+             {
+              "op": "get",
+              "args": [
+               "$row",
+               "account"
+              ]
+             },
+             "$executor"
+            ]
+           }
+          ]
+         }
         ]
        }
       },
       {
        "assert": {
+        "op": "and",
+        "args": [
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "length",
+            "args": [
+             "$inRows"
+            ]
+           },
+           1
+          ]
+         },
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "length",
+            "args": [
+             "$outRows"
+            ]
+           },
+           1
+          ]
+         }
+        ]
+       },
+       "error": "curve-plain-lp execution quote requires one actual input and output delta"
+      },
+      {
+       "assert": {
+        "op": "eq",
+        "args": [
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "at",
+            "args": [
+             "$inRows",
+             0
+            ]
+           },
+           "delta"
+          ]
+         },
+         {
+          "op": "sub",
+          "args": [
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           },
+           "$amountIn"
+          ]
+         }
+        ]
+       },
+       "error": "curve-plain-lp execution quote input debit differs from requested input"
+      },
+      {
+       "assert": {
         "op": "gt",
         "args": [
-         "$lp",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "at",
+            "args": [
+             "$outRows",
+             0
+            ]
+           },
+           "delta"
+          ]
+         },
          {
           "op": "uint",
           "args": [
@@ -4684,85 +4923,57 @@
          }
         ]
        },
-       "error": "curve-plain-lp exact quote minted no LP"
-      },
-      {
-       "return": "$lp"
-      }
-     ]
-    },
-    {
-     "id": "out",
-     "requirements": {
-      "transports": [
-       "eth-call"
-      ]
-     },
-     "requests": [
-      {
-       "id": "exact-out",
-       "kind": "eth-call",
-       "to": "$descriptor.pool",
-       "data": {
-        "op": "encode",
-        "args": [
-         "pool",
-         "calc_withdraw_one_coin",
-         [
-          "$steps.lp",
-          "$route.j"
-         ]
-        ]
-       },
-       "completion": "return-data"
-      }
-     ],
-     "decode": [
-      {
-       "let": "amountOut",
-       "value": {
-        "op": "decodeCanonical",
-        "args": [
-         "pool",
-         "calc_withdraw_one_coin",
-         {
-          "op": "get",
-          "args": [
-           {
-            "op": "returned",
-            "args": [
-             "exact-out"
-            ]
-           },
-           "data"
-          ]
-         },
-         0
-        ]
-       }
+       "error": "curve-plain-lp execution quote output is not a positive token delta"
       },
       {
        "assert": {
-        "op": "gt",
+        "op": "every",
         "args": [
-         "$amountOut",
+         "$lpRows",
+         "row",
          {
-          "op": "uint",
+          "op": "eq",
           "args": [
-           "0"
+           {
+            "op": "get",
+            "args": [
+             "$row",
+             "delta"
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
           ]
          }
         ]
        },
-       "error": "curve-plain-lp exact quote received no coin"
+       "error": "curve-plain-lp execution quote left residual LP"
       },
       {
-       "return": "$amountOut"
+       "return": {
+        "amountOut": {
+         "op": "get",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$outRows",
+            0
+           ]
+          },
+          "delta"
+         ]
+        }
+       }
       }
      ]
     }
    ],
-   "result": "$steps.out"
+   "result": "$steps.execution"
   },
   "pricingProjection": {
    "version": 1,
