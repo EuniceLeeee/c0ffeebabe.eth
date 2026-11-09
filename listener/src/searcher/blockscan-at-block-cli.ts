@@ -587,6 +587,8 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     if (finalSimulationExecutorRuntimeCode) save("final-simulation-executor-code.json", {
       ...finalSimulationExecutorRuntimeCode, scope: "search/final simulation only; startup table identity unchanged" });
     const sourceSimulationFactory = createLiveSourceSimulationFactory({ rpcUrl, chainId: Number(chainId),
+      executor, executorRuntimeCode: finalSimulationExecutorRuntimeCode ?? await provider.getCode(executor, args.block).then(code => ({ code, keccak256: ethers.keccak256(code) })),
+      allowExecutorCodeOverride: dryRunBotVmCodeOverrideEnabled(configEnv.SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE, true, false),
       executablePath: args["revm-bin"] ?? env.SEARCHER_REVM_SIM_BIN,
       timeoutMs: benchmark ? liveSettings.sourceSimulationTimeoutMs : 120_000, runtimeAbort: abort,
       onFatal: reason => abort.abort(new Error(`strict simulator fatal: ${reason.kind}`)) });

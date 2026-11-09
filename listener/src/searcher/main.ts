@@ -1,3 +1,5 @@
+import { NodeStrictClient } from "./simulator/node-strict-client.js";
+import { createNodeFundingCache } from "./simulator/node-input-funding.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -249,10 +251,9 @@ import {
 } from "./live-state-backend.js";
 import type { LiveStateBackend, QuoteHop, QuoteRequest } from "./live-state-backend.js";
 import { DEFAULT_BRIBE_BPS, validateLiveEnvelope } from "./live-envelope.js";
-import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "./revm-sim-client.js";
+import { assertPendingBoundedLiveSession } from "../shared/bounded-live-session.js";
+import { RevmFatalError, type RevmFatalReason } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
-import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
-import { HybridLiveBackend } from "./live-backends/hybrid-live-backend.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import { replayVictimSwapOnAnvil } from "./live-backends/rpc-victim-replay.js";
@@ -1134,17 +1135,18 @@ export function createLiveRuntimeStop({ runtimeAbort, emitFatal, exit }: {
 export function createLiveSourceSimulationFactory(input: {
   readonly rpcUrl: string;
   readonly chainId: number;
-  readonly executablePath: string | undefined;
+  readonly allowExecutorCodeOverride?: boolean;
+  readonly executablePath?: string; // Legacy caller shape; never used by node simulation.
+  readonly scheduler?: Pick<RethTransportScheduler, "run">;
+  readonly executor?: string;
   readonly timeoutMs: number;
   readonly runtimeAbort: AbortController;
   readonly onFatal: (reason: RevmFatalReason) => void;
   readonly createClient?: Parameters<typeof createRevmStrictSourceSimulation>[0]["createClient"];
   readonly executorRuntimeCode?: Parameters<typeof createRevmStrictSourceSimulation>[0]["executorRuntimeCode"];
 }): SourceSimulationFactory {
-  const { rpcUrl, chainId, executablePath, timeoutMs, runtimeAbort, onFatal, createClient } = input;
-  if (!executablePath || !isAbsolute(executablePath) || !existsSync(executablePath)) {
-    throw new Error("strict simulation requires an explicit existing SEARCHER_REVM_SIM_BIN");
-  }
+  const { rpcUrl, chainId, timeoutMs, runtimeAbort, onFatal, createClient } = input;
+  const fundingCache = createNodeFundingCache();
   if (!Number.isSafeInteger(chainId) || chainId <= 0 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("invalid strict simulation chain or timeout");
   }
@@ -1152,12 +1154,14 @@ export function createLiveSourceSimulationFactory(input: {
     if (runtimeAbort.signal.aborted) throw runtimeAbort.signal.reason;
     return createRevmStrictSourceSimulation({
       identity: { source, chainId, rpcUrl },
+      preserveExecutorCode: !input.allowExecutorCodeOverride,
       ...(input.executorRuntimeCode === undefined ? {} : { executorRuntimeCode: input.executorRuntimeCode }),
       control: { ...control, signal: AbortSignal.any([runtimeAbort.signal, control.signal]) },
       // Explicitly bind the existing engine DEFAULT_GAS_LIMIT (main.rs), not
       // the unrelated profit-cost estimate or a construction-time caller.
       executionGasLimit: 0x1000000,
-      createClient: createClient ?? (({ onFatal }) => new RevmSimClient({ executablePath, timeoutMs, onFatal })),
+      createClient: createClient ?? (() => new NodeStrictClient({ timeoutMs, scheduler: input.scheduler,
+        executor: input.executor, executorRuntimeCode: input.executorRuntimeCode, allowExecutorCodeOverride: input.allowExecutorCodeOverride, fundingCache })),
       onFatal(reason) {
         if (reason.kind === "rpc-throttle" && onRpcThrottle !== undefined) {
           // The strict source slot is already fenced and owns its drain.
@@ -1501,6 +1505,7 @@ export function createBlockScanPriceRuntime(input: {
 export async function initializeReadyProducer({
   universeRebuildCheckpointPath, rpcUrl, startupCandidates, executionIdentity,
   onSimulationFatal, blindUseIncumbentReady, useReadyGeneration, currentHead,
+  boundedLiveReadyResume = false,
 }: {
   readonly universeRebuildCheckpointPath: string;
   readonly rpcUrl: string;
@@ -1510,12 +1515,17 @@ export async function initializeReadyProducer({
   readonly blindUseIncumbentReady: boolean;
   readonly useReadyGeneration: boolean;
   readonly currentHead: number;
+  readonly boundedLiveReadyResume?: boolean;
 }) {
-  const liveSubset = liveReadySubsetPriceMode(process.env) !== undefined;
+  const subsetPriceMode = liveReadySubsetPriceMode(process.env);
+  const liveSubset = subsetPriceMode !== undefined;
+  const drySubset = process.env.SEARCHER_DRY_RUN === "1" && process.env.SEARCHER_BLOCKSCAN_SUBMIT === "0";
+  const liveResume = boundedLiveReadyResume && subsetPriceMode === "resume" &&
+    process.env.SEARCHER_DRY_RUN === "0" && process.env.SEARCHER_BLOCKSCAN_SUBMIT === "1";
   if (liveSubset && (!useReadyGeneration || blindUseIncumbentReady ||
-      process.env.SEARCHER_DRY_RUN !== "1" || process.env.SEARCHER_BLOCKSCAN_SUBMIT !== "0" ||
+      (!drySubset && !liveResume) ||
       process.env.SEARCHER_ENABLE_BACKRUN !== "0" || process.env.SEARCHER_ENABLE_MEMPOOL !== "0")) {
-    throw new Error("live Ready subset requires a dry-run on a sealed Ready");
+    throw new Error("Ready subset requires a sealed dry-run or a bounded live resume");
   }
   const rebuildStore = new UniverseRebuildCheckpointStore({
     path: universeRebuildCheckpointPath,
@@ -1829,6 +1839,10 @@ async function main(): Promise<void> {
   const rpcUrl = liveRpcUrl();
 
   const subsetPriceMode = liveReadySubsetPriceMode(process.env);
+  if (subsetPriceMode && process.env.SEARCHER_DRY_RUN !== "1" &&
+      (subsetPriceMode !== "resume" || process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR)) {
+    throw new Error("bounded live Ready subset requires a direct journal");
+  }
   const validatedParent = await liveSubsetParentProof();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
@@ -1909,6 +1923,14 @@ async function main(): Promise<void> {
       },
     },
   );
+  const boundedLiveReadyResume = subsetPriceMode === "resume" && !config.dryRun;
+  if (boundedLiveReadyResume) {
+    assertPendingBoundedLiveSession({
+      wallet: executionIdentity.transactionOrigin,
+      executor: executionIdentity.executor,
+      profitMode: config.blockScanProfitMode,
+    });
+  }
   const anvilPort = Number(process.env.SEARCHER_ANVIL_PORT ?? "8555");
   const state = new AnvilStateBackend(
     config.rpcUrl,
@@ -2474,7 +2496,7 @@ async function main(): Promise<void> {
   } = await initializeReadyProducer({
     universeRebuildCheckpointPath, rpcUrl: config.rpcUrl, startupCandidates,
     executionIdentity, onSimulationFatal, blindUseIncumbentReady,
-    useReadyGeneration, currentHead: discoveryToBlock,
+    useReadyGeneration, currentHead: discoveryToBlock, boundedLiveReadyResume,
   });
   // Transition-only pool views remain useful for detector metadata, but no
   // longer grant identity or Graph admission. readyGeneration is the sole
@@ -2616,30 +2638,20 @@ async function main(): Promise<void> {
       ` | flash tokens: ${flashTokens.length}`,
   );
 
-  // Now that the graph exists, wire the configured revm/hybrid backend.
-  if (config.liveBackend !== "rpc") {
-    const revmSimClient = new RevmSimClient({
-      executablePath: process.env.SEARCHER_REVM_SIM_BIN,
-      timeoutMs: Number(process.env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
-    });
-    const revmLiveBackend = new RevmLiveBackend(
-      revmSimClient,
-      executionIdentity.executor,
-      executionIdentity.transactionOrigin,
-      provider,
-      graph,
-      config.rpcUrl,
-      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    );
-    liveBackend = config.liveBackend === "revm"
-      ? revmLiveBackend
-      : new HybridLiveBackend(revmLiveBackend, rpcLiveBackend);
-  }
+  // Live simulation uses the remote node; no local engine is started.
+  if (config.liveBackend !== "rpc") throw new Error("live simulation requires node RPC; local REVM backends are disabled");
 
   const blockScanChainId = (await provider.getNetwork()).chainId;
+  // A normal startup snapshot is a required code capability, not an override.
+  // NodeStrictClient verifies it again at every pinned source before use.
+  const simulationCode = finalSimulationExecutorRuntimeCode?.code ?? await provider.getCode(executionIdentity.executor);
+  if (simulationCode === "0x") throw new Error("node simulation requires the configured executor runtime");
+  const familySimulationExecutorCode = { code: simulationCode, keccak256: ethers.keccak256(simulationCode) };
   const sourceSimulationFactory = createLiveSourceSimulationFactory({
     rpcUrl: config.rpcUrl, chainId: Number(blockScanChainId),
-    executablePath: process.env.SEARCHER_REVM_SIM_BIN,
+    executor: executionIdentity.executor, scheduler: blockScanRethTransportScheduler ?? undefined,
+    executorRuntimeCode: familySimulationExecutorCode,
+    allowExecutorCodeOverride: finalSimulationExecutorRuntimeCode !== undefined,
     timeoutMs: blockScanStageSettings.sourceSimulationTimeoutMs,
     runtimeAbort: blockScanRuntimeAbort,
     onFatal: onSimulationFatal,

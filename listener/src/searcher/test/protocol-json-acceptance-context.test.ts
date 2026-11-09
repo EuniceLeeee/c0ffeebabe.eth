@@ -87,7 +87,7 @@ test("RPC responses must match request identity and budget exhaustion does not r
   assert.equal(await good.rpc.request("eth_call", call), "0x1");
   await assert.rejects(good.rpc.request("eth_chainId", []), /budget/);
   assert.equal(good.requests.length, 2);
-  assert.equal(good.rpc.counters().revmInternalRpcReads, "not counted");
+  assert.equal(good.rpc.counters().nodeSimulationRpcReads, "not counted by direct provider");
   for (const answer of [
     (request: any) => ({ jsonrpc: "2.0", id: request.id + 1, result: "0x" }),
     (request: any) => ({ jsonrpc: "1.0", id: request.id, result: "0x" }),

@@ -14,7 +14,7 @@ interface SessionPermit {
   wallet: string;
   executor: string;
   chainId: 1;
-  status: "active";
+  status: "pending" | "active";
   firstTargetBlock: number;
   lastTargetBlock: number;
   maxBlocks: number;
@@ -52,7 +52,7 @@ function wei(value: unknown): bigint {
   return BigInt(value);
 }
 
-function readPermit(path: string): SessionPermit {
+function readPrivateJson(path: string): unknown {
   let fd: number | undefined;
   let parsed: unknown;
   try {
@@ -71,6 +71,11 @@ function readPermit(path: string): SessionPermit {
   } finally {
     if (fd !== undefined) closeSync(fd);
   }
+  return parsed;
+}
+
+function readPermit(path: string, status: SessionPermit["status"] = "active"): SessionPermit {
+  const parsed = readPrivateJson(path);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) fail("invalid-permit");
   const p = parsed as Record<string, unknown>;
   if (p.profitMode !== undefined && p.profitMode !== "positive-ev" && p.profitMode !== "positive-gross-profit") {
@@ -87,7 +92,7 @@ function readPermit(path: string): SessionPermit {
     || p.deadlineAtMs <= p.startedAtMs || p.deadlineAtMs - p.startedAtMs > MAX_WALL_MS) {
     fail("invalid-permit");
   }
-  if (p.status !== "active") fail("inactive");
+  if (p.status !== status) fail("inactive");
   const now = Date.now();
   if (now < p.startedAtMs || now >= p.deadlineAtMs
     || now >= p.validUntilMs || p.validUntilMs > p.deadlineAtMs
@@ -111,6 +116,26 @@ function immutableIdentity(p: SessionPermit): string {
     p.startedAtMs, p.deadlineAtMs, p.baselineBalanceWei, p.minimumBalanceWei, p.maxWalletWei,
     resolveProfitMode(p.profitMode),
   ]);
+}
+
+/** A sealed Ready resume starts with a pending permit, which cannot sign. */
+export function assertPendingBoundedLiveSession(params: {
+  wallet: string;
+  executor: string;
+  profitMode: ProfitMode;
+}, markerPath = "/opt/MEV/.deploy-live"): void {
+  const path = process.env.SEARCHER_LIVE_SESSION_PATH;
+  const runId = process.env.SEARCHER_LIVE_SESSION_ID;
+  if (!path || !isAbsolute(path) || !runId) fail("missing-startup-permit");
+  const marker = readPrivateJson(markerPath) as { runId?: string; permitPath?: string } | null;
+  if (marker?.runId !== runId || marker.permitPath !== path) fail("startup-marker-mismatch");
+  const permit = readPermit(path, "pending");
+  if (permit.runId !== runId || permit.firstTargetBlock !== 1 ||
+      permit.wallet.toLowerCase() !== params.wallet.toLowerCase() ||
+      permit.executor.toLowerCase() !== params.executor.toLowerCase() ||
+      resolveProfitMode(permit.profitMode) !== params.profitMode) {
+    fail("startup-identity-mismatch");
+  }
 }
 
 /** Optional, fail-closed permit pinned for the entire asynchronous submission. */

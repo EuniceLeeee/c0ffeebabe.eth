@@ -1,0 +1,259 @@
+{
+  "schema": "node-rpc-family-simulation-review-v1",
+  "baselineCommit": "f77db38c6033c962d39bc272fa773e2b3ab916c1",
+  "claim": "shared transport implemented; pinned Curve component correctness; no systemic performance or full Family acceptance claim",
+  "source": {
+    "number": 26373823,
+    "hash": "0xeac119cb4a64681b2d79b5028a6f353ae1d7e23b3c8af80d986941e63140b251",
+    "generation": 0
+  },
+  "referenceTransaction": "0x818167c4c61e14c0a9f86512a52ab1fb37b4d026e47216c833a1f251b498a5c2",
+  "referenceBlock": 26373824,
+  "referenceIndex": 46,
+  "executionContext": {
+    "executor": "0x3a1a0d1f6293d5deb82caf420ede157a538d38c2",
+    "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c",
+    "executorCodeHash": "0xaa678ef6a03701bac0255d4fd9d0ce93f680752776f97dac4ee4415550e1c57b",
+    "mode": "deployed"
+  },
+  "definitionSha256": "e47f041f4a416b7a3adb22050adfcc44c84e8fa56b1377c2b885a37eae458a98",
+  "input": "13841602413681833810310",
+  "quoteOutput": "13800279483077820555379",
+  "runtimeBuiltBeforeExact": true,
+  "facts": [
+    {
+      "encoding": "quoted",
+      "probe": "positive",
+      "passed": true,
+      "classification": "executed-as-quoted",
+      "observed": {
+        "actualDebit": "13841602413681833810310",
+        "actualCredit": "13800279483077820555379",
+        "requestedInput": "13841602413681833810310",
+        "quotedOutput": "13800279483077820555379",
+        "expectedOutput": null,
+        "inputMode": "exact",
+        "inputShortfall": "0",
+        "outputShortfall": "0",
+        "outputExcess": "0",
+        "inputToleranceRawUnits": 0,
+        "outputToleranceRawUnits": 0
+      }
+    },
+    {
+      "encoding": "quoted",
+      "probe": "no-input",
+      "passed": true,
+      "classification": "observed-revert",
+      "observed": {
+        "probe": "no-input",
+        "tokenObservations": 0,
+        "nativeObservations": 0,
+        "measuredZeroBalances": false
+      }
+    },
+    {
+      "encoding": "quoted",
+      "probe": "forced-revert",
+      "passed": true,
+      "classification": "observed-revert",
+      "observed": {
+        "probe": "forced-revert",
+        "tokenObservations": 0,
+        "nativeObservations": 0,
+        "measuredZeroBalances": false
+      }
+    },
+    {
+      "encoding": "runtime",
+      "probe": "positive",
+      "passed": true,
+      "classification": "executed-as-quoted",
+      "observed": {
+        "actualDebit": "13841602413681833810310",
+        "actualCredit": "13800279483077820555379",
+        "requestedInput": "13841602413681833810310",
+        "quotedOutput": "13800279483077820555379",
+        "expectedOutput": null,
+        "inputMode": "exact",
+        "inputShortfall": "0",
+        "outputShortfall": "0",
+        "outputExcess": "0",
+        "inputToleranceRawUnits": 0,
+        "outputToleranceRawUnits": 0
+      }
+    },
+    {
+      "encoding": "runtime",
+      "probe": "no-input",
+      "passed": true,
+      "classification": "observed-revert",
+      "observed": {
+        "probe": "no-input",
+        "tokenObservations": 0,
+        "nativeObservations": 0,
+        "measuredZeroBalances": false
+      }
+    },
+    {
+      "encoding": "runtime",
+      "probe": "forced-revert",
+      "passed": true,
+      "classification": "observed-revert",
+      "observed": {
+        "probe": "forced-revert",
+        "tokenObservations": 0,
+        "nativeObservations": 0,
+        "measuredZeroBalances": false
+      }
+    }
+  ],
+  "standalone": {
+    "kind": "success",
+    "targetBlock": 26373824,
+    "gasUsed": "283365"
+  },
+  "toolReconciliation": {
+    "capabilityQuery": [
+      "node",
+      "rpc",
+      "simulation",
+      "component-execution"
+    ],
+    "manifestSha256": "88ae1b298a841a2f0af06e6413bb52480afcdfdcd62a1ac1136397abdb9e62fb",
+    "resultSha256": "180cc24dc4de9718eb326eb45fb0100daa5056f7b157bde04581d38b814bd8e7",
+    "executions": [
+      {
+        "tool_id": "listener:searcher:node-rpc-simulation",
+        "descriptor_sha256": "681a94d05e4ac4e48a8bb866870c3105c78c6b8945f454aa36af5f7723be0889",
+        "started_at": "2026-11-09T05:42:20.109Z",
+        "finished_at": "2026-11-09T05:42:20.967Z",
+        "exit_code": 0,
+        "stdout_sha256": "427a630eba2825ab957317e7a461c24cafe7df95bdf11e953547b13d30d26022",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "tool_id": "listener:searcher:node-rpc-family-case",
+        "descriptor_sha256": "535d4e79614d6afb3312fa6c0b0021767455afbb6fe93825b49ce9e5facce031",
+        "started_at": "2026-11-09T05:42:21.399Z",
+        "finished_at": "2026-11-09T05:42:23.795Z",
+        "exit_code": 0,
+        "stdout_sha256": "beaca8a74729a5d59b803456d27747265026dd73c5487479ce36f7b3c8e39f22",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "verdict": "agrees with independently observed same-state debit/credit and rollback facts"
+  },
+  "verification": {
+    "buildLive": "pass",
+    "focusedSourceTransportContext": {
+      "passed": 186,
+      "failed": 0
+    },
+    "factoryLeaseDrain": {
+      "passed": 6,
+      "failed": 0
+    },
+    "nodeSafety": {
+      "passed": 7,
+      "failed": 0
+    },
+    "familyJson": {
+      "tests": 725,
+      "passed": 723,
+      "failed": 1,
+      "skipped": 1,
+      "failure": "existing orphaned badger-sett-withdraw.generated.ts; installed-definition round not completed"
+    }
+  },
+  "sourceFiles": [
+    {
+      "path": "listener/package.json",
+      "sha256": "2124875acde88d212d52741d943bdd9655c82d3e7b3ad7dc5a707f9e76c5ca5e"
+    },
+    {
+      "path": "listener/scripts/test-protocol-json.mjs",
+      "sha256": "d9d7fe3b12e0489bd5dd0a53ab324e639f48e4957cd9cbf7d372a65602ab05bb"
+    },
+    {
+      "path": "listener/src/searcher/main.ts",
+      "sha256": "80890c2b6608e0f54954e60c02342543c685e682811297fa11af9f1f18eefc8d"
+    },
+    {
+      "path": "listener/src/searcher/blockscan-at-block-cli.ts",
+      "sha256": "0b8efbf47dd4f7be2b5156100958a3c6884461e2060080d19380870198e4c017"
+    },
+    {
+      "path": "listener/src/searcher/universe-rebuild-production.ts",
+      "sha256": "1bffb3a8c136bbe82702ac4b3a36923d361780c5e9fced5971883030cd3636f9"
+    },
+    {
+      "path": "listener/src/searcher/revm-strict-source-simulation.ts",
+      "sha256": "488c8986c35a2c56936189c9bc0aa8b66b43ab144df5c1b00cc104c64097c827"
+    },
+    {
+      "path": "listener/src/searcher/revm-strict-simulation-transport.ts",
+      "sha256": "427819e7ff050d75b509e830786b56deb4f35d854061fb6c354bbb83e2cce739"
+    },
+    {
+      "path": "listener/src/searcher/node-strict-source-simulation.ts",
+      "sha256": "9d5854d44db7ac791d61b9c4b6603b2016bda87608ccd7ffd7ebd89fceefa9d6"
+    },
+    {
+      "path": "listener/src/searcher/test/node-rpc-simulation.ts",
+      "sha256": "9c8bdf3e554f0ab6355975ddefc8ed7a892eba1d265d531b3768e96fa96a9e66"
+    },
+    {
+      "path": "listener/src/searcher/test/node-rpc-family-case.ts",
+      "sha256": "5769982aaca01e5a44c8f51bdbe719b294976f3fb271eb2486b31ee4237aec9a"
+    },
+    {
+      "path": "listener/src/searcher/test/fixtures/node-rpc/curve-lp-add-remove.json",
+      "sha256": "2bd6697fac1386797a2bdba51423046ba89c6e130342fb776a25c84d8311965a"
+    },
+    {
+      "path": "listener/src/searcher/test/protocol-json-acceptance-context.ts",
+      "sha256": "efd2354f5069d0dfbef1a50fd164dac8a0da0607b192e926814a5874ba3c1cda"
+    },
+    {
+      "path": "listener/src/searcher/test/protocol-json-acceptance-context.test.ts",
+      "sha256": "73ddf5040ba0b7e790845dcffc582f884ffb8ce4983b60ba83da3c2aa1a8b3af"
+    },
+    {
+      "path": "listener/src/searcher/test/protocol-json-acceptance.ts",
+      "sha256": "d535d422f249f2fefc92f93c77a8d18be13fd79c41705ec3b350646b58a49314"
+    },
+    {
+      "path": "listener/src/searcher/simulator/node-strict-client.ts",
+      "sha256": "1a6659fe2c441c0b26f5f23d805b6c6205c6810df118ec5f86d86614692915ea"
+    },
+    {
+      "path": "listener/src/searcher/simulator/node-program-quote.ts",
+      "sha256": "c5bcee4794e8b176a8dbe932b914d80c19b11ca09fe0a3382d82fa401a1227f6"
+    },
+    {
+      "path": "listener/src/searcher/simulator/node-trace-simulation.ts",
+      "sha256": "414a3bbaf1c7f9b3552680149a3180958195585cb20cbf7c600ce4febb1af79d"
+    },
+    {
+      "path": "listener/src/searcher/simulator/node-input-funding.ts",
+      "sha256": "831cc209e9d498a9bbd03004ebc39d132ad89ceb628390a304c7d6a2c968570c"
+    },
+    {
+      "path": "analysis/src/tool-index.ts",
+      "sha256": "11385fbab051507ac37de16e9f25708e6400b9c19d7111e0c28ef00740a1d260"
+    }
+  ],
+  "limits": {
+    "originalTransactionReplay": "not performed; source is parent block end, no index-46 prefix",
+    "readyGraph": "not run; target JSON remains external/disabled",
+    "allFamilyHistoricalParity": "not verified",
+    "ownNodeCompatibility": "not exercised; standard RPC features required",
+    "localLatency": "not accepted",
+    "representativeLatency": "not run; another live process active",
+    "localRevm": "not used",
+    "signing": false,
+    "broadcast": false,
+    "deployment": false
+  }
+}

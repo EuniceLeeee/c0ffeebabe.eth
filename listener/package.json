@@ -487,7 +487,9 @@
     "test:family-json": "node scripts/test-protocol-json.mjs",
     "accept:family-json": "node --import tsx src/searcher/test/protocol-json-acceptance.ts",
     "check:swap-json-samples": "node --import tsx src/searcher/test/swap-json-samples.ts",
-    "prepare:family-json": "node --import tsx src/searcher/test/family-json-ready.ts"
+    "prepare:family-json": "node --import tsx src/searcher/test/family-json-ready.ts",
+    "searcher:node-rpc-simulation": "node --import tsx src/searcher/test/node-rpc-simulation.ts",
+    "searcher:node-rpc-family-case": "node --import tsx src/searcher/test/node-rpc-family-case.ts"
   },
   "dependencies": {
     "ethers": "^6.13.0"

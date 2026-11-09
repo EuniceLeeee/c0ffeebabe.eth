@@ -273,13 +273,14 @@ export async function protocolJsonAcceptanceMain(argv = process.argv.slice(2)) {
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i]!;
     if (key === "--validate-only" && !validateOnly) { validateOnly = true; continue; }
-    assert(["--case", "--ready", "--rpc-file", "--revm-bin", "--out"].includes(key) && !args.has(key) && argv[i + 1], "invalid arguments");
+    assert(["--case", "--ready", "--rpc-file", "--revm-bin", "--executor-code-mode", "--out"].includes(key) && !args.has(key) && argv[i + 1], "invalid arguments");
     args.set(key, argv[++i]!);
   }
   assert(args.has("--case"), "--case is required");
   const sample = parseProtocolJsonAcceptanceCase(JSON.parse(readFileSync(args.get("--case")!, "utf8")));
   if (validateOnly) { assert.equal(args.size, 1); console.log(json({ result: "case-valid", familyId: sample.familyId, execution: "not-run" })); return; }
-  for (const key of ["--ready", "--rpc-file", "--revm-bin", "--out"]) assert(args.has(key), `${key} is required`);
+  for (const key of ["--ready", "--rpc-file", "--out"]) assert(args.has(key), `${key} is required`);
+  assert([undefined, "deployed", "counterfactual"].includes(args.get("--executor-code-mode")), "invalid executor code mode");
   const fd = openSync(args.get("--out")!, "wx", 0o600);
   const report: Record<string, any> = { format: "protocol-json-acceptance-v1", result: "incomplete", sample,
     signing: false, broadcast: false, protocolStateOverrides: false, performance: "not-run", errors: [] };
@@ -290,7 +291,7 @@ export async function protocolJsonAcceptanceMain(argv = process.argv.slice(2)) {
   try {
     checkpoint();
     context = await openProtocolJsonAcceptanceContext({ ...sample, readyPath: resolve(args.get("--ready")!),
-      rpcFile: resolve(args.get("--rpc-file")!), revmBin: resolve(args.get("--revm-bin")!), inputPaths: [resolve(args.get("--case")!),
+      rpcFile: resolve(args.get("--rpc-file")!), allowExecutorCodeOverride: args.get("--executor-code-mode") === "counterfactual", inputPaths: [resolve(args.get("--case")!),
         fileURLToPath(import.meta.url), fileURLToPath(new URL("./protocol-json-acceptance-facts.ts", import.meta.url))] });
     await runProtocolJsonAcceptance(sample, context, report, checkpoint);
   } catch (error) {

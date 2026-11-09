@@ -169,6 +169,8 @@ export function makeRunConfig(base, profile, run, resumePrices, profitMode = 'po
   assert(resumePrices === undefined || ['0', '1'].includes(resumePrices), 'invalid resume-prices');
   assert(['positive-ev', 'positive-gross-profit'].includes(profitMode), 'invalid profit mode');
   assert(['bigquery', 'rpc'].includes(catchupSource), 'invalid catchup source');
+  const scopedResume = base.SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET === "1";
+  if (scopedResume) assert.equal(resumePrices, "1", "scoped live requires an explicit price resume");
   // The frozen base contains only public, reviewed options; no inherited process environment.
   const result = { ...base,
     SEARCHER_DRY_RUN: '0', SEARCHER_BLOCKSCAN_SUBMIT: '1', SEARCHER_EV_GATE: '1',
@@ -193,7 +195,8 @@ export function makeRunConfig(base, profile, run, resumePrices, profitMode = 'po
     SEARCHER_BLOCKSCAN_STARTUP_CACHE_NAMESPACE: sha(JSON.stringify([profile.release, profile.ready, profile.executor])),
     SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED: resumePrices ?? base.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED ?? '0',
     SEARCHER_BLOCKSCAN_STARTUP_CATCHUP_SOURCE: catchupSource,
-    SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR: resolve(dirname(run), '..', 'price-continuation'),
+    SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR: scopedResume
+      ? join(run, 'price-continuation') : resolve(dirname(run), '..', 'price-continuation'),
     SEARCHER_REVM_SIM_BIN: join(profile.release, 'runtime/listener/revm-sim/target/release/revm-sim'),
     SEARCHER_EVENTS_PATH: join(run, 'events.jsonl'),
     SEARCHER_BLOCKSCAN_ROUTE_EVENTS_PATH: join(run, 'routes.jsonl'),
@@ -216,7 +219,7 @@ export function makeRunConfig(base, profile, run, resumePrices, profitMode = 'po
     assert(typeof value === 'string', 'config values must be strings');
     assert(!/PRIVATE_KEY|RPC_URL|SECRET|PASSWORD/.test(key), 'public config cannot contain credentials');
   }
-  assert.equal(result.SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT, '0.02');
+  assert.equal(result.SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT, scopedResume ? '0.002' : '0.02');
   assert.equal(result.SEARCHER_BLOCKSCAN_MAX_CANDIDATES, '10');
   assert.equal(result.SEARCHER_BLOCKSCAN_REFINE_CANDIDATES, '512');
   assert.equal(result.SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED, '1');
@@ -226,12 +229,15 @@ export function makeRunConfig(base, profile, run, resumePrices, profitMode = 'po
 }
 
 export class RunWindow {
-  constructor({ runId, profile, blocks, balance, now, profitMode = 'positive-ev' }) {
+  constructor({ runId, profile, blocks, balance, now, profitMode = 'positive-ev', scopedResume }) {
     assert(Number.isSafeInteger(blocks) && blocks >= 1 && blocks <= 2500);
     assert(['positive-ev', 'positive-gross-profit'].includes(profitMode), 'invalid profit mode');
     assert(balance > 2n * RESERVE && balance <= MAX_WALLET, 'wallet outside bounded range');
     this.blocks = blocks; this.first = null; this.last = null;
     this.ready = false; this.mode = false; this.transitions = new Map();
+    this.scopedResume = scopedResume;
+    this.scopedReady = false; this.restored = false; this.caughtUp = null;
+    this.scopedPrice = null;
     this.permit = { schemaVersion: 1, runId, mode: 'standalone', profitMode, wallet: profile.wallet,
       executor: profile.executor, chainId: 1, status: 'pending',
       firstTargetBlock: 1, lastTargetBlock: blocks, maxBlocks: blocks,
@@ -260,7 +266,7 @@ export class RunWindow {
     }
     if (line.startsWith('[searcher/rpc-throttle-observation] ')) {
       const value = JSON.parse(line.slice(line.indexOf('{')));
-      assert(['observe', 'recovered', 'stop'].includes(value.action) && value.limit === 5);
+      assert(['observe', 'recovered', 'stop'].includes(value.action) && value.limit === (this.scopedResume ? 100 : 5));
       if (value.action === 'stop') throw new Error('terminal RPC throttle');
     }
     if (line.startsWith('[searcher/blockscan-activity-range] ')) {
@@ -269,13 +275,42 @@ export class RunWindow {
       this.transitions.set(value.sourceBlock, value.transitions);
       for (const height of this.transitions.keys()) if (height < value.sourceBlock - 64) this.transitions.delete(height);
     }
+    if (this.scopedResume && line.startsWith('[searcher/live-ready-scope] ')) {
+      const scope = JSON.parse(line.slice(line.indexOf('{')));
+      assert.equal(scope.parentGeneration, generation);
+      assert.equal(scope.liveGraphEdges, this.scopedResume.edges);
+      assert.deepEqual(scope.liveFamilyIds, this.scopedResume.families);
+      this.scopedReady = true;
+    }
+    if (this.scopedResume && line.startsWith('[searcher/effective-mid] ')) {
+      const price = JSON.parse(line.slice(line.indexOf('{')));
+      this.scopedPrice = price.complete === true && price.quoted > 0 ? price : null;
+    }
+    if (this.scopedResume && line.startsWith('[searcher/live-continuation] ')) {
+      const resume = JSON.parse(line.slice(line.indexOf('{')));
+      if (resume.phase === 'restored') {
+        assert.equal(resume.sourceBlock, this.scopedResume.sourceBlock);
+        assert.equal(resume.sourceBlockHash, this.scopedResume.sourceBlockHash);
+        assert.equal(resume.trading, false);
+        this.restored = true;
+      }
+      if (resume.phase === 'caught-up') {
+        assert(this.scopedReady && this.restored);
+        assert(resume.sourceBlock >= this.scopedResume.sourceBlock && resume.sourceBlock === resume.head);
+        this.caughtUp = resume.sourceBlock;
+      }
+    }
     if (!line.includes('"type":"block_scan_timing"')) return null;
     const event = JSON.parse(line.slice(line.indexOf('{')));
     if (event.startup_warm) return null;
     assert(Number.isSafeInteger(event.source_block) && event.source_block > 0);
     this.last = event.source_block;
     if (this.first === null) {
-      if (!this.ready || !this.mode || event.stages?.state?.status !== 'ran' || this.transitions.get(this.last) !== 1) return null;
+      if (!this.ready || !this.mode || event.stages?.state?.status !== 'ran' ||
+          this.transitions.get(this.last) !== 1) return null;
+      if (this.scopedResume && (this.caughtUp === null || this.last <= this.caughtUp ||
+          this.scopedPrice?.sourceBlock !== this.last ||
+          this.scopedPrice.sourceBlockHash !== event.exact_source_block_hash)) return null;
       // Authorization starts on the NEXT height: this observation is after the current pipeline pass.
       this.first = this.last + 1;
       this.permit.firstTargetBlock = this.first + 1;
@@ -306,11 +341,20 @@ function verifyRelease(profile, checkDisk = true) {
   for (const [path, expected] of release.files) {
     assert(!isAbsolute(path) && !path.split('/').includes('..'));
     const file = join(profile.release, path);
-    const bytes = lstatSync(file).isSymbolicLink() ? Buffer.from(readlinkSync(file)) : readFileSync(file);
-    assert.equal(sha(bytes), expected, 'release file changed: ' + path);
+    const digest = lstatSync(file).isSymbolicLink() ? sha(Buffer.from(readlinkSync(file))) : shaFile(file);
+    assert.equal(digest, expected, 'release file changed: ' + path);
   }
   assert.equal(shaFile(profile.ready), release.readySha256, 'Ready reference changed');
   assert.equal(json(join(profile.release, 'checks.json')).passed, true, 'release checks incomplete');
+  if (release.config.SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET === '1') {
+    const resume = release.scopedResume;
+    assert(resume && Array.isArray(resume.families) && resume.families.length > 0);
+    assert(Number.isSafeInteger(resume.edges) && resume.edges > 0);
+    assert(Number.isSafeInteger(resume.sourceBlock) && resume.sourceBlock > 0);
+    assert(/^0x[0-9a-f]{64}$/.test(resume.sourceBlockHash));
+    assert(release.files.some(([name]) => name === 'resume/current.bin'));
+  } else assert(!release.scopedResume);
+
   if (checkDisk) assertStartDisk(profile.runs);
   return release;
 }
@@ -322,7 +366,7 @@ function assertNoSearcher() {
     assert(!/(?:src|dist)\/searcher\/(?:main|index)\.(?:ts|js)/.test(cmd), 'another searcher is running');
   }
 }
-async function inspector(profile) {
+async function inspector(profile, scopedResume) {
   privateRegular(profile.rpcFile);
   const endpoint = json(profile.rpcFile).MAINNET_RPC_URL;
   assert(typeof endpoint === 'string' && endpoint.length > 0);
@@ -332,6 +376,10 @@ async function inspector(profile) {
   try {
     assert.equal(BigInt(await provider.send('eth_chainId', [])), 1n);
     const head = await provider.getBlock('latest'); assert(head?.hash);
+    if (scopedResume) {
+      const anchor = await provider.getBlock(scopedResume.sourceBlock);
+      assert.equal(anchor?.hash, scopedResume.sourceBlockHash, 'price checkpoint reorged');
+    }
     const pin = { blockHash: head.hash, requireCanonical: true };
     const [code, owner, balance] = await Promise.all([
       provider.send('eth_getCode', [profile.executor, pin]),
@@ -359,8 +407,10 @@ async function receiveKey() {
 async function start(options, profile, release) {
   assert.equal(process.getuid(), 0, 'root required');
   assert.equal(profile.runs, MANUAL_RUNS, 'cleanup is limited to the manual-live runs directory');
+  if (release.scopedResume) makeRunConfig(release.config, profile, join(profile.runs, 'preflight'),
+    options.resumePrices, options.profitMode, options.catchupSource);
   assertNoSearcher(); assert(!existsSync(MARKER), 'existing live marker: review active owner first');
-  const check = await inspector(profile);
+  const check = await inspector(profile, release.scopedResume);
   try {
     const key = await receiveKey();
     assert.equal(new check.ethers.Wallet(key).address.toLowerCase(), profile.wallet.toLowerCase(), 'signer mismatch');
@@ -384,6 +434,18 @@ async function start(options, profile, release) {
     try {
       copyFileSync(profile.ready, join(run, 'checkpoint.json'), constants.COPYFILE_EXCL);
       assert.equal(shaFile(join(run, 'checkpoint.json')), release.readySha256);
+      if (release.scopedResume) {
+        const directory = join(run, 'price-continuation');
+        mkdirSync(directory, { mode: 0o700 });
+        for (const [name, digest] of release.files) {
+          if (!name.startsWith('resume/')) continue;
+          const file = name.slice('resume/'.length);
+          assert(/^[a-zA-Z0-9.-]+$/.test(file));
+          const target = join(directory, file);
+          copyFileSync(join(profile.release, name), target, constants.COPYFILE_EXCL);
+          assert.equal(shaFile(target), digest, 'copied journal changed');
+        }
+      }
       exclusiveJson(join(run, 'request.json'), { schemaVersion: 1, runId, profilePath: options.profile,
         profileSha256: sha(readFileSync(options.profile)), releaseSha256: profile.releaseSha256,
         blocks: options.blocks, resumePrices: options.resumePrices ?? null, profitMode: options.profitMode ?? 'positive-ev',
@@ -464,11 +526,15 @@ async function supervise(options, profile, release) {
     assert.equal(shaFile(config.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH), release.readySha256);
     privateRegular(profile.rpcFile);
     fd = openSync(join(run, 'live.log'), 'wx', 0o600);
-    const runReady = await prepareRunReady({profile,release,config,run,
-      onChild: value => { child = value; }, log: text => writeFileSync(fd,text)});
+    // The scoped receiver verifies the original Ready's exact Family proofs and
+    // graph before restoring. Re-activating it here changes the sealed identity.
+    const runReady = release.scopedResume
+      ? { generation: release.readyGeneration, readySha256: release.readySha256 }
+      : await prepareRunReady({profile,release,config,run,
+        onChild: value => { child = value; }, log: text => writeFileSync(fd,text)});
     record('ready-activation', runReady);
     assert(!stopping, 'stopped during Ready activation');
-    check = await inspector(profile);
+    check = await inspector(profile, release.scopedResume);
     const credentialDirectory = process.env.CREDENTIALS_DIRECTORY;
     assert.equal(credentialDirectory, '/run/credentials/' + UNIT);
     const credential = join(credentialDirectory, request.credentialName);
@@ -479,7 +545,7 @@ async function supervise(options, profile, release) {
     assert(!stopping, 'stopped during preflight');
     const now = Date.now();
     window = new RunWindow({ runId: request.runId, profile, blocks: request.blocks, balance: check.balance, now,
-      profitMode: config.SEARCHER_BLOCKSCAN_PROFIT_MODE });
+      profitMode: config.SEARCHER_BLOCKSCAN_PROFIT_MODE, scopedResume: release.scopedResume });
     exclusiveJson(permitPath, window.permit);
     armPermitExpiry();
     markerContent = JSON.stringify({ runId: request.runId, permitPath });
@@ -607,8 +673,10 @@ export async function main(args) {
   assertNoSearcher(); assert(!existsSync(MARKER), 'existing live marker');
   if (options.mode === 'broadcast') return start(options, profile, release);
   assert.equal(profile.runs, MANUAL_RUNS);
+  if (release.scopedResume) makeRunConfig(release.config, profile, join(profile.runs, 'preflight'),
+    options.resumePrices, options.profitMode, options.catchupSource);
   const cleanup = cleanupOldRunLogs(profile.runs);
-  const check = await inspector(profile);
+  const check = await inspector(profile, release.scopedResume);
   try { console.log(JSON.stringify({ checkOnly: true, signing: false, broadcast: false, head: check.head,
     blocks: options.blocks, walletBalanceWei: check.balance.toString(), release: profile.release,
     profitMode: options.profitMode ?? 'positive-ev',

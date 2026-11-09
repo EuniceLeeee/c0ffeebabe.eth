@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { chmodSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ethers } from "ethers";
-import { captureBoundedLiveSession } from "../../shared/bounded-live-session.js";
+import { assertPendingBoundedLiveSession, captureBoundedLiveSession } from "../../shared/bounded-live-session.js";
 import { createBundleRouter } from "../execution/bundle-router.js";
 import { buildSignedBackrunTx, submitBundle, submitMevShareBundle, submitStandaloneBundle } from "../../submitter.js";
 
@@ -119,6 +119,24 @@ async function main(): Promise<void> {
     assert.equal(signs, 1);
     assert.equal(sends, 0);
     checks++;
+
+    // A matching pending session may restore Ready but still cannot sign.
+    reset();
+    const marker = join(dir, "deploy-live");
+    writeFileSync(marker, JSON.stringify({ runId: permit.runId, permitPath: path }), { mode: 0o600 });
+    const startup = () => assertPendingBoundedLiveSession({
+      wallet: WALLET, executor: EXECUTOR, profitMode: "positive-gross-profit",
+    }, marker);
+    assert.throws(startup, /bounded-live:inactive/);
+    write({ status: "pending", firstTargetBlock: 1, lastTargetBlock: 250,
+      profitMode: "positive-gross-profit" });
+    startup();
+    assert.throws(capture, /bounded-live:inactive/);
+    write({ status: "pending", firstTargetBlock: 1, lastTargetBlock: 250,
+      profitMode: "positive-gross-profit", validUntilMs: NOW });
+    assert.throws(startup, /bounded-live:expired/);
+    writeFileSync(marker, JSON.stringify({ runId: "different", permitPath: path }));
+    assert.throws(startup, /bounded-live:startup-marker-mismatch/);
 
     // Real production router → signer → relay plumbing, with mock I/O only.
     // A positive simulation now bids 99% of gross even when net EV is negative.

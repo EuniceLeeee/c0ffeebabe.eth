@@ -33,10 +33,11 @@ export function createRevmStrictSimulationTransport(input: {
   readonly executionGasLimit: number;
   /** Trusted executor bytecode, never supplied by a Family request. */
   readonly executorRuntimeCode?: ExecutorRuntimeCode;
+  readonly preserveExecutorCode?: boolean;
   readonly leaseFor: (source: CanonicalSource) => Promise<RevmStrictSourceLease>;
   readonly onFatal: (reason: RevmFatalReason) => void;
 }): StrictSimulationTransport {
-  record(input, ["rpcUrl", "executionGasLimit", "executorRuntimeCode", "leaseFor", "onFatal"]);
+  record(input, ["rpcUrl", "executionGasLimit", "executorRuntimeCode", "preserveExecutorCode", "leaseFor", "onFatal"]);
   const { rpcUrl, executionGasLimit, leaseFor, onFatal } = input;
   const executorRuntimeCode = input.executorRuntimeCode === undefined ? undefined : codeSnapshot(input.executorRuntimeCode);
   try {
@@ -123,8 +124,8 @@ export function createRevmStrictSimulationTransport(input: {
   // Only immutable initialization is reused. Each node simulation starts from
   // the pinned source, never from a previous leg's modified state.
   let fundingSource = "";
-  let header: Promise<Awaited<ReturnType<typeof readBlockScanObservedHeader>>> | undefined;
-  const funding = new Map<string, Promise<InputFundingOverrides>>();
+  let header: Awaited<ReturnType<typeof readBlockScanObservedHeader>> | undefined;
+  const funding = new Map<string, InputFundingOverrides>();
   return Object.freeze({
     ...(executorRuntimeCode === undefined ? {} : { executorProgramCodeHash: executorRuntimeCode.keccak256 }),
     async simulateStandalone(invocation: Parameters<NonNullable<StrictSimulationTransport["simulateStandalone"]>>[0]) {
@@ -142,26 +143,26 @@ export function createRevmStrictSimulationTransport(input: {
       const sourceKey = JSON.stringify([source, pin]);
       if (fundingSource !== sourceKey) { fundingSource = sourceKey; funding.clear(); header = undefined; }
       open(control);
-      header ??= readBlockScanObservedHeader(rpcUrl, BigInt(pin.chainId), source.number, control);
+      const observed = header ?? await readBlockScanObservedHeader(rpcUrl, BigInt(pin.chainId), source.number, control);
+      open(control); header = observed;
       const key = JSON.stringify([authority.executor, authority.transactionOrigin, inputToken, inputAmount]);
       const reusedInputFunding = funding.has(key);
       let prepared = funding.get(key);
       if (!prepared) {
-        prepared = execute({ source, control, callerAuthority: authority,
+        prepared = await execute({ source, control, callerAuthority: authority,
           prefix: { executor, calldata: buildSubscriptCalldata(getBytes(scriptHex)),
             inputToken, inputAmount: BigInt(inputAmount) },
           request: { id: "standalone-input", kind: "eth-call", to: executor, data: "0x",
             caller: { kind: "executor" }, completion: "return-data" } }, true, true)
-          .then(result => { if (!result.funding) invalid(); return result.funding; });
-        funding.set(key, prepared);
-        void prepared.catch(() => { if (funding.get(key) === prepared) funding.delete(key); });
+          .then(result => { if (!result.funding) invalid(); return result.funding!; });
+        funding.set(key, prepared!);
         if (funding.size > 256) funding.delete(funding.keys().next().value!);
       }
-      const [stateOverrides, observed] = await Promise.all([prepared, header]);
+      const stateOverrides = prepared!;
       if (observed.hash.toLowerCase() !== source.hash) fatal({ kind: "source-fault" });
       open(control);
       const inputPreparationMs = performance.now() - started;
-      const simulator = new EthSimulateV1Simulator(rpcUrl, executor, authority.transactionOrigin, executorRuntimeCode);
+      const simulator = new EthSimulateV1Simulator(rpcUrl, executor, authority.transactionOrigin, input.preserveExecutorCode ? undefined : executorRuntimeCode);
       const simStarted = performance.now();
       const result = await simulator.simulateStandalone({ source, header: observed, scriptHex, inputToken,
         inputAmount: BigInt(inputAmount), funding: stateOverrides }, { signal: control.signal, deadlineAtMs: control.deadlineAtMs });
