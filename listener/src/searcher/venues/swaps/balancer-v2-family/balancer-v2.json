@@ -2963,7 +2963,10 @@
       "zero": "0x0000000000000000000000000000000000000000",
       "maxInput": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
       "maxUint": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
-      "swapTopic": "0x2170c741c41531aec20e7c107c24eecfdd15e69c9bb0a8dd37b1840b9e0b207b"
+      "swapTopic": "0x2170c741c41531aec20e7c107c24eecfdd15e69c9bb0a8dd37b1840b9e0b207b",
+      "poolBalanceChangedTopic": "0xe5ce249087ce04f05a957192435400fd97868dba0e6a4b4c049abf8af80dae78",
+      "poolBalanceManagedTopic": "0x6edcaf6241105b4c94c2efdbf3a6b12458eb3d07be3a0e81d24b13c44045fe7a",
+      "tokensRegisteredTopic": "0xf5847d3f2197b16cdcd2098ec95d0905cd1abdaf415f07bb7cef2bba8ac5dec4"
     },
     "expressions": {},
     "match": true,
@@ -2975,7 +2978,7 @@
       "decimals": "$descriptor.binding.decimals"
     },
     "pricing": {
-      "refreshPolicy": "each-block",
+      "refreshPolicy": "on-touch",
       "requirements": {
         "transports": [
           "eth-call"
@@ -3006,8 +3009,219 @@
             ]
           },
           {
-            "op": "and",
+            "op": "or",
             "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      {
+                        "op": "lower",
+                        "args": [
+                          "$observation.address"
+                        ]
+                      },
+                      {
+                        "op": "lower",
+                        "args": [
+                          "$constants.vault"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "or",
+                    "args": [
+                      {
+                        "op": "and",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "$constants.swapTopic"
+                            ]
+                          },
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "lower",
+                                "args": [
+                                  "$descriptor.poolId"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "and",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "$constants.poolBalanceChangedTopic"
+                            ]
+                          },
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "lower",
+                                "args": [
+                                  "$descriptor.poolId"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "and",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "$constants.poolBalanceManagedTopic"
+                            ]
+                          },
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "lower",
+                                "args": [
+                                  "$descriptor.poolId"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "and",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "$constants.tokensRegisteredTopic"
+                            ]
+                          },
+                          {
+                            "op": "eq",
+                            "args": [
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "at",
+                                    "args": [
+                                      "$observation.topics",
+                                      1
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "lower",
+                                "args": [
+                                  "$descriptor.poolId"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
               {
                 "op": "eq",
                 "args": [
@@ -3020,48 +3234,7 @@
                   {
                     "op": "lower",
                     "args": [
-                      "$constants.vault"
-                    ]
-                  }
-                ]
-              },
-              {
-                "op": "eq",
-                "args": [
-                  {
-                    "op": "lower",
-                    "args": [
-                      {
-                        "op": "at",
-                        "args": [
-                          "$observation.topics",
-                          0
-                        ]
-                      }
-                    ]
-                  },
-                  "$constants.swapTopic"
-                ]
-              },
-              {
-                "op": "eq",
-                "args": [
-                  {
-                    "op": "lower",
-                    "args": [
-                      {
-                        "op": "at",
-                        "args": [
-                          "$observation.topics",
-                          1
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "op": "lower",
-                    "args": [
-                      "$descriptor.poolId"
+                      "$descriptor.pool"
                     ]
                   }
                 ]
@@ -3069,23 +3242,13 @@
             ]
           },
           {
-            "op": "or",
+            "op": "and",
             "args": [
               {
                 "op": "eq",
                 "args": [
-                  {
-                    "op": "lower",
-                    "args": [
-                      "$observation.target"
-                    ]
-                  },
-                  {
-                    "op": "lower",
-                    "args": [
-                      "$constants.vault"
-                    ]
-                  }
+                  "$observation.kind",
+                  "call"
                 ]
               },
               {
@@ -3836,119 +3999,48 @@
               }
             },
             {
-              "let": "exponents",
+              "let": "sample",
               "value": {
-                "op": "filter",
+                "op": "if",
                 "args": [
-                  [
-                    0,
-                    3,
-                    6,
-                    9,
-                    12,
-                    15,
-                    18,
-                    21,
-                    24,
-                    27,
-                    30,
-                    33,
-                    36,
-                    39,
-                    42
-                  ],
-                  "e",
+                  {
+                    "op": "lt",
+                    "args": [
+                      "$liquidity",
+                      "$unit"
+                    ]
+                  },
+                  "$liquidity",
+                  "$unit"
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$sample",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
                   {
                     "op": "lte",
                     "args": [
-                      "$e",
-                      {
-                        "op": "add",
-                        "args": [
-                          {
-                            "op": "get",
-                            "args": [
-                              "$descriptor.binding.decimals",
-                              {
-                                "op": "get",
-                                "args": [
-                                  "$route",
-                                  "i"
-                                ]
-                              }
-                            ]
-                          },
-                          6
-                        ]
-                      }
+                      "$sample",
+                      "$constants.maxInput"
                     ]
                   }
                 ]
-              }
-            },
-            {
-              "let": "powers",
-              "value": {
-                "op": "map",
-                "args": [
-                  "$exponents",
-                  "e",
-                  {
-                    "op": "pow",
-                    "args": [
-                      10,
-                      "$e"
-                    ]
-                  }
-                ]
-              }
-            },
-            {
-              "let": "amounts",
-              "value": {
-                "op": "unique",
-                "args": [
-                  {
-                    "op": "filter",
-                    "args": [
-                      {
-                        "op": "concat",
-                        "args": [
-                          [
-                            "$first"
-                          ],
-                          "$powers"
-                        ]
-                      },
-                      "a",
-                      {
-                        "op": "and",
-                        "args": [
-                          {
-                            "op": "gt",
-                            "args": [
-                              "$a",
-                              {
-                                "op": "uint",
-                                "args": [
-                                  "0"
-                                ]
-                              }
-                            ]
-                          },
-                          {
-                            "op": "lte",
-                            "args": [
-                              "$a",
-                              "$constants.maxInput"
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
+              },
+              "error": "balancer-v2 invalid sample amount"
             },
             {
               "return": {
@@ -3970,7 +4062,7 @@
                 },
                 "balanceIn": "$balanceIn",
                 "balanceOut": "$balanceOut",
-                "amounts": "$amounts"
+                "sample": "$sample"
               }
             }
           ]
@@ -3982,76 +4074,67 @@
               "eth-call"
             ]
           },
-          "requests": {
-            "op": "map",
-            "args": [
-              "$steps.state.amounts",
-              "amount",
-              {
-                "id": {
-                  "op": "join",
-                  "args": [
+          "requests": [
+            {
+              "id": "current-quote:0",
+              "kind": "eth-call",
+              "to": "$constants.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "vault",
+                  "queryBatchSwap",
+                  [
+                    0,
                     [
-                      "current-quote",
-                      "$index"
-                    ],
-                    ":"
-                  ]
-                },
-                "kind": "eth-call",
-                "to": "$constants.vault",
-                "data": {
-                  "op": "encode",
-                  "args": [
-                    "vault",
-                    "queryBatchSwap",
-                    [
-                      0,
-                      [
-                        [
-                          {
-                            "op": "get",
-                            "args": [
-                              "$steps.state",
-                              "poolId"
-                            ]
-                          },
-                          0,
-                          1,
-                          "$amount",
-                          "0x"
-                        ]
-                      ],
                       [
                         {
                           "op": "get",
                           "args": [
                             "$steps.state",
-                            "tokenIn"
+                            "poolId"
                           ]
                         },
+                        0,
+                        1,
                         {
                           "op": "get",
                           "args": [
                             "$steps.state",
-                            "tokenOut"
+                            "sample"
                           ]
-                        }
-                      ],
-                      [
-                        "$constants.zero",
-                        false,
-                        "$constants.zero",
-                        false
+                        },
+                        "0x"
                       ]
+                    ],
+                    [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$steps.state",
+                          "tokenIn"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          "$steps.state",
+                          "tokenOut"
+                        ]
+                      }
+                    ],
+                    [
+                      "$constants.zero",
+                      false,
+                      "$constants.zero",
+                      false
                     ]
                   ]
-                },
-                "completion": "return-data",
-                "required": false
-              }
-            ]
-          },
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
           "decode": [
             {
               "assert": {
@@ -4063,12 +4146,7 @@
                       "$results"
                     ]
                   },
-                  {
-                    "op": "length",
-                    "args": [
-                      "$requests"
-                    ]
-                  }
+                  1
                 ]
               },
               "error": "balancer-v2 missing/extra results"
@@ -4078,77 +4156,19 @@
                 "op": "eq",
                 "args": [
                   {
-                    "op": "length",
+                    "op": "get",
                     "args": [
                       {
-                        "op": "unique",
+                        "op": "at",
                         "args": [
-                          {
-                            "op": "map",
-                            "args": [
-                              "$results",
-                              "r",
-                              "$r.id"
-                            ]
-                          }
+                          "$results",
+                          0
                         ]
-                      }
+                      },
+                      "id"
                     ]
                   },
-                  {
-                    "op": "length",
-                    "args": [
-                      "$results"
-                    ]
-                  }
-                ]
-              },
-              "error": "balancer-v2 duplicate results"
-            },
-            {
-              "assert": {
-                "op": "eq",
-                "args": [
-                  {
-                    "op": "hash",
-                    "args": [
-                      {
-                        "op": "sortId",
-                        "args": [
-                          {
-                            "op": "map",
-                            "args": [
-                              "$results",
-                              "r",
-                              {
-                                "id": "$r.id"
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "op": "hash",
-                    "args": [
-                      {
-                        "op": "sortId",
-                        "args": [
-                          {
-                            "op": "map",
-                            "args": [
-                              "$requests",
-                              "r",
-                              {
-                                "id": "$r.id"
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  }
+                  "current-quote:0"
                 ]
               },
               "error": "balancer-v2 unexpected results"
@@ -4163,597 +4183,170 @@
               }
             },
             {
-              "let": "rows",
+              "let": "data",
               "value": {
-                "op": "map",
+                "op": "get",
                 "args": [
-                  "$steps.state.amounts",
-                  "amount",
                   {
-                    "amountIn": "$amount",
-                    "id": {
-                      "op": "join",
-                      "args": [
-                        [
-                          "current-quote",
-                          "$index"
-                        ],
-                        ":"
-                      ]
-                    },
-                    "valid": {
-                      "op": "if",
-                      "args": [
-                        {
-                          "op": "get",
-                          "args": [
-                            {
-                              "op": "result",
-                              "args": [
-                                {
-                                  "op": "join",
-                                  "args": [
-                                    [
-                                      "current-quote",
-                                      "$index"
-                                    ],
-                                    ":"
-                                  ]
-                                }
-                              ]
-                            },
-                            "ok"
-                          ]
-                        },
-                        {
-                          "op": "or",
-                          "args": [
-                            {
-                              "op": "eq",
-                              "args": [
-                                {
-                                  "op": "if",
-                                  "args": [
-                                    {
-                                      "op": "get",
-                                      "args": [
-                                        {
-                                          "op": "result",
-                                          "args": [
-                                            {
-                                              "op": "join",
-                                              "args": [
-                                                [
-                                                  "current-quote",
-                                                  "$index"
-                                                ],
-                                                ":"
-                                              ]
-                                            }
-                                          ]
-                                        },
-                                        "ok"
-                                      ]
-                                    },
-                                    {
-                                      "op": "word",
-                                      "args": [
-                                        {
-                                          "op": "at",
-                                          "args": [
-                                            {
-                                              "op": "decodeCanonical",
-                                              "args": [
-                                                "vault",
-                                                "queryBatchSwap",
-                                                {
-                                                  "op": "get",
-                                                  "args": [
-                                                    {
-                                                      "op": "result",
-                                                      "args": [
-                                                        {
-                                                          "op": "join",
-                                                          "args": [
-                                                            [
-                                                              "current-quote",
-                                                              "$index"
-                                                            ],
-                                                            ":"
-                                                          ]
-                                                        }
-                                                      ]
-                                                    },
-                                                    "data"
-                                                  ]
-                                                },
-                                                0
-                                              ]
-                                            },
-                                            1
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "op": "uint",
-                                      "args": [
-                                        "0"
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "op": "uint",
-                                  "args": [
-                                    "0"
-                                  ]
-                                }
-                              ]
-                            },
-                            {
-                              "op": "and",
-                              "args": [
-                                {
-                                  "op": "gte",
-                                  "args": [
-                                    {
-                                      "op": "if",
-                                      "args": [
-                                        {
-                                          "op": "get",
-                                          "args": [
-                                            {
-                                              "op": "result",
-                                              "args": [
-                                                {
-                                                  "op": "join",
-                                                  "args": [
-                                                    [
-                                                      "current-quote",
-                                                      "$index"
-                                                    ],
-                                                    ":"
-                                                  ]
-                                                }
-                                              ]
-                                            },
-                                            "ok"
-                                          ]
-                                        },
-                                        {
-                                          "op": "word",
-                                          "args": [
-                                            {
-                                              "op": "at",
-                                              "args": [
-                                                {
-                                                  "op": "decodeCanonical",
-                                                  "args": [
-                                                    "vault",
-                                                    "queryBatchSwap",
-                                                    {
-                                                      "op": "get",
-                                                      "args": [
-                                                        {
-                                                          "op": "result",
-                                                          "args": [
-                                                            {
-                                                              "op": "join",
-                                                              "args": [
-                                                                [
-                                                                  "current-quote",
-                                                                  "$index"
-                                                                ],
-                                                                ":"
-                                                              ]
-                                                            }
-                                                          ]
-                                                        },
-                                                        "data"
-                                                      ]
-                                                    },
-                                                    0
-                                                  ]
-                                                },
-                                                1
-                                              ]
-                                            }
-                                          ]
-                                        },
-                                        {
-                                          "op": "uint",
-                                          "args": [
-                                            "0"
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "op": "add",
-                                      "args": [
-                                        {
-                                          "op": "pow",
-                                          "args": [
-                                            2,
-                                            255
-                                          ]
-                                        },
-                                        {
-                                          "op": "uint",
-                                          "args": [
-                                            "1"
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "op": "lte",
-                                  "args": [
-                                    {
-                                      "op": "if",
-                                      "args": [
-                                        {
-                                          "op": "get",
-                                          "args": [
-                                            {
-                                              "op": "result",
-                                              "args": [
-                                                {
-                                                  "op": "join",
-                                                  "args": [
-                                                    [
-                                                      "current-quote",
-                                                      "$index"
-                                                    ],
-                                                    ":"
-                                                  ]
-                                                }
-                                              ]
-                                            },
-                                            "ok"
-                                          ]
-                                        },
-                                        {
-                                          "op": "word",
-                                          "args": [
-                                            {
-                                              "op": "at",
-                                              "args": [
-                                                {
-                                                  "op": "decodeCanonical",
-                                                  "args": [
-                                                    "vault",
-                                                    "queryBatchSwap",
-                                                    {
-                                                      "op": "get",
-                                                      "args": [
-                                                        {
-                                                          "op": "result",
-                                                          "args": [
-                                                            {
-                                                              "op": "join",
-                                                              "args": [
-                                                                [
-                                                                  "current-quote",
-                                                                  "$index"
-                                                                ],
-                                                                ":"
-                                                              ]
-                                                            }
-                                                          ]
-                                                        },
-                                                        "data"
-                                                      ]
-                                                    },
-                                                    0
-                                                  ]
-                                                },
-                                                1
-                                              ]
-                                            }
-                                          ]
-                                        },
-                                        {
-                                          "op": "uint",
-                                          "args": [
-                                            "0"
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "op": "sub",
-                                      "args": [
-                                        {
-                                          "op": "pow",
-                                          "args": [
-                                            2,
-                                            256
-                                          ]
-                                        },
-                                        {
-                                          "op": "uint",
-                                          "args": [
-                                            "1"
-                                          ]
-                                        }
-                                      ]
-                                    }
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        true
-                      ]
-                    },
-                    "amountOut": {
-                      "op": "if",
-                      "args": [
-                        {
-                          "op": "and",
-                          "args": [
-                            {
-                              "op": "get",
-                              "args": [
-                                {
-                                  "op": "result",
-                                  "args": [
-                                    {
-                                      "op": "join",
-                                      "args": [
-                                        [
-                                          "current-quote",
-                                          "$index"
-                                        ],
-                                        ":"
-                                      ]
-                                    }
-                                  ]
-                                },
-                                "ok"
-                              ]
-                            },
-                            {
-                              "op": "gte",
-                              "args": [
-                                {
-                                  "op": "if",
-                                  "args": [
-                                    {
-                                      "op": "get",
-                                      "args": [
-                                        {
-                                          "op": "result",
-                                          "args": [
-                                            {
-                                              "op": "join",
-                                              "args": [
-                                                [
-                                                  "current-quote",
-                                                  "$index"
-                                                ],
-                                                ":"
-                                              ]
-                                            }
-                                          ]
-                                        },
-                                        "ok"
-                                      ]
-                                    },
-                                    {
-                                      "op": "word",
-                                      "args": [
-                                        {
-                                          "op": "at",
-                                          "args": [
-                                            {
-                                              "op": "decodeCanonical",
-                                              "args": [
-                                                "vault",
-                                                "queryBatchSwap",
-                                                {
-                                                  "op": "get",
-                                                  "args": [
-                                                    {
-                                                      "op": "result",
-                                                      "args": [
-                                                        {
-                                                          "op": "join",
-                                                          "args": [
-                                                            [
-                                                              "current-quote",
-                                                              "$index"
-                                                            ],
-                                                            ":"
-                                                          ]
-                                                        }
-                                                      ]
-                                                    },
-                                                    "data"
-                                                  ]
-                                                },
-                                                0
-                                              ]
-                                            },
-                                            1
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    {
-                                      "op": "uint",
-                                      "args": [
-                                        "0"
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "op": "pow",
-                                  "args": [
-                                    2,
-                                    255
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "op": "sub",
-                          "args": [
-                            {
-                              "op": "pow",
-                              "args": [
-                                2,
-                                256
-                              ]
-                            },
-                            {
-                              "op": "if",
-                              "args": [
-                                {
-                                  "op": "get",
-                                  "args": [
-                                    {
-                                      "op": "result",
-                                      "args": [
-                                        {
-                                          "op": "join",
-                                          "args": [
-                                            [
-                                              "current-quote",
-                                              "$index"
-                                            ],
-                                            ":"
-                                          ]
-                                        }
-                                      ]
-                                    },
-                                    "ok"
-                                  ]
-                                },
-                                {
-                                  "op": "word",
-                                  "args": [
-                                    {
-                                      "op": "at",
-                                      "args": [
-                                        {
-                                          "op": "decodeCanonical",
-                                          "args": [
-                                            "vault",
-                                            "queryBatchSwap",
-                                            {
-                                              "op": "get",
-                                              "args": [
-                                                {
-                                                  "op": "result",
-                                                  "args": [
-                                                    {
-                                                      "op": "join",
-                                                      "args": [
-                                                        [
-                                                          "current-quote",
-                                                          "$index"
-                                                        ],
-                                                        ":"
-                                                      ]
-                                                    }
-                                                  ]
-                                                },
-                                                "data"
-                                              ]
-                                            },
-                                            0
-                                          ]
-                                        },
-                                        1
-                                      ]
-                                    }
-                                  ]
-                                },
-                                {
-                                  "op": "uint",
-                                  "args": [
-                                    "0"
-                                  ]
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "op": "uint",
-                          "args": [
-                            "0"
-                          ]
-                        }
-                      ]
-                    }
-                  }
+                    "op": "returned",
+                    "args": [
+                      "current-quote:0"
+                    ]
+                  },
+                  "data"
                 ]
               }
             },
             {
-              "assert": {
-                "op": "every",
-                "args": [
-                  "$rows",
-                  "r",
-                  "$r.valid"
-                ]
-              },
-              "error": "balancer-v2 invalid quote deltas"
-            },
-            {
-              "let": "first",
+              "let": "deltas",
               "value": {
-                "op": "at",
+                "op": "decodeCanonical",
                 "args": [
-                  {
-                    "op": "filter",
-                    "args": [
-                      "$rows",
-                      "r",
-                      {
-                        "op": "gt",
-                        "args": [
-                          "$r.amountOut",
-                          {
-                            "op": "uint",
-                            "args": [
-                              "0"
-                            ]
-                          }
-                        ]
-                      }
-                    ]
-                  },
+                  "vault",
+                  "queryBatchSwap",
+                  "$data",
                   0
                 ]
               }
             },
             {
               "assert": {
-                "op": "defined",
+                "op": "eq",
                 "args": [
-                  "$first"
+                  {
+                    "op": "length",
+                    "args": [
+                      "$deltas"
+                    ]
+                  },
+                  2
+                ]
+              },
+              "error": "balancer-v2 invalid quote deltas"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$deltas",
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "get",
+                    "args": [
+                      "$steps.state",
+                      "sample"
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 invalid quote deltas"
+            },
+            {
+              "let": "outputWord",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$deltas",
+                      1
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "ne",
+                "args": [
+                  "$outputWord",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
                 ]
               },
               "error": "balancer-v2 current quote unresolved"
             },
             {
               "assert": {
+                "op": "gte",
+                "args": [
+                  "$outputWord",
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      255
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 invalid quote deltas"
+            },
+            {
+              "let": "amountOut",
+              "value": {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      256
+                    ]
+                  },
+                  "$outputWord"
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gte",
+                    "args": [
+                      "$amountOut",
+                      1
+                    ]
+                  },
+                  {
+                    "op": "lte",
+                    "args": [
+                      "$amountOut",
+                      "$constants.maxInput"
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 invalid quote deltas"
+            },
+            {
+              "assert": {
                 "op": "lte",
                 "args": [
-                  "$first.amountOut",
-                  "$steps.state.balanceOut"
+                  "$amountOut",
+                  {
+                    "op": "get",
+                    "args": [
+                      "$steps.state",
+                      "balanceOut"
+                    ]
+                  }
                 ]
               },
               "error": "balancer-v2 output exceeds registered balance"
@@ -4761,13 +4354,49 @@
             {
               "return": {
                 "source": "$source",
-                "poolId": "$steps.state.poolId",
-                "tokenIn": "$steps.state.tokenIn",
-                "tokenOut": "$steps.state.tokenOut",
-                "balanceIn": "$steps.state.balanceIn",
-                "balanceOut": "$steps.state.balanceOut",
-                "amountIn": "$first.amountIn",
-                "amountOut": "$first.amountOut",
+                "poolId": {
+                  "op": "get",
+                  "args": [
+                    "$steps.state",
+                    "poolId"
+                  ]
+                },
+                "tokenIn": {
+                  "op": "get",
+                  "args": [
+                    "$steps.state",
+                    "tokenIn"
+                  ]
+                },
+                "tokenOut": {
+                  "op": "get",
+                  "args": [
+                    "$steps.state",
+                    "tokenOut"
+                  ]
+                },
+                "balanceIn": {
+                  "op": "get",
+                  "args": [
+                    "$steps.state",
+                    "balanceIn"
+                  ]
+                },
+                "balanceOut": {
+                  "op": "get",
+                  "args": [
+                    "$steps.state",
+                    "balanceOut"
+                  ]
+                },
+                "amountIn": {
+                  "op": "get",
+                  "args": [
+                    "$steps.state",
+                    "sample"
+                  ]
+                },
+                "amountOut": "$amountOut",
                 "quotes": {
                   "op": "objectFromEntries",
                   "args": [
@@ -4787,8 +4416,14 @@
                           ]
                         },
                         {
-                          "amountIn": "$first.amountIn",
-                          "amountOut": "$first.amountOut"
+                          "amountIn": {
+                            "op": "get",
+                            "args": [
+                              "$steps.state",
+                              "sample"
+                            ]
+                          },
+                          "amountOut": "$amountOut"
                         }
                       ]
                     ]
