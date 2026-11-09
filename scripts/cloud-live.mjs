@@ -55,6 +55,7 @@ export async function main(args) {
   // Only public deployment coordinates are read for check/status/stop.
   for (const key of ['configuration', 'instance', 'project', 'zone']) assert(/^[a-zA-Z0-9._-]+$/.test(config[key]));
   for (const key of ['node', 'launcher']) assert(/^\/[a-zA-Z0-9/_.-]+$/.test(config[key]));
+  if (config.profile !== undefined) assert(/^\/[a-zA-Z0-9/_.-]+$/.test(config.profile));
   let input;
   if (mode === 'broadcast') {
     failureStage = 'human confirmation';
@@ -78,7 +79,8 @@ export async function main(args) {
   const remote = ['sudo', '-n', config.node, config.launcher, '--' + mode, '--blocks', String(blocks),
     ...(resumePrices === undefined ? [] : ['--resume-prices', resumePrices]),
     ...(profitMode === undefined ? [] : ['--profit-mode', profitMode]),
-    ...(catchupSource === undefined ? [] : ['--catchup-source', catchupSource])].join(' ');
+    ...(catchupSource === undefined ? [] : ['--catchup-source', catchupSource]),
+    ...(config.profile === undefined ? [] : ['--profile', config.profile])].join(' ');
   const child = spawn('gcloud', ['--configuration=' + config.configuration, 'compute', 'ssh', config.instance,
     '--project=' + config.project, '--zone=' + config.zone, '--tunnel-through-iap', '--quiet', '--command=' + remote, '--', '-T'],
     { stdio: [input === undefined ? 'ignore' : 'pipe', 'inherit', 'inherit'] });

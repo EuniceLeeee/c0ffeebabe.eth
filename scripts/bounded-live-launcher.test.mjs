@@ -283,3 +283,37 @@ test('balance deadline cancels the socket instead of only abandoning the await',
     await new Promise(done => server.close(done));
   }
 });
+
+test('scoped resume uses a run-local price journal and keeps submission pending through catchup', () => {
+  const base = { ...baseConfig, SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET: '1',
+    SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT: '0.002' };
+  assert.throws(() => makeRunConfig(base, profile, '/runs/test', '0'), /explicit price resume/);
+  const config = makeRunConfig(base, profile, '/runs/test', '1', 'positive-gross-profit', 'rpc');
+  assert.equal(config.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR, '/runs/test/price-continuation');
+  assert.equal(config.SEARCHER_EV_GATE, '1');
+  assert.equal(config.SEARCHER_BLOCKSCAN_PROFIT_MODE, 'positive-gross-profit');
+
+  const scopedResume = { families: ['a', 'b'], edges: 3, sourceBlock: 95, sourceBlockHash: '0x' + 'a'.repeat(64) };
+  const window = new RunWindow({ runId: 'test', profile, blocks: 500, balance: baseline, now: 100000,
+    profitMode: 'positive-gross-profit', scopedResume });
+  assert.equal(activate(window, 99), null);
+  assert.equal(window.permit.status, 'pending');
+  const log = (tag, event) => window.observe(tag + ' ' + JSON.stringify(event), 6);
+  assert.throws(() => log('[searcher/live-ready-scope]', { parentGeneration: 6, liveGraphEdges: 3, liveFamilyIds: ['a'] }));
+  log('[searcher/live-ready-scope]', { parentGeneration: 6, liveGraphEdges: 3, liveFamilyIds: ['a', 'b'] });
+  assert.throws(() => log('[searcher/live-continuation]', { phase: 'restored', sourceBlock: 94,
+    sourceBlockHash: scopedResume.sourceBlockHash, trading: false }));
+  log('[searcher/live-continuation]', { phase: 'restored', sourceBlock: 95,
+    sourceBlockHash: scopedResume.sourceBlockHash, trading: false });
+  assert.throws(() => log('[searcher/live-continuation]', { phase: 'caught-up', sourceBlock: 98, head: 99 }));
+  log('[searcher/live-continuation]', { phase: 'caught-up', sourceBlock: 99, head: 99 });
+  log('[searcher/rpc-throttle-observation]', { action: 'recovered', limit: 100 });
+  log('[searcher/blockscan-activity-range]', { sourceBlock: 100, transitions: 1 });
+  const tick = { type: 'block_scan_timing', source_block: 100, exact_source_block_hash: '0x' + 'b'.repeat(64),
+    stages: { state: { status: 'ran' } } };
+  assert.equal(log('[searcher/blockscan-family]', tick), null);
+  log('[searcher/effective-mid]', { sourceBlock: 100, sourceBlockHash: tick.exact_source_block_hash, complete: true, quoted: 3 });
+  const result = log('[searcher/blockscan-family]', tick);
+  assert.deepEqual(result, { activated: true, from: 101, to: 600, count: 500 });
+  assert.equal(window.permit.status, 'active');
+});

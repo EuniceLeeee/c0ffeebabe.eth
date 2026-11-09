@@ -249,6 +249,7 @@ import {
 } from "./live-state-backend.js";
 import type { LiveStateBackend, QuoteHop, QuoteRequest } from "./live-state-backend.js";
 import { DEFAULT_BRIBE_BPS, validateLiveEnvelope } from "./live-envelope.js";
+import { assertPendingBoundedLiveSession } from "../shared/bounded-live-session.js";
 import { RevmFatalError, RevmSimClient, type RevmFatalReason } from "./revm-sim-client.js";
 import { RpcAnvilLiveBackend } from "./live-backends/rpc-anvil-live-backend.js";
 import { RevmLiveBackend } from "./live-backends/revm-live-backend.js";
@@ -1501,6 +1502,7 @@ export function createBlockScanPriceRuntime(input: {
 export async function initializeReadyProducer({
   universeRebuildCheckpointPath, rpcUrl, startupCandidates, executionIdentity,
   onSimulationFatal, blindUseIncumbentReady, useReadyGeneration, currentHead,
+  boundedLiveReadyResume = false,
 }: {
   readonly universeRebuildCheckpointPath: string;
   readonly rpcUrl: string;
@@ -1510,12 +1512,17 @@ export async function initializeReadyProducer({
   readonly blindUseIncumbentReady: boolean;
   readonly useReadyGeneration: boolean;
   readonly currentHead: number;
+  readonly boundedLiveReadyResume?: boolean;
 }) {
-  const liveSubset = liveReadySubsetPriceMode(process.env) !== undefined;
+  const subsetPriceMode = liveReadySubsetPriceMode(process.env);
+  const liveSubset = subsetPriceMode !== undefined;
+  const drySubset = process.env.SEARCHER_DRY_RUN === "1" && process.env.SEARCHER_BLOCKSCAN_SUBMIT === "0";
+  const liveResume = boundedLiveReadyResume && subsetPriceMode === "resume" &&
+    process.env.SEARCHER_DRY_RUN === "0" && process.env.SEARCHER_BLOCKSCAN_SUBMIT === "1";
   if (liveSubset && (!useReadyGeneration || blindUseIncumbentReady ||
-      process.env.SEARCHER_DRY_RUN !== "1" || process.env.SEARCHER_BLOCKSCAN_SUBMIT !== "0" ||
+      (!drySubset && !liveResume) ||
       process.env.SEARCHER_ENABLE_BACKRUN !== "0" || process.env.SEARCHER_ENABLE_MEMPOOL !== "0")) {
-    throw new Error("live Ready subset requires a dry-run on a sealed Ready");
+    throw new Error("Ready subset requires a sealed dry-run or a bounded live resume");
   }
   const rebuildStore = new UniverseRebuildCheckpointStore({
     path: universeRebuildCheckpointPath,
@@ -1829,6 +1836,10 @@ async function main(): Promise<void> {
   const rpcUrl = liveRpcUrl();
 
   const subsetPriceMode = liveReadySubsetPriceMode(process.env);
+  if (subsetPriceMode && process.env.SEARCHER_DRY_RUN !== "1" &&
+      (subsetPriceMode !== "resume" || process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR)) {
+    throw new Error("bounded live Ready subset requires a direct journal");
+  }
   const validatedParent = await liveSubsetParentProof();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
@@ -1909,6 +1920,14 @@ async function main(): Promise<void> {
       },
     },
   );
+  const boundedLiveReadyResume = subsetPriceMode === "resume" && !config.dryRun;
+  if (boundedLiveReadyResume) {
+    assertPendingBoundedLiveSession({
+      wallet: executionIdentity.transactionOrigin,
+      executor: executionIdentity.executor,
+      profitMode: config.blockScanProfitMode,
+    });
+  }
   const anvilPort = Number(process.env.SEARCHER_ANVIL_PORT ?? "8555");
   const state = new AnvilStateBackend(
     config.rpcUrl,
@@ -2474,7 +2493,7 @@ async function main(): Promise<void> {
   } = await initializeReadyProducer({
     universeRebuildCheckpointPath, rpcUrl: config.rpcUrl, startupCandidates,
     executionIdentity, onSimulationFatal, blindUseIncumbentReady,
-    useReadyGeneration, currentHead: discoveryToBlock,
+    useReadyGeneration, currentHead: discoveryToBlock, boundedLiveReadyResume,
   });
   // Transition-only pool views remain useful for detector metadata, but no
   // longer grant identity or Graph admission. readyGeneration is the sole
