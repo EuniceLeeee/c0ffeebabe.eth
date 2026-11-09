@@ -1,0 +1,5119 @@
+{
+ "version": 2,
+ "scope": {
+  "family": "curve-plain-lp"
+ },
+ "production": {
+  "domain": "swap",
+  "activation": {
+   "enabled": false,
+   "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_LP_ENABLED"
+  }
+ },
+ "manifest": {
+  "familyId": "curve-plain-lp",
+  "domain": "swap",
+  "ownedActionAdapterIds": [
+   "curve-plain-lp-cycle"
+  ],
+  "requiredInfraActionAdapterIds": [],
+  "allowedTaxonomy": [
+   {
+    "slotKind": "swap"
+   }
+  ],
+  "supportedLineages": [
+   "curve-plain-lp:ng-stableswap-2coin"
+  ],
+  "poolAdapterIds": [
+   "curve-plain-lp"
+  ],
+  "edgeAdapterIds": [
+   "curve-plain-lp-cycle"
+  ],
+  "requiresProtocolEdgesFlag": false
+ },
+ "discovery": {
+  "definition": {
+   "version": 2,
+   "sources": [
+    "landed-log",
+    "observed-call",
+    "address-surface"
+   ],
+   "candidateSources": [],
+   "candidate": {
+    "kind": "curve-plain-lp-pool",
+    "addressField": "pool",
+    "fields": {
+     "pool": "address"
+    },
+    "key": [
+     "pool"
+    ],
+    "instanceKey": [
+     "pool"
+    ]
+   },
+   "calls": [
+    {
+     "id": "curve-plain-lp-add-liquidity",
+     "signature": "function add_liquidity(uint256[],uint256) returns(uint256)",
+     "fields": {
+      "pool": {
+       "from": "target"
+      }
+     },
+     "predicates": [
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "length",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            0
+           ]
+          }
+         ]
+        },
+        2
+       ]
+      },
+      {
+       "op": "or",
+       "args": [
+        {
+         "op": "and",
+         "args": [
+          {
+           "op": "eq",
+           "args": [
+            {
+             "op": "at",
+             "args": [
+              {
+               "op": "at",
+               "args": [
+                "$args",
+                0
+               ]
+              },
+              0
+             ]
+            },
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "gt",
+           "args": [
+            {
+             "op": "at",
+             "args": [
+              {
+               "op": "at",
+               "args": [
+                "$args",
+                0
+               ]
+              },
+              1
+             ]
+            },
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "and",
+         "args": [
+          {
+           "op": "gt",
+           "args": [
+            {
+             "op": "at",
+             "args": [
+              {
+               "op": "at",
+               "args": [
+                "$args",
+                0
+               ]
+              },
+              0
+             ]
+            },
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "eq",
+           "args": [
+            {
+             "op": "at",
+             "args": [
+              {
+               "op": "at",
+               "args": [
+                "$args",
+                0
+               ]
+              },
+              1
+             ]
+            },
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "curve-plain-lp-remove-liquidity-one",
+     "signature": "function remove_liquidity_one_coin(uint256,int128,uint256) returns(uint256)",
+     "fields": {
+      "pool": {
+       "from": "target"
+      }
+     },
+     "predicates": [
+      {
+       "op": "gt",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          0
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          "0"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "gte",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          1
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          "0"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "lt",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          1
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          "2"
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "events": [
+    {
+     "id": "curve-plain-lp-add-liquidity-log",
+     "signature": "event AddLiquidity(address indexed provider,uint256[] token_amounts,uint256[] fees,uint256 invariant,uint256 token_supply)",
+     "fields": {
+      "pool": {
+       "from": "emitter"
+      }
+     },
+     "predicates": [
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "length",
+         "args": [
+          {
+           "op": "at",
+           "args": [
+            "$args",
+            1
+           ]
+          }
+         ]
+        },
+        2
+       ]
+      },
+      {
+       "op": "or",
+       "args": [
+        {
+         "op": "and",
+         "args": [
+          {
+           "op": "eq",
+           "args": [
+            {
+             "op": "at",
+             "args": [
+              {
+               "op": "at",
+               "args": [
+                "$args",
+                1
+               ]
+              },
+              0
+             ]
+            },
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "gt",
+           "args": [
+            {
+             "op": "at",
+             "args": [
+              {
+               "op": "at",
+               "args": [
+                "$args",
+                1
+               ]
+              },
+              1
+             ]
+            },
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "op": "and",
+         "args": [
+          {
+           "op": "gt",
+           "args": [
+            {
+             "op": "at",
+             "args": [
+              {
+               "op": "at",
+               "args": [
+                "$args",
+                1
+               ]
+              },
+              0
+             ]
+            },
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "eq",
+           "args": [
+            {
+             "op": "at",
+             "args": [
+              {
+               "op": "at",
+               "args": [
+                "$args",
+                1
+               ]
+              },
+              1
+             ]
+            },
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "curve-plain-lp-remove-liquidity-one-log",
+     "signature": "event RemoveLiquidityOne(address indexed provider,int128 i,uint256 token_amount,uint256 coin_amount,uint256 token_supply)",
+     "fields": {
+      "pool": {
+       "from": "emitter"
+      }
+     },
+     "predicates": [
+      {
+       "op": "gt",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          2
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          "0"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "gt",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          3
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          "0"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "gte",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          1
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          "0"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "lt",
+       "args": [
+        {
+         "op": "at",
+         "args": [
+          "$args",
+          1
+         ]
+        },
+        {
+         "op": "uint",
+         "args": [
+          "2"
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "labels": [
+    "curve",
+    "curve-plain",
+    "curve-plain-lp"
+   ],
+   "nomination": "address-surface",
+   "surface": {
+    "id": "curve-plain-lp-ng-surface",
+    "fingerprint": "curve-plain-lp-ng-stableswap-2coin-v1",
+    "fields": {
+     "pool": {
+      "from": "emitter"
+     }
+    },
+    "predicates": [
+     {
+      "op": "ne",
+      "args": [
+       {
+        "op": "lower",
+        "args": [
+         "$candidate.pool"
+        ]
+       },
+       "0x0000000000000000000000000000000000000000"
+      ]
+     }
+    ]
+   },
+   "reverseBinding": "address-surface"
+  }
+ },
+ "identity": {
+  "memoReuse": "recheck-identity",
+  "key": {
+   "op": "lower",
+   "args": [
+    {
+     "op": "address",
+     "args": [
+      "$identity.subject"
+     ]
+    }
+   ]
+  },
+  "definition": {
+   "version": 1,
+   "identity": {
+    "applies": {
+     "op": "eq",
+     "args": [
+      "$candidate.candidateKind",
+      "curve-plain-lp-pool"
+     ]
+    },
+    "select": [
+     {
+      "return": "done",
+      "when": {
+       "op": "or",
+       "args": [
+        {
+         "op": "defined",
+         "args": [
+          "$evidence.rejection"
+         ]
+        },
+        {
+         "op": "defined",
+         "args": [
+          "$evidence.retry"
+         ]
+        },
+        {
+         "op": "eq",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$evidence",
+            "phase"
+           ]
+          },
+          "complete"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "return": "registry",
+      "when": {
+       "op": "not",
+       "args": [
+        {
+         "op": "defined",
+         "args": [
+          "$evidence"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "return": "surface",
+      "when": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "phase"
+         ]
+        },
+        "registry"
+       ]
+      }
+     },
+     {
+      "return": "mint",
+      "when": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "phase"
+         ]
+        },
+        "surface"
+       ]
+      }
+     },
+     {
+      "return": "withdraw",
+      "when": {
+       "op": "eq",
+       "args": [
+        {
+         "op": "get",
+         "args": [
+          "$evidence",
+          "phase"
+         ]
+        },
+        "mint"
+       ]
+      }
+     }
+    ],
+    "stages": {
+     "registry": {
+      "requirements": {
+       "transports": [
+        "eth-call",
+        "get-code"
+       ]
+      },
+      "optionalFailures": [
+       "pool-total-supply",
+       "pool-lp-decimals",
+       "pool-amplification",
+       "pool-fee"
+      ],
+      "requests": [
+       {
+        "id": "pool-code",
+        "kind": "get-code",
+        "address": "$candidate.pool"
+       },
+       {
+        "id": "registry-handlers",
+        "kind": "eth-call",
+        "to": "$constants.registry",
+        "data": {
+         "op": "encode",
+         "args": [
+          "registry",
+          "get_registry_handlers_from_pool",
+          [
+           "$candidate.pool"
+          ]
+         ]
+        },
+        "completion": "return-data"
+       },
+       {
+        "id": "registry-coins",
+        "kind": "eth-call",
+        "to": "$constants.registry",
+        "data": {
+         "op": "encode",
+         "args": [
+          "registry",
+          "get_coins",
+          [
+           "$candidate.pool"
+          ]
+         ]
+        },
+        "completion": "return-data"
+       },
+       {
+        "id": "registry-lp-token",
+        "kind": "eth-call",
+        "to": "$constants.registry",
+        "data": {
+         "op": "encode",
+         "args": [
+          "registry",
+          "get_lp_token",
+          [
+           "$candidate.pool"
+          ]
+         ]
+        },
+        "completion": "return-data"
+       },
+       {
+        "id": "registry-pool-from-lp",
+        "kind": "eth-call",
+        "to": "$constants.registry",
+        "data": {
+         "op": "encode",
+         "args": [
+          "registry",
+          "get_pool_from_lp_token",
+          [
+           "$candidate.pool"
+          ]
+         ]
+        },
+        "completion": "return-data"
+       },
+       {
+        "id": "pool-total-supply",
+        "kind": "eth-call",
+        "to": "$candidate.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "totalSupply",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "required": false
+       },
+       {
+        "id": "pool-lp-decimals",
+        "kind": "eth-call",
+        "to": "$candidate.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "decimals",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "required": false
+       },
+       {
+        "id": "pool-amplification",
+        "kind": "eth-call",
+        "to": "$candidate.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "A",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "required": false
+       },
+       {
+        "id": "pool-fee",
+        "kind": "eth-call",
+        "to": "$candidate.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "fee",
+          []
+         ]
+        },
+        "completion": "return-data",
+        "required": false
+       }
+      ],
+      "decode": [
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$requests"
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp missing/extra results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            {
+             "op": "unique",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp duplicate results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$requests",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp unexpected results"
+       },
+       {
+        "let": "source",
+        "value": {
+         "op": "source",
+         "args": [
+          "$results"
+         ]
+        }
+       },
+       {
+        "let": "pool",
+        "value": {
+         "op": "lower",
+         "args": [
+          {
+           "op": "address",
+           "args": [
+            "$candidate.pool"
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "assert": {
+         "op": "ne",
+         "args": [
+          "$pool",
+          "$constants.zero"
+         ]
+        },
+        "error": "curve-plain-lp zero pool address"
+       },
+       {
+        "let": "poolCode",
+        "value": {
+         "op": "get",
+         "args": [
+          {
+           "op": "returned",
+           "args": [
+            "pool-code"
+           ]
+          },
+          "data"
+         ]
+        }
+       },
+       {
+        "let": "handlers",
+        "value": {
+         "op": "filter",
+         "args": [
+          {
+           "op": "decodeCanonical",
+           "args": [
+            "registry",
+            "get_registry_handlers_from_pool",
+            {
+             "op": "get",
+             "args": [
+              {
+               "op": "returned",
+               "args": [
+                "registry-handlers"
+               ]
+              },
+              "data"
+             ]
+            },
+            0
+           ]
+          },
+          "handler",
+          {
+           "op": "not",
+           "args": [
+            {
+             "op": "sameAddress",
+             "args": [
+              "$handler",
+              "$constants.zero"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "coins",
+        "value": {
+         "op": "filter",
+         "args": [
+          {
+           "op": "decodeCanonical",
+           "args": [
+            "registry",
+            "get_coins",
+            {
+             "op": "get",
+             "args": [
+              {
+               "op": "returned",
+               "args": [
+                "registry-coins"
+               ]
+              },
+              "data"
+             ]
+            },
+            0
+           ]
+          },
+          "coin",
+          {
+           "op": "not",
+           "args": [
+            {
+             "op": "sameAddress",
+             "args": [
+              "$coin",
+              "$constants.zero"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "lpToken",
+        "value": {
+         "op": "lower",
+         "args": [
+          {
+           "op": "address",
+           "args": [
+            {
+             "op": "decodeCanonical",
+             "args": [
+              "registry",
+              "get_lp_token",
+              {
+               "op": "get",
+               "args": [
+                {
+                 "op": "returned",
+                 "args": [
+                  "registry-lp-token"
+                 ]
+                },
+                "data"
+               ]
+              },
+              0
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "poolFromLp",
+        "value": {
+         "op": "lower",
+         "args": [
+          {
+           "op": "address",
+           "args": [
+            {
+             "op": "decodeCanonical",
+             "args": [
+              "registry",
+              "get_pool_from_lp_token",
+              {
+               "op": "get",
+               "args": [
+                {
+                 "op": "returned",
+                 "args": [
+                  "registry-pool-from-lp"
+                 ]
+                },
+                "data"
+               ]
+              },
+              0
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "basic",
+        "value": {
+         "pool": "$pool",
+         "registry": "$constants.registry",
+         "registryHandler": "$constants.registryHandler",
+         "handlerCodeHash": "$constants.handlerCodeHash",
+         "lpToken": "$lpToken",
+         "coins": "$coins",
+         "model": "$constants.model",
+         "codeHash": {
+          "op": "codeHash",
+          "args": [
+           "$poolCode"
+          ]
+         }
+        }
+       },
+       {
+        "return": {
+         "phase": "registry",
+         "source": "$source",
+         "ids": {
+          "op": "map",
+          "args": [
+           "$requests",
+           "request",
+           "$request.id"
+          ]
+         },
+         "pool": "$pool",
+         "rejection": "no-pool-code"
+        },
+        "when": {
+         "op": "eq",
+         "args": [
+          "$poolCode",
+          "0x"
+         ]
+        }
+       },
+       {
+        "return": {
+         "phase": "registry",
+         "source": "$source",
+         "ids": {
+          "op": "map",
+          "args": [
+           "$requests",
+           "request",
+           "$request.id"
+          ]
+         },
+         "pool": "$pool",
+         "rejection": "no-registry-membership"
+        },
+        "when": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            "$handlers"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "return": {
+         "phase": "registry",
+         "source": "$source",
+         "ids": {
+          "op": "map",
+          "args": [
+           "$requests",
+           "request",
+           "$request.id"
+          ]
+         },
+         "pool": "$pool",
+         "rejection": "unsupported-coin-count"
+        },
+        "when": {
+         "op": "not",
+         "args": [
+          {
+           "op": "and",
+           "args": [
+            {
+             "op": "eq",
+             "args": [
+              {
+               "op": "length",
+               "args": [
+                "$coins"
+               ]
+              },
+              2
+             ]
+            },
+            {
+             "op": "eq",
+             "args": [
+              {
+               "op": "length",
+               "args": [
+                {
+                 "op": "unique",
+                 "args": [
+                  {
+                   "op": "map",
+                   "args": [
+                    "$coins",
+                    "coin",
+                    {
+                     "op": "lower",
+                     "args": [
+                      {
+                       "op": "address",
+                       "args": [
+                        "$coin"
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              },
+              2
+             ]
+            },
+            {
+             "op": "every",
+             "args": [
+              "$coins",
+              "coin",
+              {
+               "op": "and",
+               "args": [
+                {
+                 "op": "ne",
+                 "args": [
+                  "$coin",
+                  "$constants.zero"
+                 ]
+                },
+                {
+                 "op": "not",
+                 "args": [
+                  {
+                   "op": "sameAddress",
+                   "args": [
+                    "$coin",
+                    "$constants.native"
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "not",
+                 "args": [
+                  {
+                   "op": "sameAddress",
+                   "args": [
+                    "$coin",
+                    "$pool"
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "op": "not",
+                 "args": [
+                  {
+                   "op": "sameAddress",
+                   "args": [
+                    "$coin",
+                    "$constants.registry"
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "phase": "registry",
+         "source": "$source",
+         "ids": {
+          "op": "map",
+          "args": [
+           "$requests",
+           "request",
+           "$request.id"
+          ]
+         },
+         "pool": "$pool",
+         "rejection": "unsupported-external-lp-token"
+        },
+        "when": {
+         "op": "not",
+         "args": [
+          {
+           "op": "and",
+           "args": [
+            {
+             "op": "sameAddress",
+             "args": [
+              "$lpToken",
+              "$pool"
+             ]
+            },
+            {
+             "op": "sameAddress",
+             "args": [
+              "$poolFromLp",
+              "$pool"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "phase": "registry",
+         "source": "$source",
+         "ids": {
+          "op": "map",
+          "args": [
+           "$requests",
+           "request",
+           "$request.id"
+          ]
+         },
+         "pool": "$pool",
+         "rejection": "unsupported-lp-surface"
+        },
+        "when": {
+         "op": "not",
+         "args": [
+          {
+           "op": "every",
+           "args": [
+            [
+             "pool-total-supply",
+             "pool-lp-decimals",
+             "pool-amplification",
+             "pool-fee"
+            ],
+            "requestId",
+            {
+             "op": "eq",
+             "args": [
+              {
+               "op": "shape",
+               "args": [
+                "$requestId"
+               ]
+              },
+              "returned"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "totalSupply",
+        "value": {
+         "op": "decode",
+         "args": [
+          "pool",
+          "totalSupply",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "pool-total-supply"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "let": "lpDecimals",
+        "value": {
+         "op": "decode",
+         "args": [
+          "pool",
+          "decimals",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "pool-lp-decimals"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "let": "amplification",
+        "value": {
+         "op": "decode",
+         "args": [
+          "pool",
+          "A",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "pool-amplification"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "let": "fee",
+        "value": {
+         "op": "decode",
+         "args": [
+          "pool",
+          "fee",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "pool-fee"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "return": {
+         "phase": "registry",
+         "source": "$source",
+         "ids": {
+          "op": "map",
+          "args": [
+           "$requests",
+           "request",
+           "$request.id"
+          ]
+         },
+         "pool": "$pool",
+         "rejection": "unsupported-lp-surface"
+        },
+        "when": {
+         "op": "not",
+         "args": [
+          {
+           "op": "and",
+           "args": [
+            {
+             "op": "eq",
+             "args": [
+              "$lpDecimals",
+              {
+               "op": "uint",
+               "args": [
+                "18"
+               ]
+              }
+             ]
+            },
+            {
+             "op": "gt",
+             "args": [
+              "$totalSupply",
+              {
+               "op": "uint",
+               "args": [
+                "0"
+               ]
+              }
+             ]
+            },
+            {
+             "op": "gt",
+             "args": [
+              "$amplification",
+              {
+               "op": "uint",
+               "args": [
+                "0"
+               ]
+              }
+             ]
+            },
+            {
+             "op": "lt",
+             "args": [
+              "$fee",
+              {
+               "op": "uint",
+               "args": [
+                "$constants.feeDenominator"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "phase": "registry",
+         "source": "$source",
+         "ids": {
+          "op": "map",
+          "args": [
+           "$requests",
+           "request",
+           "$request.id"
+          ]
+         },
+         "binding": {
+          "op": "merge",
+          "args": [
+           "$basic",
+           {
+            "poolDecimals": "$lpDecimals"
+           }
+          ]
+         }
+        }
+       }
+      ]
+     },
+     "surface": {
+      "requirements": {
+       "transports": [
+        "eth-call",
+        "get-code"
+       ]
+      },
+      "requests": {
+       "op": "concat",
+       "args": [
+        [
+         {
+          "id": "handler-code",
+          "kind": "get-code",
+          "address": "$evidence.binding.registryHandler"
+         }
+        ],
+        {
+         "op": "map",
+         "args": [
+          "$evidence.binding.coins",
+          "coin",
+          {
+           "id": {
+            "op": "join",
+            "args": [
+             [
+              "coins-direct",
+              "$index"
+             ],
+             ":"
+            ]
+           },
+           "kind": "eth-call",
+           "to": "$evidence.binding.pool",
+           "data": {
+            "op": "encode",
+            "args": [
+             "pool",
+             "coins",
+             [
+              {
+               "op": "number",
+               "args": [
+                "$index"
+               ]
+              }
+             ]
+            ]
+           },
+           "completion": "return-data"
+          }
+         ]
+        },
+        {
+         "op": "map",
+         "args": [
+          "$evidence.binding.coins",
+          "coin",
+          {
+           "id": {
+            "op": "join",
+            "args": [
+             [
+              "balances-direct",
+              "$index"
+             ],
+             ":"
+            ]
+           },
+           "kind": "eth-call",
+           "to": "$evidence.binding.pool",
+           "data": {
+            "op": "encode",
+            "args": [
+             "pool",
+             "balances",
+             [
+              {
+               "op": "number",
+               "args": [
+                "$index"
+               ]
+              }
+             ]
+            ]
+           },
+           "completion": "return-data"
+          }
+         ]
+        },
+        {
+         "op": "map",
+         "args": [
+          "$evidence.binding.coins",
+          "coin",
+          {
+           "id": {
+            "op": "join",
+            "args": [
+             [
+              "token-decimals",
+              "$index"
+             ],
+             ":"
+            ]
+           },
+           "kind": "eth-call",
+           "to": "$coin",
+           "data": {
+            "op": "encode",
+            "args": [
+             "token",
+             "decimals",
+             []
+            ]
+           },
+           "completion": "return-data"
+          }
+         ]
+        }
+       ]
+      },
+      "decode": [
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$requests"
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp missing/extra results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            {
+             "op": "unique",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp duplicate results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$requests",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp unexpected results"
+       },
+       {
+        "let": "source",
+        "value": {
+         "op": "source",
+         "args": [
+          "$results"
+         ]
+        }
+       },
+       {
+        "evaluate": {
+         "op": "assertSource",
+         "args": [
+          "$source",
+          "$evidence.source"
+         ]
+        }
+       },
+       {
+        "let": "handlerCode",
+        "value": {
+         "op": "get",
+         "args": [
+          {
+           "op": "returned",
+           "args": [
+            "handler-code"
+           ]
+          },
+          "data"
+         ]
+        }
+       },
+       {
+        "let": "directCoins",
+        "value": {
+         "op": "map",
+         "args": [
+          "$evidence.binding.coins",
+          "coin",
+          {
+           "op": "lower",
+           "args": [
+            {
+             "op": "address",
+             "args": [
+              {
+               "op": "decode",
+               "args": [
+                "pool",
+                "coins",
+                {
+                 "op": "get",
+                 "args": [
+                  {
+                   "op": "returned",
+                   "args": [
+                    {
+                     "op": "join",
+                     "args": [
+                      [
+                       "coins-direct",
+                       "$index"
+                      ],
+                      ":"
+                     ]
+                    }
+                   ]
+                  },
+                  "data"
+                 ]
+                },
+                0
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "balances",
+        "value": {
+         "op": "map",
+         "args": [
+          "$evidence.binding.coins",
+          "coin",
+          {
+           "op": "decode",
+           "args": [
+            "pool",
+            "balances",
+            {
+             "op": "get",
+             "args": [
+              {
+               "op": "returned",
+               "args": [
+                {
+                 "op": "join",
+                 "args": [
+                  [
+                   "balances-direct",
+                   "$index"
+                  ],
+                  ":"
+                 ]
+                }
+               ]
+              },
+              "data"
+             ]
+            },
+            0
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "let": "decimals",
+        "value": {
+         "op": "map",
+         "args": [
+          "$evidence.binding.coins",
+          "coin",
+          {
+           "op": "decode",
+           "args": [
+            "token",
+            "decimals",
+            {
+             "op": "get",
+             "args": [
+              {
+               "op": "returned",
+               "args": [
+                {
+                 "op": "join",
+                 "args": [
+                  [
+                   "token-decimals",
+                   "$index"
+                  ],
+                  ":"
+                 ]
+                }
+               ]
+              },
+              "data"
+             ]
+            },
+            0
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "surface",
+           "source": "$source",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             "$request.id"
+            ]
+           },
+           "balances": "$balances",
+           "rejection": "unsupported-registry-handler-code"
+          }
+         ]
+        },
+        "when": {
+         "op": "ne",
+         "args": [
+          {
+           "op": "codeHash",
+           "args": [
+            "$handlerCode"
+           ]
+          },
+          "$constants.handlerCodeHash"
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "surface",
+           "source": "$source",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             "$request.id"
+            ]
+           },
+           "balances": "$balances",
+           "rejection": "direct-coin-mismatch"
+          }
+         ]
+        },
+        "when": {
+         "op": "not",
+         "args": [
+          {
+           "op": "every",
+           "args": [
+            {
+             "op": "map",
+             "args": [
+              "$evidence.binding.coins",
+              "coin",
+              "$index"
+             ]
+            },
+            "position",
+            {
+             "op": "sameAddress",
+             "args": [
+              {
+               "op": "at",
+               "args": [
+                "$directCoins",
+                "$position"
+               ]
+              },
+              {
+               "op": "at",
+               "args": [
+                "$evidence.binding.coins",
+                "$position"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "surface",
+           "source": "$source",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             "$request.id"
+            ]
+           },
+           "balances": "$balances",
+           "rejection": "empty-pool-balance"
+          }
+         ]
+        },
+        "when": {
+         "op": "not",
+         "args": [
+          {
+           "op": "every",
+           "args": [
+            "$balances",
+            "balance",
+            {
+             "op": "gt",
+             "args": [
+              "$balance",
+              {
+               "op": "uint",
+               "args": [
+                "0"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "surface",
+           "source": "$source",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             "$request.id"
+            ]
+           },
+           "balances": "$balances",
+           "decimals": "$decimals",
+           "rejection": "unsupported-token-scale"
+          }
+         ]
+        },
+        "when": {
+         "op": "not",
+         "args": [
+          {
+           "op": "every",
+           "args": [
+            "$decimals",
+            "dec",
+            {
+             "op": "and",
+             "args": [
+              {
+               "op": "gte",
+               "args": [
+                "$dec",
+                {
+                 "op": "uint",
+                 "args": [
+                  "0"
+                 ]
+                }
+               ]
+              },
+              {
+               "op": "lte",
+               "args": [
+                "$dec",
+                {
+                 "op": "uint",
+                 "args": [
+                  "36"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "surface",
+           "source": "$source",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             "$request.id"
+            ]
+           },
+           "balances": "$balances",
+           "binding": {
+            "op": "merge",
+            "args": [
+             "$evidence.binding",
+             {
+              "decimals": "$decimals"
+             }
+            ]
+           }
+          }
+         ]
+        }
+       }
+      ]
+     },
+     "mint": {
+      "requirements": {
+       "transports": [
+        "eth-call"
+       ]
+      },
+      "requests": [
+       {
+        "id": "mint-lp-01",
+        "kind": "eth-call",
+        "to": "$evidence.binding.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "calc_token_amount",
+          [
+           [
+            {
+             "op": "pow",
+             "args": [
+              {
+               "op": "uint",
+               "args": [
+                "10"
+               ]
+              },
+              {
+               "op": "at",
+               "args": [
+                "$evidence.binding.decimals",
+                0
+               ]
+              }
+             ]
+            },
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            }
+           ],
+           true
+          ]
+         ]
+        },
+        "completion": "return-data"
+       },
+       {
+        "id": "mint-lp-10",
+        "kind": "eth-call",
+        "to": "$evidence.binding.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "calc_token_amount",
+          [
+           [
+            {
+             "op": "uint",
+             "args": [
+              "0"
+             ]
+            },
+            {
+             "op": "pow",
+             "args": [
+              {
+               "op": "uint",
+               "args": [
+                "10"
+               ]
+              },
+              {
+               "op": "at",
+               "args": [
+                "$evidence.binding.decimals",
+                1
+               ]
+              }
+             ]
+            }
+           ],
+           true
+          ]
+         ]
+        },
+        "completion": "return-data"
+       }
+      ],
+      "decode": [
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$requests"
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp missing/extra results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            {
+             "op": "unique",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp duplicate results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$requests",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp unexpected results"
+       },
+       {
+        "let": "source",
+        "value": {
+         "op": "source",
+         "args": [
+          "$results"
+         ]
+        }
+       },
+       {
+        "evaluate": {
+         "op": "assertSource",
+         "args": [
+          "$source",
+          "$evidence.source"
+         ]
+        }
+       },
+       {
+        "let": "lp01",
+        "value": {
+         "op": "decode",
+         "args": [
+          "pool",
+          "calc_token_amount",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "mint-lp-01"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "let": "lp10",
+        "value": {
+         "op": "decode",
+         "args": [
+          "pool",
+          "calc_token_amount",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "mint-lp-10"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "mint",
+           "source": "$source",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             "$request.id"
+            ]
+           },
+           "lp01": "$lp01",
+           "lp10": "$lp10",
+           "rejection": "no-lp-minted"
+          }
+         ]
+        },
+        "when": {
+         "op": "not",
+         "args": [
+          {
+           "op": "and",
+           "args": [
+            {
+             "op": "gt",
+             "args": [
+              "$lp01",
+              {
+               "op": "uint",
+               "args": [
+                "0"
+               ]
+              }
+             ]
+            },
+            {
+             "op": "gt",
+             "args": [
+              "$lp10",
+              {
+               "op": "uint",
+               "args": [
+                "0"
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "mint",
+           "source": "$source",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             "$request.id"
+            ]
+           },
+           "lp01": "$lp01",
+           "lp10": "$lp10"
+          }
+         ]
+        }
+       }
+      ]
+     },
+     "withdraw": {
+      "requirements": {
+       "transports": [
+        "eth-call"
+       ]
+      },
+      "requests": [
+       {
+        "id": "withdraw-out-01",
+        "kind": "eth-call",
+        "to": "$evidence.binding.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "calc_withdraw_one_coin",
+          [
+           "$evidence.lp01",
+           {
+            "op": "uint",
+            "args": [
+             "1"
+            ]
+           }
+          ]
+         ]
+        },
+        "completion": "return-data"
+       },
+       {
+        "id": "withdraw-out-10",
+        "kind": "eth-call",
+        "to": "$evidence.binding.pool",
+        "data": {
+         "op": "encode",
+         "args": [
+          "pool",
+          "calc_withdraw_one_coin",
+          [
+           "$evidence.lp10",
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         ]
+        },
+        "completion": "return-data"
+       }
+      ],
+      "decode": [
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$requests"
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp missing/extra results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "length",
+           "args": [
+            {
+             "op": "unique",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "length",
+           "args": [
+            "$results"
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp duplicate results"
+       },
+       {
+        "assert": {
+         "op": "eq",
+         "args": [
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$results",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "op": "hash",
+           "args": [
+            {
+             "op": "sortId",
+             "args": [
+              {
+               "op": "map",
+               "args": [
+                "$requests",
+                "row",
+                {
+                 "id": "$row.id"
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        "error": "curve-plain-lp unexpected results"
+       },
+       {
+        "let": "source",
+        "value": {
+         "op": "source",
+         "args": [
+          "$results"
+         ]
+        }
+       },
+       {
+        "evaluate": {
+         "op": "assertSource",
+         "args": [
+          "$source",
+          "$evidence.source"
+         ]
+        }
+       },
+       {
+        "let": "out01",
+        "value": {
+         "op": "decode",
+         "args": [
+          "pool",
+          "calc_withdraw_one_coin",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "withdraw-out-01"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "let": "out10",
+        "value": {
+         "op": "decode",
+         "args": [
+          "pool",
+          "calc_withdraw_one_coin",
+          {
+           "op": "get",
+           "args": [
+            {
+             "op": "returned",
+             "args": [
+              "withdraw-out-10"
+             ]
+            },
+            "data"
+           ]
+          },
+          0
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "complete",
+           "source": "$source",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             "$request.id"
+            ]
+           },
+           "out01": "$out01",
+           "out10": "$out10",
+           "rejection": "no-withdrawal-quote"
+          }
+         ]
+        },
+        "when": {
+         "op": "not",
+         "args": [
+          {
+           "op": "and",
+           "args": [
+            {
+             "op": "gt",
+             "args": [
+              "$out01",
+              {
+               "op": "uint",
+               "args": [
+                "0"
+               ]
+              }
+             ]
+            },
+            {
+             "op": "gt",
+             "args": [
+              "$out10",
+              {
+               "op": "uint",
+               "args": [
+                "0"
+               ]
+              }
+             ]
+            },
+            {
+             "op": "lte",
+             "args": [
+              "$out01",
+              {
+               "op": "at",
+               "args": [
+                "$evidence.balances",
+                1
+               ]
+              }
+             ]
+            },
+            {
+             "op": "lte",
+             "args": [
+              "$out10",
+              {
+               "op": "at",
+               "args": [
+                "$evidence.balances",
+                0
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "return": {
+         "op": "merge",
+         "args": [
+          "$evidence",
+          {
+           "phase": "complete",
+           "source": "$source",
+           "ids": {
+            "op": "map",
+            "args": [
+             "$requests",
+             "request",
+             "$request.id"
+            ]
+           },
+           "out01": "$out01",
+           "out10": "$out10"
+          }
+         ]
+        }
+       }
+      ]
+     },
+     "done": {
+      "requirements": {
+       "transports": []
+      },
+      "requests": [],
+      "decode": [
+       {
+        "return": "$evidence"
+       }
+      ]
+     }
+    },
+    "decide": [
+     {
+      "return": {
+       "status": "continue"
+      },
+      "when": {
+       "op": "not",
+       "args": [
+        {
+         "op": "defined",
+         "args": [
+          "$evidence"
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "return": {
+       "status": "invalid-program",
+       "reasonCode": "foreign-curve-plain-lp-candidate"
+      },
+      "when": {
+       "op": "ne",
+       "args": [
+        "$candidate.candidateKind",
+        "curve-plain-lp-pool"
+       ]
+      }
+     },
+     {
+      "return": {
+       "status": "chain-proven-rejected",
+       "reasonCode": "$evidence.rejection",
+       "evidenceRequestIds": "$evidence.ids"
+      },
+      "when": {
+       "op": "defined",
+       "args": [
+        "$evidence.rejection"
+       ]
+      }
+     },
+     {
+      "return": {
+       "status": "retryable",
+       "reasonCode": "$evidence.retry"
+      },
+      "when": {
+       "op": "defined",
+       "args": [
+        "$evidence.retry"
+       ]
+      }
+     },
+     {
+      "return": {
+       "status": "continue"
+      },
+      "when": {
+       "op": "ne",
+       "args": [
+        "$evidence.phase",
+        "complete"
+       ]
+      }
+     },
+     {
+      "return": {
+       "status": "verified",
+       "identity": {
+        "familyId": "$profile.familyId",
+        "lineageId": "$profile.lineageId",
+        "subject": "$evidence.binding.pool",
+        "facts": "$evidence.binding",
+        "provenance": [
+         {
+          "kind": "curve-metaregistry-ng-pool-lp-and-direct-surface",
+          "subject": "$constants.registry",
+          "evidenceHash": {
+           "op": "hash",
+           "args": [
+            {
+             "binding": "$evidence.binding",
+             "source": "$evidence.source"
+            }
+           ]
+          }
+         }
+        ]
+       }
+      }
+     }
+    ]
+   }
+  }
+ },
+ "instance": {
+  "key": {
+   "op": "lower",
+   "args": [
+    {
+     "op": "address",
+     "args": [
+      "$identity.subject"
+     ]
+    }
+   ]
+  },
+  "draft": {
+   "op": "merge",
+   "args": [
+    {
+     "familyId": "$identity.familyId",
+     "lineageId": "$identity.lineageId",
+     "instanceKey": {
+      "op": "lower",
+      "args": [
+       {
+        "op": "address",
+        "args": [
+         "$identity.subject"
+        ]
+       }
+      ]
+     },
+     "provenance": "$identity.provenance",
+     "runtimeRequirements": [
+      {
+       "kind": "source-state",
+       "freshness": "pinned-block"
+      }
+     ]
+    },
+    "$identity.facts"
+   ]
+  },
+  "bindingProjection": {
+   "pool": "$descriptor.pool",
+   "registry": "$descriptor.registry",
+   "registryHandler": "$descriptor.registryHandler",
+   "handlerCodeHash": "$descriptor.handlerCodeHash",
+   "lpToken": "$descriptor.lpToken",
+   "coins": "$descriptor.coins",
+   "decimals": "$descriptor.decimals",
+   "poolDecimals": "$descriptor.poolDecimals",
+   "codeHash": "$descriptor.codeHash",
+   "model": "$descriptor.model"
+  }
+ },
+ "routes": {
+  "target": "$descriptor.pool",
+  "bindingKey": "$descriptor.pool",
+  "directions": {
+   "op": "flatMap",
+   "args": [
+    {
+     "op": "map",
+     "args": [
+      "$descriptor.coins",
+      "coin",
+      {
+       "coin": "$coin",
+       "position": "$index"
+      }
+     ]
+    },
+    "left",
+    {
+     "op": "flatMap",
+     "args": [
+      {
+       "op": "map",
+       "args": [
+        "$descriptor.coins",
+        "coin",
+        {
+         "coin": "$coin",
+         "position": "$index"
+        }
+       ]
+      },
+      "right",
+      {
+       "op": "if",
+       "args": [
+        {
+         "op": "eq",
+         "args": [
+          "$left.position",
+          "$right.position"
+         ]
+        },
+        [],
+        [
+         {
+          "id": {
+           "op": "join",
+           "args": [
+            [
+             "$left.position",
+             "$right.position"
+            ],
+            ":"
+           ]
+          },
+          "enabled": true,
+          "tokenIn": "$left.coin",
+          "tokenOut": "$right.coin",
+          "adapterId": "curve-plain-lp-cycle",
+          "taxonomy": {
+           "slotKind": "swap"
+          },
+          "fields": {
+           "i": "$left.position",
+           "j": "$right.position"
+          }
+         }
+        ]
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  "key": {
+   "op": "join",
+   "args": [
+    [
+     "curve-plain-lp",
+     "$descriptor.pool",
+     "$route.i",
+     "$route.j"
+    ],
+    ":"
+   ]
+  },
+  "graphVenue": {
+   "kind": "address-pool",
+   "pool": "$descriptor.pool"
+  },
+  "effects": [
+   {
+    "kind": "token-delta",
+    "token": "$route.tokenIn",
+    "account": "executor",
+    "direction": "decrease"
+   },
+   {
+    "kind": "token-delta",
+    "token": "$route.tokenOut",
+    "account": "executor",
+    "direction": "increase"
+   }
+  ],
+  "descriptorChecks": [
+   {
+    "assert": {
+     "op": "and",
+     "args": [
+      {
+       "op": "eq",
+       "args": [
+        "$descriptor.familyId",
+        "curve-plain-lp"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        "$descriptor.lineageId",
+        "curve-plain-lp:ng-stableswap-2coin"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        "$descriptor.model",
+        "$constants.model"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        "$descriptor.registry",
+        "$constants.registry"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        "$descriptor.registryHandler",
+        "$constants.registryHandler"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        "$descriptor.handlerCodeHash",
+        "$constants.handlerCodeHash"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        "$descriptor.instanceKey",
+        "$descriptor.pool"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "lower",
+         "args": [
+          {
+           "op": "address",
+           "args": [
+            "$descriptor.pool"
+           ]
+          }
+         ]
+        },
+        "$descriptor.pool"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        "$descriptor.lpToken",
+        "$descriptor.pool"
+       ]
+      },
+      {
+       "op": "ne",
+       "args": [
+        "$descriptor.pool",
+        "$constants.zero"
+       ]
+      },
+      {
+       "op": "ne",
+       "args": [
+        "$descriptor.pool",
+        "$constants.registry"
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "length",
+         "args": [
+          "$descriptor.coins"
+         ]
+        },
+        2
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "length",
+         "args": [
+          {
+           "op": "unique",
+           "args": [
+            {
+             "op": "map",
+             "args": [
+              "$descriptor.coins",
+              "coin",
+              {
+               "op": "lower",
+               "args": [
+                {
+                 "op": "address",
+                 "args": [
+                  "$coin"
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        },
+        2
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "length",
+         "args": [
+          "$descriptor.decimals"
+         ]
+        },
+        2
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        "$descriptor.poolDecimals",
+        {
+         "op": "uint",
+         "args": [
+          "18"
+         ]
+        }
+       ]
+      },
+      {
+       "op": "every",
+       "args": [
+        "$descriptor.coins",
+        "coin",
+        {
+         "op": "and",
+         "args": [
+          {
+           "op": "ne",
+           "args": [
+            "$coin",
+            "$constants.zero"
+           ]
+          },
+          {
+           "op": "ne",
+           "args": [
+            "$coin",
+            "$constants.native"
+           ]
+          },
+          {
+           "op": "not",
+           "args": [
+            {
+             "op": "sameAddress",
+             "args": [
+              "$coin",
+              "$descriptor.pool"
+             ]
+            }
+           ]
+          },
+          {
+           "op": "not",
+           "args": [
+            {
+             "op": "sameAddress",
+             "args": [
+              "$coin",
+              "$constants.registry"
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "op": "eq",
+       "args": [
+        {
+         "op": "length",
+         "args": [
+          "$descriptor.codeHash"
+         ]
+        },
+        66
+       ]
+      }
+     ]
+    },
+    "error": "curve-plain-lp incompatible descriptor"
+   }
+  ]
+ },
+ "pricing": {
+  "draft": {
+   "op": "merge",
+   "args": [
+    "$descriptor",
+    {
+     "routes": "$routes"
+    }
+   ]
+  },
+  "compatibility": {
+   "pool": "$descriptor.pool",
+   "registry": "$descriptor.registry",
+   "registryHandler": "$descriptor.registryHandler",
+   "handlerCodeHash": "$descriptor.handlerCodeHash",
+   "lpToken": "$descriptor.lpToken",
+   "coins": "$descriptor.coins",
+   "decimals": "$descriptor.decimals",
+   "codeHash": "$descriptor.codeHash",
+   "model": "$descriptor.model"
+  },
+  "static": {
+   "requirements": {
+    "transports": []
+   },
+   "dependencies": [],
+   "requests": [],
+   "decode": [
+    {
+     "return": {}
+    }
+   ]
+  },
+  "finalize": "$draft",
+  "sampleAmount": {
+   "op": "uint",
+   "args": [
+    "1000000000000000000"
+   ]
+  },
+  "exactCompatibility": {
+   "binding": "$route.bindingRef.fingerprint",
+   "routeKey": "$route.routeKey",
+   "executor": {
+    "op": "lower",
+    "args": [
+     {
+      "op": "address",
+      "args": [
+       "$executor"
+      ]
+     }
+    ]
+   }
+  },
+  "mutationKinds": [
+   "log",
+   "call"
+  ]
+ },
+ "swap": {
+  "version": 1,
+  "events": [
+   {
+    "id": "curve-plain-lp-add-liquidity",
+    "signature": "event AddLiquidity(address indexed provider,uint256[] token_amounts,uint256[] fees,uint256 invariant,uint256 token_supply)",
+    "classification": "mutation",
+    "pool": {
+     "op": "lower",
+     "args": [
+      {
+       "op": "address",
+       "args": [
+        "$log.address"
+       ]
+      }
+     ]
+    },
+    "payload": {
+     "provider": {
+      "op": "lower",
+      "args": [
+       {
+        "op": "address",
+        "args": [
+         "$args.provider"
+        ]
+       }
+      ]
+     },
+     "tokenAmounts": "$args.token_amounts"
+    },
+    "match": true,
+    "impact": {},
+    "receiptMode": "mutation-only",
+    "mutationReason": "same-pool LP deposit changes balances and LP supply"
+   },
+   {
+    "id": "curve-plain-lp-remove-liquidity-one",
+    "signature": "event RemoveLiquidityOne(address indexed provider,int128 i,uint256 token_amount,uint256 coin_amount,uint256 token_supply)",
+    "classification": "mutation",
+    "pool": {
+     "op": "lower",
+     "args": [
+      {
+       "op": "address",
+       "args": [
+        "$log.address"
+       ]
+      }
+     ]
+    },
+    "payload": {
+     "provider": {
+      "op": "lower",
+      "args": [
+       {
+        "op": "address",
+        "args": [
+         "$args.provider"
+        ]
+       }
+      ]
+     },
+     "i": "$args.i",
+     "tokenAmount": "$args.token_amount",
+     "coinAmount": "$args.coin_amount"
+    },
+    "match": true,
+    "impact": {},
+    "receiptMode": "mutation-only",
+    "mutationReason": "same-pool single-coin LP withdrawal changes balances and LP supply"
+   }
+  ],
+  "canonicalIntakeTargets": [],
+  "victimSupport": "none"
+ },
+ "standard": {
+  "id": "ng-stableswap-2coin-lp-cycle",
+  "lineageId": "curve-plain-lp:ng-stableswap-2coin",
+  "identityKind": "registry-member",
+  "abi": {
+   "pool": [
+    "function coins(uint256) view returns(address)",
+    "function balances(uint256) view returns(uint256)",
+    "function totalSupply() view returns(uint256)",
+    "function decimals() view returns(uint8)",
+    "function A() view returns(uint256)",
+    "function fee() view returns(uint256)",
+    "function calc_token_amount(uint256[],bool) view returns(uint256)",
+    "function calc_withdraw_one_coin(uint256,int128) view returns(uint256)",
+    "function add_liquidity(uint256[],uint256) returns(uint256)",
+    "function remove_liquidity_one_coin(uint256,int128,uint256) returns(uint256)"
+   ],
+   "registry": [
+    "function get_registry_handlers_from_pool(address) view returns(address[10])",
+    "function get_coins(address) view returns(address[8])",
+    "function get_lp_token(address) view returns(address)",
+    "function get_pool_from_lp_token(address) view returns(address)"
+   ],
+   "token": [
+    "function decimals() view returns(uint8)",
+    "function balanceOf(address) view returns(uint256)"
+   ]
+  },
+  "constants": {
+   "registry": "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC",
+   "registryHandler": "0xe06EBA9ceA16cc71d4498CdBA7240BB20d475890",
+   "handlerCodeHash": "0xa8eec4cef91fa34f7f59afce987ce6c40f171601bd9708ee36923ccf22c36faa",
+   "model": "curve-ng-stableswap-2coin-pool-lp-v1",
+   "zero": "0x0000000000000000000000000000000000000000",
+   "native": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+   "feeDenominator": "10000000000",
+   "maxUint": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+  },
+  "expressions": {},
+  "programs": {},
+  "match": {
+   "op": "eq",
+   "args": [
+    "$descriptor.model",
+    "$constants.model"
+   ]
+  },
+  "context": {},
+  "boundState": {
+   "pool": "$descriptor.pool",
+   "lpToken": "$descriptor.lpToken",
+   "coins": "$descriptor.coins",
+   "decimals": "$descriptor.decimals",
+   "model": "$descriptor.model",
+   "codeHash": "$descriptor.codeHash",
+   "registryHandler": "$descriptor.registryHandler",
+   "registry": "$descriptor.registry"
+  },
+  "pricing": {
+   "refreshPolicy": "on-touch",
+   "requirements": {
+    "transports": [
+     "eth-call"
+    ]
+   },
+   "dependencies": [
+    "$descriptor.pool"
+   ],
+   "mutationAddresses": [
+    "$descriptor.pool"
+   ],
+   "classifyUnavailable": {
+    "op": "map",
+    "args": [
+     {
+      "op": "filter",
+      "args": [
+       "$routes",
+       "route",
+       {
+        "op": "or",
+        "args": [
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "if",
+            "args": [
+             {
+              "op": "eq",
+              "args": [
+               "$route.i",
+               0
+              ]
+             },
+             "$snapshot.sample0",
+             "$snapshot.sample1"
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "if",
+            "args": [
+             {
+              "op": "eq",
+              "args": [
+               "$route.i",
+               0
+              ]
+             },
+             "$snapshot.balance0",
+             "$snapshot.balance1"
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "eq",
+          "args": [
+           {
+            "op": "if",
+            "args": [
+             {
+              "op": "eq",
+              "args": [
+               "$route.i",
+               0
+              ]
+             },
+             "$snapshot.out01",
+             "$snapshot.out10"
+            ]
+           },
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "route",
+     [
+      "$route.routeKey",
+      "curve-plain-lp empty or non-positive cycle quote"
+     ]
+    ]
+   }
+  },
+  "exact": {
+   "methodId": "curve-plain-lp-calc-chain",
+   "requirements": {
+    "transports": [
+     "eth-call"
+    ]
+   },
+   "protectedAddresses": {
+    "op": "concat",
+    "args": [
+     [
+      "$descriptor.pool",
+      "$descriptor.lpToken",
+      "$descriptor.registry"
+     ],
+     "$descriptor.coins"
+    ]
+   },
+   "checks": [
+    {
+     "assert": {
+      "op": "and",
+      "args": [
+       {
+        "op": "gte",
+        "args": [
+         "$amountIn",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "lte",
+        "args": [
+         "$amountIn",
+         {
+          "op": "uint",
+          "args": [
+           "$constants.maxUint"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "error": "curve-plain-lp uint256 amount"
+    },
+    {
+     "assert": {
+      "op": "and",
+      "args": [
+       {
+        "op": "ne",
+        "args": [
+         {
+          "op": "lower",
+          "args": [
+           {
+            "op": "address",
+            "args": [
+             "$executor"
+            ]
+           }
+          ]
+         },
+         "$constants.zero"
+        ]
+       },
+       {
+        "op": "every",
+        "args": [
+         {
+          "op": "concat",
+          "args": [
+           [
+            "$descriptor.pool",
+            "$descriptor.lpToken",
+            "$descriptor.registry"
+           ],
+           "$descriptor.coins"
+          ]
+         },
+         "protected",
+         {
+          "op": "not",
+          "args": [
+           {
+            "op": "sameAddress",
+            "args": [
+             "$executor",
+             "$protected"
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "error": "curve-plain-lp unsupported executor"
+    }
+   ],
+   "evidence": {
+    "kind": "curve-plain-lp-calc-chain",
+    "source": "$source",
+    "executor": {
+     "op": "lower",
+     "args": [
+      {
+       "op": "address",
+       "args": [
+        "$executor"
+       ]
+      }
+     ]
+    },
+    "binding": "$route.bindingRef.fingerprint",
+    "routeKey": "$route.routeKey",
+    "amountIn": "$amountIn",
+    "amountOut": "$amountOut"
+   }
+  },
+  "readPrograms": {},
+  "execution": {
+   "version": 2,
+   "settlement": {
+    "directOutput": false
+   },
+   "protectedAddresses": {
+    "op": "concat",
+    "args": [
+     [
+      "$descriptor.pool",
+      "$descriptor.lpToken",
+      "$descriptor.registry"
+     ],
+     "$descriptor.coins"
+    ]
+   },
+   "requireCanonicalSource": true,
+   "rejectRuntimeEvidence": true,
+   "contextChecks": [
+    {
+     "condition": {
+      "op": "and",
+      "args": [
+       {
+        "op": "ne",
+        "args": [
+         "$route.tokenIn",
+         "$route.tokenOut"
+        ]
+       },
+       {
+        "op": "sameAddress",
+        "args": [
+         "$route.tokenIn",
+         {
+          "op": "at",
+          "args": [
+           "$descriptor.coins",
+           "$route.i"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "sameAddress",
+        "args": [
+         "$route.tokenOut",
+         {
+          "op": "at",
+          "args": [
+           "$descriptor.coins",
+           "$route.j"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "eq",
+        "args": [
+         "$descriptor.lpToken",
+         "$descriptor.pool"
+        ]
+       }
+      ]
+     },
+     "error": "curve-plain-lp execution route does not match its pool binding"
+    }
+   ],
+   "steps": [
+    {
+     "id": "add",
+     "approval": {
+      "token": "$route.tokenIn",
+      "spender": "$descriptor.pool",
+      "mode": "exact-clear",
+      "verifyAllowance": true
+     },
+     "call": {
+      "target": "$descriptor.pool",
+      "signature": "function add_liquidity(uint256[],uint256) returns(uint256)",
+      "args": [
+       [
+        {
+         "op": "if",
+         "args": [
+          {
+           "op": "eq",
+           "args": [
+            "$route.i",
+            0
+           ]
+          },
+          {
+           "runtime": "amountIn"
+          },
+          {
+           "op": "uint",
+           "args": [
+            "0"
+           ]
+          }
+         ]
+        },
+        {
+         "op": "if",
+         "args": [
+          {
+           "op": "eq",
+           "args": [
+            "$route.i",
+            1
+           ]
+          },
+          {
+           "runtime": "amountIn"
+          },
+          {
+           "op": "uint",
+           "args": [
+            "0"
+           ]
+          }
+         ]
+        }
+       ],
+       {
+        "op": "uint",
+        "args": [
+         "1"
+        ]
+       }
+      ],
+      "save": {
+       "mintedLp": 0
+      }
+     }
+    },
+    {
+     "id": "remove",
+     "call": {
+      "target": "$descriptor.pool",
+      "signature": "function remove_liquidity_one_coin(uint256,int128,uint256) returns(uint256)",
+      "args": [
+       {
+        "runtime": "mintedLp"
+       },
+       "$route.j",
+       "$minAmountOut"
+      ],
+      "save": {
+       "received": 0
+      }
+     }
+    }
+   ],
+   "effects": [
+    {
+     "kind": "debit",
+     "token": "$route.tokenIn",
+     "account": "$executor",
+     "equals": {
+      "runtime": "amountIn"
+     }
+    },
+    {
+     "kind": "credit",
+     "token": "$route.tokenOut",
+     "account": "$recipient",
+     "equals": {
+      "runtime": "received"
+     },
+     "minimum": "$minAmountOut"
+    },
+    {
+     "kind": "unchanged-token",
+     "token": "$descriptor.lpToken",
+     "account": "$executor"
+    }
+   ]
+  }
+ },
+ "modules": {
+  "pricingFlow": {
+   "version": 1,
+   "steps": [
+    {
+     "id": "state",
+     "requirements": {
+      "transports": [
+       "eth-call"
+      ]
+     },
+     "requests": [
+      {
+       "id": "state-balance-0",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "balances",
+         [
+          {
+           "op": "uint",
+           "args": [
+            "0"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data"
+      },
+      {
+       "id": "state-balance-1",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "balances",
+         [
+          {
+           "op": "uint",
+           "args": [
+            "1"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data"
+      },
+      {
+       "id": "state-total-supply",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "totalSupply",
+         []
+        ]
+       },
+       "completion": "return-data"
+      },
+      {
+       "id": "state-fee",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "fee",
+         []
+        ]
+       },
+       "completion": "return-data"
+      }
+     ],
+     "decode": [
+      {
+       "let": "balance0",
+       "value": {
+        "op": "decode",
+        "args": [
+         "pool",
+         "balances",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "state-balance-0"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "let": "balance1",
+       "value": {
+        "op": "decode",
+        "args": [
+         "pool",
+         "balances",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "state-balance-1"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "let": "supply",
+       "value": {
+        "op": "decode",
+        "args": [
+         "pool",
+         "totalSupply",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "state-total-supply"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "let": "fee",
+       "value": {
+        "op": "decode",
+        "args": [
+         "pool",
+         "fee",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "state-fee"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "and",
+        "args": [
+         {
+          "op": "gt",
+          "args": [
+           "$balance0",
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "gt",
+          "args": [
+           "$balance1",
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "gt",
+          "args": [
+           "$supply",
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ]
+         },
+         {
+          "op": "lt",
+          "args": [
+           "$fee",
+           {
+            "op": "uint",
+            "args": [
+             "$constants.feeDenominator"
+            ]
+           }
+          ]
+         }
+        ]
+       },
+       "error": "curve-plain-lp empty or invalid pricing state"
+      },
+      {
+       "return": {
+        "balance0": "$balance0",
+        "balance1": "$balance1",
+        "supply": "$supply",
+        "fee": "$fee",
+        "sample0": {
+         "op": "pow",
+         "args": [
+          {
+           "op": "uint",
+           "args": [
+            "10"
+           ]
+          },
+          {
+           "op": "at",
+           "args": [
+            "$descriptor.decimals",
+            0
+           ]
+          }
+         ]
+        },
+        "sample1": {
+         "op": "pow",
+         "args": [
+          {
+           "op": "uint",
+           "args": [
+            "10"
+           ]
+          },
+          {
+           "op": "at",
+           "args": [
+            "$descriptor.decimals",
+            1
+           ]
+          }
+         ]
+        }
+       }
+      }
+     ]
+    },
+    {
+     "id": "lp",
+     "requirements": {
+      "transports": [
+       "eth-call"
+      ]
+     },
+     "requests": [
+      {
+       "id": "sample-lp-01",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "calc_token_amount",
+         [
+          [
+           "$steps.state.sample0",
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           }
+          ],
+          true
+         ]
+        ]
+       },
+       "completion": "return-data"
+      },
+      {
+       "id": "sample-lp-10",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "calc_token_amount",
+         [
+          [
+           {
+            "op": "uint",
+            "args": [
+             "0"
+            ]
+           },
+           "$steps.state.sample1"
+          ],
+          true
+         ]
+        ]
+       },
+       "completion": "return-data"
+      }
+     ],
+     "decode": [
+      {
+       "let": "lp01",
+       "value": {
+        "op": "decode",
+        "args": [
+         "pool",
+         "calc_token_amount",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "sample-lp-01"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "let": "lp10",
+       "value": {
+        "op": "decode",
+        "args": [
+         "pool",
+         "calc_token_amount",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "sample-lp-10"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "return": {
+        "lp01": "$lp01",
+        "lp10": "$lp10"
+       }
+      }
+     ]
+    },
+    {
+     "id": "out",
+     "requirements": {
+      "transports": [
+       "eth-call"
+      ]
+     },
+     "requests": [
+      {
+       "id": "sample-out-01",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "calc_withdraw_one_coin",
+         [
+          "$steps.lp.lp01",
+          {
+           "op": "uint",
+           "args": [
+            "1"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data"
+      },
+      {
+       "id": "sample-out-10",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "calc_withdraw_one_coin",
+         [
+          "$steps.lp.lp10",
+          {
+           "op": "uint",
+           "args": [
+            "0"
+           ]
+          }
+         ]
+        ]
+       },
+       "completion": "return-data"
+      }
+     ],
+     "decode": [
+      {
+       "let": "out01",
+       "value": {
+        "op": "decode",
+        "args": [
+         "pool",
+         "calc_withdraw_one_coin",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "sample-out-01"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "let": "out10",
+       "value": {
+        "op": "decode",
+        "args": [
+         "pool",
+         "calc_withdraw_one_coin",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "sample-out-10"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "return": {
+        "out01": "$out01",
+        "out10": "$out10"
+       }
+      }
+     ]
+    }
+   ],
+   "result": {
+    "source": "$source",
+    "balance0": "$steps.state.balance0",
+    "balance1": "$steps.state.balance1",
+    "supply": "$steps.state.supply",
+    "fee": "$steps.state.fee",
+    "sample0": "$steps.state.sample0",
+    "sample1": "$steps.state.sample1",
+    "lp01": "$steps.lp.lp01",
+    "lp10": "$steps.lp.lp10",
+    "out01": "$steps.out.out01",
+    "out10": "$steps.out.out10"
+   }
+  },
+  "quoteFlow": {
+   "version": 1,
+   "sourceKind": "view",
+   "chainQuote": {
+    "version": 2,
+    "choices": [
+     {
+      "when": {
+       "op": "eq",
+       "args": [
+        "$route.direction",
+        "0:1"
+       ]
+      },
+      "proof": {
+       "steps": [
+        {
+         "version": 2,
+         "step": "lp",
+         "requestId": "exact-lp",
+         "signature": "function calc_token_amount(uint256[],bool) view returns(uint256)",
+         "amountPath": [
+          0,
+          0
+         ],
+         "outputPath": [
+          0
+         ],
+         "completion": "returned",
+         "requestBinding": {
+          "target": "$descriptor.pool",
+          "caller": {
+           "kind": "none"
+          }
+         }
+        },
+        {
+         "version": 2,
+         "step": "out",
+         "requestId": "exact-out",
+         "signature": "function calc_withdraw_one_coin(uint256,int128) view returns(uint256)",
+         "amountPath": [
+          0
+         ],
+         "outputPath": [
+          0
+         ],
+         "completion": "returned",
+         "requestBinding": {
+          "target": "$descriptor.pool",
+          "caller": {
+           "kind": "none"
+          }
+         }
+        }
+       ]
+      }
+     },
+     {
+      "when": {
+       "op": "eq",
+       "args": [
+        "$route.direction",
+        "1:0"
+       ]
+      },
+      "proof": {
+       "steps": [
+        {
+         "version": 2,
+         "step": "lp",
+         "requestId": "exact-lp",
+         "signature": "function calc_token_amount(uint256[],bool) view returns(uint256)",
+         "amountPath": [
+          0,
+          1
+         ],
+         "outputPath": [
+          0
+         ],
+         "completion": "returned",
+         "requestBinding": {
+          "target": "$descriptor.pool",
+          "caller": {
+           "kind": "none"
+          }
+         }
+        },
+        {
+         "version": 2,
+         "step": "out",
+         "requestId": "exact-out",
+         "signature": "function calc_withdraw_one_coin(uint256,int128) view returns(uint256)",
+         "amountPath": [
+          0
+         ],
+         "outputPath": [
+          0
+         ],
+         "completion": "returned",
+         "requestBinding": {
+          "target": "$descriptor.pool",
+          "caller": {
+           "kind": "none"
+          }
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "steps": [
+    {
+     "id": "lp",
+     "requirements": {
+      "transports": [
+       "eth-call"
+      ]
+     },
+     "requests": [
+      {
+       "id": "exact-lp",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "calc_token_amount",
+         [
+          [
+           {
+            "op": "if",
+            "args": [
+             {
+              "op": "eq",
+              "args": [
+               "$route.i",
+               0
+              ]
+             },
+             "$amountIn",
+             {
+              "op": "uint",
+              "args": [
+               "0"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "if",
+            "args": [
+             {
+              "op": "eq",
+              "args": [
+               "$route.i",
+               1
+              ]
+             },
+             "$amountIn",
+             {
+              "op": "uint",
+              "args": [
+               "0"
+              ]
+             }
+            ]
+           }
+          ],
+          true
+         ]
+        ]
+       },
+       "completion": "return-data"
+      }
+     ],
+     "decode": [
+      {
+       "let": "lp",
+       "value": {
+        "op": "decodeCanonical",
+        "args": [
+         "pool",
+         "calc_token_amount",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "exact-lp"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "gt",
+        "args": [
+         "$lp",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       "error": "curve-plain-lp exact quote minted no LP"
+      },
+      {
+       "return": "$lp"
+      }
+     ]
+    },
+    {
+     "id": "out",
+     "requirements": {
+      "transports": [
+       "eth-call"
+      ]
+     },
+     "requests": [
+      {
+       "id": "exact-out",
+       "kind": "eth-call",
+       "to": "$descriptor.pool",
+       "data": {
+        "op": "encode",
+        "args": [
+         "pool",
+         "calc_withdraw_one_coin",
+         [
+          "$steps.lp",
+          "$route.j"
+         ]
+        ]
+       },
+       "completion": "return-data"
+      }
+     ],
+     "decode": [
+      {
+       "let": "amountOut",
+       "value": {
+        "op": "decodeCanonical",
+        "args": [
+         "pool",
+         "calc_withdraw_one_coin",
+         {
+          "op": "get",
+          "args": [
+           {
+            "op": "returned",
+            "args": [
+             "exact-out"
+            ]
+           },
+           "data"
+          ]
+         },
+         0
+        ]
+       }
+      },
+      {
+       "assert": {
+        "op": "gt",
+        "args": [
+         "$amountOut",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       "error": "curve-plain-lp exact quote received no coin"
+      },
+      {
+       "return": "$amountOut"
+      }
+     ]
+    }
+   ],
+   "result": "$steps.out"
+  },
+  "pricingProjection": {
+   "version": 1,
+   "checks": [
+    {
+     "assert": {
+      "op": "and",
+      "args": [
+       {
+        "op": "gt",
+        "args": [
+         "$snapshot.sample0",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "gt",
+        "args": [
+         "$snapshot.sample1",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "gt",
+        "args": [
+         "$snapshot.balance0",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "gt",
+        "args": [
+         "$snapshot.balance1",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       },
+       {
+        "op": "gt",
+        "args": [
+         "$snapshot.supply",
+         {
+          "op": "uint",
+          "args": [
+           "0"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "error": "curve-plain-lp invalid pricing snapshot"
+    }
+   ],
+   "rows": {
+    "op": "map",
+    "args": [
+     {
+      "op": "filter",
+      "args": [
+       "$routes",
+       "route",
+       {
+        "op": "not",
+        "args": [
+         {
+          "op": "or",
+          "args": [
+           {
+            "op": "eq",
+            "args": [
+             {
+              "op": "if",
+              "args": [
+               {
+                "op": "eq",
+                "args": [
+                 {
+                  "op": "get",
+                  "args": [
+                   "$route",
+                   "i"
+                  ]
+                 },
+                 0
+                ]
+               },
+               "$snapshot.sample0",
+               "$snapshot.sample1"
+              ]
+             },
+             {
+              "op": "uint",
+              "args": [
+               "0"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "eq",
+            "args": [
+             {
+              "op": "if",
+              "args": [
+               {
+                "op": "eq",
+                "args": [
+                 {
+                  "op": "get",
+                  "args": [
+                   "$route",
+                   "i"
+                  ]
+                 },
+                 0
+                ]
+               },
+               "$snapshot.balance0",
+               "$snapshot.balance1"
+              ]
+             },
+             {
+              "op": "uint",
+              "args": [
+               "0"
+              ]
+             }
+            ]
+           },
+           {
+            "op": "eq",
+            "args": [
+             {
+              "op": "if",
+              "args": [
+               {
+                "op": "eq",
+                "args": [
+                 {
+                  "op": "get",
+                  "args": [
+                   "$route",
+                   "i"
+                  ]
+                 },
+                 0
+                ]
+               },
+               "$snapshot.out01",
+               "$snapshot.out10"
+              ]
+             },
+             {
+              "op": "uint",
+              "args": [
+               "0"
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "route",
+     {
+      "routeKey": "$route.routeKey",
+      "kind": "curve",
+      "numerator": {
+       "op": "if",
+       "args": [
+        {
+         "op": "eq",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "i"
+           ]
+          },
+          0
+         ]
+        },
+        "$snapshot.out01",
+        "$snapshot.out10"
+       ]
+      },
+      "denominator": {
+       "op": "if",
+       "args": [
+        {
+         "op": "eq",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "i"
+           ]
+          },
+          0
+         ]
+        },
+        "$snapshot.sample0",
+        "$snapshot.sample1"
+       ]
+      },
+      "depth": {
+       "op": "min",
+       "args": [
+        {
+         "op": "if",
+         "args": [
+          {
+           "op": "eq",
+           "args": [
+            {
+             "op": "get",
+             "args": [
+              "$route",
+              "i"
+             ]
+            },
+            0
+           ]
+          },
+          "$snapshot.balance0",
+          "$snapshot.balance1"
+         ]
+        },
+        {
+         "op": "if",
+         "args": [
+          {
+           "op": "eq",
+           "args": [
+            {
+             "op": "get",
+             "args": [
+              "$route",
+              "i"
+             ]
+            },
+            0
+           ]
+          },
+          "$snapshot.balance1",
+          "$snapshot.balance0"
+         ]
+        }
+       ]
+      },
+      "reserveA": {
+       "op": "if",
+       "args": [
+        {
+         "op": "eq",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "i"
+           ]
+          },
+          0
+         ]
+        },
+        "$snapshot.balance0",
+        "$snapshot.balance1"
+       ]
+      },
+      "reserveB": {
+       "op": "if",
+       "args": [
+        {
+         "op": "eq",
+         "args": [
+          {
+           "op": "get",
+           "args": [
+            "$route",
+            "i"
+           ]
+          },
+          0
+         ]
+        },
+        "$snapshot.balance1",
+        "$snapshot.balance0"
+       ]
+      },
+      "feePpm": {
+       "op": "div",
+       "args": [
+        "$snapshot.fee",
+        {
+         "op": "uint",
+         "args": [
+          "10000"
+         ]
+        }
+       ]
+      }
+     }
+    ]
+   }
+  }
+ },
+ "variantFiles": [],
+ "actionAdapters": [
+  {
+   "descriptor": {
+    "adapterId": "curve-plain-lp-cycle",
+    "lineage": "custom-swap:curve-plain-lp",
+    "edgeKind": "swap",
+    "action": "swap",
+    "canSendValue": false,
+    "leavesStandingPositionDefault": false
+   },
+   "traces": [
+    {
+     "signature": "function add_liquidity(uint256[],uint256) returns(uint256)"
+    },
+    {
+     "signature": "function remove_liquidity_one_coin(uint256,int128,uint256) returns(uint256)"
+    }
+   ]
+  }
+ ]
+}
