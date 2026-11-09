@@ -1048,7 +1048,7 @@ export class BlockScanRuntimeLoop {
         if (prior.sourceBlock >= head) {
           if (!this.reorgRecoveryPending) {
             this.reorgCatchupPending = false;
-            this.liveContinuationCompletedThrough = prior.sourceBlock;
+            this.priceCatchupCompletedThrough = prior.sourceBlock;
           }
           return;
         }
@@ -1064,14 +1064,14 @@ export class BlockScanRuntimeLoop {
       }
       return;
     }
-    if (this.liveContinuationPending) {
+    if (this.priceCatchupPending) {
       while (!this.deps.runtimeAbort.signal.aborted && !this.deps.isShuttingDown()) {
         const prior = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
         if (!prior?.effectiveMids?.complete) throw new Error("live continuation lost complete pricing");
         const head = Math.max(number, this.latestScheduledHead ?? number);
         if (prior.sourceBlock > head) throw new Error("live continuation source is ahead of head");
         if (prior.sourceBlock < head) {
-          const target = this.liveContinuationInitialCatchupComplete
+          const target = this.priceCatchupInitialComplete
             ? Math.min(head, prior.sourceBlock + MAX_ACTIVITY_TRANSITIONS) : head;
           await this.runHead(target, { ...observation,
             sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
@@ -1079,26 +1079,26 @@ export class BlockScanRuntimeLoop {
           if (!next?.effectiveMids?.complete || next.sourceBlock <= prior.sourceBlock) {
             throw new Error("live continuation made no pricing progress; trading remains disabled");
           }
-          this.liveContinuationInitialCatchupComplete = true;
+          this.priceCatchupInitialComplete = true;
           console.log(`[searcher/live-continuation] ${JSON.stringify({
             phase: "catching-up-prices", from: prior.sourceBlock, to: next.sourceBlock, head,
             startupSimulation: false, trading: false,
           })}`);
           continue;
         }
-        if (!this.liveContinuationStartupChecked) {
-          this.liveContinuationInitialCatchupComplete = true;
+        if (!this.priceCatchupStartupChecked) {
+          this.priceCatchupInitialComplete = true;
           await this.deps.liveContinuation!.revalidateStartup(prior, {
             signal: this.deps.runtimeAbort.signal,
             deadlineAtMs: Date.now() + this.deps.startupWarmBudgetMs,
           });
-          this.liveContinuationStartupChecked = true;
+          this.priceCatchupStartupChecked = true;
           // Heads may have advanced during simulation. Price catch-up remains
           // mandatory, but startup simulation is not repeated for each head.
           continue;
         }
-        this.liveContinuationPending = false;
-        this.liveContinuationCompletedThrough = prior.sourceBlock;
+        this.priceCatchupPending = false;
+        this.priceCatchupCompletedThrough = prior.sourceBlock;
         this.deps.rethTransportScheduler?.completeStartup?.();
         console.log(`[searcher/live-continuation] ${JSON.stringify({
           phase: "caught-up", sourceBlock: prior.sourceBlock, head,
@@ -1108,9 +1108,10 @@ export class BlockScanRuntimeLoop {
       }
       return;
     }
+    const warming = this.startupWarmPending;
     // The existing latest-head scheduler may still hold the newest head that
     // arrived while continuation was processing its activity range.
-    if (this.liveContinuationCompletedThrough !== null && number <= this.liveContinuationCompletedThrough) return;
+    if (this.priceCatchupCompletedThrough !== null && number <= this.priceCatchupCompletedThrough) return;
     const cached = this.startupWarmPending && !this.deps.blind.enabled
       ? this.deps.startupWarmCache?.restore(number, this.topologyKey(), MAX_ACTIVITY_TRANSITIONS)
       : undefined;
@@ -1126,6 +1127,11 @@ export class BlockScanRuntimeLoop {
         // runHead's ordinary startup path revalidates before publication and
         // never enumerates this old source. The next head owns range catch-up.
         await this.runHead(cached.number, observation);
+        this.beginFreshPriceCatchup();
+        if (this.priceCatchupPending) {
+          await this.runScheduledHead(number, observation);
+          return;
+        }
         if (!this.startupWarmPending && !this.deps.runtimeAbort.signal.aborted &&
             !this.deps.isShuttingDown() && cached.number < number && this.latestScheduledHead === number) {
           await this.runHead(number, observation, this.deps.diagnosticForHead?.(number));
@@ -1137,6 +1143,8 @@ export class BlockScanRuntimeLoop {
       })}`);
     }
     await this.runHead(number, observation, this.deps.diagnosticForHead?.(number));
+    if (warming) this.beginFreshPriceCatchup();
+    if (this.priceCatchupPending) await this.runScheduledHead(number, observation);
   }
 
   private observeRpcThrottle(blockNumber: number, error: unknown, controller?: AbortController): void {
@@ -2108,12 +2116,28 @@ export class BlockScanRuntimeLoop {
     }
   }
 
-  private liveContinuationPending = false;
+  private priceCatchupPending = false;
   private reorgRecoveryPending = false;
   private reorgCatchupPending = false;
-  private liveContinuationInitialCatchupComplete = false;
-  private liveContinuationStartupChecked = false;
-  private liveContinuationCompletedThrough: number | null = null;
+  private priceCatchupInitialComplete = false;
+  private priceCatchupStartupChecked = false;
+  private priceCatchupCompletedThrough: number | null = null;
+
+  // Both fresh and restored complete prices must reach the head before trading.
+  // Fresh warm already ran startup execution checks; restored data must renew them.
+  private beginPriceCatchup(startupChecked: boolean): void {
+    this.priceCatchupPending = true;
+    this.priceCatchupInitialComplete = false;
+    this.priceCatchupStartupChecked = startupChecked;
+  }
+
+  private beginFreshPriceCatchup(): void {
+    if (!this.startupWarmPending && !this.deps.blind.enabled && !this.deps.historicalReadOnly &&
+        !this.deps.nMinusOneFallbackEnabled &&
+        this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot()?.effectiveMids?.complete) {
+      this.beginPriceCatchup(true);
+    }
+  }
 
   restoreLiveContinuation(): void {
     const baseline = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
@@ -2123,7 +2147,7 @@ export class BlockScanRuntimeLoop {
     }
     this.generation = baseline.generation;
     this.startupWarmPending = false;
-    this.liveContinuationPending = true;
+    this.beginPriceCatchup(false);
   }
 
   /** Resume data-only pricing in a new historical loop, never a live startup.
@@ -2377,7 +2401,7 @@ export class BlockScanRuntimeLoop {
     );
     let passDeadlineAtMs = reorgCatchupAttempt
       ? Math.max(hotPassDeadlineAtMs, passWorkerStartedAtMs + Math.min(60_000, Math.max(1, this.deps.startupWarmBudgetMs)))
-      : startupWarmAttempt || this.liveContinuationPending
+      : startupWarmAttempt || this.priceCatchupPending
       ? Math.max(
           hotPassDeadlineAtMs,
           passWorkerStartedAtMs + Math.max(1, this.deps.startupWarmBudgetMs),
@@ -2548,7 +2572,7 @@ export class BlockScanRuntimeLoop {
           ? "positive_quote_without_atomic_decision"
           : "no_positive_quote");
       const structuredFields = {
-        startup_warm: startupWarmAttempt || this.liveContinuationPending,
+        startup_warm: startupWarmAttempt || this.priceCatchupPending,
         source_head_seen_at_ms: passStartedAtMs,
         scheduler_queue_ms: Math.max(
           0,
@@ -2716,10 +2740,10 @@ export class BlockScanRuntimeLoop {
     // N-1's separate sequential producer keeps its existing one-block scope.
     const activityBasis = useNMinusOneFallback || startupWarmAttempt
       ? null : currentRuntimeCoordinator.latestPricingSnapshot();
-    const initialContinuationCatchup = this.liveContinuationPending && !this.liveContinuationInitialCatchupComplete;
+    const initialPriceCatchup = this.priceCatchupPending && !this.priceCatchupInitialComplete;
     const activityPreviousSource = activityBasis !== null &&
         blockNumber > activityBasis.sourceBlock &&
-        (reorgRecoveryAttempt || initialContinuationCatchup || blockNumber - activityBasis.sourceBlock <= MAX_ACTIVITY_TRANSITIONS)
+        (reorgRecoveryAttempt || initialPriceCatchup || blockNumber - activityBasis.sourceBlock <= MAX_ACTIVITY_TRANSITIONS)
       ? Object.freeze({ number: activityBasis.sourceBlock, hash: activityBasis.sourceBlockHash })
       : undefined;
     let activityCanonicalBaseHash: string | null = null;
@@ -2746,7 +2770,7 @@ export class BlockScanRuntimeLoop {
             });
             return reorgActivity.touchedStateKeys;
           }
-          if (initialContinuationCatchup && activityPreviousSource !== undefined) {
+          if (initialPriceCatchup && activityPreviousSource !== undefined) {
             const range = { previousSource: activityPreviousSource, signal: passSignal, deadlineAtMs: passDeadlineAtMs };
             if (this.deps.liveContinuation?.readInitialTouched) {
               return await this.deps.liveContinuation.readInitialTouched(blockNumber, header.value, range);
@@ -3013,7 +3037,7 @@ export class BlockScanRuntimeLoop {
           }),
           backend,
         };
-        if (!startupWarmAttempt && !this.liveContinuationPending && !reorgCatchupAttempt) {
+        if (!startupWarmAttempt && !this.priceCatchupPending && !reorgCatchupAttempt) {
           // Funding has a separate pending queue on the existing priority lane.
           // The parent backend owns its abort/drain; both share global permits.
           fundingCallBackend = currentRuntimeCoordinator.startFundingPreparation === undefined
@@ -3035,7 +3059,7 @@ export class BlockScanRuntimeLoop {
         }
       }
       const passTouchedPools = await awaitActivity();
-      const pricingFamilySettleDeadlineAtMs = startupWarmAttempt || this.liveContinuationPending
+      const pricingFamilySettleDeadlineAtMs = startupWarmAttempt || this.priceCatchupPending
         ? preparationSettleDeadlineAtMs
         : Math.min(
             preparationSettleDeadlineAtMs,
@@ -3118,7 +3142,7 @@ export class BlockScanRuntimeLoop {
         recordEnumeration(coarse.opportunities, coarse.coarseEnumeration, coarse.selection.selectedCount);
       } else if (!useNMinusOneFallback) {
         this.passStageLabel = "state:prepare";
-        if (!startupWarmAttempt && !this.liveContinuationPending && !reorgCatchupAttempt) {
+        if (!startupWarmAttempt && !this.priceCatchupPending && !reorgCatchupAttempt) {
           for (const worker of blockScanFinalSimulationWorkers) {
             backgroundFinalSimForks.set(worker, startBlockScanBackgroundFork({
               signal: passSignal,
@@ -3182,7 +3206,7 @@ export class BlockScanRuntimeLoop {
         // Never hold the process open only to report progress.
         prepareHeartbeat.unref?.();
         try {
-          if (this.liveContinuationPending || reorgCatchupAttempt) {
+          if (this.priceCatchupPending || reorgCatchupAttempt) {
             const pricing = await currentRuntimeCoordinator.prepareCoarsePricing({
               graph: graphView, simulationTransport, deadlineAtMs: runtimeDeadlineAtMs,
               familySettleDeadlineAtMs: preparationSettleDeadlineAtMs,

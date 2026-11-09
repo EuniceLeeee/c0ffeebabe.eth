@@ -380,6 +380,82 @@ function loopFixture(factory: SourceSimulationFactory, startupWarmEnabled = fals
   return { loop: new BlockScanRuntimeLoop(deps), deps, inputs, coordinator, runtimeAbort };
 }
 
+
+for (const mode of ["cold", "cache", "incomplete", "cancelled"] as const)
+test(`fresh prices join the shared long-budget catch-up before trading: ${mode}`, async context => {
+  context.mock.method(console, "log", () => {});
+  const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("no catchup execution"); } },
+    async closeAndDrain() {} }), true);
+  let latest: any = null;
+  let warmCalls = 0, publications = 0;
+  const ranges: number[][] = [];
+  const end = 100 + MAX_ACTIVITY_TRANSITIONS * 2 + 1;
+  Object.assign(f.deps, {
+    startupWarmBudgetMs: 120_000,
+    ...(mode === "cache" ? { startupWarmCache: { restore() { return { number: 100, hash: hash(100) }; }, begin() { return undefined; } } } : {}),
+  });
+  f.coordinator.latestPricingSnapshot = () => latest;
+  f.coordinator.prepare = async (input: any) => {
+    warmCalls++;
+    assert.equal(input.graph.sourceBlock, 100);
+    const runtime = completeRuntimeFixture(input.graph);
+    latest = runtime.snapshot.pricing;
+    // Simulate heads received during the warm; the same production scheduler
+    // must join the accumulated range even though it exceeds normal retention.
+    if (mode === "cold" || mode === "cache") f.loop.schedule(end);
+    return runtime;
+  };
+  f.deps.readBlockSwapTouched = async (n, _header, range) => {
+    if (!range) return new Set(); // Initial warm has no prior source.
+    ranges.push([range.previousSource.number, n]);
+    if (n <= end) assert(range.deadlineAtMs! - Date.now() > 110_000, "catchup owns the startup budget");
+    else assert(range.deadlineAtMs! - Date.now() <= 10_000, "ordinary activity keeps its head deadline");
+    if (mode === "cancelled") {
+      f.runtimeAbort.abort(new Error("fixture catchup cancelled"));
+      throw f.runtimeAbort.signal.reason;
+    }
+    return new Set([target]);
+  };
+  f.coordinator.prepareCoarsePricing = async (input: any) => {
+    publications++;
+    assert.equal(input.canonicalActivity.previousSource.number, 100);
+    assert.equal(input.canonicalActivity.source.number, end);
+    assert.deepEqual([...input.touchedPools], [target]);
+    assert.equal(input.fundingTokens, undefined);
+    if (mode !== "incomplete") latest = pricingFixture(input.graph);
+    return { status: mode === "incomplete" ? "incomplete" : "complete", snapshot: latest };
+  };
+  try {
+    if (mode === "cold" || mode === "cache") {
+      f.loop.schedule(mode === "cache" ? 103 : 100);
+      await f.loop.waitForIdle();
+    } else {
+      (f.loop as any).advanceLatestHead(end);
+      const pass = (f.loop as any).runScheduledHead(100, {
+        sourceHeadSeenAtMs: Date.now() - 60_000, sourceHeadSeenAtMonotonicMs: performance.now() - 60_000 });
+      if (mode === "incomplete") await assert.rejects(pass, /no pricing progress/);
+      else await assert.rejects(pass, /fixture catchup cancelled/);
+    }
+    assert.equal(warmCalls, 1, "the catchup must not rerun full startup or Funding");
+    assert.equal(f.inputs.length, 0, "price catchup must not enter Funding or execution");
+    assert(ranges.every(([a, b]) => b - a <= MAX_ACTIVITY_TRANSITIONS));
+    assert.equal(ranges.length, mode === "cancelled" ? 1 : 3);
+    assert.equal(publications, mode === "cancelled" ? 0 : 1);
+    const failed = mode === "incomplete" || mode === "cancelled";
+    assert.equal(latest.sourceBlock, failed ? 100 : end);
+    assert.equal((f.loop as any).priceCatchupPending, failed);
+    if (!failed) {
+      f.coordinator.prepare = async (input: any) => {
+        assert(input.deadlineAtMs - Date.now() <= 10_000, "steady heads keep their ordinary budget");
+        throw new Error("normal full runtime");
+      };
+      await assert.rejects(f.loop.runHead(end + 1, { sourceHeadSeenAtMs: Date.now(),
+        sourceHeadSeenAtMonotonicMs: performance.now() }), /normal full runtime/);
+      assert(f.inputs.some(input => input.kind === "funding"));
+    }
+  } finally { await f.loop.shutdown(); }
+});
+
 test("cross-live resume uses the ordinary price/activity producer, defers startup sim, and bars full pipeline until caught up", async () => {
   const f = loopFixture(() => ({ transport: { async simulate() { throw new Error("no catchup execution"); } },
     async closeAndDrain() {} }));
@@ -409,7 +485,7 @@ test("cross-live resume uses the ordinary price/activity producer, defers startu
     assert.deepEqual(ranges, [[100, 103], [103, 104]]);
     assert.equal(revalidated, 1);
     assert.equal(f.inputs.length, 0, "neither Funding nor full runtime prepare runs during catch-up");
-    assert.equal((f.loop as any).liveContinuationPending, false);
+    assert.equal((f.loop as any).priceCatchupPending, false);
     await assert.rejects(f.loop.runHead(105, { sourceHeadSeenAtMs: Date.now(),
       sourceHeadSeenAtMonotonicMs: performance.now() }), /fixture prepared boundary/);
     assert(f.inputs.some(input => input.kind === "funding"), "next head reacquires Funding");
@@ -450,7 +526,7 @@ test("cross-live large gaps union bounded activity reads before exactly one pric
       assert.equal(ranges.length, 3, "all activity is read before any price update, even when that update fails");
       assert.equal(publications, 1);
       assert.equal(revalidated, fail ? 0 : 1);
-      assert.equal((f.loop as any).liveContinuationPending, fail);
+      assert.equal((f.loop as any).priceCatchupPending, fail);
       assert.equal(f.inputs.length, 0);
     } finally { await f.loop.shutdown(); }
   }
@@ -505,7 +581,7 @@ test("cross-live incomplete indexed activity never reaches pricing or startup si
     await assert.rejects((f.loop as any).runScheduledHead(613, { sourceHeadSeenAtMs: Date.now(),
       sourceHeadSeenAtMonotonicMs: performance.now() }), /missing indexed block|no pricing progress/);
     assert.equal(publications, 0); assert.equal(simulations, 0);
-    assert.equal((f.loop as any).liveContinuationPending, true);
+    assert.equal((f.loop as any).priceCatchupPending, true);
     assert.equal(f.inputs.length, 0);
   } finally { await f.loop.shutdown(); }
 });
