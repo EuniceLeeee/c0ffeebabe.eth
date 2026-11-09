@@ -1,3 +1,4 @@
+import { scannerConsumesEdge } from "./blockscan-pricing-delta.js";
 import { applyStartupTargetFilters } from "./blockscan-startup-filter.js";
 import { blockScanEdgeKey, exactSetHash, type VerifiedGraphView } from "./venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
@@ -568,8 +569,8 @@ export function liveContinuationPointer(directory: string): {identity:string;dig
   return {identity:p.pointer.identity,digest:sha(bytes)};
 }
 
-/** Narrow saved data within one sealed Ready. Only the consumer's live view changes. */
-export async function projectLiveContinuationSubset(input: {
+/** Reconcile one live Family selection within one sealed Ready, in either direction. */
+export async function reconcileLiveContinuationFamilies(input: {
   parent: LivePricingContinuation;
   identity: string;
   liveFamilies: readonly string[];
@@ -578,26 +579,52 @@ export async function projectLiveContinuationSubset(input: {
   rawGraph: VerifiedGraphView;
   graph: VerifiedGraphView;
   weth: string;
+  prepareRaw: (previous: BlockScanStateSnapshot, graph: VerifiedGraphView) => Promise<BlockScanStateSnapshot>;
   rebuild: (raw: BlockScanStateSnapshot, previous: EffectiveMidSnapshot,
     touched: ReadonlySet<string>, disabled: ReadonlySet<string>) => Promise<EffectiveMidSnapshot>;
 }): Promise<LivePricingContinuation> {
   const { parent, graph, rawGraph } = input;
-  const allowed = new Set(input.liveFamilies);
+  const allowed = new Set(input.liveFamilies), priorFamilies = new Set(input.priorFamilies);
   assert(allowed.size > 0 && allowed.size === input.liveFamilies.length &&
-    input.liveFamilies.every(id => input.priorFamilies.includes(id)), "cross-live Family expansion is unsupported");
+    priorFamilies.size > 0 && priorFamilies.size === input.priorFamilies.length, "invalid live Family selection");
   const prior = parent.pricing.pricing, raw = parent.pricing.raw, effective = prior.effectiveMids;
   assert(effective?.complete && graph.sourceBlock === prior.sourceBlock && graph.sourceBlockHash === prior.sourceBlockHash &&
-    rawGraph.sourceBlock === raw.sourceBlock && rawGraph.sourceBlockHash === raw.sourceBlockHash, "subset anchors differ");
+    graph.generation === prior.generation && rawGraph.generation === raw.generation &&
+    rawGraph.sourceBlock === raw.sourceBlock && rawGraph.sourceBlockHash === raw.sourceBlockHash, "selection anchors differ");
   const keys = new Set(graph.edges.map(blockScanEdgeKey));
-  const pricedKeys = new Set([...effective.rows.keys()].filter(k=>keys.has(k)));
-  const owners = prior.pricingFamilyIdByEdgeKey!, states = prior.pricingStateKeyByEdgeKey!;
+  assert.equal(keys.size, graph.edges.length, "duplicate selected edge");
   for (const [before, after] of [[prior.graph, graph], [raw.graph, rawGraph]] as const) {
-    assert(before.edges.every(edge => input.priorFamilies.includes(input.owner(edge)!)), "unbound parent edge owner");
-    const expected = before.edges.filter(edge => allowed.has(input.owner(edge)!));
-    assert.equal(expected.length, after.edges.length, "live subset membership differs from saved pricing");
-    for (let i = 0; i < expected.length; i++) assert.deepEqual(expected[i], after.edges[i], "retained edge metadata changed");
+    const oldEdges = new Map(before.edges.map(edge => [blockScanEdgeKey(edge), edge]));
+    const nextEdges = new Map(after.edges.map(edge => [blockScanEdgeKey(edge), edge]));
+    assert.equal(nextEdges.size, after.edges.length, "duplicate selected edge");
+    for (const edge of before.edges) {
+      const family = input.owner(edge);
+      assert(family && priorFamilies.has(family), "unbound parent edge owner");
+      if (allowed.has(family)) assert.deepEqual(nextEdges.get(blockScanEdgeKey(edge)), edge, "retained edge metadata changed");
+    }
+    for (const edge of after.edges) {
+      const family = input.owner(edge), old = oldEdges.get(blockScanEdgeKey(edge));
+      assert(family && allowed.has(family), "unbound selected edge owner");
+      if (old) assert.deepEqual(edge, old, "retained edge metadata changed");
+      else assert(!priorFamilies.has(family), "retained Family changed its Ready edge set");
+    }
   }
   restoreEffectiveMidReplayState(effective, parent.pricing.lineage, prior.graph.edges, input.weth);
+  // The same raw reconciliation runs for add/remove/mixed/no-op selections.
+  // Its production session reads only new Ready instances at the old raw anchor.
+  const rawPricing = await input.prepareRaw(raw, rawGraph);
+  assert(rawPricing.graph === rawGraph && rawPricing.sourceBlock === raw.sourceBlock &&
+    rawPricing.sourceBlockHash === raw.sourceBlockHash && rawPricing.generation === raw.generation,
+    "reconciled raw pricing source or graph differs");
+  const owners = rawPricing.pricingFamilyIdByEdgeKey!, states = rawPricing.pricingStateKeyByEdgeKey!;
+  const pricedKeys = new Set(graph.edges.filter(edge => scannerConsumesEdge(edge) || states.has(blockScanEdgeKey(edge))).map(blockScanEdgeKey));
+  for (const key of pricedKeys) {
+    assert(states.has(key) && owners.has(key), "selected Ready pricing metadata is missing");
+    if (effective.rows.has(key)) {
+      assert.equal(states.get(key), prior.pricingStateKeyByEdgeKey?.get(key), "retained state key changed");
+      assert.equal(owners.get(key), prior.pricingFamilyIdByEdgeKey?.get(key), "retained pricing owner changed");
+    }
+  }
   const affected = new Set<string>();
   const affectedRows = new Set<string>();
   for (const [key, ref] of parent.pricing.lineage.byRow) {
@@ -605,27 +632,6 @@ export async function projectLiveContinuationSubset(input: {
       const state = states.get(key); assert(state, "retained effective row lost its state key"); affected.add(state.toLowerCase()); affectedRows.add(key);
     }
   }
-  const filter = <V>(map: ReadonlyMap<string,V> | undefined) =>
-    new Map([...(map ?? [])].filter(([key]) => keys.has(key)));
-  const subStates = filter(raw.pricingStateKeyByEdgeKey), selectedStates = new Set(subStates.values());
-  // Strict production stores raw per-edge observations. Other read layouts need their own provenance.
-  assert(raw.coverage.expectedReadKeys.length === 0 && !raw.coverageByReadKey.size &&
-    !raw.freshnessByReadKey.size && !raw.stateByStateKey.size, "unsupported raw read layout");
-  const coverage = { ...raw.coverage };
-  for (const kind of ["expectedState","resolvedState","unresolvedState","expectedEdge","resolvedEdge","unavailableEdge",
-    "unresolvedEdge","refreshedEdge","carriedEdge"] as const) {
-    const source = raw.coverage[`${kind}Keys`];
-    if (source === undefined) continue;
-    const selected = kind.endsWith("State") ? selectedStates : keys;
-    const valid = source.filter(key => selected.has(key));
-    coverage[`${kind}Keys`] = valid;
-    coverage[`${kind}KeyHash`] = exactSetHash(valid);
-  }
-  const narrowed = { ...raw, graph: rawGraph, coverage, mids: filter(raw.mids), coverageByEdgeKey: filter(raw.coverageByEdgeKey),
-    pricingProvenanceByEdgeKey: filter(raw.pricingProvenanceByEdgeKey), pricingStateKeyByEdgeKey: subStates,
-    pricingFamilyIdByEdgeKey: filter(raw.pricingFamilyIdByEdgeKey), perBlockRefreshStateKeys: raw.perBlockRefreshStateKeys?.filter(k => selectedStates.has(k)),
-    resolvedFamilyIds: raw.resolvedFamilyIds.filter(id => allowed.has(id)), incompleteFamilyIds: raw.incompleteFamilyIds.filter(id => allowed.has(id)),
-    familyTelemetry: [], laneTelemetry: [], poolTopologySpikeReceipts: [] };
   const groups = new Map(graph.edges.map(edge => [JSON.stringify([owners.get(blockScanEdgeKey(edge)),edgeInstanceKey(edge)]),true]));
   const disabledInstances = parent.pricing.disabledInstances.filter(key => groups.has(key));
   const disabledGroups = new Set(disabledInstances);
@@ -661,11 +667,12 @@ export async function projectLiveContinuationSubset(input: {
       affected.add(state.toLowerCase());
     }
   }
-  const next = await input.rebuild(narrowed, effective, affected, disabled);
-  assert(next.complete && next.rows.size === pricedKeys.size && [...next.rows.keys()].every(key => pricedKeys.has(key)), "incomplete subset price table");
+  const next = await input.rebuild(rawPricing, effective, affected, disabled);
+  assert(sameSource(next.source, effective.source), "selected effective source changed");
+  assert(next.complete && next.rows.size === pricedKeys.size && [...next.rows.keys()].every(key => pricedKeys.has(key)), "incomplete selected price table");
   // Apply the producer's positive-input, all-directions failure rule to the new evidence.
   // In particular, missing valuation cannot keep an old automatic exclusion alive.
-  const perBlock = new Set(prior.perBlockRefreshStateKeys);
+  const perBlock = new Set(rawPricing.perBlockRefreshStateKeys);
   for (const edge of graph.edges) {
     const key = group(edge);
     if (!recheck.has(key)) continue;
@@ -677,12 +684,15 @@ export async function projectLiveContinuationSubset(input: {
   }
   const lineage = exportEffectiveMidReplayState(next);
   restoreEffectiveMidReplayState(next,lineage,graph.edges,input.weth);
-  const pricing = { ...narrowed, generation: prior.generation, sourceBlock: prior.sourceBlock, sourceBlockHash: prior.sourceBlockHash,
-    graph, effectiveMids: next, perBlockRefreshStateKeys: prior.perBlockRefreshStateKeys?.filter(k => selectedStates.has(k)),
-    pricingStateKeyByEdgeKey: filter(states), pricingFamilyIdByEdgeKey: filter(owners) };
-  console.log("[searcher/live-subset-restore] " + JSON.stringify({ source: next.source, parentRows: effective.rows.size,
-    liveRows: next.rows.size, invalidatedStateKeys: affected.size, recheckedAutoExclusions: recheck.size, families: input.liveFamilies, startupObservations: rows.length }));
+  const pricing = { ...rawPricing, generation: prior.generation, sourceBlock: prior.sourceBlock, sourceBlockHash: prior.sourceBlockHash,
+    graph, effectiveMids: next };
+  console.log("[searcher/live-family-reconcile] " + JSON.stringify({ source: next.source, parentRows: effective.rows.size,
+    liveRows: next.rows.size, addedFamilies: input.liveFamilies.filter(id => !priorFamilies.has(id)),
+    removedFamilies: input.priorFamilies.filter(id => !allowed.has(id)), invalidatedStateKeys: affected.size, recheckedAutoExclusions: recheck.size, families: input.liveFamilies, startupObservations: rows.length }));
   return { version: 1, identity: input.identity, amounts: parent.amounts,
-    pricing: { version: 1, raw: narrowed, pricing, lineage, disabledInstances: [...disabledGroups] }, startup: {version:1,rows},
+    pricing: { version: 1, raw: rawPricing, pricing, lineage, disabledInstances: [...disabledGroups] }, startup: {version:1,rows},
     simRejects: { version:1, pools, routes: parent.simRejects.routes } };
 }
+
+/** Existing callers keep the same entry point; there is only one reconciliation flow. */
+export const projectLiveContinuationSubset = reconcileLiveContinuationFamilies;

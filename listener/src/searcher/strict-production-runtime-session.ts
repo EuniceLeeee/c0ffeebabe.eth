@@ -440,7 +440,7 @@ export class StrictProductionRuntimeRoot {
     readonly kind?: StrictProductionSessionKind;
     readonly control?: AdapterWorkControl;
     readonly touchedPools?: ReadonlySet<string>;
-    /** Exact refinement scope inherited from the coarse candidates' edge closure. */
+    /** Optional instance scope; pricing uses it for newly enabled Ready edges only. */
     readonly requiredEdgeIds?: ReadonlySet<string>;
   }): Promise<StrictProductionRuntimeSession> {
     const sessionStartedAtMs = Date.now();
@@ -469,7 +469,7 @@ export class StrictProductionRuntimeRoot {
           this.#pricingIndex.instanceKeyByEdgeKey,
           requiredEdgeIds,
         );
-    const selectedPricingInstanceIndexes = kind === "pricing"
+    let selectedPricingInstanceIndexes = kind === "pricing"
       ? input.touchedPools === undefined
         ? Array.from({ length: this.#readyInstances.length }, (_, index) => index)
         : selectedInstanceIndexesForTouchedPools(
@@ -478,6 +478,20 @@ export class StrictProductionRuntimeRoot {
               : new Set([...input.touchedPools, ...this.#pricingIndex.perBlockRefreshStateKeys]),
           )
       : [];
+    if (kind === "pricing" && requiredEdgeIds !== undefined) {
+      // A shared instance key does not authorize reads of another Family.
+      const requiredOwners = new Map<string, Set<string>>();
+      for (const edgeId of requiredEdgeIds) {
+        const key = this.#pricingIndex.instanceKeyByEdgeKey.get(edgeId)!;
+        const owners = requiredOwners.get(key) ?? new Set<string>();
+        owners.add(this.#pricingIndex.familyIdByEdgeKey.get(edgeId)!);
+        requiredOwners.set(key, owners);
+      }
+      selectedPricingInstanceIndexes = selectedPricingInstanceIndexes.filter(index => {
+        const instance = this.#readyInstances[index]!;
+        return requiredOwners.get(instanceKeyFor(instance))?.has(instance.familyId);
+      });
+    }
     // Preserve the old instance-key selection and Ready order, including
     // different Families sharing a key, without scanning all Ready instances.
     const selectedExactInstances = kind !== "pricing" && requiredInstanceKeys !== undefined
@@ -487,7 +501,7 @@ export class StrictProductionRuntimeRoot {
       : this.#readyInstances;
     let refreshedInstanceCount = 0;
     const skippedCleanInstanceCount = kind === "pricing" &&
-        input.touchedPools !== undefined
+        (input.touchedPools !== undefined || requiredEdgeIds !== undefined)
       ? this.#readyInstances.length - selectedPricingInstanceIndexes.length
       : 0;
     let failedInstanceCount = 0;

@@ -32,6 +32,7 @@ import { StrictProductionRuntimeSession, SequentialQuoteUnsupportedError } from
   "../strict-production-runtime-session.js";
 import {
   StrictCurrentRuntimeCoordinator,
+  reconcileLiveContinuationRawPricing,
   type StrictPricingPublication,
   type StrictSessionRequest,
 } from
@@ -3016,6 +3017,59 @@ for (const path of ["coarse", "runtime"] as const) {
   assert.equal(freshRound.exportHistoricalBaseline().disabledInstances.length, 0);
   console.log("strict live continuation: PASS exclusions continue; explicit fresh round resets");
 }
+// Raw membership reconciliation uses real lifecycle-issued Ready instances and
+// actual pricing sessions. Only the node responses/Exact amounts are fixtures.
+for (const mode of ["add", "remove", "mixed", "same"] as const) {
+  const beforeInstances = mode === "remove" ? parallelReadyInstances : parallelReadyInstances.slice(0, 10);
+  const afterInstances = mode === "remove" ? parallelReadyInstances.slice(0, 10)
+    : mode === "mixed" ? parallelReadyInstances.slice(5) : mode === "same" ? beforeInstances : parallelReadyInstances;
+  const selection = (instances: typeof parallelReadyInstances) => {
+    const instanceKeys = new Set(instances.map(instance => instance.instanceKey));
+    const edges = parallelStartupView.edges.filter(edge => instanceKeys.has(edge.instanceKey!));
+    const graph = createVerifiedGraphView({...carryBaseGraph,edges,familyIdForEdge:()=>publication.familyId});
+    const selectedRoot = new StrictProductionRuntimeRoot({catalog:PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+      readySource:STARTUP,readyGraph:edges,readyInstances:instances,readyFundingAssets});
+    return {graph,selectedRoot};
+  };
+  const before = selection(beforeInstances), after = selection(afterInstances);
+  const quote = async ({amountIn}: {amountIn:bigint}) => ({source:CURRENT,amountIn,amountOut:amountIn*2n});
+  const make = (selectedRoot:StrictProductionRuntimeRoot) => new StrictCurrentRuntimeCoordinator(request => selectedRoot.createSession({
+    source:request.source,runtime:runtime(request.source),fundingAssets:[],kind:request.purpose==="exact-execution"?"exact":"pricing",
+    requiredEdgeIds:request.requiredEdgeIds}),()=>{},undefined,(pricing,control,_backend,reuse)=>buildEffectiveMids({
+      pricing,control,quoteGraph:reuse?.quoteGraph,previous:reuse?.previous,touchedStateKeys:reuse?.touchedStateKeys,
+      weth:UNIV2_FIXTURE_TOKEN0,gasCostWei:null,enumerationSpreadBps:0,concurrency:2,quote}));
+  const original = make(before.selectedRoot);
+  await original.prepareCoarsePricing({graph:before.graph,deadlineAtMs:Date.now()+10_000});
+  const baseline = original.exportHistoricalBaseline(), oldRaw=baseline.raw;
+  const oldKeys=new Set(before.graph.edges.map(blockScanEdgeKey));
+  const added=new Set(after.selectedRoot.pricingIndex().expectedEdgeKeys.filter(key=>!oldKeys.has(key)));
+  let reads=0;
+  const session=await after.selectedRoot.createSession({source:CURRENT,runtime:runtime(CURRENT,{
+    onCurrentPricingReadStart:()=>{reads++;}}),fundingAssets:[],kind:"pricing",requiredEdgeIds:added});
+  assert.equal(reads,added.size/2,`${mode}: only new two-direction instances are read`);
+  const raw=reconcileLiveContinuationRawPricing(session,after.graph,oldRaw);
+  for(const key of oldKeys) if(raw.mids.has(key)) {
+    assert.strictEqual(raw.mids.get(key),oldRaw.mids.get(key));
+    assert.equal(raw.pricingProvenanceByEdgeKey!.get(key),oldRaw.pricingProvenanceByEdgeKey!.get(key));
+  }
+  assert.deepEqual(raw.coverage.expectedEdgeKeys,[...after.selectedRoot.pricingIndex().expectedEdgeKeys].sort());
+  const effective=await buildEffectiveMids({pricing:raw,control:{},
+    weth:UNIV2_FIXTURE_TOKEN0,gasCostWei:null,enumerationSpreadBps:0,concurrency:2,quote});
+  const restored=make(after.selectedRoot);
+  const {exportEffectiveMidReplayState}=await import("../blockscan-effective-mid.js");
+  const rebased={version:1 as const,raw,pricing:{...raw,effectiveMids:effective},
+    lineage:exportEffectiveMidReplayState(effective),disabledInstances:[]};
+  const stored=deserialize(serialize(historicalBaselineData(rebased)));
+  await restored.restoreHistoricalBaseline(stored,{graph:after.graph,rawGraph:after.graph,weth:UNIV2_FIXTURE_TOKEN0,control:{}});
+  assert.equal(restored.latestPricingSnapshot()!.effectiveMids!.rows.size,after.graph.edges.length);
+  assert.throws(()=>reconcileLiveContinuationRawPricing(session,after.graph,{...oldRaw,sourceBlock:oldRaw.sourceBlock-1}),/source/);
+  if(mode!=="remove") {
+    const broken={...oldRaw,pricingStateKeyByEdgeKey:new Map()};
+    assert.throws(()=>reconcileLiveContinuationRawPricing(session,after.graph,broken),/state key/);
+  }
+  console.log(`strict raw membership + binary restore: PASS ${mode}, new instance reads=${reads}`);
+}
+
 if (process.argv.includes("--historical-baseline-only")) process.exit(0);
 
 // Current effective status owns coverage even when every raw entry is healthy.

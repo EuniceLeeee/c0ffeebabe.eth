@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { BlockScanStartupCache, startupCacheNamespace } from "./blockscan-startup-cache.js";
-import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveReadySubsetPriceMode, liveContinuationIdentity, compatibleLiveContinuationIdentities, liveContinuationPointer, projectLiveContinuationSubset, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
+import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveReadySubsetPriceMode, liveContinuationIdentity, compatibleLiveContinuationIdentities, liveContinuationPointer, reconcileLiveContinuationFamilies, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
 import { createBlockScanActivityTransport } from "./blockscan-activity-transport.js";
 import { startupRevertFilterEnabled } from "./blockscan-startup-filter.js";
 import { writeEffectiveMidProgress } from "./effective-mid-progress-file.js";
@@ -195,6 +195,7 @@ import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
 import { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import {
   StrictCurrentRuntimeCoordinator,
+  reconcileLiveContinuationRawPricing,
   type StrictSessionProvider,
   type StrictSessionRequest,
 } from
@@ -1612,7 +1613,7 @@ export async function initializeReadyProducer({
   const liveIds = liveFamilyIds && new Set(liveFamilyIds);
   if (liveFamilyIds) {
     if (!readyUniverse.familyPartitions || liveFamilyIds.some(id => !readyUniverse.familyPartitions![id]?.enabled)) {
-      throw new Error("live Family selection expands the parent Ready");
+      throw new Error("live Family selection lacks a sealed Ready partition; update Ready first");
     }
     await rebuildWiring.assertCanonicalHead(readyUniverse.cutoff);
   }
@@ -1791,8 +1792,6 @@ async function liveSubsetParentProof() {
   if (!Array.isArray(prior.families) || !prior.families.every((id:unknown) => typeof id === "string") ||
       !prior.readyFingerprint || new Set(prior.families).size !== prior.families.length) throw new Error("missing parent activation receipt");
   const enabled = new Set<string>(prior.families);
-  const current = PRODUCTION_FAMILY_ACTIVATIONS.filter(row=>row.enabled);
-  if (current.some(row=>!enabled.has(row.familyId))) throw new Error("cross-live Family expansion is unsupported");
   const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, MAINNET_RPC_URL:liveRpcUrl(), BOTVM_ADDRESS:process.env.BOTVM_ADDRESS,
     BOTVM_OWNER:process.env.BOTVM_OWNER, SEARCHER_TEST_DISABLE_DOTENV:"1", SEARCHER_DRY_RUN:"1", SEARCHER_BLOCKSCAN_SUBMIT:"0",
     SEARCHER_ENABLE_BACKRUN:"0", SEARCHER_ENABLE_MEMPOOL:"0", SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED:"1",
@@ -2966,8 +2965,8 @@ async function main(): Promise<void> {
       if (!validatedParent || validatedParent.readyFingerprint !== readyFingerprint ||
           validatedParent.digest !== liveContinuationPointer(parentDir).digest) throw new Error("validated parent journal or Ready changed");
       const priorFamilies = validatedParent.families;
-      if (liveFamilyIds.some(id => !priorFamilies.includes(id)) || priorFamilies.some(id => !parentFamilyIds.includes(id))) {
-        throw new Error("cross-live Family expansion is unsupported");
+      if ([...liveFamilyIds, ...priorFamilies].some(id => !parentFamilyIds.includes(id))) {
+        throw new Error("live Family selection lacks a sealed Ready partition; update Ready first");
       }
       const { liveFamilyIds: _selected, readyFingerprint: _parentReady, ...baseContext } = continuationContext;
       const manifest = process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_COMPATIBILITY;
@@ -2986,7 +2985,7 @@ async function main(): Promise<void> {
       const control = {signal:blockScanRuntimeAbort.signal,deadlineAtMs:Date.now()+blockScanStartupWarmBudgetMs};
       const sim = sourceSimulationFactory({source,control});
       const backend = new PinnedRethQuoteBackend(config.rpcUrl,source.hash,{...control,transportLane:"producer-bulk",
-        scopeLabel:"live subset affected pricing",maxBatchSize:64,maxConcurrentBatches:8,retryRpcThrottle:true,
+        scopeLabel:"live Family selection effective pricing",maxBatchSize:64,maxConcurrentBatches:8,retryRpcThrottle:true,
         allowSingleCallFallback:false,transportScheduler:blockScanRethTransportScheduler,
         onSourceUnavailable:error=>blockScanRuntimeAbort.abort(error),onRpcThrottle:error=>blockScanRuntimeAbort.abort(error)});
       try {
@@ -2995,9 +2994,24 @@ async function main(): Promise<void> {
         const ownership = new Map<string,string>();
         for (const module of [...PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins,...PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins])
           for (const action of module.plugin.manifest.ownedActionAdapterIds) ownership.set(action,module.familyId);
-        restored = await projectLiveContinuationSubset({parent,identity,liveFamilies:liveFamilyIds,priorFamilies,
+        restored = await reconcileLiveContinuationFamilies({parent,identity,liveFamilies:liveFamilyIds,priorFamilies,
           owner:edge=>ownership.get(edge.adapterId),
           graph:view(previous),rawGraph:view(parent.pricing.raw),weth:ADDR.WETH,
+          prepareRaw: async (oldRaw, rawGraph) => {
+            const rawSource = {number:oldRaw.sourceBlock,hash:oldRaw.sourceBlockHash,generation:oldRaw.generation};
+            const oldKeys = new Set(oldRaw.graph.edges.map(blockScanEdgeKey));
+            const requiredEdgeIds = new Set(strictRuntimeRoot.pricingIndex().expectedEdgeKeys.filter(key => !oldKeys.has(key)));
+            const rawSim = sourceSimulationFactory({source:rawSource,control});
+            const rawBackend = new PinnedRethQuoteBackend(config.rpcUrl,rawSource.hash,{...control,transportLane:"producer-bulk",
+              scopeLabel:"live Family selection raw pricing",maxBatchSize:64,maxConcurrentBatches:8,retryRpcThrottle:true,
+              allowSingleCallFallback:false,transportScheduler:blockScanRethTransportScheduler,
+              onSourceUnavailable:error=>blockScanRuntimeAbort.abort(error),onRpcThrottle:error=>blockScanRuntimeAbort.abort(error)});
+            try {
+              const session = await strictSessionFor({purpose:"coarse-pricing",source:rawSource,control,
+                fundingAssets:[],requiredEdgeIds,pricingCallBackend:rawBackend,simulationTransport:rawSim.transport});
+              return reconcileLiveContinuationRawPricing(session,rawGraph,oldRaw);
+            } finally { await Promise.all([rawBackend.closeAndDrain(),rawSim.closeAndDrain()]); }
+          },
           rebuild:(raw, old, touched, disabled) => buildEffectiveMids({ pricing:raw, quoteGraph:view(previous),
             previous:old,touchedStateKeys:touched,disabledEdgeIds:disabled,weth:ADDR.WETH,control,concurrency:1024,
             fixedWethInput:blockScanStageSettings.fixedEffectiveWethInput,gasCostWei:blockScanAmountReference.estimateGasCost(source),

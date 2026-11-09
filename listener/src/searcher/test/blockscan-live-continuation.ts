@@ -318,6 +318,7 @@ test("subset continuation retains clean rows and requotes a retained consumer of
   const graph={...prices(10),edges:[oldEdges[0]!,oldEdges[2]!]} as unknown as import("../venues/blockscan-state-capability.js").VerifiedGraphView;
   const calls:string[]=[];
   const input:Parameters<typeof projectLiveContinuationSubset>[0]={parent,identity:"new",weth:ADDR.WETH,graph,rawGraph:graph,priorFamilies:["F","removed"],liveFamilies:["F"],owner:e=>owners.get(e.canonicalEdgeId!),
+    prepareRaw:fixtureRawSelection,
     rebuild:(pricing,previous,touched,disabled)=>build(10,{pricing,previous,touchedStateKeys:touched,disabledEdgeIds:disabled,
       quote:async r=>{calls.push(r.edge.canonicalEdgeId!);return quote(r);}})};
   const result=await projectLiveContinuationSubset(input);
@@ -349,6 +350,67 @@ test("subset continuation retains clean rows and requotes a retained consumer of
   assert.equal(result.pricing.pricing.effectiveMids!.rows.get("next")!.amountIn,200n);
   assert(!result.pricing.pricing.effectiveMids!.rows.has("best"));
   assert.equal(parent.pricing.pricing.effectiveMids!.rows.get("next")!.amountIn,300n);
-  await assert.rejects(projectLiveContinuationSubset({...input,liveFamilies:["F","new"]}),/expansion/);
+  await projectLiveContinuationSubset({...input,liveFamilies:["F","new"]}); // Added Ready Family with no instances.
+  const added=edge("added",ADDR.WETH,token(5));
+  const bothGraph={...graph,edges:[...graph.edges,added]};
+  const bothOwners=new Map([...owners,["added","new"]]);
+  calls.length=0;
+  const both=await projectLiveContinuationSubset({...input,liveFamilies:["F","new"],graph:bothGraph,rawGraph:bothGraph,
+    owner:e=>bothOwners.get(e.canonicalEdgeId!),prepareRaw:(raw,g)=>fixtureRawSelection(raw,g,bothOwners)});
+  assert.deepEqual(calls.sort(),["added","next"]);
+  assert.equal(both.pricing.pricing.effectiveMids!.rows.get("next")!.amountIn,200n);
+
   await assert.rejects(projectLiveContinuationSubset({...input,graph:{...graph,edges:[oldEdges[1]!,oldEdges[2]!]}}),/metadata/);
 });
+
+// Raw RPC responses are fixtures; reconciliation and quotes use production code.
+async function fixtureRawSelection(previous: any, graph: any, owners?: Map<string,string>) {
+  const keys = new Set<string>(graph.edges.map((e:TokenEdge) => e.canonicalEdgeId!));
+  const filter = (map: Map<string,unknown> | undefined) => new Map([...(map ?? [])].filter(([key])=>keys.has(key)));
+  return { ...previous, graph,
+    pricingStateKeyByEdgeKey: new Map(graph.edges.filter((e:TokenEdge)=>!e.leavesStandingPosition)
+      .map((e:TokenEdge)=>[e.canonicalEdgeId!, e.instanceKey!])),
+    pricingFamilyIdByEdgeKey: owners ? filter(owners) : filter(previous.pricingFamilyIdByEdgeKey),
+    mids:filter(previous.mids), coverageByEdgeKey:filter(previous.coverageByEdgeKey) };
+}
+
+for (const mode of ["add", "remove", "mixed", "replace", "same"] as const) {
+  test(`one Family reconciliation flow: ${mode}`, async () => {
+    const {reconcileLiveContinuationFamilies} = await import("../blockscan-live-continuation.js");
+    const keep=edge("keep",ADDR.WETH,token(1)), remove=edge("remove",ADDR.WETH,token(3));
+    const waiting=edge("waiting",token(7),token(8)), add=edge("add",ADDR.WETH,token(7));
+    const oldEdges=[keep,waiting,remove], owners=new Map([["keep","K"],["waiting","K"],["remove","R"],["add","A"]]);
+    const nextEdges=mode==="same"?oldEdges:mode==="add"?[...oldEdges,add]:mode==="remove"?[keep,waiting]:mode==="mixed"?[keep,waiting,add]:[add];
+    const families=mode==="same"?["K","R"]:mode==="add"?["K","R","A"]:mode==="remove"?["K"]:mode==="mixed"?["K","A"]:["A"];
+    const base={...prices(10),graph:{edges:oldEdges},pricingStateKeyByEdgeKey:new Map(oldEdges.map(e=>[e.canonicalEdgeId!,e.instanceKey!])),
+      pricingFamilyIdByEdgeKey:new Map([...owners].filter(([key])=>key!=="add"))};
+    const old=await build(10,{pricing:base});
+    assert.equal(old.rows.get("waiting")!.status,"missing-valuation");
+    const parent:any={version:1,identity:"old",pricing:{version:1,raw:base,pricing:{...base,effectiveMids:old},
+      lineage:exportEffectiveMidReplayState(old),disabledInstances:[]},startup:{version:1,rows:[]},
+      simRejects:{version:1,pools:[],routes:[]},amounts:{version:1,headers:[],samples:[]}};
+    const graph:any={...prices(10),edges:nextEdges};
+    const quotes:string[]=[];
+    const input:Parameters<typeof reconcileLiveContinuationFamilies>[0]={parent,identity:"new",priorFamilies:["K","R"],liveFamilies:families,
+      owner:e=>owners.get(e.canonicalEdgeId!),graph,rawGraph:graph,weth:ADDR.WETH,
+      prepareRaw:(raw,g)=>fixtureRawSelection(raw,g,owners),
+      rebuild:(pricing,previous,touched,disabled)=>build(10,{pricing,previous,touchedStateKeys:touched,disabledEdgeIds:disabled,
+        quote:async ({edge,amountIn})=>{quotes.push(edge.canonicalEdgeId!);return {source:source(10),amountIn,amountOut:amountIn*2n};}})};
+    const result=await reconcileLiveContinuationFamilies(input), rows=result.pricing.pricing.effectiveMids!.rows;
+    assert.deepEqual([...rows.keys()].sort(),nextEdges.map(e=>e.canonicalEdgeId).sort());
+    assert.deepEqual(quotes.sort(),(mode==="add"||mode==="mixed"?["add","waiting"]:mode==="replace"?["add"]:[]));
+    if (rows.has("keep")) assert.strictEqual(rows.get("keep"),old.rows.get("keep"));
+    if (rows.has("waiting")&&rows.has("add")) assert.equal(rows.get("waiting")!.amountIn,200n);
+    assert.equal(result.startup.rows.length,0,"new quotes do not invent startup execution proof");
+    assert.equal(old.rows.get("waiting")!.status,"missing-valuation","parent is immutable");
+    await assert.rejects(reconcileLiveContinuationFamilies({...input,graph:{...graph,sourceBlock:11}}),/anchors/);
+    await assert.rejects(reconcileLiveContinuationFamilies({...input,rebuild:async (...args)=>({...await input.rebuild(...args),complete:false})}),/incomplete/);
+    await assert.rejects(reconcileLiveContinuationFamilies({...input,rebuild:async (...args)=>({...await input.rebuild(...args),source:source(11)})}),/effective source/);
+    await assert.rejects(reconcileLiveContinuationFamilies({...input,prepareRaw:async()=>{throw new Error("source unavailable");}}),/source unavailable/);
+    if (rows.has("add")) {
+      await assert.rejects(reconcileLiveContinuationFamilies({...input,owner:e=>e.canonicalEdgeId==="add"?"unknown":input.owner(e)}),/unbound/);
+      await assert.rejects(reconcileLiveContinuationFamilies({...input,prepareRaw:async (...args)=>({
+        ...await input.prepareRaw(...args),pricingStateKeyByEdgeKey:new Map()})}),/metadata/);
+    }
+  });
+}

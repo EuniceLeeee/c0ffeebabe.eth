@@ -67,7 +67,7 @@ export interface StrictSessionRequest {
   readonly pricingCallBackend?: Pick<StateBackend, "call">;
   /** Same-pass successful reads only; misses keep the ordinary provider path. */
   readonly pricingCallCache?: Pick<PinnedRethQuoteBackend, "callCached">;
-  /** Required for exact-execution; inherited from coarse candidate closure. */
+  /** Exact closure, or an explicit coarse-pricing scope for Ready membership changes. */
   readonly requiredEdgeIds?: ReadonlySet<string>;
 }
 
@@ -987,12 +987,46 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
   }
 }
 
+/** Reconcile raw observations at the original anchor; no old row becomes fresh.
+ * The caller has already authenticated the parent and the sealed Ready. Only
+ * newly selected instances may be read; current index/edge contracts must agree
+ * for every retained observation before it can be reused.
+ */
+export function reconcileLiveContinuationRawPricing(
+  session: StrictProductionRuntimeSession,
+  graph: VerifiedGraphView,
+  previous: BlockScanStateSnapshot,
+): BlockScanStateSnapshot {
+  assert(sameCanonicalSource(sourceFor(graph), {number:previous.sourceBlock,hash:previous.sourceBlockHash,
+    generation:previous.generation}), "continuation raw source changed");
+  assert(previous.coverage.expectedReadKeys.length === 0 && !previous.coverageByReadKey.size &&
+    !previous.freshnessByReadKey.size && !previous.stateByStateKey.size, "unsupported raw read layout");
+  const oldEdges = new Map(previous.graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
+  const index = session.pricingIndex();
+  const oldPerBlock = new Set(previous.perBlockRefreshStateKeys);
+  const newPerBlock = new Set(index.perBlockRefreshStateKeys);
+  for (const edge of graph.edges) {
+    const key = blockScanEdgeKey(edge), old = oldEdges.get(key);
+    if (!old) continue;
+    assert.deepEqual(edge, old, "retained raw edge metadata changed");
+    const state = index.stateKeyByEdgeKey.get(key);
+    assert.equal(state, previous.pricingStateKeyByEdgeKey?.get(key), "retained raw state key changed");
+    assert.equal(index.familyIdByEdgeKey.get(key), previous.pricingFamilyIdByEdgeKey?.get(key),
+      "retained raw Family changed");
+    if (state !== undefined) assert.equal(newPerBlock.has(state), oldPerBlock.has(state), "retained refresh policy changed");
+  }
+  assert(session.edges.every(edge => !oldEdges.has(blockScanEdgeKey(edge))), "continuation reread a retained instance");
+  return buildStrictPricingSnapshot(session, graph, { previous, reuseSameSource: true }).snapshot;
+}
+
 function buildStrictPricingSnapshot(
   session: StrictProductionRuntimeSession,
   graph: VerifiedGraphView,
   input: {
     readonly previous: BlockScanStateSnapshot | null;
     readonly canonicalActivity?: StrictCanonicalActivityProof;
+    /** Private to authenticated same-source membership reconciliation above. */
+    readonly reuseSameSource?: boolean;
   },
 ): StrictPricingBuildResult {
   assertSessionGraphSource(session, graph);
@@ -1135,6 +1169,28 @@ function buildStrictPricingSnapshot(
       ? session.currentPricingForEdge(edge)
       : null;
     if (current === null) {
+      if (input.reuseSameSource && previousEdgeByKey.has(edgeKey)) {
+        const status = previous!.coverageByEdgeKey.get(edgeKey);
+        const provenance = previous!.pricingProvenanceByEdgeKey?.get(edgeKey);
+        assert(status && provenance, "retained raw observation lacks provenance");
+        recordCoverage(edgeKey, status);
+        recordProvenance(edgeKey, provenance);
+        if (status.status === "resolved") {
+          const mid = previous!.mids.get(edgeKey);
+          assert(mid && (provenance === "refreshed" || provenance === "carried"), "invalid retained raw price");
+          recordMid(edgeKey, mid);
+          resolvedEdgeKeys.push(edgeKey);
+          (provenance === "refreshed" ? refreshedEdgeKeys : carriedEdgeKeys).push(edgeKey);
+        } else if (status.status === "rejected") {
+          assert.equal(provenance, "unavailable");
+          unavailableEdgeKeys.push(edgeKey);
+        } else {
+          assert.equal(provenance, "unresolved");
+          unresolvedEdgeKeys.push(edgeKey);
+          incompleteFamilyIds.add(familyId);
+        }
+        continue;
+      }
       const carried = perBlockRefresh.has(stateKey) ? null : compatibleCarryForEdge({
         edge,
         edgeKey,
