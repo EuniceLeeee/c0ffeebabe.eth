@@ -39,7 +39,8 @@
     "definition": {
       "version": 2,
       "sources": [
-        "landed-log"
+        "landed-log",
+        "observed-call"
       ],
       "candidateSources": [],
       "candidate": {
@@ -67,7 +68,666 @@
           "pool"
         ]
       },
-      "calls": [],
+      "calls": [
+        {
+          "id": "balancer-v2-pool-onSwap",
+          "signature": "function onSwap((uint8,address,address,uint256,bytes32,uint256,address,address,bytes),uint256,uint256) returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            },
+            "poolId": {
+              "from": "argument",
+              "index": 0,
+              "path": [
+                4
+              ]
+            },
+            "specialization": {
+              "from": "expression",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          },
+                          4
+                        ]
+                      },
+                      20,
+                      2
+                    ]
+                  }
+                ]
+              }
+            },
+            "hintedTokenIn": {
+              "from": "argument",
+              "index": 0,
+              "path": [
+                1
+              ]
+            },
+            "hintedTokenOut": {
+              "from": "argument",
+              "index": 0,
+              "path": [
+                2
+              ]
+            }
+          },
+          "predicates": [
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$observation.target"
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$observation.target",
+                    "$constants.vault"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$observation.sender",
+                "$constants.vault"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$observation.target",
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            4
+                          ]
+                        },
+                        0,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            4
+                          ]
+                        },
+                        20,
+                        2
+                      ]
+                    }
+                  ]
+                },
+                2
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "balancer-v2-pool-onSwap-balances",
+          "signature": "function onSwap((uint8,address,address,uint256,bytes32,uint256,address,address,bytes),uint256[],uint256,uint256) returns(uint256)",
+          "fields": {
+            "pool": {
+              "from": "target"
+            },
+            "poolId": {
+              "from": "argument",
+              "index": 0,
+              "path": [
+                4
+              ]
+            },
+            "specialization": {
+              "from": "expression",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$args",
+                              0
+                            ]
+                          },
+                          4
+                        ]
+                      },
+                      20,
+                      2
+                    ]
+                  }
+                ]
+              }
+            },
+            "hintedTokenIn": {
+              "from": "argument",
+              "index": 0,
+              "path": [
+                1
+              ]
+            },
+            "hintedTokenOut": {
+              "from": "argument",
+              "index": 0,
+              "path": [
+                2
+              ]
+            }
+          },
+          "predicates": [
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$observation.target"
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$observation.target",
+                    "$constants.vault"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$observation.sender",
+                "$constants.vault"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$observation.target",
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            4
+                          ]
+                        },
+                        0,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            4
+                          ]
+                        },
+                        20,
+                        2
+                      ]
+                    }
+                  ]
+                },
+                2
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
       "events": [
         {
           "id": "balancer-v2-vault-swap",
@@ -317,6 +977,45 @@
       ],
       "nomination": "tx-evidence",
       "txSeedNominations": true,
+      "recentCallNomination": {
+        "emitter": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+        "topic": "0x2170c741c41531aec20e7c107c24eecfdd15e69c9bb0a8dd37b1840b9e0b207b",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$nomination.opaque.poolId"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$nomination.opaque.txHash"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$nomination.opaque.transactionHash"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "nominationKey": "$nomination.opaque.poolId",
+        "candidateKey": "$candidate.poolId"
+      },
       "surface": {
         "id": "balancer-v2-vault-membership",
         "fingerprint": "balancer-v2-vault-registered-v1",
