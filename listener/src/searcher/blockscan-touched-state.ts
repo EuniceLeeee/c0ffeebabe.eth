@@ -59,6 +59,39 @@ const completedByProvider = new WeakMap<BlockTouchedProvider, {
   readonly blocks: Map<number, CompletedBlockActivity>;
 }>();
 
+interface RetainedBlockActivity extends CompletedBlockActivity { readonly number: number; }
+const retainedByProvider = new WeakMap<BlockTouchedProvider, {
+  readonly poolManager: string;
+  readonly resolver: BlockTouchedStateKeyResolver | undefined;
+  readonly blocks: Map<string, RetainedBlockActivity>;
+}>();
+
+/** Reorg recovery may need an orphan whose trace RPC no longer serves. Reuse
+ * only a completely validated block under this exact interpreter and anchor.
+ * These are historical touched keys, never canonicality or pricing authority. */
+export async function readRetainedBlockTouchedStateKeys(
+  provider: BlockTouchedProvider, blockNumber: number, poolManager: string,
+  anchor: BlockTouchedCanonicalAnchor, resolver?: BlockTouchedStateKeyResolver,
+  control?: { readonly signal?: AbortSignal; readonly deadlineAtMs?: number },
+): Promise<ReadonlySet<string>> {
+  const pinned = snapshotAnchor(anchor, blockNumber);
+  const assertOpen = () => {
+    control?.signal?.throwIfAborted();
+    if (control?.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs)
+      throw new Error("retained activity deadline exceeded");
+  };
+  assertOpen();
+  const memo = retainedByProvider.get(provider);
+  const found = memo?.poolManager === poolManager.toLowerCase() && memo.resolver === resolver
+    ? memo.blocks.get(pinned.hash) : undefined;
+  if (found !== undefined) {
+    if (found.number !== blockNumber || !sameAnchor(found.anchor, pinned))
+      throw new BlockActivityRangeInvalidatedError("retained activity anchor mismatch");
+    return new Set(found.touchedKeys);
+  }
+  return readTouchedBlock(provider, blockNumber, poolManager, pinned, assertOpen, resolver);
+}
+
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const HASH_RE = /^0x[0-9a-fA-F]{64}$/;
 const QUANTITY_RE = /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/;
@@ -183,6 +216,14 @@ async function readTouchedBlock(
   assertOpen: () => void = () => {},
   resolver?: BlockTouchedStateKeyResolver,
 ): Promise<ReadonlySet<string>> {
+  // Keep hash-bound completed facts independently of the canonical range memo.
+  // Invalidating a range must not erase the old branch needed to repair it.
+  let retained = pinned === undefined ? undefined : retainedByProvider.get(provider);
+  if (pinned !== undefined && (retained === undefined ||
+      retained.poolManager !== uniswapV4PoolManager.toLowerCase() || retained.resolver !== resolver)) {
+    retained = { poolManager: uniswapV4PoolManager.toLowerCase(), resolver, blocks: new Map() };
+    retainedByProvider.set(provider, retained);
+  }
   const traceMethod = pinned === undefined ? "debug_traceBlockByNumber" : "debug_traceBlockByHash";
   const [logsResult, tracesResult] = await Promise.allSettled([
     Promise.resolve().then(() => {
@@ -295,6 +336,13 @@ async function readTouchedBlock(
     }
     for (const key of keys) touched.add(key.toLowerCase());
     assertOpen();
+  }
+  assertOpen();
+  if (pinned !== undefined && retained !== undefined && retainedByProvider.get(provider) === retained) {
+    retained.blocks.set(pinned.hash, Object.freeze({ number: blockNumber, anchor: pinned,
+      touchedKeys: Object.freeze([...touched]) }));
+    while (retained.blocks.size > MAX_ACTIVITY_TRANSITIONS)
+      retained.blocks.delete(retained.blocks.keys().next().value!);
   }
   return touched;
 }

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { setTimeout as wait } from "node:timers/promises";
 import { RevmFatalError, type RevmFatalReason } from "./revm-sim-client.js";
 import { isRpcQuotaExhaustedError, isRpcThrottleError } from "./rpc-throttle-guard.js";
 
@@ -24,13 +25,14 @@ export class ReadyRpcThrottle {
   private candidateSchedulers = 0;
   private batchLimit = 8;
   private responses = 0;
+  private retryNotBefore = 0;
   private terminal?: Error;
   private readonly observed = new WeakSet<object>();
   private readonly attempts = new AsyncLocalStorage<{ failure?: Error }>();
 
   constructor(initialConcurrency = 4, private readonly log: (state: ReadyRpcThrottleState) => void = state => {
     console.warn("[ready/rpc-throttle] " + JSON.stringify(state));
-  }, initialState?: ReadyRpcThrottleState) {
+  }, initialState?: ReadyRpcThrottleState, private readonly cooldownMs = 1_000) {
     if (!Number.isSafeInteger(initialConcurrency) || initialConcurrency < 1 || initialConcurrency > 4) {
       throw new Error("Ready concurrency must be between 1 and 4");
     }
@@ -66,7 +68,18 @@ export class ReadyRpcThrottle {
     this.concurrencyLimit = this.configuredConcurrency;
     this.batchLimit = 8;
     this.responses = 0;
+    this.retryNotBefore = 0;
     this.log(this.snapshot());
+  }
+
+  private async waitForRetry(): Promise<void> {
+    // Concurrent 429s extend one shared quiet period. Check again after each
+    // wait in case a draining sibling was throttled while this retry waited.
+    let remaining: number;
+    while ((remaining = this.retryNotBefore - performance.now()) > 0) {
+      await wait(Math.ceil(remaining));
+    }
+    this.assertOpen();
   }
 
   get inAttempt(): boolean { return this.attempts.getStore() !== undefined; }
@@ -124,6 +137,7 @@ export class ReadyRpcThrottle {
       this.log(this.snapshot());
     } else if (typeof error === "object" && error !== null && !this.observed.has(error)) {
       this.observed.add(error);
+      if (this.cooldownMs > 0) this.retryNotBefore = performance.now() + this.cooldownMs;
       if (++this.responses === 3) {
         if (this.concurrencyLimit > 1) this.concurrencyLimit--;
         else if (this.batchLimit > 1) this.batchLimit /= 2;
@@ -142,6 +156,7 @@ export class ReadyRpcThrottle {
     try {
       for (;;) {
         this.assertOpen();
+        if (this.retryNotBefore) await this.waitForRetry();
         try {
           const result = await work();
           succeeded = true;
@@ -166,7 +181,10 @@ export class ReadyRpcThrottle {
     let next = 0;
     const launch = (index: number): void => {
       let pending: Promise<Settled>;
-      pending = this.attempt(() => work(candidates[index]!)).then(
+      pending = this.attempt(async () => {
+        if (this.retryNotBefore) await this.waitForRetry();
+        return work(candidates[index]!);
+      }).then(
         result => ({ ok: true as const, result, index, pending }),
         error => ({ ok: false as const, error, index, pending }),
       );

@@ -197,6 +197,41 @@ export function compatibleLiveContinuationIdentities(context: unknown, manifestP
   }))];
 }
 
+
+/** V8 restores repeated string values as separate allocations. Share those
+ * immutable values once, after the journal has authenticated and replayed.
+ * Object identity, collection order and every persisted value stay unchanged;
+ * the temporary dictionary is released before the live pipeline starts. */
+function shareContinuationStrings<T>(root: T): T {
+  const strings = new Map<string, string>();
+  const seen = new WeakSet<object>();
+  const visit = (value: any): any => {
+    if (typeof value === "string") {
+      if (value.length < 16) return value;
+      const shared = strings.get(value);
+      if (shared !== undefined) return shared;
+      strings.set(value, value);
+      return value;
+    }
+    if (value === null || typeof value !== "object" ||
+        seen.has(value) || ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return value;
+    seen.add(value);
+    if (value instanceof Map) {
+      const entries = [...value];
+      value.clear();
+      for (const [key, entry] of entries) value.set(visit(key), visit(entry));
+    } else if (value instanceof Set) {
+      const entries = [...value];
+      value.clear();
+      for (const entry of entries) value.add(visit(entry));
+    } else {
+      for (const key of Object.keys(value)) value[key] = visit(value[key]);
+    }
+    return value;
+  };
+  return visit(root);
+}
+
 /** One immutable baseline, then hash-chained, atomic delta commits. There is
  * deliberately no periodic full-table write or full-table fallback. */
 export class LivePricingContinuationStore {
@@ -304,7 +339,7 @@ export class LivePricingContinuationStore {
     for (const record of chain.reverse()) replay.apply((await this.decode(record.file, record.digest)).value.delta);
     const restored = replay.finish();
     this.pointer = pointer; this.source = restored.pricing.pricing.effectiveMids!.source;
-    return restored;
+    return shareContinuationStrings(restored);
   }
   /** Explicit new logical round: retire the old pointer before any warmup.
    * A failed fresh startup must not resume an older round on the next launch. */

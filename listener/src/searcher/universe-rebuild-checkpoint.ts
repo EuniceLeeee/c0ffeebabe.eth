@@ -924,6 +924,10 @@ async function readTopLevelJsonObject(
   let token: "string" | "atom" | null = null;
   let parts: string[] = [];
   let escape = false;
+  // Scalar parsing otherwise allocates an equal address/hash once per field.
+  // Share only immutable string values during this load; discard the table
+  // before returning. Containers, JSON rules and evidence bytes stay intact.
+  const strings = new Map<string, string>();
 
   const whitespace = (char: string): boolean =>
     char === " " || char === "\n" || char === "\r" || char === "\t";
@@ -949,6 +953,11 @@ async function readTopLevelJsonObject(
     let value: unknown;
     try { value = JSON.parse(parts.join("")); }
     catch (error) { invalid(error instanceof Error ? error.message : String(error)); }
+    if (typeof value === "string" && value.length >= 16) {
+      const shared = strings.get(value);
+      if (shared === undefined) strings.set(value, value);
+      else value = shared;
+    }
     parts = [];
     token = null;
     const frame = stack.at(-1);

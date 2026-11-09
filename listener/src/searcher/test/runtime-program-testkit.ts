@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import { ethers } from "ethers";
 
+export type RuntimeProgramGuardCode = "uint256-range" | "equality";
+/** Only interpreter checks create this error. Fixture/host/assertion errors
+ * must never be promoted to a successful negative execution test. */
+export class RuntimeProgramGuardError extends Error {
+  constructor(readonly code: RuntimeProgramGuardCode, message: string) {
+    super(message); this.name = "RuntimeProgramGuardError";
+  }
+}
+export function assertRuntimeGuardRejects(run: () => unknown, code: RuntimeProgramGuardCode): void {
+  assert.throws(run, (error: unknown) => error instanceof RuntimeProgramGuardError && error.code === code);
+}
+
 export interface RuntimeCall {
   target: string; data: string; template: string; static: boolean; value: bigint;
   revertBytes?: number;
@@ -27,6 +39,11 @@ export function inspectRuntime(program: string, amount: bigint, input: {
   const set = (n: number, value: bigint) => {
     assert(n > 0 || mode.output === true, "Family may not overwrite actual input r0");
     assert(value >= 0n && value <= ethers.MaxUint256, "checked uint256 math"); r[n] = value;
+  };
+  const mathSet = (n: number, value: bigint) => {
+    if (value < 0n || value > ethers.MaxUint256)
+      throw new RuntimeProgramGuardError("uint256-range", "checked uint256 math");
+    set(n, value);
   };
   assert.equal(byte(), 1);
   while (ip < bytes.length) {
@@ -61,9 +78,9 @@ export function inspectRuntime(program: string, amount: bigint, input: {
       }
       case 2: {
         const op = byte(), d = reg(), a = r[reg()], b = r[reg()];
-        if (op === 0) set(d, a + b);
-        else if (op === 1) set(d, a - b);
-        else if (op === 2) set(d, a * b);
+        if (op === 0) mathSet(d, a + b);
+        else if (op === 1) mathSet(d, a - b);
+        else if (op === 2) mathSet(d, a * b);
         else if (op === 3) set(d, a / b);
         else if (op === 4) { assert(b < 256n); set(d, a >> b); }
         else if (op === 5) set(d, a & b);
@@ -73,7 +90,10 @@ export function inspectRuntime(program: string, amount: bigint, input: {
         else assert.fail("math opcode");
         break;
       }
-      case 3: assert.equal(r[reg()], r[reg()], "runtime amount mismatch"); break;
+      case 3: {
+        if (r[reg()] !== r[reg()]) throw new RuntimeProgramGuardError("equality", "runtime amount mismatch");
+        break;
+      }
       case 4: {
         assert(!mode.readOnly, "runtime readonly allowance");
         const token = ethers.getAddress(ethers.hexlify(take(20))), spender = ethers.getAddress(ethers.hexlify(take(20)));

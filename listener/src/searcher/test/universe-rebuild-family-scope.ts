@@ -43,8 +43,11 @@ const classificationMiss = {
 };
 const log: RebuildScanObservation = {
   address: "0x" + "11".repeat(20),
-  topics: [ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)")],
-  data: "0x", transactionHash: "0x" + "cc".repeat(32),
+  topics: [ethers.id("Swap(address,uint256,uint256,uint256,uint256,address)"),
+    ethers.zeroPadValue(sender, 32), ethers.zeroPadValue(sender, 32)],
+  data: ethers.AbiCoder.defaultAbiCoder().encode(
+    ["uint256", "uint256", "uint256", "uint256"], [1n, 0n, 0n, 1n]),
+  transactionHash: "0x" + "cc".repeat(32),
   blockNumber: source.number, blockHash: source.hash, logIndex: 0,
 };
 const opaqueLog: RebuildScanObservation = {
@@ -67,6 +70,8 @@ const otherCandidate = candidatesFromCall(otherCall)[0]!;
 assert(logCandidate && callCandidate && otherCandidate, "real catalog fixtures must decode");
 const logId = String(logCandidate.familyId), callId = String(callCandidate.familyId);
 const otherId = String(otherCandidate.familyId);
+assert.deepEqual(candidatesFromLog({ ...log, data: "0x" }, [logId]), [],
+  "a malformed Swap body cannot nominate the valid-log fixture's Family");
 
 function hashPlan(payload: unknown): string {
   return createHash("sha256").update("source-plan-v1:" + canonicalJson(payload)).digest("hex");

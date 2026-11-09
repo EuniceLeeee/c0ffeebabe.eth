@@ -48,7 +48,7 @@ test("a swallowed simulation throttle still fences its own candidate, not its si
 });
 
 test("temporary failures requeue the same candidate; completion remains exact", async () => {
-  const control = new ReadyRpcThrottle(4, quiet), attempts = new Map<number, number>(), completed: number[] = [];
+  const control = new ReadyRpcThrottle(4, quiet, undefined, 0), attempts = new Map<number, number>(), completed: number[] = [];
   await control.runCandidates([0, 1, 2, 3, 4, 5], async candidate => {
     const count = (attempts.get(candidate) ?? 0) + 1; attempts.set(candidate, count);
     if (candidate === 0 && count <= 3) throw new RevmFatalError({ kind: "rpc-throttle", category: "rpc-limit-code", rpcCode: 429 });
@@ -60,7 +60,7 @@ test("temporary failures requeue the same candidate; completion remains exact", 
 });
 
 test("a throttled cohort drains before the next cohort reopens at the configured ceiling", async () => {
-  const control = new ReadyRpcThrottle(4, quiet);
+  const control = new ReadyRpcThrottle(4, quiet, undefined, 0);
   control.limitConcurrency(3);
   let attempts = 0;
   let releaseSibling!: () => void;
@@ -90,7 +90,7 @@ test("a throttled cohort drains before the next cohort reopens at the configured
 });
 
 test("lowest-level exhaustion never marks the throttled candidate completed", async () => {
-  const control = new ReadyRpcThrottle(1, quiet), completed: number[] = [];
+  const control = new ReadyRpcThrottle(1, quiet, undefined, 0), completed: number[] = [];
   let attempts = 0;
   await assert.rejects(control.runCandidates([1], async candidate => {
     attempts++; throw rate();
@@ -109,7 +109,7 @@ test("an unowned latched simulator fatal stops source reads rather than looping 
 });
 
 type Rpc = { id: number; jsonrpc: string; method: string; params: unknown[] };
-async function fixture(handler: (requests: Rpc[], attempt: number) => { status?: number; body: unknown }) {
+async function fixture(handler: (requests: Rpc[], attempt: number) => { status?: number; body: unknown }, cooldownMs = 0) {
   let attempts = 0;
   const sizes: number[] = [];
   const server = createServer(async (incoming, response) => {
@@ -123,7 +123,7 @@ async function fixture(handler: (requests: Rpc[], attempt: number) => { status?:
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert(address && typeof address !== "string");
-  const control = new ReadyRpcThrottle(4, quiet);
+  const control = new ReadyRpcThrottle(4, quiet, undefined, cooldownMs);
   const provider = new RebuildReadProvider(async work => work(), `http://127.0.0.1:${address.port}`, 1,
     { staticNetwork: ethers.Network.from(1), cacheTimeout: -1, requestTimeoutMs: 2000, readyThrottle: control });
   return { control, provider, sizes, attempts: () => attempts, async close() {
@@ -148,6 +148,39 @@ test("real HTTP batches count once each and shrink 8->4->2->1 without losing rea
       f.provider.send("eth_getCode", [ethers.toBeHex(i + 21, 20), "0x7b"])));
     assert.equal(f.sizes.at(-1), 8, "the next source-read batch returns to the configured width");
   } finally { await f.close(); }
+});
+
+test("a temporary provider rate window closes before the next physical attempt", async () => {
+  let limitedAt: number | undefined;
+  const f = await fixture(requests => {
+    const now = performance.now();
+    limitedAt ??= now;
+    return { body: now - limitedAt < 900 ? limited(requests)
+      : requests.map(request => ({ jsonrpc: "2.0", id: request.id, result: "0x6000" })) };
+  }, 1_000);
+  try {
+    const result = await f.provider.send("eth_getCode", [ethers.toBeHex(1, 20), "0x7b"]);
+    assert.equal(result, "0x6000");
+    assert.equal(f.attempts(), 2);
+    assert.equal(f.control.snapshot().responsesAtLevel, 0);
+  } finally { await f.close(); }
+});
+
+test("a throttled native candidate is retried after the rate window closes", async () => {
+  const control = new ReadyRpcThrottle(4, quiet);
+  const completed: string[] = [];
+  let attempts = 0;
+  let limitedAt = 0;
+  await control.runCandidates(["same-candidate"], async candidate => {
+    if (++attempts === 1) limitedAt = performance.now();
+    if (performance.now() - limitedAt < 900) {
+      throw new RevmFatalError({ kind: "rpc-throttle", category: "rpc-limit-code", rpcCode: 429 });
+    }
+    return candidate;
+  }, candidate => completed.push(candidate));
+  assert.equal(attempts, 2);
+  assert.deepEqual(completed, ["same-candidate"]);
+  assert.deepEqual(control.snapshot(), { concurrency: 4, batchMaxCount: 8, responsesAtLevel: 0, stopped: false });
 });
 
 test("HTTP 429 transport attempts are not secretly multiplied by the ethers retry loop", async () => {
